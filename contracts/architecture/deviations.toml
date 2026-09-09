@@ -2,6 +2,43 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-014"
+date = "2026-09-09"
+status = "closed"
+approval = "Explicit user authorization to repair required repository coverage and release-preflight blockers while preserving quality thresholds and deferred qualification scope."
+affected_steps = ["315"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#quality_policy.coverage",
+]
+source_evidence = [
+  "Current release preflight requires all current coverage-policy package reports and their aggregate; the aggregate is absent and the existing xtask line/branch measurements are below policy.",
+  "The advisory, bounded-process and safe-artifact contracts name executable self-tests, but Cargo tests check their decision metadata without executing the complete CLI self-test suites.",
+  "The detailed coverage scope mapper assumes crates/<package>/src even for xtask, whose source is tools/xtask/src; this selects no detailed functions or regions and reports empty perfect percentages.",
+  "A deterministic malformed RustSec affected-object regression reproduces a panic when the functions member is absent; checked optional lookup must return the existing InvalidReport error instead.",
+  "Workspace-only coverage cleanup leaves orphan xtask executables under debug/build/xtask with older source maps. A measured one-line parser shift adds stale branch/region records; reset the owned coverage build tree before current collection instead of filtering those records or trusting contaminated metrics.",
+  "Retained gate and platform validators lack isolated argument, canonical-authority, inventory and result-encoding coverage. Extract those private transformations without changing pinned historical contracts or invoking their external qualification commands.",
+  "Synthetic parsed ELF fixtures reproduce acceptance of 32-bit and big-endian binaries despite the existing elf64_little_endian_x86_64_execute_or_pie contract. Enforce the existing class and byte-order requirements alongside machine, entrypoint and executable-segment validation.",
+  "Normalized Gradle graph validation is coupled to descriptor-bound admission that rejects changed projections before their structural checks. Isolate the existing private structural validator, preserve its call order, and exercise malformed graph identity, lineage and artifact bindings without fabricating admitted filesystem evidence.",
+  "Gradle projection metadata and process-receipt bindings share the same admitted-projection short circuit as graph structure. Isolate their private validator without changing check order or errors so receipt, raw-source, count and normalization bindings can be tested with structurally valid inputs.",
+  "Fresh collection succeeds for all 49 required packages, with 47 passing every coverage gate. Runtime paths has 82.407407 percent branch coverage and service SQLite has 89.316239 percent; their other metrics pass. Add focused owner tests for retained directory identity and cleanup, bounded schema catalogs, metadata and migration-history rejection without changing public behavior, policy or historical qualification.",
+]
+replacement_action = "Qualify current required-package behavior through the governed coverage commands, execute omitted existing CLI self-tests, and add narrow owner tests or testability repairs justified by actual uncovered paths. This repairs current qualification and does not reopen historical release or deferred Nix/device gates."
+verification = [
+  "Current owned command self-tests and their failure assertions execute from Cargo integration tests with no external provider or Nix access.",
+  "All currently required package reports retain the existing coverage policy; the generated aggregate and release preflight must pass before qualification is complete.",
+  "Relevant Rust, contract, architecture, API, feature and generated-freshness checks remain required.",
+]
+unresolved_risk = "Current macOS aarch64 qualification is complete. Deferred Nix, device, historical release and deployment qualification remain outside this repair; two unchanged opt-in SDK generators are not claimed by the workspace test lane."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "All 49 required package reports pass the unchanged four-metric coverage policy, and the governed aggregate and release preflight pass.",
+  "The full workspace check, test, Clippy and Rustdoc lanes pass, together with catalog, architecture, contracts, DTO freshness, API boundaries, resolved dependency graph and portable checks.",
+  "Runtime-paths and service-SQLite documentation tests pass; generated public API text is byte-identical to each reviewed baseline. Their five changed source files contain test-only additions.",
+  "Cargo tests execute the three complete offline command self-tests. The workspace reports 3816 passing tests and eight ignored entrypoints: six process children exercised by parents and two unchanged opt-in SDK generators outside this lane.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-001"
 date = "2026-07-27"
 status = "active"

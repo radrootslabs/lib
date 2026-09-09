@@ -1526,6 +1526,28 @@ mod tests {
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn bounded_metadata_and_foreign_key_integrity_reject() {
+        for statement in [
+            "UPDATE radroots_service_metadata SET singleton = 2",
+            "UPDATE radroots_service_metadata SET state_schema_version = 'invalid'",
+            "UPDATE radroots_service_metadata SET created_at_unix_ms = 'invalid'",
+        ] {
+            let mut fixture = Fixture::new("malformed-metadata");
+            fixture.verify().expect("valid original bundle");
+            let state = fixture.bundle.join(crate::BACKUP_STATE_MEMBER_NAME);
+            let mut connection = open_test_database(&state);
+            futures::executor::block_on(async {
+                sqlx::query(sqlx::AssertSqlSafe(statement))
+                    .execute(&mut connection)
+                    .await
+                    .expect("substituted metadata value");
+                connection.close().await.expect("close fixture");
+            });
+            fixture.refresh_manifest();
+            assert_eq!(
+                fixture.verify().expect_err("invalid metadata").kind(),
+                ServiceSqliteErrorKind::Metadata
+            );
+        }
         let mut metadata_fixture = Fixture::new("oversized-metadata");
         let state = metadata_fixture
             .bundle

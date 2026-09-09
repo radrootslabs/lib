@@ -624,6 +624,9 @@ fn is_ignorable_detail_function(
 }
 
 fn scope_path_fragment(scope: &str) -> String {
+    if scope == "xtask" {
+        return "/tools/xtask/src/".to_owned();
+    }
     let crate_dir = scope.strip_prefix("radroots_").unwrap_or(scope);
     format!("/crates/{crate_dir}/src/")
 }
@@ -1757,12 +1760,14 @@ fn run_crate_with_runner_at_root(
     runner(
         {
             let mut cmd = coverage_llvm_cov_command();
-            cmd.arg("clean")
-                .arg("--workspace")
-                .current_dir(workspace_root);
+            // Package cleanup leaves orphan executables under build output
+            // directories. LLVM also reads those coverage maps, so an earlier
+            // source revision can contaminate the current report even when its
+            // profile has been removed. Reset the owned coverage build tree.
+            cmd.arg("clean").current_dir(workspace_root);
             cmd
         },
-        "cargo llvm-cov clean --workspace",
+        "cargo llvm-cov clean",
     )?;
 
     runner(
@@ -2627,6 +2632,67 @@ mod tests {
     }
 
     #[test]
+    fn detailed_xtask_report_measures_tool_source_instead_of_empty_perfect_totals() {
+        let root = temp_dir_path("details_xtask_scope");
+        let source_path = root.join("tools/xtask/src/main.rs");
+        write_file(
+            &source_path,
+            "fn used(flag: bool) { if flag { work(); } }\nfn missed() { work(); }\n",
+        );
+        let details = root.join("coverage-details.json");
+        let raw = serde_json::json!({"data": [{"functions": [
+            {
+                "count": 1,
+                "filenames": [source_path.display().to_string()],
+                "regions": [[1, 1, 1, 41, 1, 0, 0, 0]],
+                "branches": [[1, 25, 1, 29, 1, 0, 0, 0, 0]]
+            },
+            {
+                "count": 0,
+                "filenames": [source_path.display().to_string()],
+                "regions": [[2, 1, 2, 23, 0, 0, 0, 0]]
+            }
+        ]}]});
+        write_file(&details, &raw.to_string());
+        let measured = read_detailed_summary(&details, Some("xtask")).unwrap();
+        assert_eq!(measured.functions_percent, 50.0);
+        assert_eq!(measured.regions_percent, 50.0);
+        assert_eq!(measured.executable_lines.total, 2);
+        assert_eq!(measured.executable_lines.covered, 1);
+        assert_eq!(measured.branches.total, 2);
+        assert_eq!(measured.branches.covered, 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn detailed_scope_separates_macro_files_and_preserves_existing_index_fallback() {
+        let root = temp_dir_path("details_mixed_source_maps");
+        let source = root.join("tools/xtask/src/main.rs");
+        let external = root.join("dependency/src/lib.rs");
+        write_file(
+            &source,
+            "fn measured() { work(); }\n#[cfg(test)]\nfn test_only() {}\n#[cfg(test)]\nconst TEST_ONLY: bool = true;\n",
+        );
+        write_file(&external, "fn external() {}\n");
+        let details = root.join("coverage-details.json");
+        let raw = serde_json::json!({"data":[{"functions":[
+            {"count":1,"filenames":[source,external],
+             "regions":[[1,1,1,25,1,0,0,0],[1,1,1,16,1,1,0,0],[1,1,1,2,1,99,0,0],[4,1,4,11,1,0,0,0],[1,1,1,2,1,0,0,1]],
+             "branches":[[1,17,1,21,1,1,0,0,0],[1,1,1,2,1,1,1,0,0],[1,1,1,2,1,1,99,0,0],[3,1,3,2,1,1,0,0,0]]},
+            {"count":1,"filenames":[source,external],"regions":[[1,1,1,16,1,1,0,0]],"branches":[]},
+            {"count":1,"filenames":[source],"regions":[[1,1,1,2,1,99,0,0]],"branches":[]}
+        ]}]});
+        write_file(&details, &raw.to_string());
+        let measured = read_detailed_summary(&details, Some("xtask")).unwrap();
+        assert_eq!(measured.functions_percent, 100.0);
+        assert_eq!(measured.executable_lines.covered, 1);
+        assert_eq!(measured.executable_lines.total, 1);
+        assert_eq!(measured.branches.covered, 4);
+        assert_eq!(measured.branches.total, 4);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn read_summary_reports_read_and_parse_errors() {
         let missing = temp_file_path("summary_missing");
         let read_err = read_summary(&missing).expect_err("missing summary should fail");
@@ -2828,6 +2894,46 @@ pub fn production() {}
             assert!(is_cfg_test_source_line(source, line), "test line {line}");
         }
         assert!(!is_cfg_test_source_line(source, 12));
+    }
+
+    #[test]
+    fn lexical_brace_tracking_keeps_escaped_literals_and_pending_attributes_bounded() {
+        for literal in [r"'\n'", r"'\''", r"'\u{7d}'", "'é'"] {
+            assert_eq!(
+                char_literal_end(literal, 0),
+                Some(literal.len()),
+                "{literal}"
+            );
+            assert_eq!(source_brace_deltas(literal).collect::<Vec<_>>(), [0]);
+        }
+        for literal in ["'", r"'\", r"'\u{7d", r"'\uX'", "'ab'"] {
+            assert_eq!(char_literal_end(literal, 0), None, "{literal}");
+        }
+        let source = r####"fn boundary() {
+    let escaped = "\"}\\{";
+    let raw = r##"a"#} b"x { c"##;
+    let divided = 8 / 2;
+    /* / text * /* nested */ } */
+}
+"####;
+        assert_eq!(
+            source_brace_deltas(source).collect::<Vec<_>>(),
+            [1, 0, 0, 0, 0, -1]
+        );
+        for attribute in [
+            "#[cfg(test)]",
+            "#[cfg_attr(coverage_nightly, coverage(off))]",
+        ] {
+            let source = format!(
+                "{attribute}\n\n// reason\n#[allow(dead_code)]\nfn excluded\n() {{}}\nfn measured() {{}}\n"
+            );
+            let lines = if attribute == "#[cfg(test)]" {
+                cfg_test_source_lines(&source)
+            } else {
+                coverage_off_source_lines(&source)
+            };
+            assert_eq!(lines, [true, true, true, true, true, true, false]);
+        }
     }
 
     #[test]
@@ -4610,13 +4716,14 @@ test_threads = 0
         assert_eq!(
             names,
             vec![
-                "cargo llvm-cov clean --workspace".to_string(),
+                "cargo llvm-cov clean".to_string(),
                 "cargo llvm-cov --no-report".to_string(),
                 "cargo llvm-cov report --json --summary-only".to_string(),
                 "cargo llvm-cov report --json".to_string(),
                 "cargo llvm-cov report --lcov".to_string(),
             ]
         );
+        assert!(rendered_commands[0].ends_with("llvm-cov clean"));
         assert!(
             rendered_commands
                 .iter()

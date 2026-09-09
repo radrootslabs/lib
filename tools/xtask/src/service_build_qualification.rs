@@ -455,6 +455,67 @@ mod tests {
     }
 
     #[test]
+    fn canonical_fixture_locks_bind_service_and_each_positive_contract_version() {
+        for (from, to) in [
+            (
+                "service = \"fixture_service\"",
+                "service = \"other_service\"",
+            ),
+            ("config = 1", "config = 9"),
+            ("state = 2", "state = 9"),
+            ("admin = 3", "admin = 9"),
+            ("status = 4", "status = 9"),
+            ("provider = 5", "provider = 9"),
+            (
+                "material = \"absent\"",
+                "material = \"deferred\"\nlib_revision = \"1111111111111111111111111111111111111111\"\nflake_lock_sha256 = \"1111111111111111111111111111111111111111111111111111111111111111\"",
+            ),
+        ] {
+            let root = copied_fixture();
+            validate_fixture(root.path()).unwrap();
+            let path = root.path().join(FIXTURE_RELATIVE).join(LOCK_FILENAME);
+            let original = fs::read_to_string(&path).unwrap();
+            assert!(original.contains(from));
+            let changed = original.replacen(from, to, 1);
+            ServiceSourceLockV2::from_canonical_bytes(changed.as_bytes())
+                .expect("valid canonical lock with substituted identity");
+            fs::write(&path, changed).unwrap();
+            assert_eq!(
+                validate_fixture(root.path()),
+                Err(BuildQualificationError::InvalidFixture),
+                "{from}"
+            );
+        }
+        let root = copied_fixture();
+        let path = root.path().join(FIXTURE_RELATIVE).join("Cargo.toml");
+        let original = fs::read_to_string(&path).unwrap();
+        let changed = original.replace("nix_material = \"absent\"", "nix_material = \"deferred\"");
+        assert_ne!(changed, original);
+        fs::write(path, changed).unwrap();
+        assert_eq!(
+            validate_fixture(root.path()),
+            Err(BuildQualificationError::InvalidFixture)
+        );
+    }
+
+    #[test]
+    fn bound_contracts_reject_digest_substitution_and_unsafe_file_inputs() {
+        let root = TempDir::new().unwrap();
+        let path = root.path().join("input");
+        fs::write(&path, b"{}").unwrap();
+        validate_bound_contract(root.path(), "input", &digest(b"{}")).unwrap();
+        assert!(validate_bound_contract(root.path(), "input", &"1".repeat(64)).is_err());
+        assert!(read_bounded(&path, 1, BuildQualificationError::InvalidContract).is_err());
+        assert!(read_bounded(root.path(), 10, BuildQualificationError::InvalidContract).is_err());
+        #[cfg(unix)]
+        {
+            let link = root.path().join("link");
+            std::os::unix::fs::symlink(&path, &link).unwrap();
+            assert!(read_bounded(&link, 10, BuildQualificationError::InvalidContract).is_err());
+        }
+    }
+
+    #[test]
     fn fixture_rejects_every_independent_metadata_drift() {
         for (section, field, replacement) in [
             (

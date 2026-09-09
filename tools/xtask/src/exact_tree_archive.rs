@@ -409,6 +409,133 @@ mod tests {
     }
 
     #[test]
+    fn archive_verification_rejects_metadata_inventory_and_payload_tampering() {
+        let payload = b"source\n";
+        let expected = || {
+            vec![WrittenMember {
+                path: "source.rs".to_owned(),
+                mode: 0o644,
+                byte_length: payload.len() as u64,
+                sha256: hex::encode(Sha256::digest(payload)),
+            }]
+        };
+        let bytes = |change: fn(&mut Header)| {
+            let mut header = Header::new_ustar();
+            header.set_path("source.rs").unwrap();
+            header.set_mode(0o644);
+            header.set_uid(0);
+            header.set_gid(0);
+            header.set_mtime(123);
+            header.set_size(payload.len() as u64);
+            header.set_entry_type(EntryType::Regular);
+            header.set_username("").unwrap();
+            header.set_groupname("").unwrap();
+            change(&mut header);
+            header.set_cksum();
+            let mut archive = Builder::new(Vec::new());
+            archive.append(&header, &payload[..]).unwrap();
+            archive.into_inner().unwrap()
+        };
+        let original = bytes(|_| {});
+        validate_archive_bytes(&original, &expected(), 123).unwrap();
+        let metadata_changes: [fn(&mut Header); 7] = [
+            |header| header.set_entry_type(EntryType::Directory),
+            |header| header.set_uid(1),
+            |header| header.set_gid(1),
+            |header| header.set_mtime(124),
+            |header| header.set_username("user").unwrap(),
+            |header| header.set_groupname("group").unwrap(),
+            |header| header.set_mode(0o755),
+        ];
+        for change in metadata_changes {
+            assert!(validate_archive_bytes(&bytes(change), &expected(), 123).is_err());
+        }
+        let inventory_changes: [fn(&mut WrittenMember); 4] = [
+            |member| member.path = "other.rs".to_owned(),
+            |member| member.mode = 0o755,
+            |member| member.byte_length += 1,
+            |member| member.sha256 = "0".repeat(64),
+        ];
+        for change in inventory_changes {
+            let mut altered = expected();
+            change(&mut altered[0]);
+            assert!(validate_archive_bytes(&original, &altered, 123).is_err());
+        }
+        let mut altered = original.clone();
+        altered[512] ^= 1;
+        assert!(validate_archive_bytes(&altered, &expected(), 123).is_err());
+        let mut altered = original.clone();
+        *altered.last_mut().unwrap() = 1;
+        assert!(validate_archive_bytes(&altered, &expected(), 123).is_err());
+        assert!(validate_archive_bytes(&original[..original.len() - 1], &expected(), 123).is_err());
+        assert!(validate_archive_bytes(&[], &expected(), 123).is_err());
+        assert!(validate_archive_bytes(&original, &[], 123).is_err());
+        let mut overflow = expected();
+        overflow[0].byte_length = u64::MAX;
+        assert!(validate_archive_bytes(&original, &overflow, 123).is_err());
+    }
+
+    #[test]
+    fn exact_blob_reads_bind_revision_path_and_output_limit() {
+        let (_fixture, root, revision) = fixture();
+        assert_eq!(
+            read_blob(&root, &revision, "alpha.txt", 6).unwrap(),
+            b"alpha\n"
+        );
+        assert!(read_blob(&root, &revision, "alpha.txt", 5).is_err());
+        assert!(read_blob(&root, &revision, "absent", 6).is_err());
+        for maximum in [0, MAX_SOURCE_MEMBER_BYTES + 1] {
+            assert!(read_blob(&root, &revision, "alpha.txt", maximum).is_err());
+        }
+        for path in [
+            "",
+            "/absolute",
+            "../escape",
+            "a\\b",
+            "a\nb",
+            "a\rb",
+            "a\0b",
+            ".",
+            &"x".repeat(MAX_USTAR_PATH_BYTES + 1),
+        ] {
+            assert!(read_blob(&root, &revision, path, 10).is_err(), "{path:?}");
+        }
+        for invalid in ["short", &"G".repeat(40), &"0".repeat(40)] {
+            assert!(read_blob(&root, invalid, "alpha.txt", 10).is_err());
+        }
+        assert!(read_blob(Path::new("relative"), &revision, "alpha.txt", 10).is_err());
+        assert!(read_blob(&root.join("absent"), &revision, "alpha.txt", 10).is_err());
+        assert!(git_output(&root, &["not-a-real-git-command"], 100).is_err());
+        assert!(git_output(&root.join("absent"), &["status"], 100).is_err());
+        assert_eq!(split_once(b"missing", b'\t'), None);
+        assert_eq!(
+            split_once(b"one\ttwo\tthree", b'\t'),
+            Some((&b"one"[..], &b"two\tthree"[..]))
+        );
+    }
+
+    #[test]
+    fn archive_creation_requires_fresh_canonical_output_and_nonempty_commit() {
+        let (_fixture, root, revision) = fixture();
+        let output = root.join("output.tar");
+        fs::write(&output, b"preserve").unwrap();
+        assert!(create(&root, &revision, &output, 1).is_err());
+        assert_eq!(fs::read(&output).unwrap(), b"preserve");
+        assert!(create(&root, &revision, &root.join("absent/output.tar"), 1).is_err());
+        git(&root, &["rm", "-r", "alpha.txt", "nested"]);
+        git(&root, &["commit", "--quiet", "-m", "empty source"]);
+        let empty = git(&root, &["rev-parse", "HEAD"]);
+        assert!(create(&root, &empty, &root.join("empty.tar"), 1).is_err());
+        assert!(!root.join("empty.tar").exists());
+        #[cfg(unix)]
+        {
+            let link = root.join("parent-link");
+            std::os::unix::fs::symlink(root.join(".git"), &link).unwrap();
+            assert!(create(&root, &revision, &link.join("archive.tar"), 1).is_err());
+        }
+    }
+
+    #[test]
     fn exact_tree_archive_is_reproducible_and_canonical() {
         let (fixture, root, revision) = fixture();
         let first = fixture.path().join("first.tar");

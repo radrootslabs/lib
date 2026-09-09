@@ -662,6 +662,38 @@ mod tests {
     }
 
     #[test]
+    fn aggregate_schema_sql_accepts_its_exact_limit_and_rejects_one_extra_byte() {
+        fn object(name: &'static str, size: usize) -> SchemaObject {
+            let prefix = format!("CREATE TABLE {name} (value INTEGER) /*");
+            let sql: &'static str = Box::leak(
+                format!("{prefix}{}*/", "x".repeat(size - prefix.len() - 2)).into_boxed_str(),
+            );
+            assert_eq!(sql.len(), size);
+            let digest =
+                SchemaObject::computed_digest(SchemaObjectKind::Table, name, name, sql).unwrap();
+            SchemaObject::new(SchemaObjectKind::Table, name, name, sql, digest).unwrap()
+        }
+        let shared = shared_objects()
+            .iter()
+            .map(|object| object.sql.len())
+            .sum::<usize>();
+        let mut objects = (0..15)
+            .map(|index| {
+                let name: &'static str = Box::leak(format!("table_{index}").into_boxed_str());
+                object(name, MAX_SCHEMA_SQL_UTF8_BYTES)
+            })
+            .collect::<Vec<_>>();
+        let last_size = MAX_SCHEMA_CATALOG_UTF8_BYTES - shared - 15 * MAX_SCHEMA_SQL_UTF8_BYTES;
+        objects.push(object("last_table", last_size));
+        SchemaVersionCatalog::computed_digest(1, objects.iter().cloned()).unwrap();
+        *objects.last_mut().unwrap() = object("last_table", last_size + 1);
+        assert_eq!(
+            SchemaVersionCatalog::computed_digest(1, objects),
+            Err(SchemaCatalogContractError::TooManyObjects)
+        );
+    }
+
+    #[test]
     fn exact_object_snapshot_and_catalog_vectors_are_stable() {
         let object = table();
         assert_eq!(

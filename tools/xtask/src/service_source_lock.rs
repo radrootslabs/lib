@@ -1037,6 +1037,90 @@ mod tests {
     }
 
     #[test]
+    fn deferred_material_parser_accepts_both_exact_layouts_and_rejects_ambiguous_selection() {
+        let revision = "1".repeat(40);
+        let mut original = serde_json::json!({"version":7,"root":"root","nodes":{
+            "root":{"inputs":{"lib":"lib"}},
+            "lib":{
+                "locked":{"lastModified":1,"narHash":format!("sha256-{}=", "A".repeat(43)),"owner":"radrootslabs","repo":"lib","rev":revision,"type":"github"},
+                "original":{"owner":"radrootslabs","repo":"lib","rev":revision,"type":"github"}
+            }
+        }});
+        let bytes = serde_json::to_vec(&original).unwrap();
+        assert_eq!(validate_deferred_nix_lock(&bytes).unwrap(), revision);
+        let direct = format!(
+            "inputs.lib = {{\nurl = \"github:radrootslabs/lib/{revision}\";\nflake = false;\n}};\n"
+        );
+        let nested = format!(
+            "inputs = {{\nlib = {{\nurl = \"github:radrootslabs/lib/{revision}\";\nflake = false;\n}};\n}};\n"
+        );
+        for expression in [&direct, &nested] {
+            assert_eq!(
+                validate_deferred_nix_material(expression.as_bytes(), &bytes)
+                    .unwrap()
+                    .lib_revision(),
+                revision
+            );
+            for changed in [
+                expression.replace("flake = false;", "flake = true;"),
+                expression.replace(&revision, &"2".repeat(40)),
+                format!("{expression}{direct}"),
+            ] {
+                assert_eq!(
+                    validate_deferred_nix_material(changed.as_bytes(), &bytes),
+                    Err(ServiceSourceLockError::InvalidNixMaterial)
+                );
+            }
+        }
+        assert!(validate_deferred_nix_material(&[255], &bytes).is_err());
+        for (pointer, value) in [
+            ("/root", serde_json::json!("")),
+            ("/root", serde_json::json!(null)),
+            ("/nodes", serde_json::json!([])),
+            ("/nodes/root/inputs/lib", serde_json::json!([])),
+            ("/nodes/lib/locked/owner", serde_json::json!("elsewhere")),
+            ("/nodes/lib/original/owner", serde_json::json!("elsewhere")),
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).unwrap() = value;
+            assert!(
+                validate_deferred_nix_lock(&serde_json::to_vec(&changed).unwrap()).is_err(),
+                "{pointer}"
+            );
+        }
+        original["nodes"]["unrelated"] =
+            serde_json::json!({"values":[null,true,1,-1,"text",{},[]]});
+        assert_eq!(
+            validate_deferred_nix_lock(&serde_json::to_vec(&original).unwrap()).unwrap(),
+            revision
+        );
+        original["unknown"] = serde_json::json!(true);
+        assert!(validate_deferred_nix_lock(&serde_json::to_vec(&original).unwrap()).is_err());
+        for digest in [
+            "invalid".to_owned(),
+            format!("sha256-{}x", "A".repeat(43)),
+            format!("sha256-{}?=", "A".repeat(42)),
+        ] {
+            assert!(!valid_nix_sha256(&digest));
+        }
+        for service in ["a_", "a-b", "a.B"] {
+            assert!(!valid_service(service));
+        }
+    }
+
+    #[test]
+    fn source_lock_contract_input_must_be_a_bounded_regular_file() {
+        let root = tempfile::TempDir::new().unwrap();
+        let contract = root.path().join(CONTRACT_RELATIVE);
+        fs::create_dir_all(contract.parent().unwrap()).unwrap();
+        fs::create_dir(&contract).unwrap();
+        assert!(validate_contract_inner(root.path()).is_err());
+        fs::remove_dir(&contract).unwrap();
+        fs::write(&contract, vec![b' '; MAX_CONTRACT_BYTES + 1]).unwrap();
+        assert!(validate_contract_inner(root.path()).is_err());
+    }
+
+    #[test]
     fn decision_rejects_every_independent_governed_field_drift() {
         let bytes = fs::read(workspace_root().join(CONTRACT_RELATIVE)).expect("decision");
         let canonical = serde_json::from_slice::<serde_json::Value>(&bytes).expect("decision json");

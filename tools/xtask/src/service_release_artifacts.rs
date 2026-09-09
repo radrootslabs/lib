@@ -2758,6 +2758,7 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
 
 #[cfg(test)]
 mod tests {
+    use serde_json::{Value, json};
     use std::process::Command;
 
     use crate::service_source_lock::ContractVersions;
@@ -3172,6 +3173,248 @@ version = "0.1.0-alpha"
     }
 
     #[test]
+    fn oci_admission_reconciles_manifest_config_and_layer_content() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let original = root.join("original.tar.gz");
+        let revision = "a".repeat(40);
+        create_oci_fixture(&original, &revision, &revision);
+        let expected = artifact_admission::OciExpectation {
+            service: "myc",
+            binary_name: "fixture-service",
+            version: "0.1.0-alpha",
+            service_revision: &revision,
+            lib_revision: &revision,
+            license: "AGPL-3.0-or-later",
+            contract_versions: artifact_admission::ContractVersions {
+                admin: 1,
+                config: 1,
+                provider: 1,
+                state: 1,
+                status: 1,
+            },
+        };
+        artifact_admission::admit_oci(&original, &root, &expected).unwrap();
+        let decoder = flate2::read::GzDecoder::new(fs::File::open(&original).unwrap());
+        let mut archive = tar::Archive::new(decoder);
+        let mut original_members = BTreeMap::new();
+        let mut directories = BTreeSet::new();
+        for entry in archive.entries().unwrap() {
+            let mut entry = entry.unwrap();
+            let name = entry.path().unwrap().to_str().unwrap().to_owned();
+            if entry.header().entry_type().is_dir() {
+                directories.insert(name.clone());
+            }
+            let mut bytes = Vec::new();
+            entry.read_to_end(&mut bytes).unwrap();
+            original_members.insert(name, bytes);
+        }
+        for case in 0..14 {
+            let mut members = original_members.clone();
+            let mut manifest: Value = serde_json::from_slice(&members["manifest.json"]).unwrap();
+            match case {
+                0 => manifest = json!([]),
+                1 => manifest[0]["Config"] = json!("wrong.extension"),
+                2 => manifest[0]["Config"] = json!("invalid.json"),
+                3 => manifest[0]["RepoTags"] = json!(["wrong:tag"]),
+                4 => manifest[0]["Layers"] = json!([]),
+                5 => manifest[0]["Layers"] = json!(["one", "two", "three"]),
+                6 => {
+                    manifest[0]["Layers"] = json!([
+                        manifest[0]["Layers"][0].clone(),
+                        manifest[0]["Layers"][0].clone()
+                    ])
+                }
+                7 => {
+                    members
+                        .get_mut(manifest[0]["Config"].as_str().unwrap())
+                        .unwrap()
+                        .push(b' ');
+                }
+                8..=10 => {
+                    let old_name = manifest[0]["Config"].as_str().unwrap().to_owned();
+                    let mut config: Value =
+                        serde_json::from_slice(&members.remove(&old_name).unwrap()).unwrap();
+                    match case {
+                        8 => config["rootfs"]["type"] = json!("unknown"),
+                        9 => config["rootfs"]["diff_ids"] = json!([]),
+                        _ => {
+                            config["rootfs"]["diff_ids"] =
+                                json!([format!("sha256:{}", "0".repeat(64))])
+                        }
+                    }
+                    let bytes = serde_json::to_vec(&config).unwrap();
+                    let name = format!("{}.json", sha256_bytes(&bytes));
+                    members.insert(name.clone(), bytes);
+                    manifest[0]["Config"] = json!(name);
+                }
+                11 => {
+                    members.remove(manifest[0]["Layers"][0].as_str().unwrap());
+                }
+                12 => {
+                    members.insert("unexpected".to_owned(), b"extra".to_vec());
+                }
+                _ => {}
+            }
+            members.insert(
+                "manifest.json".to_owned(),
+                serde_json::to_vec(&manifest).unwrap(),
+            );
+            let path = root.join(format!("invalid-{case}.tar.gz"));
+            let encoder = GzBuilder::new()
+                .mtime(0)
+                .operating_system(255)
+                .write(fs::File::create(&path).unwrap(), Compression::best());
+            let mut archive = TarBuilder::new(encoder);
+            for (name, bytes) in members {
+                let mut header = TarHeader::new_gnu();
+                let directory = directories.contains(&name);
+                header.set_entry_type(if directory {
+                    tar::EntryType::Directory
+                } else {
+                    tar::EntryType::Regular
+                });
+                header.set_size(bytes.len() as u64);
+                header.set_mode(if directory { 0o755 } else { 0o644 });
+                header.set_uid(0);
+                header.set_gid(0);
+                header.set_mtime(0);
+                header.set_cksum();
+                archive
+                    .append_data(&mut header, name, bytes.as_slice())
+                    .unwrap();
+            }
+            archive.into_inner().unwrap().finish().unwrap();
+            let admitted = artifact_admission::admit_oci(&path, &root, &expected);
+            if case == 13 {
+                admitted.expect("rewritten unmodified OCI fixture remains valid");
+            } else {
+                assert!(admitted.is_err(), "OCI case {case}");
+            }
+        }
+        for case in 0..5 {
+            let mut changed = artifact_admission::OciExpectation { ..expected };
+            match case {
+                0 => changed.license = "MIT",
+                1 => changed.service = "../escape",
+                2 => changed.binary_name = "../escape",
+                3 => changed.service_revision = "invalid",
+                _ => changed.lib_revision = "invalid",
+            }
+            assert!(artifact_admission::admit_oci(&original, &root, &changed).is_err());
+        }
+    }
+
+    #[test]
+    fn dependency_license_admission_preserves_exact_text_and_rejects_missing_or_unsafe_paths() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let mut dependency = package(
+            "fixture",
+            "fixture",
+            Some("registry+https://github.com/rust-lang/crates.io-index"),
+            Some(&"a".repeat(64)),
+            Some("MIT"),
+            false,
+        );
+        dependency.manifest_path = root.join("Cargo.toml").to_str().unwrap().to_owned();
+        fs::write(root.join("Cargo.toml"), b"fixture").unwrap();
+        assert!(dependency_license_texts(&dependency).is_err());
+        let text = "Fixture copyright\nPermission is granted.\n";
+        fs::write(root.join("LICENSE"), text).unwrap();
+        fs::write(root.join("COPYING-MIT"), "Copying terms\n").unwrap();
+        fs::write(root.join("NOTICE.txt"), "Notice terms\n").unwrap();
+        let texts = dependency_license_texts(&dependency).unwrap();
+        assert_eq!(
+            texts
+                .iter()
+                .map(|row| row.filename.as_str())
+                .collect::<Vec<_>>(),
+            ["COPYING-MIT", "LICENSE", "NOTICE.txt"]
+        );
+        assert_eq!(texts[1].text, text);
+        assert_eq!(texts[1].sha256, sha256_bytes(text.as_bytes()));
+        dependency.license_file = Some("LICENSE".to_owned());
+        assert_eq!(dependency_license_texts(&dependency).unwrap().len(), 1);
+        for path in ["../outside", "/absolute", "./LICENSE", "missing"] {
+            dependency.license_file = Some(path.to_owned());
+            assert!(dependency_license_texts(&dependency).is_err(), "{path}");
+        }
+        for path in [
+            "relative/Cargo.toml".to_owned(),
+            root.join("not-a-manifest").to_str().unwrap().to_owned(),
+        ] {
+            dependency.manifest_path = path;
+            assert!(dependency_license_texts(&dependency).is_err());
+        }
+    }
+
+    #[test]
+    fn dependency_license_content_and_inventory_are_bounded() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let mut dependency = package(
+            "fixture",
+            "fixture",
+            Some("registry+https://github.com/rust-lang/crates.io-index"),
+            Some(&"a".repeat(64)),
+            Some("MIT"),
+            false,
+        );
+        dependency.manifest_path = root.join("Cargo.toml").to_str().unwrap().to_owned();
+        dependency.license_file = Some("LICENSE".to_owned());
+        for bytes in [
+            b" \n\t".as_slice(),
+            &[255, 254],
+            b"-----BEGIN PRIVATE KEY-----\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n-----END PRIVATE KEY-----",
+        ] {
+            fs::write(root.join("LICENSE"), bytes).unwrap();
+            assert!(dependency_license_texts(&dependency).is_err());
+        }
+        let file = fs::File::create(root.join("LICENSE")).unwrap();
+        file.set_len(MAX_TEXT_INPUT_BYTES + 1).unwrap();
+        assert!(dependency_license_texts(&dependency).is_err());
+        drop(file);
+        fs::write(root.join("LICENSE"), b"Valid terms\n").unwrap();
+        dependency.license_file = None;
+        for index in 0..16 {
+            fs::write(root.join(format!("LICENSE-{index}")), b"Terms\n").unwrap();
+        }
+        assert!(dependency_license_texts(&dependency).is_err());
+        for index in 0..256 {
+            fs::write(root.join(format!("ordinary-{index}")), b"").unwrap();
+        }
+        assert!(dependency_license_texts(&dependency).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dependency_license_paths_cannot_escape_the_package_root() {
+        use std::os::unix::fs::symlink;
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let package_root = root.join("package");
+        fs::create_dir(&package_root).unwrap();
+        let mut dependency = package(
+            "fixture",
+            "fixture",
+            Some("registry+https://github.com/rust-lang/crates.io-index"),
+            Some(&"a".repeat(64)),
+            Some("MIT"),
+            false,
+        );
+        dependency.manifest_path = package_root.join("Cargo.toml").to_str().unwrap().to_owned();
+        fs::write(root.join("outside"), b"Outside terms\n").unwrap();
+        symlink(root.join("outside"), package_root.join("LICENSE")).unwrap();
+        assert!(dependency_license_texts(&dependency).is_err());
+        fs::create_dir(package_root.join("nested")).unwrap();
+        fs::write(package_root.join("nested/terms"), b"Nested terms\n").unwrap();
+        dependency.license_file = Some("nested/terms".to_owned());
+        assert!(dependency_license_texts(&dependency).is_err());
+        assert_eq!(fs::read(root.join("outside")).unwrap(), b"Outside terms\n");
+    }
+
+    #[test]
     fn contract_matches_the_checked_in_decision() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
@@ -3322,6 +3565,42 @@ version = "0.1.0-alpha"
         assert!(notices.contains("registry+https://github.com/rust-lang/crates.io-index"));
         assert!(notices.contains("License-Text: LICENSE sha256:"));
         assert!(licenses.contains("fixture dependency license text"));
+    }
+
+    #[test]
+    fn license_documents_require_exact_bounded_nonempty_text_and_safe_filenames() {
+        build_supply_chain_documents(&sample_metadata(), sample_cargo_metadata()).unwrap();
+        for case in ["missing", "filename", "empty", "oversized"] {
+            let mut changed = sample_cargo_metadata();
+            let package = &mut changed.packages[1];
+            match case {
+                "missing" => package.license_texts.clear(),
+                "filename" => package.license_texts[0].filename = "../LICENSE".into(),
+                "empty" => package.license_texts[0].text = " \n".into(),
+                "oversized" => {
+                    package.license_texts[0].text =
+                        "x".repeat(MAX_GENERATED_DOCUMENT_BYTES as usize + 1)
+                }
+                _ => unreachable!(),
+            }
+            if let Some(text) = package.license_texts.first_mut() {
+                text.sha256 = sha256_bytes(text.text.as_bytes());
+            }
+            assert!(
+                matches!(
+                    build_supply_chain_documents(&sample_metadata(), changed),
+                    Err(ReleaseArtifactError::InvalidPackageInventory)
+                ),
+                "{case}"
+            );
+        }
+        let mut without_newline = sample_cargo_metadata();
+        let text = &mut without_newline.packages[1].license_texts[0];
+        text.text = "Exact license terms".into();
+        text.sha256 = sha256_bytes(text.text.as_bytes());
+        let (_, _, document) =
+            build_supply_chain_documents(&sample_metadata(), without_newline).unwrap();
+        assert!(document.ends_with("Exact license terms\n"));
     }
 
     #[test]
@@ -4380,6 +4659,88 @@ version = "0.1.0-alpha"
     }
 
     #[test]
+    fn release_metadata_rejects_well_typed_but_invalid_identifiers_and_versions() {
+        let temporary = TempDir::new().unwrap();
+        let original: toml::Value = toml::from_str(
+            r#"
+            [workspace.package]
+            license = "AGPL-3.0-or-later"
+            [workspace.metadata.radroots.service_release]
+            service = "myc"
+            service_package = "fixture-service"
+            binary_name = "fixture-service"
+            version = "0.1.0-alpha"
+        "#,
+        )
+        .unwrap();
+        let manifest = temporary.path().join("Cargo.toml");
+        fs::write(&manifest, toml::to_string(&original).unwrap()).unwrap();
+        read_release_metadata(temporary.path()).unwrap();
+        for (field, replacement) in [
+            ("service", "Invalid".to_owned()),
+            ("service_package", "Invalid".to_owned()),
+            ("binary_name", "../escape".to_owned()),
+            ("version", "x".repeat(129)),
+            ("version", "invalid".to_owned()),
+            ("version", "01.0.0".to_owned()),
+        ] {
+            let mut value = original.clone();
+            value["workspace"]["metadata"]["radroots"]["service_release"][field] =
+                toml::Value::String(replacement);
+            fs::write(&manifest, toml::to_string(&value).unwrap()).unwrap();
+            assert!(matches!(
+                read_release_metadata(temporary.path()),
+                Err(ReleaseArtifactError::InvalidServiceMetadata)
+            ));
+        }
+        let mut value = original;
+        value["workspace"]["package"]["license"] = toml::Value::String("MIT".to_owned());
+        fs::write(&manifest, toml::to_string(&value).unwrap()).unwrap();
+        assert!(matches!(
+            read_release_metadata(temporary.path()),
+            Err(ReleaseArtifactError::InvalidServiceMetadata)
+        ));
+    }
+
+    #[test]
+    fn sbom_dependency_edges_composition_and_artifact_hashes_are_exact() {
+        let artifacts = vec![ArtifactRecord {
+            path: "binary.tar.gz".to_owned(),
+            byte_length: 42,
+            sha256: "a".repeat(64),
+        }];
+        for case in 0..7 {
+            let (mut sbom, _, _) =
+                build_supply_chain_documents(&sample_metadata(), sample_cargo_metadata()).unwrap();
+            reconcile_sbom_artifacts(&mut sbom, &artifacts);
+            validate_cyclonedx_profile(&sbom, &artifacts).unwrap();
+            match case {
+                0 => sbom.components[0].bom_ref = sbom.metadata.component.bom_ref.clone(),
+                1 => {
+                    sbom.dependencies.pop();
+                }
+                2 => sbom.dependencies[0].reference = "unknown".to_owned(),
+                3 => sbom.dependencies[0].depends_on.push("unknown".to_owned()),
+                4 => sbom.compositions[0].aggregate = "incomplete",
+                5 => sbom.compositions[0].assemblies.clear(),
+                _ => {
+                    let artifact = sbom
+                        .components
+                        .iter_mut()
+                        .find(|row| row.bom_ref.starts_with("artifact:"))
+                        .unwrap();
+                    artifact.hashes[0].content = "b".repeat(64);
+                }
+            }
+            assert_eq!(
+                validate_cyclonedx_profile(&sbom, &artifacts),
+                Err(ReleaseArtifactError::GenerationFailure),
+                "SBOM case {case}"
+            );
+        }
+    }
+
+    #[test]
     fn schema_reconciliation_attribution_and_subjects_fail_closed() {
         let (mut sbom, _, _) =
             build_supply_chain_documents(&sample_metadata(), sample_cargo_metadata())
@@ -4426,6 +4787,13 @@ version = "0.1.0-alpha"
         );
         validate_provenance_subjects(&provenance, &"a".repeat(64), &artifacts)
             .expect("exact provenance subjects");
+        provenance.statement_type = "unknown";
+        assert!(validate_provenance_subjects(&provenance, &"a".repeat(64), &artifacts).is_err());
+        provenance.statement_type = "https://in-toto.io/Statement/v1";
+        provenance.predicate_type = "unknown";
+        assert!(validate_provenance_subjects(&provenance, &"a".repeat(64), &artifacts).is_err());
+        provenance.predicate_type = "https://slsa.dev/provenance/v1";
+        assert!(validate_provenance_subjects(&provenance, &"b".repeat(64), &artifacts).is_err());
         provenance.subject.clear();
         assert_eq!(
             validate_provenance_subjects(&provenance, &"a".repeat(64), &artifacts),
@@ -4446,39 +4814,48 @@ version = "0.1.0-alpha"
             nested_members_scanned: 1,
             expanded_bytes_scanned: 42,
         };
-        let mut manifest = ArtifactManifestDocument {
-            schema: "radroots.service.release-artifacts.v2",
-            contract_version: 2,
-            candidate_digest: "a".repeat(64),
-            service: "myc".to_owned(),
-            version: "0.1.0-alpha".to_owned(),
-            target: native_fixture_target().to_owned(),
-            source_date_epoch: 1_700_000_000,
-            service_revision: "1".repeat(40),
-            lib_revision: "2".repeat(40),
-            rust_version: "1.97.1",
-            host_feature_profile: "service-host",
-            contract_versions: ContractVersionsDocument {
-                config: 1,
-                state: 1,
-                admin: 1,
-                status: 1,
-                provider: 1,
-            },
-            confidentiality: ConfidentialityDocument {
-                state: scan.state,
-                derived_from: artifact_record("artifact-scan.v1.json", &scan_evidence),
-                protected_material_included: false,
-            },
-            artifacts: artifacts.clone(),
-        };
-        validate_confidentiality_binding(&manifest, &scan, &scan_evidence, &artifacts)
-            .expect("derived confidentiality");
-        manifest.confidentiality.state = "invented_clean_state";
-        assert_eq!(
-            validate_confidentiality_binding(&manifest, &scan, &scan_evidence, &artifacts),
-            Err(ReleaseArtifactError::GenerationFailure)
-        );
+        for case in 0..6 {
+            let mut manifest = ArtifactManifestDocument {
+                schema: "radroots.service.release-artifacts.v2",
+                contract_version: 2,
+                candidate_digest: "a".repeat(64),
+                service: "myc".to_owned(),
+                version: "0.1.0-alpha".to_owned(),
+                target: native_fixture_target().to_owned(),
+                source_date_epoch: 1_700_000_000,
+                service_revision: "1".repeat(40),
+                lib_revision: "2".repeat(40),
+                rust_version: "1.97.1",
+                host_feature_profile: "service-host",
+                contract_versions: ContractVersionsDocument {
+                    config: 1,
+                    state: 1,
+                    admin: 1,
+                    status: 1,
+                    provider: 1,
+                },
+                confidentiality: ConfidentialityDocument {
+                    state: scan.state,
+                    derived_from: artifact_record("artifact-scan.v1.json", &scan_evidence),
+                    protected_material_included: false,
+                },
+                artifacts: artifacts.clone(),
+            };
+            validate_confidentiality_binding(&manifest, &scan, &scan_evidence, &artifacts)
+                .expect("derived confidentiality");
+            match case {
+                0 => manifest.confidentiality.state = "invented_clean_state",
+                1 => manifest.candidate_digest = "b".repeat(64),
+                2 => manifest.confidentiality.protected_material_included = true,
+                3 => manifest.confidentiality.derived_from.path = "unknown".to_owned(),
+                4 => manifest.confidentiality.derived_from.sha256 = "b".repeat(64),
+                _ => manifest.artifacts.clear(),
+            }
+            assert_eq!(
+                validate_confidentiality_binding(&manifest, &scan, &scan_evidence, &artifacts),
+                Err(ReleaseArtifactError::GenerationFailure)
+            );
+        }
     }
 
     #[test]
@@ -4521,6 +4898,63 @@ version = "0.1.0-alpha"
             scan_tar_members(&bundle, false),
             Err(ReleaseArtifactError::InvalidInputArtifact)
         );
+    }
+
+    #[test]
+    fn archive_scanning_enforces_member_types_counts_lengths_and_protected_paths() {
+        let root = TempDir::new().unwrap();
+        let path = root.path().join("input.tar");
+        for kind in [
+            tar::EntryType::Directory,
+            tar::EntryType::Symlink,
+            tar::EntryType::Link,
+            tar::EntryType::Fifo,
+        ] {
+            let mut builder = TarBuilder::new(Vec::new());
+            let mut header = TarHeader::new_gnu();
+            header.set_path("member").unwrap();
+            header.set_entry_type(kind);
+            header.set_size(0);
+            if kind.is_symlink() || kind.is_hard_link() {
+                header.set_link_name("target").unwrap();
+            }
+            header.set_cksum();
+            builder.append(&header, &[][..]).unwrap();
+            let bytes = builder.into_inner().unwrap();
+            fs::write(&path, &bytes).unwrap();
+            assert!(scan_tar_members(&path, false).is_err());
+            assert_eq!(
+                scan_tar_members(&path, true).is_ok(),
+                kind != tar::EntryType::Fifo
+            );
+            let gzip = root.path().join("binary.tar.gz");
+            let mut encoder = GzBuilder::new().write(Vec::new(), Compression::best());
+            encoder.write_all(&bytes).unwrap();
+            fs::write(&gzip, encoder.finish().unwrap()).unwrap();
+            assert_eq!(scan_tar_gzip_members(&gzip).is_ok(), kind.is_dir());
+        }
+        let empty = TarBuilder::new(Vec::new()).into_inner().unwrap();
+        fs::write(&path, &empty).unwrap();
+        assert!(scan_tar_members(&path, true).is_err());
+        let mut encoder = GzBuilder::new().write(Vec::new(), Compression::best());
+        encoder.write_all(&empty).unwrap();
+        fs::write(&path, encoder.finish().unwrap()).unwrap();
+        assert!(scan_tar_gzip_members(&path).is_err());
+        for length in [2, 4] {
+            assert!(scan_reader(&mut &b"abc"[..], length).is_err());
+        }
+        assert_eq!(scan_reader(&mut &b"abc"[..], 3).unwrap(), 3);
+        for path in [
+            "/absolute",
+            "../escape",
+            "src/.ssh/config",
+            &"a".repeat(MAX_ARCHIVE_PATH_BYTES + 1),
+        ] {
+            assert_eq!(
+                validate_scanned_path(path),
+                Err(ReleaseArtifactError::ProtectedMaterialDetected)
+            );
+        }
     }
 
     fn write_tar_fixture(path: &Path, member: &str, bytes: &[u8], gzip: bool) {

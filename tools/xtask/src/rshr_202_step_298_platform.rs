@@ -36,7 +36,11 @@ fn uname(flag: &str) -> Result<String, String> {
     if !output.status.success() || !output.stderr.is_empty() {
         return Err("Step 298 platform probe uname failed".to_owned());
     }
-    let value = std::str::from_utf8(&output.stdout)
+    parse_uname(&output.stdout)
+}
+
+fn parse_uname(stdout: &[u8]) -> Result<String, String> {
+    let value = std::str::from_utf8(stdout)
         .map_err(|_| "Step 298 platform probe uname output is not UTF-8".to_owned())?
         .strip_suffix('\n')
         .ok_or_else(|| "Step 298 platform probe uname output differs".to_owned())?;
@@ -49,7 +53,20 @@ fn uname(flag: &str) -> Result<String, String> {
 pub(crate) fn run() -> Result<(), String> {
     let request_bytes = fs::read(root().join(REQUEST_PATH))
         .map_err(|_| "Step 298 platform execution request is unavailable".to_owned())?;
-    let raw_request = std::str::from_utf8(&request_bytes)
+    let execution_request_sha256 = request_digest(&request_bytes)?;
+    let bytes = result_bytes(
+        execution_request_sha256,
+        &uname("-s")?,
+        &uname("-r")?,
+        &uname("-v")?,
+        std::env::consts::ARCH,
+    )?;
+    std::io::Write::write_all(&mut std::io::stdout().lock(), &bytes)
+        .map_err(|_| "Step 298 platform result write failed".to_owned())
+}
+
+fn request_digest(request_bytes: &[u8]) -> Result<&str, String> {
+    let raw_request = std::str::from_utf8(request_bytes)
         .map_err(|_| "Step 298 platform execution request is not UTF-8".to_owned())?;
     let execution_request_sha256 = raw_request.strip_suffix('\n').unwrap_or(raw_request);
     if execution_request_sha256.len() != 64
@@ -59,11 +76,17 @@ pub(crate) fn run() -> Result<(), String> {
     {
         return Err("Step 298 platform execution request differs".to_owned());
     }
+    Ok(execution_request_sha256)
+}
 
-    let kernel_name = uname("-s")?;
-    let kernel_release = uname("-r")?;
-    let kernel_version = uname("-v")?;
-    if kernel_name != "Darwin" || std::env::consts::ARCH != "aarch64" {
+fn result_bytes(
+    execution_request_sha256: &str,
+    kernel_name: &str,
+    kernel_release: &str,
+    kernel_version: &str,
+    architecture: &str,
+) -> Result<Vec<u8>, String> {
+    if kernel_name != "Darwin" || architecture != "aarch64" {
         return Err("Step 298 platform identity differs".to_owned());
     }
 
@@ -98,6 +121,66 @@ pub(crate) fn run() -> Result<(), String> {
     });
     let mut bytes = canonical(&result)?;
     bytes.push(b'\n');
-    std::io::Write::write_all(&mut std::io::stdout().lock(), &bytes)
-        .map_err(|_| "Step 298 platform result write failed".to_owned())
+    Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_digest_rejects_noncanonical_or_unbound_values() {
+        let digest = "0123456789abcdef".repeat(4);
+        assert_eq!(request_digest(digest.as_bytes()).unwrap(), digest);
+        assert_eq!(
+            request_digest(format!("{digest}\n").as_bytes()).unwrap(),
+            digest
+        );
+        for bytes in [
+            vec![],
+            vec![0xff],
+            vec![b'0'; 63],
+            vec![b'0'; 65],
+            vec![b'G'; 64],
+            vec![b'A'; 64],
+            format!("{digest}\n\n").into_bytes(),
+        ] {
+            assert!(request_digest(&bytes).is_err());
+        }
+    }
+
+    #[test]
+    fn uname_output_requires_one_nonempty_utf8_line() {
+        assert_eq!(parse_uname(b"Darwin\n").unwrap(), "Darwin");
+        for bytes in [
+            b"".as_slice(),
+            b"\n",
+            b"Darwin",
+            b"Dar\nwin\n",
+            b"Darwin\r\n",
+            &[0xff],
+        ] {
+            assert!(parse_uname(bytes).is_err());
+        }
+    }
+
+    #[test]
+    fn encoded_platform_fixture_binds_request_and_kernel_without_qualifying_host() {
+        let request = "a".repeat(64);
+        let bytes = result_bytes(
+            &request,
+            "Darwin",
+            "fixture-release",
+            "fixture-version",
+            "aarch64",
+        )
+        .unwrap();
+        let result: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result["execution_request_sha256"], request);
+        assert_eq!(result["kernel_release"], "fixture-release");
+        assert_eq!(result["os_build_sha256"], sha256(&canonical(&json!({"kernel_name":"Darwin", "kernel_release":"fixture-release", "kernel_version":"fixture-version"})).unwrap()));
+        assert!(bytes.ends_with(b"\n"));
+        assert!(result_bytes(&request, "Linux", "fixture", "fixture", "aarch64").is_err());
+        assert!(result_bytes(&request, "Darwin", "fixture", "fixture", "x86_64").is_err());
+    }
 }

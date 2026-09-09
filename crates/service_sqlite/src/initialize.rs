@@ -1327,6 +1327,21 @@ mod supported {
             assert!(!called.get());
             assert!(!expected_paths.state_database().exists());
             assert!(!expected_paths.state_lock().exists());
+            let error = initialize_or_existing_database(
+                &expected_paths,
+                &other_metadata,
+                &base_schema_catalog(),
+                |_| {
+                    called.set(true);
+                    Box::pin(ready(Ok::<(), CallbackFailure>(())))
+                },
+            )
+            .await
+            .expect_err("existing-or-new initialization must reject mismatched identity");
+            assert_eq!(error.kind(), ServiceSqliteErrorKind::Metadata);
+            assert!(!called.get());
+            assert!(!expected_paths.state_database().exists());
+            assert!(!expected_paths.state_lock().exists());
         }
 
         #[tokio::test(flavor = "current_thread")]

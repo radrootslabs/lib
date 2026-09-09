@@ -2385,6 +2385,161 @@ mod tests {
     }
 
     #[test]
+    fn zero_limits_and_unsafe_names_fail_before_filesystem_admission() {
+        for mutate in [
+            |limits: &mut TraversalLimits| limits.max_entries = 0,
+            |limits: &mut TraversalLimits| limits.max_files = 0,
+            |limits: &mut TraversalLimits| limits.max_total_bytes = 0,
+            |limits: &mut TraversalLimits| limits.max_file_bytes = 0,
+            |limits: &mut TraversalLimits| limits.max_depth = 0,
+            |limits: &mut TraversalLimits| limits.max_path_bytes = 0,
+        ] {
+            let mut limits = traversal_limits();
+            mutate(&mut limits);
+            assert_eq!(
+                validate_traversal_limits(limits).unwrap_err().kind(),
+                ArtifactIoFailureKind::InvalidRequest
+            );
+        }
+        for mutate in [
+            |limits: &mut TarGzipLimits| limits.max_compressed_bytes = 0,
+            |limits: &mut TarGzipLimits| limits.max_expanded_bytes = 0,
+            |limits: &mut TarGzipLimits| limits.max_members = 0,
+            |limits: &mut TarGzipLimits| limits.max_member_bytes = 0,
+            |limits: &mut TarGzipLimits| limits.max_payload_bytes = 0,
+            |limits: &mut TarGzipLimits| limits.max_depth = 0,
+            |limits: &mut TarGzipLimits| limits.max_path_bytes = 0,
+        ] {
+            let mut limits = archive_limits();
+            mutate(&mut limits);
+            assert_eq!(
+                validate_archive_limits(limits).unwrap_err().kind(),
+                ArtifactIoFailureKind::InvalidRequest
+            );
+        }
+        let directory = TempDir::new().unwrap();
+        let root = root(&directory);
+        fs::write(root.join("input"), b"x").unwrap();
+        assert_eq!(
+            read_regular(&root, Path::new("input"), 0)
+                .unwrap_err()
+                .kind(),
+            ArtifactIoFailureKind::InvalidRequest
+        );
+        assert_eq!(
+            hash_regular(&root, Path::new("input"), 0)
+                .unwrap_err()
+                .kind(),
+            ArtifactIoFailureKind::InvalidRequest
+        );
+        for excluded in ["", "a/b", "a\\b", ".", ".."] {
+            assert!(traverse_regular_files(&root, traversal_limits(), &[excluded]).is_err());
+        }
+        for path in ["", "/absolute", "../escape"] {
+            assert!(validate_relative(Path::new(path)).is_err());
+        }
+        for name in ["", "/absolute", "nested/file", ".", ".."] {
+            assert!(validate_single_component(OsStr::new(name)).is_err());
+        }
+        for path in [Path::new("relative"), Path::new("/")] {
+            assert!(copy_regular_to_new_path(&root.join("input"), path, 1).is_err());
+        }
+        assert!(split_absolute_file(Path::new("relative")).is_err());
+        assert_eq!(fs::read(root.join("input")).unwrap(), b"x");
+        assert!(open_absolute_directory(Path::new("relative")).is_err());
+        assert!(open_trusted_output_directory(Path::new("relative")).is_err());
+        assert!(open_relative(&root, Path::new("input/child"), ObjectKind::Regular).is_err());
+    }
+
+    #[test]
+    fn bounded_streams_keep_exact_prefixes_and_fail_on_the_next_byte() {
+        let mut reader = LimitReader::new(io::Cursor::new(b"abcd"), 3);
+        assert_eq!(reader.read(&mut []).unwrap(), 0);
+        let mut exact = [0; 3];
+        reader.read_exact(&mut exact).unwrap();
+        assert_eq!(&exact, b"abc");
+        assert!(!reader.exceeded());
+        assert!(reader.read(&mut [0; 1]).is_err());
+        assert!(reader.exceeded());
+        let mut writer = HashingLimitWriter::new(3);
+        writer.write_all(b"abc").unwrap();
+        assert_eq!(writer.write(&[]).unwrap(), 0);
+        writer.flush().unwrap();
+        assert!(writer.write_all(b"d").is_err());
+        assert!(writer.exceeded());
+        let evidence = writer.finalize();
+        assert_eq!(evidence.byte_length, 3);
+        assert_eq!(evidence.sha256, hex::encode(Sha256::digest(b"abc")));
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("input");
+        fs::write(&path, b"abcd").unwrap();
+        let mut file = File::open(&path).unwrap();
+        let mut reader = HashingLimitReader::new(&mut file, 3);
+        assert_eq!(reader.read(&mut []).unwrap(), 0);
+        reader.read_exact(&mut exact).unwrap();
+        assert!(reader.read(&mut [0; 1]).is_err());
+        assert!(reader.exceeded());
+        assert_eq!(reader.finalize(), hex::encode(Sha256::digest(b"abc")));
+        assert_eq!(
+            stream_regular(&mut File::open(&path).unwrap(), 3, None)
+                .unwrap_err()
+                .kind(),
+            ArtifactIoFailureKind::LimitExceeded(LimitKind::FileBytes)
+        );
+    }
+
+    #[test]
+    fn archive_names_and_headers_reject_noncanonical_and_conflicting_members() {
+        for path in [
+            b"".as_slice(),
+            b"/root",
+            b"a\0b",
+            b"a\\b",
+            &[255],
+            b"a//b",
+            b"a/../b",
+            b"./a",
+        ] {
+            assert!(validate_archive_path(path, 4, 128).is_err());
+        }
+        validate_archive_path(b"dir/file", 2, 8).unwrap();
+        assert!(validate_archive_path(b"dir/file", 1, 8).is_err());
+        assert!(validate_archive_path(b"dir/file", 2, 7).is_err());
+        let mut names = BTreeMap::new();
+        admit_archive_name(&mut names, b"dir/", ArchiveMemberKind::Directory).unwrap();
+        admit_archive_name(&mut names, b"dir/file", ArchiveMemberKind::File).unwrap();
+        assert!(admit_archive_name(&mut names, b"dir/file", ArchiveMemberKind::File).is_err());
+        assert!(
+            admit_archive_name(&mut names, b"dir/file/child", ArchiveMemberKind::File).is_err()
+        );
+        let mut reverse = BTreeMap::new();
+        admit_archive_name(&mut reverse, b"dir/child", ArchiveMemberKind::File).unwrap();
+        assert!(admit_archive_name(&mut reverse, b"dir", ArchiveMemberKind::File).is_err());
+        let directory = TempDir::new().unwrap();
+        let path = directory.path().join("header");
+        let canonical = [0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255];
+        for index in [0, 3, 4, 8, 9] {
+            let mut bytes = canonical;
+            bytes[index] ^= 1;
+            fs::write(&path, bytes).unwrap();
+            let mut file = File::open(&path).unwrap();
+            let mut reader = BufReader::new(HashingLimitReader::new(&mut file, 10));
+            assert!(
+                validate_gzip_header(&mut reader, TarGzipPolicy::DeterministicSnapshot).is_err()
+            );
+        }
+        fs::write(&path, canonical).unwrap();
+        let mut file = File::open(&path).unwrap();
+        let mut reader = BufReader::new(HashingLimitReader::new(&mut file, 9));
+        assert_eq!(
+            validate_gzip_header(&mut reader, TarGzipPolicy::DeterministicSnapshot)
+                .unwrap_err()
+                .kind(),
+            ArtifactIoFailureKind::LimitExceeded(LimitKind::ArchiveCompressedBytes)
+        );
+    }
+
+    #[test]
     fn hard_maximums_reject_invalid_requests() {
         assert_eq!(HARD_MAX_BUFFERED_READ_BYTES, 67_108_864);
         assert_eq!(HARD_MAX_STREAM_FILE_BYTES, 17_179_869_184);
@@ -2862,6 +3017,53 @@ mod tests {
                 .kind(),
             ArtifactIoFailureKind::LimitExceeded(LimitKind::TraversalDepth)
         );
+    }
+
+    #[test]
+    fn retained_traversal_rejects_root_directory_member_and_file_replacement() {
+        for case in [
+            "root",
+            "directory",
+            "mode",
+            "file",
+            "members",
+            "member-name",
+        ] {
+            let directory = TempDir::new().unwrap();
+            let base = root(&directory);
+            let tree = base.join("tree");
+            fs::create_dir_all(tree.join("nested")).unwrap();
+            fs::write(tree.join("nested/file"), b"original").unwrap();
+            let snapshot = traverse_regular_files(&tree, traversal_limits(), &[]).unwrap();
+            snapshot.revalidate().unwrap();
+            match case {
+                "root" => {
+                    fs::rename(&tree, base.join("old-tree")).unwrap();
+                    fs::create_dir_all(tree.join("nested")).unwrap();
+                    fs::write(tree.join("nested/file"), b"original").unwrap();
+                }
+                "directory" => {
+                    fs::rename(tree.join("nested"), base.join("old-nested")).unwrap();
+                    fs::create_dir(tree.join("nested")).unwrap();
+                    fs::write(tree.join("nested/file"), b"original").unwrap();
+                }
+                "mode" => {
+                    fs::set_permissions(tree.join("nested"), fs::Permissions::from_mode(0o700))
+                        .unwrap()
+                }
+                "file" => fs::write(tree.join("nested/file"), b"different length").unwrap(),
+                "members" => fs::write(tree.join("nested/added"), b"new").unwrap(),
+                "member-name" => {
+                    fs::rename(tree.join("nested/file"), tree.join("nested/renamed")).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                snapshot.revalidate().unwrap_err().kind(),
+                ArtifactIoFailureKind::ChangedDuringRead,
+                "{case}"
+            );
+        }
     }
 
     fn write_archive(path: &Path, members: &[(&str, EntryType, &[u8])]) {
@@ -3424,5 +3626,67 @@ mod step_294_tests {
                 .kind(),
             ArtifactIoFailureKind::ChangedDuringRead
         );
+    }
+
+    #[test]
+    fn materialization_rejects_parent_root_and_ancestor_rebinding() {
+        let source = trusted_tempdir("radroots-materialization-source-");
+        let source_root = root(&source);
+        write_deterministic_archive(&source_root.join("archive.tar.gz"), b"immutable", false);
+        for case in [
+            "parent-mode",
+            "root-mode",
+            "root-replacement",
+            "ancestor-replacement",
+            "ancestor-mode",
+        ] {
+            let parent = trusted_tempdir("radroots-materialization-parent-");
+            let base = root(&parent);
+            let ancestor = base.join("ancestor");
+            let output = ancestor.join("output");
+            fs::create_dir_all(&output).unwrap();
+            fs::set_permissions(&ancestor, fs::Permissions::from_mode(0o700)).unwrap();
+            fs::set_permissions(&output, fs::Permissions::from_mode(0o700)).unwrap();
+            let materialized = materialize_tar_gzip_relative(
+                &source_root,
+                Path::new("archive.tar.gz"),
+                &output,
+                archive_limits(),
+                None,
+                TarGzipPolicy::DeterministicSnapshot,
+            )
+            .unwrap();
+            materialized.revalidate().unwrap();
+            match case {
+                "parent-mode" => {
+                    fs::set_permissions(&output, fs::Permissions::from_mode(0o750)).unwrap()
+                }
+                "root-mode" => {
+                    fs::set_permissions(materialized.root(), fs::Permissions::from_mode(0o750))
+                        .unwrap()
+                }
+                "root-replacement" => {
+                    fs::rename(materialized.root(), base.join("retained-root")).unwrap();
+                    fs::create_dir(materialized.root()).unwrap();
+                    fs::set_permissions(materialized.root(), fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                }
+                "ancestor-replacement" => {
+                    fs::rename(&ancestor, base.join("retained-ancestor")).unwrap();
+                    fs::create_dir(&ancestor).unwrap();
+                    fs::set_permissions(&ancestor, fs::Permissions::from_mode(0o700)).unwrap();
+                    fs::rename(base.join("retained-ancestor/output"), &output).unwrap();
+                }
+                "ancestor-mode" => {
+                    fs::set_permissions(&ancestor, fs::Permissions::from_mode(0o750)).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                materialized.revalidate().unwrap_err().kind(),
+                ArtifactIoFailureKind::ChangedDuringRead,
+                "{case}"
+            );
+        }
     }
 }

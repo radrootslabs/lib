@@ -1498,6 +1498,38 @@ mod tests {
     use super::*;
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test(flavor = "current_thread")]
+    async fn schema_version_reads_require_one_integer_metadata_row() {
+        let mut connection = SqliteConnection::connect("sqlite::memory:").await.unwrap();
+        sqlx::query("CREATE TABLE radroots_service_metadata (singleton, state_schema_version)")
+            .execute(&mut connection)
+            .await
+            .unwrap();
+        for statement in [
+            "DELETE FROM radroots_service_metadata",
+            "INSERT INTO radroots_service_metadata VALUES (1, 1), (1, 1)",
+            "DELETE FROM radroots_service_metadata; INSERT INTO radroots_service_metadata VALUES (1, 'invalid')",
+            "DELETE FROM radroots_service_metadata; INSERT INTO radroots_service_metadata VALUES (1, NULL)",
+        ] {
+            sqlx::raw_sql(sqlx::AssertSqlSafe(statement))
+                .execute(&mut connection)
+                .await
+                .unwrap();
+            assert_eq!(
+                read_state_schema_version(&mut connection)
+                    .await
+                    .unwrap_err()
+                    .kind(),
+                ServiceSqliteErrorKind::Migration
+            );
+        }
+        sqlx::raw_sql("DELETE FROM radroots_service_metadata; INSERT INTO radroots_service_metadata VALUES (1, 1)")
+            .execute(&mut connection).await.unwrap();
+        assert_eq!(read_state_schema_version(&mut connection).await.unwrap(), 1);
+        connection.close().await.unwrap();
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn migration_failure_inventory_is_complete_and_source_aware() {
         use std::error::Error as _;

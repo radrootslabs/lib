@@ -177,7 +177,9 @@ fn admit_binary_bytes(bytes: &[u8], target: &str) -> Result<(), AdmissionError> 
         Object::parse(bytes).map_err(|_| AdmissionError::InvalidBinary)?,
     ) {
         (LINUX_TARGET, Object::Elf(binary)) => {
-            if binary.header.e_machine != EM_X86_64
+            if !binary.is_64
+                || !binary.little_endian
+                || binary.header.e_machine != EM_X86_64
                 || !matches!(
                     binary.header.e_type,
                     goblin::elf::header::ET_EXEC | goblin::elf::header::ET_DYN
@@ -826,6 +828,279 @@ fn sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Synthetic ELF headers with one executable PT_LOAD segment. These bytes
+    // exercise format admission only; no fixture is executed or released.
+    fn elf_fixture(is_64: bool, little_endian: bool) -> Vec<u8> {
+        fn put(bytes: &mut [u8], offset: usize, width: usize, value: u64, little: bool) {
+            let encoded = if little {
+                value.to_le_bytes()
+            } else {
+                value.to_be_bytes()
+            };
+            let source = if little {
+                &encoded[..width]
+            } else {
+                &encoded[8 - width..]
+            };
+            bytes[offset..offset + width].copy_from_slice(source);
+        }
+        let header = if is_64 { 64 } else { 52 };
+        let program = if is_64 { 56 } else { 32 };
+        let mut bytes = vec![0; header + program + 8];
+        bytes[..4].copy_from_slice(goblin::elf::header::ELFMAG);
+        bytes[4] = if is_64 { 2 } else { 1 };
+        bytes[5] = if little_endian { 1 } else { 2 };
+        bytes[6] = 1;
+        let length = bytes.len() as u64;
+        let word = if is_64 { 8 } else { 4 };
+        for (offset, width, value) in [
+            (16, 2, 2),
+            (18, 2, u64::from(EM_X86_64)),
+            (20, 4, 1),
+            (24, word, 0x400000 + (header + program) as u64),
+            (24 + word, word, header as u64),
+            (if is_64 { 52 } else { 40 }, 2, header as u64),
+            (if is_64 { 54 } else { 42 }, 2, program as u64),
+            (if is_64 { 56 } else { 44 }, 2, 1),
+            (header, 4, 1),
+            (header + if is_64 { 4 } else { 24 }, 4, 5),
+            (header + if is_64 { 16 } else { 8 }, word, 0x400000),
+            (header + if is_64 { 32 } else { 16 }, word, length),
+            (header + if is_64 { 40 } else { 20 }, word, length),
+        ] {
+            put(&mut bytes, offset, width, value, little_endian);
+        }
+        bytes
+    }
+
+    #[test]
+    fn linux_format_requires_both_64_bit_class_and_little_endian_encoding() {
+        let expected = expected_contract();
+        assert_eq!(
+            expected["binary"]["formats"][LINUX_TARGET],
+            "elf64_little_endian_x86_64_execute_or_pie"
+        );
+        assert!(admit_binary_bytes(&elf_fixture(true, true), LINUX_TARGET).is_ok());
+        let results = [(false, true), (true, false)].map(|(class, endian)| {
+            let bytes = elf_fixture(class, endian);
+            let Object::Elf(parsed) = Object::parse(&bytes).unwrap() else {
+                panic!("ELF fixture");
+            };
+            assert_eq!(parsed.is_64, class);
+            assert_eq!(parsed.little_endian, endian);
+            admit_binary_bytes(&bytes, LINUX_TARGET)
+        });
+        assert_eq!(results, [Err(AdmissionError::InvalidBinary); 2]);
+    }
+
+    #[test]
+    fn mach_executable_admission_binds_machine_type_entry_and_executable_segment() {
+        let mut original = vec![0u8; 136];
+        for (offset, value) in [
+            (0, 0xfeedfacfu32),
+            (4, CPU_TYPE_ARM64),
+            (12, MH_EXECUTE),
+            (16, 2),
+            (20, 96),
+            (32, 0x19),
+            (36, 72),
+            (88, 5),
+            (92, 5),
+            (104, 0x80000028),
+            (108, 24),
+        ] {
+            original[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+        }
+        original[40..46].copy_from_slice(b"__TEXT");
+        for (offset, value) in [(56, 0x100000000u64), (64, 136), (80, 136), (112, 128)] {
+            original[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+        }
+        assert!(admit_binary_bytes(&original, MACOS_TARGET).is_ok());
+        for (offset, bytes) in [
+            (4, 7u32.to_le_bytes().to_vec()),
+            (12, 6u32.to_le_bytes().to_vec()),
+            (92, 1u32.to_le_bytes().to_vec()),
+            (112, 136u64.to_le_bytes().to_vec()),
+        ] {
+            let mut changed = original.clone();
+            changed[offset..offset + bytes.len()].copy_from_slice(&bytes);
+            assert_eq!(
+                admit_binary_bytes(&changed, MACOS_TARGET),
+                Err(AdmissionError::InvalidBinary),
+                "offset {offset}"
+            );
+        }
+        let mut no_entry = original;
+        no_entry[56..64].fill(0);
+        no_entry[112..120].fill(0);
+        assert_eq!(
+            admit_binary_bytes(&no_entry, MACOS_TARGET),
+            Err(AdmissionError::InvalidBinary)
+        );
+    }
+
+    #[test]
+    fn linux_entrypoint_must_belong_to_an_executable_segment_of_the_exact_machine() {
+        let original = elf_fixture(true, true);
+        for (offset, replacement) in [
+            (16, 1u16.to_le_bytes().to_vec()),
+            (18, 183u16.to_le_bytes().to_vec()),
+            (24, 0u64.to_le_bytes().to_vec()),
+            (24, 0x3fffffu64.to_le_bytes().to_vec()),
+            (
+                24,
+                (0x400000u64 + original.len() as u64).to_le_bytes().to_vec(),
+            ),
+            (68, 4u32.to_le_bytes().to_vec()),
+        ] {
+            let mut invalid = original.clone();
+            invalid[offset..offset + replacement.len()].copy_from_slice(&replacement);
+            assert_eq!(
+                admit_binary_bytes(&invalid, LINUX_TARGET),
+                Err(AdmissionError::InvalidBinary),
+                "header offset {offset}"
+            );
+        }
+        let mut pie = original;
+        pie[16..18].copy_from_slice(&goblin::elf::header::ET_DYN.to_le_bytes());
+        assert!(admit_binary_bytes(&pie, LINUX_TARGET).is_ok());
+        assert!(admit_binary_bytes(&pie, MACOS_TARGET).is_err());
+        assert!(admit_binary_inner(Path::new("/absent"), "unknown", false).is_err());
+        for libraries in [
+            vec![String::new()],
+            vec!["x".repeat(1025)],
+            vec!["lib\nname".into()],
+            vec!["SQLite.DLL".into()],
+        ] {
+            assert_eq!(
+                validate_dynamic_libraries(&libraries),
+                Err(AdmissionError::InvalidBinary)
+            );
+        }
+        assert!(validate_dynamic_libraries(&["libc.so.6".into()]).is_ok());
+    }
+
+    #[test]
+    fn archive_paths_and_links_enforce_byte_depth_and_traversal_bounds() {
+        let exact_depth = vec!["a"; MAX_DEPTH].join("/");
+        let excessive_depth = vec!["a"; MAX_DEPTH + 1].join("/");
+        assert!(validate_relative_path(exact_depth.as_bytes()).is_ok());
+        assert!(validate_relative_path(&vec![b'a'; MAX_PATH_BYTES]).is_ok());
+        for path in [
+            b"".to_vec(),
+            b"/absolute".to_vec(),
+            b"a\0b".to_vec(),
+            b"a\\b".to_vec(),
+            vec![0xff],
+            b"a//b".to_vec(),
+            b"a/./b".to_vec(),
+            b"a/../b".to_vec(),
+            vec![b'a'; MAX_PATH_BYTES + 1],
+            excessive_depth.into_bytes(),
+        ] {
+            assert!(validate_relative_path(&path).is_err(), "{path:?}");
+        }
+        assert!(validate_relative_path(b"directory/").is_ok());
+        assert!(validate_link_target(b"a/link", b"./../target").is_ok());
+        assert!(validate_link_target(b"a/link", b"target//leaf").is_ok());
+        for target in [
+            b"".to_vec(),
+            b"/absolute".to_vec(),
+            b"a\0b".to_vec(),
+            b"a\\b".to_vec(),
+            vec![0xff],
+            vec![b'a'; MAX_PATH_BYTES + 1],
+            vec!["a"; MAX_DEPTH + 1].join("/").into_bytes(),
+        ] {
+            assert!(
+                validate_link_target(b"a/link", &target).is_err(),
+                "{target:?}"
+            );
+        }
+        for path in [
+            "layer.tar".to_owned(),
+            "bad/layer.tar".to_owned(),
+            format!("{}/other.tar", "a".repeat(64)),
+            format!("{}/nested/layer.tar", "a".repeat(64)),
+        ] {
+            assert!(validate_layer_name(&path).is_err());
+        }
+        assert!(validate_layer_name(&format!("{}/layer.tar", "a".repeat(64))).is_ok());
+    }
+
+    #[test]
+    fn oci_runtime_config_binds_rootless_identity_entrypoint_and_every_label() {
+        let expected = OciExpectation {
+            service: "fixture_service",
+            binary_name: "fixture-service",
+            version: "0.1.0-alpha",
+            service_revision: "1111111111111111111111111111111111111111",
+            lib_revision: "2222222222222222222222222222222222222222",
+            license: AGPL_LICENSE,
+            contract_versions: ContractVersions {
+                admin: 3,
+                config: 1,
+                provider: 5,
+                state: 2,
+                status: 4,
+            },
+        };
+        let entrypoint = "/nix/store/fixture/bin/fixture-service";
+        let original = json!({"architecture":"amd64", "os":"linux", "created":"1970-01-01T00:00:01+00:00",
+            "config":{"User":"65532:65532", "WorkingDir":"/", "StopSignal":"SIGTERM",
+            "Env":["SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"], "Entrypoint":[entrypoint], "Labels":fixture_labels(&expected)}});
+        assert_eq!(validate_config(&original, &expected).unwrap(), entrypoint);
+        for (pointer, replacement) in [
+            ("", json!(null)),
+            ("/architecture", json!("arm64")),
+            ("/os", json!("macos")),
+            ("/created", json!("now")),
+            ("/config", json!(null)),
+            ("/config/User", json!("root")),
+            ("/config/WorkingDir", json!("/tmp")),
+            ("/config/StopSignal", json!("SIGKILL")),
+            ("/config/Env", json!([])),
+            ("/config/Env", json!([null])),
+            ("/config/Entrypoint", json!([])),
+            ("/config/Entrypoint", json!([entrypoint, entrypoint])),
+            ("/config/Entrypoint", json!(["/bin/fixture-service"])),
+            (
+                "/config/Entrypoint",
+                json!(["/nix/store/fixture/bin/other"]),
+            ),
+            (
+                "/config/Entrypoint",
+                json!(["/nix/store/../bin/fixture-service"]),
+            ),
+            ("/config/Labels", json!(null)),
+            ("/config/Labels", json!({})),
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).unwrap() = replacement;
+            assert!(validate_config(&changed, &expected).is_err(), "{pointer}");
+        }
+        for key in original["config"]["Labels"].as_object().unwrap().keys() {
+            let mut changed = original.clone();
+            changed["config"]["Labels"][key] = json!("unbound");
+            assert!(validate_config(&changed, &expected).is_err(), "label {key}");
+        }
+        for value in ["", "A", "0a", "a-b", "a/b"] {
+            assert!(!valid_identifier(value));
+        }
+        assert!(valid_identifier("service_1"));
+        assert!(valid_binary_name("service-1"));
+        for value in ["", "A", "0a", "a/b"] {
+            assert!(!valid_binary_name(value));
+        }
+        assert!(!valid_identifier(&"a".repeat(129)));
+        assert!(!valid_binary_name(&"a".repeat(129)));
+        assert!(!valid_absolute_path("relative"));
+        assert!(!valid_absolute_path(&format!(
+            "/{}",
+            "a".repeat(MAX_PATH_BYTES)
+        )));
+    }
 
     #[test]
     fn contract_is_exact() {

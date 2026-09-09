@@ -1344,6 +1344,270 @@ printf '{"after_state_sha256":"%s","artifact_set_sha256":"%s","before_state_sha2
     }
 
     #[test]
+    fn plan_and_argument_admission_rejects_each_independent_policy_violation() {
+        for (pointer, replacement) in [
+            ("/schema", json!("unknown")),
+            ("/candidate_digest", json!("A".repeat(64))),
+            ("/target", json!("unknown")),
+            ("/source_revision", json!("invalid")),
+            ("/source_tree", json!("invalid")),
+            ("/root_preimage_revision", json!("invalid")),
+            ("/source_date_epoch", json!(0)),
+            ("/normalization/kind", json!("ignore_timestamps")),
+            ("/normalization/excluded_paths", json!(["secret"])),
+            ("/git_executable_sha256", json!("invalid")),
+            ("/adapter_executable_sha256", json!("invalid")),
+            ("/phase", json!([])),
+            ("/phase/0/id", json!("upgrade_candidate")),
+            ("/phase/0/argv", json!([])),
+        ] {
+            let mut value = sample_plan_value();
+            *value.pointer_mut(pointer).unwrap() = replacement;
+            assert_eq!(
+                validate_plan(&serde_json::from_value(value).unwrap()),
+                Err(ReproInstallError::InvalidPlan),
+                "{pointer}"
+            );
+        }
+        for arguments in [
+            vec![],
+            vec!["x".to_owned(); MAX_ARGV_TOKENS + 1],
+            vec![String::new()],
+            vec!["x".repeat(MAX_ARGV_TOKEN_BYTES + 1)],
+            vec!["a\nb".to_owned()],
+            vec!["a\0b".to_owned()],
+            vec!["{unknown}".to_owned()],
+            vec!["trailing}".to_owned()],
+            vec!["{checkout}".to_owned(), "{checkout}".to_owned()],
+            vec!["literal".to_owned()],
+        ] {
+            assert_eq!(
+                validate_argv_template(&arguments, &["{checkout}"]),
+                Err(ReproInstallError::InvalidPlan)
+            );
+        }
+        let values = BTreeMap::from([("{checkout}", OsString::from("/fixture"))]);
+        assert_eq!(
+            resolve_arguments(&["literal".to_owned(), "{checkout}".to_owned()], &values).unwrap(),
+            [OsString::from("literal"), OsString::from("/fixture")]
+        );
+        assert_eq!(
+            resolve_arguments(&["{unknown}".to_owned()], &values),
+            Err(ReproInstallError::InvalidPlan)
+        );
+        assert_eq!(
+            resolve_arguments(&["trailing}".to_owned()], &values),
+            Err(ReproInstallError::InvalidPlan)
+        );
+    }
+
+    #[test]
+    fn phase_chain_rejects_each_broken_binding_transition_and_health_mutation() {
+        let candidate = "a".repeat(64);
+        let artifacts = "1".repeat(64);
+        let predecessor = "2".repeat(64);
+        let validate = |rows: &[PhaseWitness]| {
+            validate_phase_chain(rows, &candidate, &artifacts, &predecessor)
+        };
+        validate(&valid_witnesses()).unwrap();
+        assert_eq!(validate(&[]), Err(ReproInstallError::InvalidWitness));
+        let mut reordered = valid_witnesses();
+        reordered.swap(0, 1);
+        assert_eq!(validate(&reordered), Err(ReproInstallError::InvalidWitness));
+        for index in 0..PHASE_IDS.len() {
+            for field in [
+                "schema",
+                "candidate_digest",
+                "artifact_set_sha256",
+                "before_state_sha256",
+                "result",
+            ] {
+                let mut value = serde_json::to_value(valid_witnesses()).unwrap();
+                value[index][field] = json!("mismatch");
+                let rows: Vec<PhaseWitness> = serde_json::from_value(value).unwrap();
+                assert_eq!(
+                    validate(&rows),
+                    Err(ReproInstallError::InvalidWitness),
+                    "{index} {field}"
+                );
+            }
+        }
+        for index in [1, 3, 5, 7] {
+            let mut rows = valid_witnesses();
+            rows[index].after_state_sha256 = "7".repeat(64);
+            assert_eq!(validate(&rows), Err(ReproInstallError::InvalidWitness));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_receipts_reject_noncanonical_bytes_and_unbound_adapter_claims() {
+        use std::os::unix::fs::PermissionsExt;
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let adapter = root.join("adapter");
+        let witness = serde_json::to_value(&valid_witnesses()[0]).unwrap();
+        let mut invalid_outputs = vec![
+            b"not json".to_vec(),
+            serde_json::to_vec_pretty(&witness).unwrap(),
+            b"{}\n".to_vec(),
+        ];
+        for field in [
+            "schema",
+            "phase",
+            "candidate_digest",
+            "artifact_set_sha256",
+            "result",
+            "before_state_sha256",
+            "after_state_sha256",
+        ] {
+            let mut changed = witness.clone();
+            changed[field] = json!("unbound");
+            invalid_outputs.push(canonical_json_line(&changed).unwrap());
+        }
+        for bytes in invalid_outputs {
+            let text = String::from_utf8(bytes).unwrap();
+            assert!(!text.contains('\''));
+            fs::write(&adapter, format!("#!/bin/sh\nprintf '%s' '{text}'\n")).unwrap();
+            fs::set_permissions(&adapter, fs::Permissions::from_mode(0o700)).unwrap();
+            assert!(matches!(
+                run_install_phases(
+                    &adapter,
+                    &sample_plan(),
+                    &root,
+                    &"1".repeat(64),
+                    &root,
+                    &"2".repeat(64),
+                    &root,
+                    &root,
+                    &root
+                ),
+                Err(ReproInstallError::InvalidWitness)
+            ));
+        }
+        fs::write(&adapter, b"#!/bin/sh\nexit 3\n").unwrap();
+        assert!(matches!(
+            run_install_phases(
+                &adapter,
+                &sample_plan(),
+                &root,
+                &"1".repeat(64),
+                &root,
+                &"2".repeat(64),
+                &root,
+                &root,
+                &root
+            ),
+            Err(ReproInstallError::InstallFailure)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn filesystem_and_source_admission_preserves_existing_outputs() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let file = root.join("file");
+        fs::write(&file, b"preserve").unwrap();
+        let dangling = root.join("dangling");
+        symlink(root.join("missing"), &dangling).unwrap();
+        let linked = root.join("linked");
+        symlink(&root, &linked).unwrap();
+        for path in [
+            Path::new("relative"),
+            &file,
+            &dangling,
+            &linked.join("result"),
+            &root.join("missing/result"),
+        ] {
+            assert_eq!(
+                validate_output_target(path),
+                Err(ReproInstallError::InvalidOutput)
+            );
+        }
+        assert_eq!(
+            write_result(&dangling, &json!({})),
+            Err(ReproInstallError::InvalidOutput)
+        );
+        assert_eq!(
+            write_result(&linked.join("result"), &json!({})),
+            Err(ReproInstallError::InvalidOutput)
+        );
+        assert_eq!(
+            write_result(
+                &root.join("too-large"),
+                &json!("x".repeat(MAX_RESULT_BYTES))
+            ),
+            Err(ReproInstallError::InvalidOutput)
+        );
+        for path in [Path::new("relative"), &file, &linked] {
+            assert!(canonical_directory(path, ReproInstallError::InvalidArtifacts).is_err());
+        }
+        assert_eq!(
+            validate_executable(Path::new("relative"), &"0".repeat(64)),
+            Err(ReproInstallError::InvalidTool)
+        );
+        assert_eq!(
+            validate_executable(&file, "invalid"),
+            Err(ReproInstallError::InvalidTool)
+        );
+        assert_eq!(
+            validate_executable(&root, &"0".repeat(64)),
+            Err(ReproInstallError::InvalidTool)
+        );
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            validate_executable(&file, &sha256_bytes(b"preserve")),
+            Err(ReproInstallError::InvalidTool)
+        );
+        for path in [&root, &linked, &file] {
+            assert_eq!(
+                read_regular_bounded(path, 2, ReproInstallError::InvalidPlan),
+                Err(ReproInstallError::InvalidPlan)
+            );
+        }
+        assert_eq!(
+            require_empty_directory(&root, ReproInstallError::BuildFailure),
+            Err(ReproInstallError::BuildFailure)
+        );
+        assert_eq!(
+            require_distinct(&root, &linked, ReproInstallError::BuildFailure),
+            Err(ReproInstallError::BuildFailure)
+        );
+        for path in ["", "/absolute", "../escape", ".", "a\\b", "a\nb", "a\0b"] {
+            assert_eq!(
+                portable_relative_path(Path::new(path)),
+                Err(ReproInstallError::InvalidArtifacts)
+            );
+        }
+        let empty = root.join("empty");
+        fs::create_dir(&empty).unwrap();
+        assert!(matches!(
+            artifact_inventory(&empty),
+            Err(ReproInstallError::InvalidArtifacts)
+        ));
+        let source = root.join("source");
+        create_repository(&source, "source.txt");
+        let git = program_path("git");
+        let revision = fixture_git(&source, &["rev-parse", "HEAD"]);
+        let tree = fixture_git(&source, &["rev-parse", "HEAD^{tree}"]);
+        assert_eq!(
+            verify_source(&git, &source, &root, &"0".repeat(40), &tree),
+            Err(ReproInstallError::InvalidSource)
+        );
+        assert_eq!(
+            verify_source(&git, &source, &root, &revision, &"0".repeat(40)),
+            Err(ReproInstallError::InvalidSource)
+        );
+        assert_eq!(
+            verify_root_preimage_epoch(&git, &source, &root, &revision, 1),
+            Err(ReproInstallError::InvalidSource)
+        );
+        assert_eq!(fs::read(&file).unwrap(), b"preserve");
+    }
+
+    #[test]
     fn decision_contract_is_exact() {
         validate_contract_inner(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
             .expect("decision contract");

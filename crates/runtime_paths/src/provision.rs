@@ -675,6 +675,110 @@ mod tests {
     }
 
     #[test]
+    fn root_and_owner_validation_rejects_invalid_inputs() {
+        for root in ["relative", "/", "/valid/../other"] {
+            assert_eq!(
+                super::validate_absolute_root(Path::new(root)),
+                Err(StateDirectoryProvisionError::InvalidPlan)
+            );
+        }
+        super::validate_absolute_root(Path::new("/valid/root")).unwrap();
+        let owner = rustix::process::geteuid().as_raw();
+        for (directory, uid) in [(false, owner), (true, owner.wrapping_add(1))] {
+            assert_eq!(
+                super::validate_directory_status(directory, uid, 0o700, true),
+                Err(StateDirectoryProvisionError::UnsafeDirectory)
+            );
+        }
+    }
+
+    #[test]
+    fn retained_directory_checks_reject_a_descriptor_for_another_directory() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        for name in ["expected", "other"] {
+            fs::create_dir(root.join(name)).unwrap();
+            fs::set_permissions(root.join(name), fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let parent = super::open_absolute_directory(&root).unwrap();
+        let held = super::open_directory_at(&parent, "expected".as_ref()).unwrap();
+        let expected = super::validate_secure_directory(&held, true).unwrap();
+        let mut binding = super::DirectoryBinding {
+            parent,
+            name: "expected".into(),
+            held,
+            identity: expected,
+            exact_owner_mode: true,
+        };
+        super::validate_directory_binding(&binding).unwrap();
+        super::validate_absolute_directory_binding(&root.join("expected"), &binding.held, expected)
+            .unwrap();
+        binding.held = super::open_directory_at(&binding.parent, "other".as_ref()).unwrap();
+        assert!(super::validate_directory_binding(&binding).is_err());
+        assert!(
+            super::validate_absolute_directory_binding(
+                &root.join("expected"),
+                &binding.held,
+                expected
+            )
+            .is_err()
+        );
+        assert!(root.join("expected").is_dir());
+        assert!(root.join("other").is_dir());
+    }
+
+    struct ReplaceAfterCreation {
+        component: usize,
+        original: PathBuf,
+        displaced: PathBuf,
+    }
+
+    impl ProvisionOperations for ReplaceAfterCreation {
+        fn after_create(&self, component_index: usize) -> Result<(), StateDirectoryProvisionError> {
+            if component_index == self.component {
+                fs::rename(&self.original, &self.displaced).unwrap();
+                fs::create_dir(&self.original).unwrap();
+                fs::set_permissions(&self.original, fs::Permissions::from_mode(0o700)).unwrap();
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn successful_creation_hooks_cannot_hide_root_or_suffix_replacement() {
+        for (component, replace_root) in [(0, true), (2, true), (2, false)] {
+            let temporary = TempDir::new().unwrap();
+            let context = context(
+                RadrootsPlatform::Linux,
+                RadrootsPathProfile::RepoLocal,
+                temporary.path(),
+            );
+            let root = prepare_state_root(&context);
+            let original = if replace_root {
+                root.clone()
+            } else {
+                root.join("services")
+            };
+            let displaced = temporary.path().join("displaced");
+            let operations = ReplaceAfterCreation {
+                component,
+                original: original.clone(),
+                displaced: displaced.clone(),
+            };
+            assert_eq!(
+                provision_with_operations(&context.state_directory_plan().unwrap(), &operations),
+                Err(StateDirectoryProvisionError::Cleanup)
+            );
+            assert!(original.is_dir());
+            assert!(displaced.is_dir());
+            assert_ne!(
+                fs::metadata(&original).unwrap().ino(),
+                fs::metadata(&displaced).unwrap().ino()
+            );
+        }
+    }
+
+    #[test]
     fn repo_local_creates_only_the_exact_canonical_suffix() {
         let temporary = TempDir::new().expect("temporary root");
         let context = context(

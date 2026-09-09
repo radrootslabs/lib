@@ -2542,198 +2542,227 @@ fn validate_gradle_projections(
         require_complete(projection.state)?;
         let receipt = process_receipt(receipts, &format!("gradle:{}", authority.id))?;
         admitted.revalidate()?;
-        if !admitted.matches_projection(projection)
-            || projection.workload_id != authority.id
-            || projection.raw_graph_byte_length == 0
-            || projection.raw_graph_byte_length > MAX_GRADLE_GRAPH_BYTES
-            || !valid_hex(&projection.raw_graph_sha256, 64)
-            || projection.init_script_sha256 != GRADLE_INIT_SCRIPT_SHA256
-            || projection.wrapper_arguments != expected_gradle_arguments(authority)?
-            || projection.environment_keys
-                != [
-                    "GRADLE_USER_HOME",
-                    "HOME",
-                    "JAVA_HOME",
-                    "LC_ALL",
-                    "PATH",
-                    "TMPDIR",
-                    "TZ",
-                ]
-            || !valid_hex(&projection.environment_sha256, 64)
-            || projection.exit_code != 0
-            || projection.source_revision != harvest_source.revision
-            || projection.source_tree != harvest_source.tree
-            || projection.input_sha256
-                != gradle_candidate_input_digest(request, inventory, harvest_source, projection)?
-            || projection.dependency_count != inventory.dependency_count
-            || projection.component_count != projection.components.len() as u64
-            || projection.edge_count != projection.edges.len() as u64
-            || projection.artifact_count != projection.artifacts.len() as u64
-            || projection.component_count == 0
-            || !valid_hex(&projection.materialized_tree_sha256, 64)
-            || !valid_hex(&projection.artifact_source_roots_sha256, 64)
-            || !valid_hex(&projection.seed_cache_inventory_sha256, 64)
-            || projection.wrapper_distribution_sha256
-                != "553c78f50dafcd54d65b9a444649057857469edf836431389695608536d6b746"
-            || projection.process_receipt_sha256 != process_receipt_digest(receipt)?
-            || projection.canonical_graph_sha256 != gradle_graph_digest(projection)?
-            || projection.normalization_receipt_sha256
-                != gradle_normalization_receipt_digest(
-                    &projection.workload_id,
-                    projection.raw_graph_byte_length,
-                    &projection.raw_graph_sha256,
-                    &projection.canonical_graph_sha256,
-                    &projection.materialized_tree_sha256,
-                    &projection.artifact_source_roots_sha256,
-                )?
-            || receipt.program_sha256 != TOOL_PINS[3].executable_sha256
-            || receipt.arguments_sha256
-                != domain_json_digest(
-                    b"radroots-advisory-process-arguments-v1\0",
-                    &projection.wrapper_arguments,
-                )?
-            || receipt.environment_sha256 != projection.environment_sha256
-            || receipt.input_sha256 != gradle_process_input_digest(projection)?
-            || receipt.output_sha256 != gradle_process_output_digest(projection)?
-            || receipt.path_binding
-                != vec![
-                    ProcessPathBinding {
-                        argument_index: 5,
-                        logical_role: "gradle_build_root".to_owned(),
-                        identity_sha256: gradle_build_root_binding_digest(projection)?,
-                    },
-                    ProcessPathBinding {
-                        argument_index: 7,
-                        logical_role: "gradle_init_script".to_owned(),
-                        identity_sha256: projection.init_script_sha256.clone(),
-                    },
-                    ProcessPathBinding {
-                        argument_index: 10,
-                        logical_role: "gradle_projection_output".to_owned(),
-                        identity_sha256: projection.raw_graph_sha256.clone(),
-                    },
-                ]
-            || receipt.exit_code != projection.exit_code
+        if !admitted.matches_projection(projection) {
+            return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
+        }
+        validate_gradle_projection_bindings(
+            projection,
+            authority,
+            inventory,
+            harvest_source,
+            request,
+            receipt,
+        )?;
+        validate_gradle_graph_structure(projection, authority, &harvest_source.revision)?;
+        admitted.revalidate()?;
+    }
+    Ok(())
+}
+
+fn validate_gradle_projection_bindings(
+    projection: &GradleProjection,
+    authority: &WorkloadAuthority,
+    inventory: &WorkloadInventory,
+    harvest_source: &SourceIdentity,
+    request: &AdmissionRequest,
+    receipt: &TrustedProcessReceipt,
+) -> Result<(), AdvisoryError> {
+    if projection.workload_id != authority.id
+        || projection.raw_graph_byte_length == 0
+        || projection.raw_graph_byte_length > MAX_GRADLE_GRAPH_BYTES
+        || !valid_hex(&projection.raw_graph_sha256, 64)
+        || projection.init_script_sha256 != GRADLE_INIT_SCRIPT_SHA256
+        || projection.wrapper_arguments != expected_gradle_arguments(authority)?
+        || projection.environment_keys
+            != [
+                "GRADLE_USER_HOME",
+                "HOME",
+                "JAVA_HOME",
+                "LC_ALL",
+                "PATH",
+                "TMPDIR",
+                "TZ",
+            ]
+        || !valid_hex(&projection.environment_sha256, 64)
+        || projection.exit_code != 0
+        || projection.source_revision != harvest_source.revision
+        || projection.source_tree != harvest_source.tree
+        || projection.input_sha256
+            != gradle_candidate_input_digest(request, inventory, harvest_source, projection)?
+        || projection.dependency_count != inventory.dependency_count
+        || projection.component_count != projection.components.len() as u64
+        || projection.edge_count != projection.edges.len() as u64
+        || projection.artifact_count != projection.artifacts.len() as u64
+        || projection.component_count == 0
+        || !valid_hex(&projection.materialized_tree_sha256, 64)
+        || !valid_hex(&projection.artifact_source_roots_sha256, 64)
+        || !valid_hex(&projection.seed_cache_inventory_sha256, 64)
+        || projection.wrapper_distribution_sha256
+            != "553c78f50dafcd54d65b9a444649057857469edf836431389695608536d6b746"
+        || projection.process_receipt_sha256 != process_receipt_digest(receipt)?
+        || projection.canonical_graph_sha256 != gradle_graph_digest(projection)?
+        || projection.normalization_receipt_sha256
+            != gradle_normalization_receipt_digest(
+                &projection.workload_id,
+                projection.raw_graph_byte_length,
+                &projection.raw_graph_sha256,
+                &projection.canonical_graph_sha256,
+                &projection.materialized_tree_sha256,
+                &projection.artifact_source_roots_sha256,
+            )?
+        || receipt.program_sha256 != TOOL_PINS[3].executable_sha256
+        || receipt.arguments_sha256
+            != domain_json_digest(
+                b"radroots-advisory-process-arguments-v1\0",
+                &projection.wrapper_arguments,
+            )?
+        || receipt.environment_sha256 != projection.environment_sha256
+        || receipt.input_sha256 != gradle_process_input_digest(projection)?
+        || receipt.output_sha256 != gradle_process_output_digest(projection)?
+        || receipt.path_binding
+            != vec![
+                ProcessPathBinding {
+                    argument_index: 5,
+                    logical_role: "gradle_build_root".to_owned(),
+                    identity_sha256: gradle_build_root_binding_digest(projection)?,
+                },
+                ProcessPathBinding {
+                    argument_index: 7,
+                    logical_role: "gradle_init_script".to_owned(),
+                    identity_sha256: projection.init_script_sha256.clone(),
+                },
+                ProcessPathBinding {
+                    argument_index: 10,
+                    logical_role: "gradle_projection_output".to_owned(),
+                    identity_sha256: projection.raw_graph_sha256.clone(),
+                },
+            ]
+        || receipt.exit_code != projection.exit_code
+    {
+        return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
+    }
+    Ok(())
+}
+
+fn validate_gradle_graph_structure(
+    projection: &GradleProjection,
+    authority: &WorkloadAuthority,
+    source_revision: &str,
+) -> Result<(), AdvisoryError> {
+    let mut component_ids = BTreeSet::new();
+    let mut component_by_id = BTreeMap::new();
+    let mut previous_component = None::<&str>;
+    for component in &projection.components {
+        if previous_component.is_some_and(|previous| previous >= component.identity_sha256.as_str())
+            || component.identity_sha256 != gradle_component_digest(component)?
+            || component.variant_sha256 != gradle_variant_digest(&component.variant)?
+            || !valid_gradle_variant_envelope(&component.variant)
+            || !valid_gradle_component(component)
+            || !component_ids.insert(component.identity_sha256.as_str())
         {
             return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
         }
-        let mut component_ids = BTreeSet::new();
-        let mut component_by_id = BTreeMap::new();
-        let mut previous_component = None::<&str>;
-        for component in &projection.components {
-            if previous_component
-                .is_some_and(|previous| previous >= component.identity_sha256.as_str())
-                || component.identity_sha256 != gradle_component_digest(component)?
-                || component.variant_sha256 != gradle_variant_digest(&component.variant)?
-                || !valid_gradle_variant_envelope(&component.variant)
-                || !valid_gradle_component(component)
-                || !component_ids.insert(component.identity_sha256.as_str())
-            {
-                return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
-            }
-            component_by_id.insert(component.identity_sha256.as_str(), component);
-            previous_component = Some(&component.identity_sha256);
-        }
-        let roots = projection
-            .components
-            .iter()
-            .filter(|component| {
-                component.root
-                    && component.kind == "project"
-                    && component.build_root.as_deref() == Some(authority.build_root)
-                    && component.project_path.as_deref() == authority.project_path
-            })
-            .collect::<Vec<_>>();
-        if roots.len() != 1 {
+        component_by_id.insert(component.identity_sha256.as_str(), component);
+        previous_component = Some(&component.identity_sha256);
+    }
+    let roots = projection
+        .components
+        .iter()
+        .filter(|component| {
+            component.root
+                && component.kind == "project"
+                && component.build_root.as_deref() == Some(authority.build_root)
+                && component.project_path.as_deref() == authority.project_path
+        })
+        .collect::<Vec<_>>();
+    if roots.len() != 1 {
+        return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
+    }
+    let mut previous_edge = None::<Vec<u8>>;
+    for edge in &projection.edges {
+        let key = canonical_row_key(edge)?;
+        if previous_edge
+            .as_ref()
+            .is_some_and(|previous| previous >= &key)
+            || !component_ids.contains(edge.from_identity_sha256.as_str())
+            || !component_ids.contains(edge.to_identity_sha256.as_str())
+            || edge.from_identity_sha256 == edge.to_identity_sha256
+            || edge.requested_sha256 != gradle_request_digest(&edge.requested)?
+            || edge.selected_variant_sha256 != gradle_variant_digest(&edge.selected_variant)?
+            || !valid_gradle_request(&edge.requested)
+            || !valid_gradle_variant(&edge.selected_variant)
+        {
             return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
         }
-        let mut previous_edge = None::<Vec<u8>>;
+        previous_edge = Some(key);
+    }
+    let mut reachable = BTreeSet::from([roots[0].identity_sha256.as_str()]);
+    loop {
+        let before = reachable.len();
         for edge in &projection.edges {
-            let key = canonical_row_key(edge)?;
-            if previous_edge
-                .as_ref()
-                .is_some_and(|previous| previous >= &key)
-                || !component_ids.contains(edge.from_identity_sha256.as_str())
-                || !component_ids.contains(edge.to_identity_sha256.as_str())
-                || edge.from_identity_sha256 == edge.to_identity_sha256
-                || edge.requested_sha256 != gradle_request_digest(&edge.requested)?
-                || edge.selected_variant_sha256 != gradle_variant_digest(&edge.selected_variant)?
-                || !valid_gradle_request(&edge.requested)
-                || !valid_gradle_variant(&edge.selected_variant)
-            {
-                return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
-            }
-            previous_edge = Some(key);
-        }
-        let mut reachable = BTreeSet::from([roots[0].identity_sha256.as_str()]);
-        loop {
-            let before = reachable.len();
-            for edge in &projection.edges {
-                if reachable.contains(edge.from_identity_sha256.as_str()) {
-                    reachable.insert(edge.to_identity_sha256.as_str());
-                }
-            }
-            if reachable.len() == before {
-                break;
+            if reachable.contains(edge.from_identity_sha256.as_str()) {
+                reachable.insert(edge.to_identity_sha256.as_str());
             }
         }
-        if reachable.len() != projection.components.len() {
+        if reachable.len() == before {
+            break;
+        }
+    }
+    if reachable.len() != projection.components.len() {
+        return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
+    }
+    let mut previous = None::<Vec<u8>>;
+    let mut materialized = BTreeMap::<(&str, &str), (&str, u64)>::new();
+    for artifact in &projection.artifacts {
+        let key = canonical_row_key(artifact)?;
+        if previous.as_ref().is_some_and(|prior| prior >= &key)
+            || !component_ids.contains(artifact.component_identity_sha256.as_str())
+            || !valid_bounded_text(&artifact.component, 512)
+            || artifact.package_ecosystem != "maven"
+            || !valid_bounded_text(&artifact.package_namespace, 256)
+            || !valid_bounded_text(&artifact.package_name, 256)
+            || !valid_bounded_text(&artifact.package_version, 128)
+            || !valid_hex(&artifact.artifact_sha256, 64)
+            || artifact.variant_sha256 != gradle_variant_digest(&artifact.variant)?
+            || !valid_gradle_variant(&artifact.variant)
+            || artifact.byte_length == 0
+            || !valid_bounded_text(&artifact.artifact_name, 256)
+            || !valid_bounded_text(&artifact.logical_name, 256)
+            || !valid_bounded_text(&artifact.artifact_type, 64)
+            || artifact
+                .classifier
+                .as_deref()
+                .is_some_and(|classifier| !valid_bounded_text(classifier, 128))
+            || !valid_artifact_extension(&artifact.extension)
+            || artifact.materialized_name
+                != format!("{}.{}", artifact.artifact_sha256, artifact.extension)
+        {
             return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
         }
-        let mut previous = None::<Vec<u8>>;
-        let mut materialized = BTreeMap::<(&str, &str), (&str, u64)>::new();
-        for artifact in &projection.artifacts {
-            let key = canonical_row_key(artifact)?;
-            if previous.as_ref().is_some_and(|prior| prior >= &key)
-                || !component_ids.contains(artifact.component_identity_sha256.as_str())
-                || !valid_bounded_text(&artifact.component, 512)
-                || artifact.package_ecosystem != "maven"
-                || !valid_bounded_text(&artifact.package_namespace, 256)
-                || !valid_bounded_text(&artifact.package_name, 256)
-                || !valid_bounded_text(&artifact.package_version, 128)
-                || !valid_hex(&artifact.artifact_sha256, 64)
-                || artifact.variant_sha256 != gradle_variant_digest(&artifact.variant)?
-                || !valid_gradle_variant(&artifact.variant)
-                || artifact.byte_length == 0
-                || !valid_bounded_text(&artifact.artifact_name, 256)
-                || !valid_bounded_text(&artifact.logical_name, 256)
-                || !valid_bounded_text(&artifact.artifact_type, 64)
-                || artifact
-                    .classifier
-                    .as_deref()
-                    .is_some_and(|classifier| !valid_bounded_text(classifier, 128))
-                || !valid_artifact_extension(&artifact.extension)
-                || artifact.materialized_name
-                    != format!("{}.{}", artifact.artifact_sha256, artifact.extension)
-            {
-                return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
-            }
-            let component = component_by_id
-                .get(artifact.component_identity_sha256.as_str())
-                .copied()
-                .ok_or_else(|| AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch))?;
-            if !artifact_matches_component(artifact, component, &harvest_source.revision)
-                || !projection.edges.iter().any(|edge| {
-                    edge.to_identity_sha256 == artifact.component_identity_sha256
-                        && edge.selected_variant_sha256 == artifact.variant_sha256
-                })
-            {
-                return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
-            }
-            let materialized_key = (
-                artifact.artifact_sha256.as_str(),
-                artifact.extension.as_str(),
-            );
-            if let Some((name, length)) = materialized.insert(
-                materialized_key,
-                (artifact.materialized_name.as_str(), artifact.byte_length),
-            ) && (name != artifact.materialized_name || length != artifact.byte_length)
-            {
-                return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
-            }
-            previous = Some(key);
+        let component = component_by_id
+            .get(artifact.component_identity_sha256.as_str())
+            .copied()
+            .ok_or_else(|| AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch))?;
+        if !artifact_matches_component(artifact, component, source_revision)
+            || !projection.edges.iter().any(|edge| {
+                edge.to_identity_sha256 == artifact.component_identity_sha256
+                    && edge.selected_variant_sha256 == artifact.variant_sha256
+            })
+        {
+            return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
         }
-        admitted.revalidate()?;
+        let materialized_key = (
+            artifact.artifact_sha256.as_str(),
+            artifact.extension.as_str(),
+        );
+        if let Some((name, length)) = materialized.insert(
+            materialized_key,
+            (artifact.materialized_name.as_str(), artifact.byte_length),
+        ) && (name != artifact.materialized_name || length != artifact.byte_length)
+        {
+            return Err(AdvisoryError::new(AdvisoryFailureKind::InventoryMismatch));
+        }
+        previous = Some(key);
     }
     Ok(())
 }
@@ -4112,8 +4141,9 @@ fn validate_rustsec_affected(value: &Value) -> Result<(), AdvisoryError> {
     let object = value
         .as_object()
         .ok_or_else(|| AdvisoryError::new(AdvisoryFailureKind::InvalidReport))?;
-    let functions = object["functions"]
-        .as_object()
+    let functions = object
+        .get("functions")
+        .and_then(Value::as_object)
         .filter(|rows| rows.len() <= 65_536)
         .ok_or_else(|| AdvisoryError::new(AdvisoryFailureKind::InvalidReport))?;
     if !object_keys_exact(object, &["arch", "functions", "os"], &[])
@@ -7552,5 +7582,2677 @@ mod step_296_tests {
             .and_then(Path::parent)
             .expect("xtask manifest must be beneath the workspace root");
         validate_decision(root).expect("checked-in advisory decision must be accepted");
+    }
+}
+
+#[cfg(test)]
+mod admission_boundary_tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_inventory_rejects_missing_nonfile_and_unrecognized_members() {
+        for case in ["missing", "directory", "unknown"] {
+            let directory = trusted_tempdir("radroots-snapshot-inventory-").unwrap();
+            for name in SNAPSHOT_FILE_NAMES {
+                std::fs::write(directory.path().join(name), b"{}").unwrap();
+            }
+            let limits = TraversalLimits {
+                max_entries: 16,
+                max_files: 16,
+                max_total_bytes: 1024,
+                max_file_bytes: 1024,
+                max_depth: 2,
+                max_path_bytes: 128,
+            };
+            let original =
+                safe_artifact_io::traverse_regular_files(directory.path(), limits, &[]).unwrap();
+            exact_snapshot_files(&original).unwrap();
+            let member = directory.path().join(MANIFEST_NAME);
+            match case {
+                "missing" => std::fs::remove_file(member).unwrap(),
+                "directory" => {
+                    std::fs::remove_file(&member).unwrap();
+                    std::fs::create_dir(member).unwrap();
+                }
+                "unknown" => {
+                    std::fs::rename(member, directory.path().join("unknown.json")).unwrap()
+                }
+                _ => unreachable!(),
+            }
+            let changed =
+                safe_artifact_io::traverse_regular_files(directory.path(), limits, &[]).unwrap();
+            assert!(exact_snapshot_files(&changed).is_err(), "{case}");
+        }
+        let mut binding = blob(RUSTSEC_REPORT_NAME, b"{}").unwrap();
+        assert!(valid_blob_binding(&binding));
+        binding.path = "other.json".into();
+        assert!(!valid_blob_binding(&binding));
+    }
+
+    #[test]
+    fn reports_bind_one_database_across_all_workloads_and_the_exact_network_trace() {
+        let fixture = SyntheticFixture::new().unwrap();
+        for provider in &fixture.manifest.provider_snapshot {
+            let original = fixture.read_report_value(provider.provider).unwrap();
+            let check = |value: &Value| {
+                database_identity_from_report(
+                    provider.provider,
+                    &canonical_json(value),
+                    &provider.materialized_tree_sha256,
+                )
+            };
+            assert_eq!(check(&original).unwrap(), provider.database_identity_sha256);
+            let mut empty = original.clone();
+            empty["workload_result"] = json!([]);
+            assert!(check(&empty).is_err());
+            let mut wrong_provider = original.clone();
+            wrong_provider["provider"] = json!(if provider.provider == ProviderId::Rustsec {
+                "owasp_nvd"
+            } else {
+                "rustsec"
+            });
+            assert!(check(&wrong_provider).is_err());
+            let mut changed = original.clone();
+            let mut second = original["workload_result"][0].clone();
+            let mut raw: Value =
+                serde_json::from_str(second["raw_scanner_output"].as_str().unwrap()).unwrap();
+            match provider.provider {
+                ProviderId::Rustsec => raw["database"]["last-commit"] = json!("f".repeat(40)),
+                ProviderId::OwaspNvd => {
+                    raw["scanInfo"]["dataSource"][0]["name"] = json!("NVD CVE substituted")
+                }
+            }
+            second["raw_scanner_output"] = json!(String::from_utf8(canonical_json(&raw)).unwrap());
+            changed["workload_result"]
+                .as_array_mut()
+                .unwrap()
+                .push(second);
+            assert_eq!(
+                check(&changed).unwrap_err().kind(),
+                AdvisoryFailureKind::BindingChanged
+            );
+        }
+        let provider = &fixture.manifest.provider_snapshot[1];
+        let trace: NvdNetworkTrace =
+            parse_canonical_authority(&fixture.request.nvd_network_trace).unwrap();
+        validate_provider(
+            provider,
+            &fixture.request,
+            &trace,
+            &fixture.process_receipts,
+        )
+        .unwrap();
+        let mut changed = provider.clone();
+        changed.network_trace_sha256 = "f".repeat(64);
+        assert_eq!(
+            validate_provider(
+                &changed,
+                &fixture.request,
+                &trace,
+                &fixture.process_receipts
+            )
+            .unwrap_err()
+            .kind(),
+            AdvisoryFailureKind::BindingChanged
+        );
+        let mut changed_trace = trace;
+        changed_trace.producer_request_sha256 = "f".repeat(64);
+        assert_eq!(
+            validate_provider(
+                provider,
+                &fixture.request,
+                &changed_trace,
+                &fixture.process_receipts
+            )
+            .unwrap_err()
+            .kind(),
+            AdvisoryFailureKind::BindingChanged
+        );
+    }
+
+    #[test]
+    fn related_artifact_digests_and_exact_package_tokens_are_bound() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let artifact = &fixture.manifest.gradle_projection[0].artifacts[0];
+        let expected = BTreeMap::from([(artifact.materialized_name.as_str(), vec![artifact])]);
+        let original = json!([{"fileName":artifact.materialized_name,"filePath":format!("/fixture/{}",artifact.materialized_name),"isVirtual":false,
+            "md5":"1".repeat(32),"sha1":"2".repeat(40),"sha256":artifact.artifact_sha256}]);
+        parse_owasp_related(Some(&original), &expected).unwrap();
+        let mut changed = original.clone();
+        changed[0]["sha256"] = json!("f".repeat(64));
+        assert!(parse_owasp_related(Some(&changed), &expected).is_err());
+        let id = format!(
+            "pkg:maven/{}/{}@{}",
+            artifact.package_namespace, artifact.package_name, artifact.package_version
+        );
+        assert!(package_identifier_compatible(&id, artifact));
+        let mut changed = artifact.clone();
+        changed.package_ecosystem = "cargo".into();
+        assert!(!package_identifier_compatible(&id, &changed));
+        changed = artifact.clone();
+        changed.package_namespace = "has space".into();
+        assert!(!package_identifier_compatible(&id, &changed));
+        let package = json!({"name":"example","version":"1.0.0","checksum":null,"replace":null,"source":null});
+        validate_rustsec_package(&package).unwrap();
+        for field in ["name", "version"] {
+            let mut changed = package.clone();
+            changed[field] = json!("has space");
+            assert!(validate_rustsec_package(&changed).is_err());
+        }
+        assert!(!valid_rustsec_dependency(
+            &json!({"name":"example","version":"1.0.0","source":null,"unexpected":true})
+        ));
+        assert!(!valid_text_allow_empty("too long", 3));
+    }
+
+    #[test]
+    fn artifact_source_roots_and_project_versions_have_closed_identity() {
+        let digest = "1".repeat(64);
+        let make = |role| GradleArtifactSourceRoot {
+            path: Path::new("/fixture"),
+            logical_role: role,
+            identity_sha256: &digest,
+        };
+        artifact_source_roots_digest(&[
+            make("candidate_build_output"),
+            make("governed_seed_cache"),
+        ])
+        .unwrap();
+        for roots in [
+            vec![],
+            vec![
+                make("candidate_build_output"),
+                make("governed_seed_cache"),
+                make("candidate_build_output"),
+            ],
+            vec![make("unknown")],
+            vec![
+                make("candidate_build_output"),
+                make("candidate_build_output"),
+            ],
+            vec![GradleArtifactSourceRoot {
+                path: Path::new("relative"),
+                ..make("candidate_build_output")
+            }],
+            vec![GradleArtifactSourceRoot {
+                identity_sha256: "invalid",
+                ..make("candidate_build_output")
+            }],
+        ] {
+            assert!(artifact_source_roots_digest(&roots).is_err());
+        }
+        let version = RawGradleModuleVersion {
+            group: "harvestcircle.app".into(),
+            name: "shared".into(),
+            version: "unspecified".into(),
+        };
+        assert!(valid_project_module_version(
+            ".",
+            ":app:shared",
+            &version,
+            &"1".repeat(40)
+        ));
+        assert!(!valid_project_module_version(
+            ".",
+            ":app:shared",
+            &version,
+            "invalid"
+        ));
+        assert!(!valid_project_module_version(
+            ".",
+            ":app:other",
+            &version,
+            &"1".repeat(40)
+        ));
+        assert!(!valid_gradle_project_path(":app:"));
+        for value in ["CVE-2026", "CVE-26-1234", "CVE-2026-123"] {
+            assert!(!valid_advisory_id(ProviderId::OwaspNvd, value));
+        }
+        for value in ["a\0b", "a\nb"] {
+            assert!(!valid_text_allow_empty(value, 128));
+        }
+        assert!(parse_report_epoch("2026-04-01T00:00:00Z").is_ok());
+        assert_eq!(
+            format_report_epoch(parse_report_epoch("2026-01-01T00:00:00Z").unwrap()).unwrap(),
+            "2026-01-01T00:00:00Z"
+        );
+        assert!(parse_exact_package_url("pkg:maven/example/bad name@1.0").is_err());
+        assert!(!valid_owasp_software_identifier(""));
+    }
+
+    #[test]
+    fn process_environment_is_private_per_attempt_and_shared_tools_are_consistent() {
+        let id = "gradle:harvestcircle.android.app.debugRuntimeClasspath";
+        let fixture = SyntheticFixture::new().unwrap();
+        let original = &fixture
+            .process_receipts
+            .iter()
+            .find(|row| row.id.starts_with("gradle:"))
+            .unwrap()
+            .environment;
+        let validate = |environment: &[ProcessEnvironmentRow]| {
+            validate_process_environment(
+                id,
+                environment,
+                &mut BTreeSet::new(),
+                &mut BTreeMap::new(),
+            )
+        };
+        validate(original).unwrap();
+        assert!(validate(&original[..original.len() - 1]).is_err());
+        for name in ["LC_ALL", "TZ"] {
+            let mut changed = original.clone();
+            changed
+                .iter_mut()
+                .find(|row| row.name == name)
+                .unwrap()
+                .value_sha256 = "f".repeat(64);
+            assert!(validate(&changed).is_err(), "{name}");
+        }
+        let mut changed = original.clone();
+        let home = changed
+            .iter()
+            .find(|row| row.name == "HOME")
+            .unwrap()
+            .value_sha256
+            .clone();
+        changed
+            .iter_mut()
+            .find(|row| row.name == "TMPDIR")
+            .unwrap()
+            .value_sha256 = home;
+        assert!(validate(&changed).is_err());
+        let mut shared = BTreeMap::from([("PATH".into(), "f".repeat(64))]);
+        assert!(
+            validate_process_environment(id, original, &mut BTreeSet::new(), &mut shared).is_err()
+        );
+        let mut receipts = fixture.process_receipts.clone();
+        receipts[1].working_directory.identity_sha256 =
+            receipts[0].working_directory.identity_sha256.clone();
+        receipts[1].working_directory_sha256 =
+            process_working_directory_digest(&receipts[1].working_directory).unwrap();
+        assert!(validate_process_receipts(&receipts, fixture.request.evaluation_epoch).is_err());
+        let mut receipts = fixture.process_receipts.clone();
+        receipts[0].working_directory.identity_sha256 = receipts[0]
+            .environment
+            .iter()
+            .find(|row| row.name == "HOME")
+            .unwrap()
+            .value_sha256
+            .clone();
+        receipts[0].working_directory_sha256 =
+            process_working_directory_digest(&receipts[0].working_directory).unwrap();
+        assert!(validate_process_receipts(&receipts, fixture.request.evaluation_epoch).is_err());
+    }
+
+    #[test]
+    fn gradle_projection_bindings_reject_independent_metadata_and_receipt_substitution() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let original = &fixture.manifest.gradle_projection[0];
+        let authority = WORKLOADS
+            .iter()
+            .find(|row| row.id == original.workload_id)
+            .unwrap();
+        let inventory = fixture
+            .request
+            .inventory
+            .iter()
+            .find(|row| row.id == original.workload_id)
+            .unwrap();
+        let source = fixture
+            .request
+            .sources
+            .iter()
+            .find(|row| row.repository == "oss/harvestcircle")
+            .unwrap();
+        let receipt = process_receipt(
+            &fixture.process_receipts,
+            &format!("gradle:{}", authority.id),
+        )
+        .unwrap();
+        let validate = |projection: &GradleProjection, receipt: &TrustedProcessReceipt| {
+            validate_gradle_projection_bindings(
+                projection,
+                authority,
+                inventory,
+                source,
+                &fixture.request,
+                receipt,
+            )
+        };
+        validate(original, receipt).unwrap();
+        for (pointer, replacement) in [
+            ("/workload_id", json!("unknown")),
+            ("/raw_graph_byte_length", json!(0)),
+            ("/raw_graph_byte_length", json!(MAX_GRADLE_GRAPH_BYTES + 1)),
+            ("/raw_graph_sha256", json!("invalid")),
+            ("/init_script_sha256", json!("f".repeat(64))),
+            ("/wrapper_arguments", json!([])),
+            ("/environment_keys", json!([])),
+            ("/environment_sha256", json!("invalid")),
+            ("/exit_code", json!(1)),
+            ("/source_revision", json!("f".repeat(40))),
+            ("/source_tree", json!("f".repeat(40))),
+            ("/input_sha256", json!("f".repeat(64))),
+            ("/dependency_count", json!(0)),
+            ("/component_count", json!(0)),
+            ("/edge_count", json!(0)),
+            ("/artifact_count", json!(0)),
+            ("/materialized_tree_sha256", json!("invalid")),
+            ("/artifact_source_roots_sha256", json!("invalid")),
+            ("/seed_cache_inventory_sha256", json!("invalid")),
+            ("/wrapper_distribution_sha256", json!("f".repeat(64))),
+            ("/process_receipt_sha256", json!("f".repeat(64))),
+            ("/canonical_graph_sha256", json!("f".repeat(64))),
+            ("/normalization_receipt_sha256", json!("f".repeat(64))),
+        ] {
+            let mut value = serde_json::to_value(original).unwrap();
+            assert_ne!(value.pointer(pointer).unwrap(), &replacement);
+            *value.pointer_mut(pointer).unwrap() = replacement;
+            let mut projection: GradleProjection = serde_json::from_value(value).unwrap();
+            if [
+                "/artifact_source_roots_sha256",
+                "/seed_cache_inventory_sha256",
+                "/wrapper_distribution_sha256",
+            ]
+            .contains(&pointer)
+            {
+                projection.input_sha256 =
+                    gradle_candidate_input_digest(&fixture.request, inventory, source, &projection)
+                        .unwrap();
+            }
+            assert!(validate(&projection, receipt).is_err(), "{pointer}");
+        }
+        let mut empty = original.clone();
+        empty.components.clear();
+        empty.component_count = 0;
+        assert!(validate(&empty, receipt).is_err());
+        for (field, value) in [
+            ("program_sha256", json!("f".repeat(64))),
+            ("arguments_sha256", json!("f".repeat(64))),
+            ("environment_sha256", json!("f".repeat(64))),
+            ("input_sha256", json!("f".repeat(64))),
+            ("output_sha256", json!("f".repeat(64))),
+            ("path_binding", json!([])),
+            ("exit_code", json!(1)),
+        ] {
+            let mut changed = serde_json::to_value(receipt).unwrap();
+            changed[field] = value;
+            let changed: TrustedProcessReceipt = serde_json::from_value(changed).unwrap();
+            let mut projection = original.clone();
+            projection.process_receipt_sha256 = process_receipt_digest(&changed).unwrap();
+            assert!(validate(&projection, &changed).is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn raw_scanner_files_and_archive_bindings_reject_changed_bytes_and_counters() {
+        let directory = trusted_tempdir("radroots-scanner-boundary-").unwrap();
+        let path = directory.path().join(RAW_SCANNER_OUTPUT_NAME);
+        for bytes in [b"".as_slice(), b"invalid"] {
+            std::fs::write(&path, bytes).unwrap();
+            assert!(
+                admit_raw_scanner_output(directory.path(), ProviderId::Rustsec, "fixture").is_err()
+            );
+        }
+        std::fs::write(&path, b"{}").unwrap();
+        let admitted =
+            admit_raw_scanner_output(directory.path(), ProviderId::Rustsec, "fixture").unwrap();
+        admitted.revalidate().unwrap();
+        std::fs::write(&path, b"{\"changed\":true}").unwrap();
+        assert!(admitted.revalidate().is_err());
+        let binding = blob(RUSTSEC_REPORT_NAME, b"{}").unwrap();
+        validate_blob(
+            &binding,
+            &FileEvidence {
+                byte_length: 2,
+                sha256: sha256(b"{}"),
+            },
+        )
+        .unwrap();
+        for evidence in [
+            FileEvidence {
+                byte_length: 3,
+                sha256: sha256(b"{}"),
+            },
+            FileEvidence {
+                byte_length: 2,
+                sha256: sha256(b"[]"),
+            },
+        ] {
+            assert!(validate_blob(&binding, &evidence).is_err());
+        }
+        for field in [
+            "archive_expanded_bytes",
+            "archive_member_count",
+            "archive_payload_bytes",
+            "materialized_tree_sha256",
+        ] {
+            let mut fixture = SyntheticFixture::new().unwrap();
+            let mut value = serde_json::to_value(&fixture.manifest.provider_snapshot[0]).unwrap();
+            value[field] = if field == "materialized_tree_sha256" {
+                json!("f".repeat(64))
+            } else {
+                json!(value[field].as_u64().unwrap() + 1)
+            };
+            fixture.manifest.provider_snapshot[0] = serde_json::from_value(value).unwrap();
+            fixture.seal().unwrap();
+            assert_eq!(
+                admit_snapshot(
+                    fixture.root(),
+                    fixture.materialization_parent.path(),
+                    &fixture.request
+                )
+                .unwrap_err()
+                .kind(),
+                AdvisoryFailureKind::BindingChanged,
+                "{field}"
+            );
+        }
+        let fixture = SyntheticFixture::new().unwrap();
+        let path = fixture.root().join(MANIFEST_NAME);
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes.push(b' ');
+        std::fs::write(path, bytes).unwrap();
+        assert_eq!(
+            admit_snapshot(
+                fixture.root(),
+                fixture.materialization_parent.path(),
+                &fixture.request
+            )
+            .unwrap_err()
+            .kind(),
+            AdvisoryFailureKind::InvalidSnapshot
+        );
+    }
+
+    #[test]
+    fn normalized_graph_structure_rejects_each_independent_link_and_artifact_fault() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let original = &fixture.manifest.gradle_projection[0];
+        let authority = WORKLOADS
+            .iter()
+            .find(|row| row.id == original.workload_id)
+            .unwrap();
+        let revision = "1".repeat(40);
+        let validate = |projection: &GradleProjection| {
+            validate_gradle_graph_structure(projection, authority, &revision).is_ok()
+        };
+        rejects_typed_changes(
+            original,
+            &[
+                ("/components/0/identity_sha256", json!("invalid")),
+                ("/components/0/variant_sha256", json!("invalid")),
+                ("/edges/0/from_identity_sha256", json!("invalid")),
+                ("/edges/0/to_identity_sha256", json!("invalid")),
+                ("/edges/0/requested_sha256", json!("invalid")),
+                ("/edges/0/selected_variant_sha256", json!("invalid")),
+                ("/edges", json!([])),
+                ("/artifacts/0/component_identity_sha256", json!("invalid")),
+                ("/artifacts/0/component", json!("")),
+                ("/artifacts/0/package_ecosystem", json!("cargo")),
+                ("/artifacts/0/package_namespace", json!("")),
+                ("/artifacts/0/package_name", json!("")),
+                ("/artifacts/0/package_version", json!("")),
+                ("/artifacts/0/artifact_sha256", json!("invalid")),
+                ("/artifacts/0/variant_sha256", json!("invalid")),
+                ("/artifacts/0/byte_length", json!(0)),
+                ("/artifacts/0/artifact_name", json!("")),
+                ("/artifacts/0/logical_name", json!("")),
+                ("/artifacts/0/artifact_type", json!("")),
+                ("/artifacts/0/classifier", json!("")),
+                ("/artifacts/0/extension", json!("unknown")),
+                ("/artifacts/0/materialized_name", json!("invalid")),
+                ("/artifacts/0/package_name", json!("wrong-binding")),
+            ],
+            validate,
+        );
+        for collection in ["components", "edges", "artifacts"] {
+            let mut changed = serde_json::to_value(original).unwrap();
+            let duplicate = changed[collection][0].clone();
+            changed[collection].as_array_mut().unwrap().push(duplicate);
+            assert!(
+                !validate(&serde_json::from_value(changed).unwrap()),
+                "duplicate {collection}"
+            );
+        }
+        let mut changed = original.clone();
+        changed.edges[0].to_identity_sha256 = changed.edges[0].from_identity_sha256.clone();
+        assert!(!validate(&changed));
+        let mut changed = original.clone();
+        // Reversing the sole edge leaves the non-root component unreachable.
+        changed.edges[0].from_identity_sha256 = original.edges[0].to_identity_sha256.clone();
+        changed.edges[0].to_identity_sha256 = original.edges[0].from_identity_sha256.clone();
+        assert!(!validate(&changed));
+        for case in 0..6 {
+            let mut changed = original.clone();
+            match case {
+                0 => {
+                    changed.components[0].variant = json!({"selected": []});
+                    changed.components[0].variant_sha256 =
+                        gradle_variant_digest(&changed.components[0].variant).unwrap();
+                    changed.components[0].identity_sha256 =
+                        gradle_component_digest(&changed.components[0]).unwrap();
+                    changed
+                        .components
+                        .sort_by(|a, b| a.identity_sha256.cmp(&b.identity_sha256));
+                }
+                1 => {
+                    changed.edges[0].requested = json!({});
+                    changed.edges[0].requested_sha256 =
+                        gradle_request_digest(&changed.edges[0].requested).unwrap();
+                }
+                2 => {
+                    changed.edges[0].selected_variant = json!({});
+                    changed.edges[0].selected_variant_sha256 =
+                        gradle_variant_digest(&changed.edges[0].selected_variant).unwrap();
+                }
+                3 => {
+                    changed.artifacts[0].variant = json!({});
+                    changed.artifacts[0].variant_sha256 =
+                        gradle_variant_digest(&changed.artifacts[0].variant).unwrap();
+                }
+                4 => {
+                    changed.artifacts[0].variant["attributes"][0]["value"] =
+                        json!("different-selection");
+                    changed.artifacts[0].variant_sha256 =
+                        gradle_variant_digest(&changed.artifacts[0].variant).unwrap();
+                }
+                _ => {
+                    for component in &mut changed.components {
+                        component.root = false;
+                        component.identity_sha256 = gradle_component_digest(component).unwrap();
+                    }
+                    changed
+                        .components
+                        .sort_by(|a, b| a.identity_sha256.cmp(&b.identity_sha256));
+                }
+            }
+            assert!(!validate(&changed), "graph structure case {case}");
+        }
+        let mut duplicates = original.clone();
+        let mut second = duplicates.artifacts[0].clone();
+        second.classifier = Some("sources".to_owned());
+        duplicates.artifacts.push(second);
+        duplicates
+            .artifacts
+            .sort_by_key(|row| canonical_row_key(row).unwrap());
+        assert!(
+            validate(&duplicates),
+            "same materialized bytes can support distinct artifacts"
+        );
+        duplicates.artifacts[1].byte_length += 1;
+        duplicates
+            .artifacts
+            .sort_by_key(|row| canonical_row_key(row).unwrap());
+        assert!(
+            !validate(&duplicates),
+            "one content digest cannot bind different lengths"
+        );
+    }
+
+    #[test]
+    fn process_directories_bind_identity_kind_and_before_after_state() {
+        let fixture = SyntheticFixture::new().unwrap();
+        for prefix in [
+            "cargo_audit:",
+            "gradle:",
+            "owasp_analysis:",
+            "owasp_nvd_update",
+        ] {
+            let receipt = fixture
+                .process_receipts
+                .iter()
+                .find(|row| row.id.starts_with(prefix))
+                .unwrap();
+            let directory = &receipt.working_directory;
+            let mut changes = vec![
+                ("/logical_uri", json!("unknown")),
+                ("/kind", json!("unknown")),
+                ("/identity_sha256", json!("invalid")),
+                ("/pre_execution_tree_sha256", json!("invalid")),
+                ("/post_execution_tree_sha256", json!("invalid")),
+                (
+                    "/pre_execution_entry_count",
+                    json!(if directory.pre_execution_entry_count == 0 {
+                        1
+                    } else {
+                        0
+                    }),
+                ),
+                (
+                    "/post_execution_entry_count",
+                    json!(if directory.post_execution_entry_count == 0 {
+                        1
+                    } else {
+                        0
+                    }),
+                ),
+                ("/pre_execution_tree_sha256", json!("f".repeat(64))),
+            ];
+            if prefix != "owasp_nvd_update" {
+                changes.push(("/post_execution_tree_sha256", json!("f".repeat(64))));
+            }
+            rejects_typed_changes(directory, &changes, |changed| {
+                validate_process_working_directory(&receipt.id, changed).is_ok()
+            });
+        }
+        assert!(expected_process_working_directory("unknown").is_err());
+        assert!(expected_environment_logical_value("UNKNOWN").is_err());
+    }
+
+    #[test]
+    fn report_timestamps_and_json_bounds_reject_malformed_or_oversized_values() {
+        assert!(parse_report_epoch("1970-01-01T00:00:00Z").is_err());
+        assert_eq!(parse_report_epoch("1970-01-01T00:00:01.125Z").unwrap(), 1);
+        for year in [2000, 2024] {
+            let timestamp = format!("{year}-02-29T12:30:45Z");
+            let epoch = parse_report_epoch(&timestamp).unwrap();
+            assert_eq!(format_report_epoch(epoch).unwrap(), timestamp);
+        }
+        for value in [
+            "1970-01-00T00:00:00Z",
+            "1969-01-01T00:00:00Z",
+            "2100-02-29T00:00:00Z",
+            "2023-02-29T00:00:00Z",
+            "2026-04-31T00:00:00Z",
+            "2026-13-01T00:00:00Z",
+            "2026-01-01T24:00:00Z",
+            "2026-01-01T00:60:00Z",
+            "2026-01-01T00:00:60Z",
+            "2026-01-01T00:00:00.xZ",
+            "2026-01-01T00:00:00,1Z",
+        ] {
+            assert!(parse_report_epoch(value).is_err(), "{value}");
+        }
+        let original = b"2026-03-01T00:00:00Z";
+        for index in [4, 7, 10, 13, 16, 19, 0, 5, 8, 11, 14, 17] {
+            let mut bytes = original.to_vec();
+            bytes[index] = b'x';
+            assert!(parse_report_epoch(std::str::from_utf8(&bytes).unwrap()).is_err());
+        }
+        validate_json_bounds(&json!({"rows": [null, true, 1, "safe"]})).unwrap();
+        validate_json_bounds(&json!([])).unwrap();
+        for value in [json!("x".repeat(1_048_577)), json!("a\nb")] {
+            assert!(validate_json_bounds(&value).is_err());
+        }
+        let mut deep = Value::Null;
+        for _ in 0..33 {
+            deep = Value::Array(vec![deep]);
+        }
+        assert!(validate_json_bounds(&deep).is_err());
+        assert!(validate_json_bounds(&Value::Array(vec![Value::Null; 65_537])).is_err());
+        let object = (0..1_025)
+            .map(|index| (format!("key{index}"), Value::Null))
+            .collect();
+        assert!(validate_json_bounds(&Value::Object(object)).is_err());
+        assert!(validate_json_bounds(&json!({"bad\nkey": null})).is_err());
+        let million = Value::Array(vec![Value::Array(vec![Value::Null; 65_536]); 16]);
+        assert!(validate_json_bounds(&million).is_err());
+        for id in ["CVE-2026", "CVE-26-0001", "CVE-2026-1"] {
+            assert!(!valid_advisory_id(ProviderId::OwaspNvd, id));
+        }
+    }
+
+    #[test]
+    fn workload_reports_bind_raw_bytes_counts_database_and_process_receipts() {
+        let fixture = SyntheticFixture::new().unwrap();
+        for provider in &fixture.manifest.provider_snapshot {
+            let original = fixture.read_report_value(provider.provider).unwrap();
+            let envelope: ReportEnvelope = serde_json::from_value(original.clone()).unwrap();
+            let result = &envelope.workload_result[0];
+            let inventory = fixture
+                .request
+                .inventory
+                .iter()
+                .find(|row| row.id == result.workload_id)
+                .unwrap();
+            let mut changes = vec![
+                ("/raw_scanner_output", json!("")),
+                (
+                    "/raw_scanner_output",
+                    json!("x".repeat(MAX_RAW_WORKLOAD_REPORT_BYTES as usize + 1)),
+                ),
+                ("/input_sha256", json!("f".repeat(64))),
+                ("/dependency_count", json!(0)),
+                ("/provider_archive_sha256", json!("f".repeat(64))),
+                ("/materialized_tree_sha256", json!("f".repeat(64))),
+                ("/tool_observation_sha256", json!("f".repeat(64))),
+                ("/raw_output_byte_length", json!(0)),
+                ("/raw_output_sha256", json!("f".repeat(64))),
+                ("/environment_sha256", json!("invalid")),
+                ("/environment_sha256", json!("f".repeat(64))),
+                ("/process_receipt_sha256", json!("f".repeat(64))),
+                ("/arguments", json!([])),
+                ("/exit_code", json!(2)),
+            ];
+            if provider.provider == ProviderId::OwaspNvd {
+                changes.extend([
+                    ("/database_copy", json!(null)),
+                    ("/database_copy/root_identity_sha256", json!("invalid")),
+                    ("/database_copy/source_tree_sha256", json!("f".repeat(64))),
+                    ("/database_copy/pre_scan_tree_sha256", json!("f".repeat(64))),
+                    (
+                        "/database_copy/post_scan_tree_sha256",
+                        json!("f".repeat(64)),
+                    ),
+                ]);
+            }
+            validate_workload_execution(provider, result, inventory, &fixture.request).unwrap();
+            for (pointer, replacement) in changes {
+                let mut changed = original["workload_result"][0].clone();
+                *changed.pointer_mut(pointer).unwrap() = replacement;
+                let changed: WorkloadResult = serde_json::from_value(changed).unwrap();
+                assert!(
+                    validate_workload_execution(provider, &changed, inventory, &fixture.request)
+                        .is_err(),
+                    "{pointer}"
+                );
+            }
+            let bytes = canonical_json(&original);
+            assert!(
+                parse_unsuppressed_report(
+                    provider,
+                    &bytes,
+                    &fixture.request,
+                    &fixture.manifest.gradle_projection
+                )
+                .is_ok()
+            );
+            for (pointer, replacement) in [
+                ("/schema", json!("unknown")),
+                (
+                    "/provider",
+                    json!(if provider.provider == ProviderId::Rustsec {
+                        "owasp_nvd"
+                    } else {
+                        "rustsec"
+                    }),
+                ),
+                ("/workload_result", json!([])),
+                ("/workload_result/0/workload_id", json!("unknown")),
+            ] {
+                let mut changed = original.clone();
+                *changed.pointer_mut(pointer).unwrap() = replacement;
+                assert!(
+                    parse_unsuppressed_report(
+                        provider,
+                        &canonical_json(&changed),
+                        &fixture.request,
+                        &fixture.manifest.gradle_projection
+                    )
+                    .is_err()
+                );
+            }
+            let mut noncanonical = bytes;
+            noncanonical.push(b' ');
+            assert!(
+                parse_unsuppressed_report(
+                    provider,
+                    &noncanonical,
+                    &fixture.request,
+                    &fixture.manifest.gradle_projection
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn raw_gradle_graph_rejects_identity_variant_artifact_and_source_drift() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let authority = WORKLOADS
+            .iter()
+            .find(|row| row.package_manager == "gradle")
+            .unwrap();
+        let workload_root = fixture._gradle_fixture_root.path().join(authority.id);
+        let raw: RawGradleGraph = serde_json::from_slice(
+            &std::fs::read(workload_root.join("raw").join(GRADLE_RAW_GRAPH_NAME)).unwrap(),
+        )
+        .unwrap();
+        let source = workload_root.join("source");
+        let source_identity = "a".repeat(64);
+        let roots = [GradleArtifactSourceRoot {
+            path: &source,
+            logical_role: "candidate_build_output",
+            identity_sha256: &source_identity,
+        }];
+        let revision = "1".repeat(40);
+        let normalize =
+            |raw: &RawGradleGraph| normalize_raw_gradle_graph(raw, authority, &revision, 1, &roots);
+        assert_eq!(normalize(&raw).unwrap().artifacts.len(), 1);
+        rejects_typed_changes(
+            &raw,
+            &[
+                ("/schema", json!("unknown")),
+                ("/workload_id", json!("unknown")),
+                ("/build_root", json!("unknown")),
+                ("/project_path", json!(":other")),
+                ("/configuration", json!("unknown")),
+                ("/components", json!([])),
+                ("/edges", json!([])),
+                (
+                    "/edges/0/selected_variant/attributes/0/value",
+                    json!("unselected"),
+                ),
+                (
+                    "/artifacts/0/variant/attributes/0/value",
+                    json!("unselected"),
+                ),
+                ("/artifacts/0/group", json!("other")),
+                ("/artifacts/0/name", json!("other")),
+                ("/artifacts/0/version", json!("2.0")),
+                ("/artifacts/0/module_version/group", json!("")),
+                ("/artifacts/0/module_version/name", json!("")),
+                ("/artifacts/0/module_version/version", json!("")),
+                ("/artifacts/0/module_version/group", json!("other")),
+                ("/artifacts/0/module_version/name", json!("other")),
+                ("/artifacts/0/module_version/version", json!("other")),
+                ("/artifacts/0/observed_byte_length", json!(0)),
+                (
+                    "/artifacts/0/observed_byte_length",
+                    json!(MAX_GRADLE_ARTIFACT_BYTES + 1),
+                ),
+                ("/artifacts/0/observed_byte_length", json!(1)),
+                ("/artifacts/0/observed_sha256", json!("invalid")),
+                ("/artifacts/0/observed_sha256", json!("0".repeat(64))),
+                ("/artifacts/0/artifact_name", json!("")),
+                ("/artifacts/0/artifact_name", json!("nested/unsafe.jar")),
+                ("/artifacts/0/artifact_name", json!("wrong.extension")),
+                ("/artifacts/0/logical_name", json!("")),
+                ("/artifacts/0/artifact_type", json!("")),
+                ("/artifacts/0/extension", json!("unknown")),
+                ("/artifacts/0/classifier", json!("")),
+                ("/artifacts/0/source_path", json!("")),
+                ("/artifacts/0/source_path", json!("relative/path")),
+                ("/artifacts/0/source_path", json!("/outside/root")),
+                (
+                    "/edges/0/from",
+                    serde_json::to_value(&raw.edges[0].to).unwrap(),
+                ),
+            ],
+            |changed| normalize(changed).is_ok(),
+        );
+        assert!(normalize_raw_gradle_graph(&raw, authority, &revision, 2, &roots).is_err());
+        assert!(normalize_raw_gradle_graph(&raw, &WORKLOADS[0], &revision, 1, &roots).is_err());
+        assert!(normalize_raw_gradle_graph(&raw, authority, &revision, 1, &[]).is_err());
+        for slot in ["components", "edges", "artifacts"] {
+            let mut changed = serde_json::to_value(&raw).unwrap();
+            let repeated = changed[slot][0].clone();
+            changed[slot].as_array_mut().unwrap().push(repeated);
+            assert!(normalize(&serde_json::from_value(changed).unwrap()).is_err());
+        }
+        let mut no_root = raw.clone();
+        for component in &mut no_root.components {
+            component.root = false;
+        }
+        assert!(normalize(&no_root).is_err());
+        let mut cycle = raw.clone();
+        cycle.edges[0].from = raw.edges[0].to.clone();
+        cycle.edges[0].to = raw.edges[0].from.clone();
+        assert!(normalize(&cycle).is_err());
+    }
+
+    #[test]
+    fn normalized_gradle_components_and_artifacts_keep_their_kind_specific_identity() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let projection = &fixture.manifest.gradle_projection[0];
+        let artifact = &projection.artifacts[0];
+        let module = projection
+            .components
+            .iter()
+            .find(|row| row.kind == "module")
+            .unwrap();
+        let project = projection
+            .components
+            .iter()
+            .find(|row| row.kind == "project")
+            .unwrap();
+        rejects_typed_changes(
+            module,
+            &[
+                ("/group", json!(null)),
+                ("/name", json!(null)),
+                ("/version", json!(null)),
+                ("/build_root", json!(".")),
+                ("/project_path", json!(":app")),
+                ("/root", json!(true)),
+            ],
+            valid_gradle_component,
+        );
+        rejects_typed_changes(
+            project,
+            &[
+                ("/group", json!("extra")),
+                ("/name", json!("extra")),
+                ("/version", json!("extra")),
+                ("/build_root", json!(null)),
+                ("/project_path", json!(null)),
+            ],
+            valid_gradle_component,
+        );
+        rejects_typed_changes(
+            artifact,
+            &[
+                ("/component", json!("unknown")),
+                ("/package_ecosystem", json!("cargo")),
+                ("/package_namespace", json!("other")),
+                ("/package_name", json!("other")),
+                ("/package_version", json!("other")),
+            ],
+            |changed| artifact_matches_component(changed, module, &"1".repeat(40)),
+        );
+        for missing in ["group", "name", "version"] {
+            let mut changed = serde_json::to_value(module).unwrap();
+            changed[missing] = Value::Null;
+            assert!(!artifact_matches_component(
+                artifact,
+                &serde_json::from_value(changed).unwrap(),
+                &"1".repeat(40)
+            ));
+        }
+        let mut project_artifact = artifact.clone();
+        project_artifact.component = format!(
+            "{}:{}",
+            project.build_root.as_deref().unwrap(),
+            project.project_path.as_deref().unwrap()
+        );
+        project_artifact.package_namespace = "harvestcircle.app".to_owned();
+        project_artifact.package_name = "design_system".to_owned();
+        project_artifact.package_version = "unspecified".to_owned();
+        project_artifact.classifier = None;
+        assert!(artifact_matches_component(
+            &project_artifact,
+            project,
+            &"1".repeat(40)
+        ));
+        rejects_typed_changes(
+            &project_artifact,
+            &[
+                ("/component", json!("unknown")),
+                ("/package_ecosystem", json!("cargo")),
+                ("/package_namespace", json!("other")),
+                ("/classifier", json!("classified")),
+            ],
+            |changed| artifact_matches_component(changed, project, &"1".repeat(40)),
+        );
+        for missing in ["build_root", "project_path"] {
+            let mut changed = serde_json::to_value(project).unwrap();
+            changed[missing] = Value::Null;
+            assert!(!artifact_matches_component(
+                &project_artifact,
+                &serde_json::from_value(changed).unwrap(),
+                &"1".repeat(40)
+            ));
+        }
+    }
+
+    #[test]
+    fn request_requires_complete_ordered_sources_graphs_and_scanner_outputs() {
+        for case in 0..13 {
+            let mut fixture = SyntheticFixture::new().unwrap();
+            match case {
+                0 => fixture.request.candidate.generation = 0,
+                1 => fixture.request.candidate.digest = "invalid".to_owned(),
+                2 => fixture.request.evaluation_epoch = 0,
+                3 => {
+                    fixture.request.inventory.pop();
+                }
+                4 => {
+                    fixture.request.admitted_gradle_graphs.pop();
+                }
+                5 => {
+                    fixture.request.admitted_scanner_outputs.pop();
+                }
+                6 => {
+                    fixture.request.sources.pop();
+                }
+                7 => fixture.request.sources.swap(0, 1),
+                8 => fixture.request.sources[0].revision = "invalid".to_owned(),
+                9 => fixture.request.sources[0].tree = "invalid".to_owned(),
+                10 => fixture.request.admitted_gradle_graphs.swap(0, 1),
+                11 => fixture.request.admitted_scanner_outputs.swap(0, 1),
+                _ => fixture.request.sources.clear(),
+            }
+            assert!(
+                validate_request(&fixture.request).is_err(),
+                "request case {case}"
+            );
+        }
+        for (slot, maximum) in [
+            MAX_PRODUCER_REQUEST_BYTES,
+            MAX_TOOL_MANIFEST_BYTES,
+            MAX_TOOL_OBSERVATION_BYTES,
+            MAX_NVD_TRACE_BYTES,
+            MAX_PROVIDER_EVIDENCE_BYTES,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let mut fixture = SyntheticFixture::new().unwrap();
+            let field = match slot {
+                0 => &mut fixture.request.producer_request,
+                1 => &mut fixture.request.step_297_tool_manifest,
+                2 => &mut fixture.request.fresh_tool_observation,
+                3 => &mut fixture.request.nvd_network_trace,
+                _ => &mut fixture.request.provider_execution_evidence,
+            };
+            field.resize(maximum + 1, b' ');
+            assert_eq!(
+                validate_trusted_authority(&fixture.request)
+                    .unwrap_err()
+                    .kind(),
+                AdvisoryFailureKind::InvalidSnapshot
+            );
+        }
+    }
+
+    #[test]
+    fn pinned_tools_and_scanner_arguments_reject_stale_or_substituted_inputs() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let states = &fixture.manifest.tool_state;
+        rejects_typed_changes(
+            states,
+            &[
+                ("/0/id", json!("unknown")),
+                ("/0/normalized_version", json!("0")),
+                ("/0/executable_sha256", json!("f".repeat(64))),
+                ("/0/source_sha256", json!("f".repeat(64))),
+                ("/0/package_receipt_sha256", json!("f".repeat(64))),
+                ("/0/reviewed_at_epoch", json!(0)),
+                (
+                    "/0/reviewed_at_epoch",
+                    json!(fixture.request.evaluation_epoch + 1),
+                ),
+                (
+                    "/0/reviewed_at_epoch",
+                    json!(fixture.request.evaluation_epoch - TOOL_REVIEW_SECONDS - 1),
+                ),
+                ("/0/state", json!("unavailable")),
+            ],
+            |changed| validate_tool_states(changed, fixture.request.evaluation_epoch).is_ok(),
+        );
+        assert!(validate_tool_states(&[], fixture.request.evaluation_epoch).is_err());
+        let mut boundary = states.clone();
+        boundary[0].reviewed_at_epoch = fixture.request.evaluation_epoch - TOOL_REVIEW_SECONDS;
+        validate_tool_states(&boundary, fixture.request.evaluation_epoch).unwrap();
+        rejects_typed_changes(
+            &fixture.manifest.tool_acquisition,
+            &[("/0/id", json!("unknown")), ("/0/projection", json!({}))],
+            |changed| validate_tool_acquisitions(changed).is_ok(),
+        );
+        assert!(validate_tool_acquisitions(&[]).is_err());
+        for (provider, workload) in [
+            (ProviderId::Rustsec, "lib"),
+            (ProviderId::OwaspNvd, "app_design_system"),
+        ] {
+            let original = synthetic_scanner_arguments(provider, workload);
+            assert!(valid_scanner_arguments(provider, &original));
+            assert!(!valid_scanner_arguments(provider, &[]));
+            for index in 0..original.len() {
+                let mut changed = original.clone();
+                changed[index] = "untrusted".to_owned();
+                assert!(
+                    !valid_scanner_arguments(provider, &changed),
+                    "{provider:?} argument {index}"
+                );
+            }
+        }
+        for value in ["", "relative", "/contains\0nul"] {
+            assert!(!absolute_path(value));
+        }
+        assert!(absolute_path("/valid/path"));
+    }
+
+    #[test]
+    fn suppression_requires_unique_exact_finding_and_unexpired_owner_rationale() {
+        let suppression = Suppression {
+            id: "review-1".to_owned(),
+            provider: ProviderId::Rustsec,
+            advisory_id: "RUSTSEC-2099-0001".to_owned(),
+            workload_id: WORKLOADS[0].id.to_owned(),
+            package_ecosystem: "cargo".to_owned(),
+            package_namespace: String::new(),
+            package_name: "example".to_owned(),
+            package_version: "1.0.0".to_owned(),
+            owner: "security@example.invalid".to_owned(),
+            rationale: "Reviewed fixture".to_owned(),
+            created_at_epoch: 100,
+            expires_at_epoch: 200,
+        };
+        let finding = Finding {
+            provider: suppression.provider,
+            advisory_id: suppression.advisory_id.clone(),
+            package_ecosystem: suppression.package_ecosystem.clone(),
+            package_namespace: suppression.package_namespace.clone(),
+            package_name: suppression.package_name.clone(),
+            package_version: suppression.package_version.clone(),
+            workload_id: suppression.workload_id.clone(),
+        };
+        let mut findings = vec![finding.clone()];
+        apply_suppressions(&mut findings, std::slice::from_ref(&suppression), 150).unwrap();
+        assert!(findings.is_empty());
+        for mut findings in [vec![], vec![finding.clone(), finding.clone()]] {
+            assert!(
+                apply_suppressions(&mut findings, std::slice::from_ref(&suppression), 150).is_err()
+            );
+        }
+        rejects_typed_changes(
+            &suppression,
+            &[
+                ("/advisory_id", json!(NON_WAIVABLE_RUSTSEC)),
+                ("/advisory_id", json!("unknown")),
+                ("/id", json!("..")),
+                ("/package_ecosystem", json!("npm")),
+                ("/package_namespace", json!("unexpected")),
+                ("/package_name", json!("")),
+                ("/package_version", json!("")),
+                ("/workload_id", json!("unknown")),
+                ("/owner", json!("")),
+                ("/rationale", json!("")),
+                ("/created_at_epoch", json!(0)),
+                ("/created_at_epoch", json!(200)),
+                ("/created_at_epoch", json!(151)),
+                ("/expires_at_epoch", json!(150)),
+            ],
+            |changed| validate_suppression_inventory(std::slice::from_ref(changed), 150).is_ok(),
+        );
+        for field in [
+            "provider",
+            "advisory_id",
+            "package_ecosystem",
+            "package_namespace",
+            "package_name",
+            "package_version",
+            "workload_id",
+        ] {
+            let mut changed = serde_json::to_value(&suppression).unwrap();
+            changed[field] = if field == "provider" {
+                json!("owasp_nvd")
+            } else {
+                json!("mismatch")
+            };
+            let changed: Suppression = serde_json::from_value(changed).unwrap();
+            assert!(!suppression_matches(&changed, &finding), "{field}");
+        }
+        assert!(
+            validate_suppression_inventory(&[suppression.clone(), suppression.clone()], 150)
+                .is_err()
+        );
+        let mut second = suppression.clone();
+        second.id = "review-2".to_owned();
+        validate_suppression_inventory(&[suppression.clone(), second.clone()], 150).unwrap();
+        assert!(validate_suppression_inventory(&[second, suppression.clone()], 150).is_err());
+        let mut maven = suppression;
+        maven.provider = ProviderId::OwaspNvd;
+        maven.advisory_id = "CVE-2099-0001".to_owned();
+        maven.package_ecosystem = "maven".to_owned();
+        assert!(validate_suppression_inventory(&[maven.clone()], 150).is_err());
+        maven.package_namespace = "com.example".to_owned();
+        validate_suppression_inventory(&[maven], 150).unwrap();
+    }
+
+    #[test]
+    fn temporal_evidence_orders_review_acquisition_normalization_and_scans() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let observation: TrustedToolObservation =
+            parse_canonical_authority(&fixture.request.fresh_tool_observation).unwrap();
+        let providers = &fixture.manifest.provider_snapshot;
+        let receipts = &fixture.process_receipts;
+        validate_temporal_order(&observation, providers, receipts).unwrap();
+        rejects_typed_changes(
+            &observation,
+            &[
+                ("/observed_at_epoch", json!(0)),
+                (
+                    "/tool_state/0/reviewed_at_epoch",
+                    json!(observation.observed_at_epoch + 1),
+                ),
+            ],
+            |changed| validate_temporal_order(changed, providers, receipts).is_ok(),
+        );
+        rejects_typed_changes(
+            providers,
+            &[
+                (
+                    "/0/acquired_at_epoch",
+                    json!(observation.observed_at_epoch - 1),
+                ),
+                ("/0/digest_time_epoch", json!(u64::MAX)),
+                ("/0/analyzed_at_epoch", json!(u64::MAX)),
+                (
+                    "/1/acquired_at_epoch",
+                    json!(providers[1].acquired_at_epoch + 1),
+                ),
+            ],
+            |changed| validate_temporal_order(&observation, changed, receipts).is_ok(),
+        );
+        assert!(validate_temporal_order(&observation, providers, &[]).is_err());
+        let update = receipts
+            .iter()
+            .position(|row| row.id == "owasp_nvd_update")
+            .unwrap();
+        let gradle = receipts
+            .iter()
+            .position(|row| row.id.starts_with("gradle:"))
+            .unwrap();
+        for (index, started) in [(update, true), (gradle, false)] {
+            let mut changed = receipts.clone();
+            if started {
+                changed[index].started_at_epoch = observation.observed_at_epoch - 1;
+            } else {
+                changed[index].completed_at_epoch = u64::MAX;
+            }
+            assert!(validate_temporal_order(&observation, providers, &changed).is_err());
+        }
+    }
+    use serde_json::json;
+
+    #[test]
+    fn complete_rustsec_reports_reject_nested_type_count_and_scanner_policy_drift() {
+        let mut fixture = SyntheticFixture::new().unwrap();
+        fixture
+            .set_rustsec_finding("RUSTSEC-2099-0001", "example", "1.0.0")
+            .unwrap();
+        let report = fixture.read_report_value(ProviderId::Rustsec).unwrap();
+        let result: WorkloadResult =
+            serde_json::from_value(report["workload_result"][0].clone()).unwrap();
+        let original: Value = serde_json::from_str(&result.raw_scanner_output).unwrap();
+        let provider = &fixture.manifest.provider_snapshot[0];
+        let parse = |value: &Value| {
+            parse_rustsec_output(
+                &result.workload_id,
+                value,
+                result.dependency_count,
+                &provider.database_identity_sha256,
+                &provider.materialized_tree_sha256,
+                provider.digest_time_epoch,
+                &mut Vec::new(),
+            )
+        };
+        rejects_wrong_node_types(&original, |value| parse(value).is_ok());
+        rejects_unknown_object_fields(
+            &original,
+            &[
+                "",
+                "/database",
+                "/lockfile",
+                "/settings",
+                "/vulnerabilities",
+                "/vulnerabilities/list/0",
+                "/vulnerabilities/list/0/advisory",
+                "/vulnerabilities/list/0/package",
+                "/vulnerabilities/list/0/versions",
+            ],
+            |value| parse(value).is_ok(),
+        );
+        let mut substituted_database = original.clone();
+        substituted_database["database"]["last-commit"] = json!("f".repeat(40));
+        assert!(parse(&substituted_database).is_err());
+        for (pointer, replacement) in [
+            ("/database/advisory-count", json!(0)),
+            ("/database/last-commit", json!("invalid")),
+            ("/database/last-updated", json!("invalid")),
+            ("/lockfile/dependency-count", json!(0)),
+            ("/settings/ignore", json!(["RUSTSEC-2099-0001"])),
+            ("/settings/target_arch", json!(["x86_64"])),
+            ("/settings/target_os", json!(["linux"])),
+            ("/settings/severity", json!("high")),
+            ("/settings/informational_warnings", json!([])),
+            ("/vulnerabilities/found", json!(false)),
+            ("/vulnerabilities/count", json!(0)),
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).unwrap() = replacement;
+            assert!(parse(&changed).is_err(), "{pointer}");
+        }
+        for key in original.as_object().unwrap().keys() {
+            let mut changed = original.clone();
+            changed.as_object_mut().unwrap().remove(key);
+            assert!(parse(&changed).is_err(), "missing {key}");
+        }
+        for kind in ["notice", "unmaintained", "unsound"] {
+            let mut changed = original.clone();
+            let mut warning = original["vulnerabilities"]["list"][0].clone();
+            warning["kind"] = json!(kind);
+            changed["warnings"][kind] = json!([warning]);
+            rejects_wrong_node_types(&changed, |value| parse(value).is_ok());
+            rejects_unknown_object_fields(&changed, &[&format!("/warnings/{kind}/0")], |value| {
+                parse(value).is_ok()
+            });
+            changed["warnings"][kind][0]["kind"] = json!("other");
+            assert!(parse(&changed).is_err());
+        }
+        for (kind, rows) in [("unknown", json!([])), ("yanked", json!([{}]))] {
+            let mut changed = original.clone();
+            changed["warnings"][kind] = rows;
+            assert!(parse(&changed).is_err());
+        }
+        let mut empty_yanked = original.clone();
+        empty_yanked["warnings"]["yanked"] = json!([]);
+        assert!(parse(&empty_yanked).is_ok());
+    }
+
+    #[test]
+    fn complete_owasp_reports_bind_database_project_file_and_package_identity() {
+        let mut fixture = SyntheticFixture::new().unwrap();
+        let artifact = fixture.manifest.gradle_projection[0].artifacts[0].clone();
+        fixture
+            .set_owasp_finding(
+                "CVE-2099-0001",
+                &artifact.package_namespace,
+                &artifact.package_name,
+                &artifact.package_version,
+            )
+            .unwrap();
+        let report = fixture.read_report_value(ProviderId::OwaspNvd).unwrap();
+        let result: WorkloadResult =
+            serde_json::from_value(report["workload_result"][0].clone()).unwrap();
+        let mut original: Value = serde_json::from_str(&result.raw_scanner_output).unwrap();
+        for key in ["artifactID", "groupID", "version"] {
+            original["projectInfo"][key] = json!("fixture");
+        }
+        original["dependencies"][0]["description"] = json!("fixture");
+        original["dependencies"][0]["license"] = json!("Apache-2.0");
+        original["dependencies"][0]["projectReferences"] = json!(["fixture"]);
+        let provider = &fixture.manifest.provider_snapshot[1];
+        let projection = &fixture.manifest.gradle_projection[0];
+        let receipt = process_receipt(
+            &fixture.process_receipts,
+            &format!("owasp_analysis:{}", result.workload_id),
+        )
+        .unwrap();
+        let parse = |value: &Value| {
+            parse_owasp_output(
+                &result.workload_id,
+                value,
+                projection,
+                &provider.database_identity_sha256,
+                &provider.materialized_tree_sha256,
+                &result.arguments[4],
+                receipt.started_at_epoch,
+                receipt.completed_at_epoch,
+                provider.digest_time_epoch,
+                &mut Vec::new(),
+            )
+        };
+        rejects_wrong_node_types(&original, |value| parse(value).is_ok());
+        rejects_unknown_object_fields(
+            &original,
+            &[
+                "",
+                "/scanInfo",
+                "/scanInfo/dataSource/0",
+                "/projectInfo",
+                "/projectInfo/credits",
+                "/dependencies/0",
+                "/dependencies/0/evidenceCollected",
+                "/dependencies/0/packages/0",
+                "/dependencies/0/vulnerabilities/0",
+            ],
+            |value| parse(value).is_ok(),
+        );
+        for timestamp in [
+            provider.digest_time_epoch - 1,
+            provider.digest_time_epoch + 1,
+        ] {
+            let mut changed = original.clone();
+            changed["scanInfo"]["dataSource"][0]["timestamp"] =
+                json!(format_report_epoch(timestamp).unwrap());
+            assert!(parse(&changed).is_err());
+        }
+        for timestamp in [receipt.started_at_epoch - 1, receipt.completed_at_epoch + 1] {
+            let mut changed = original.clone();
+            changed["projectInfo"]["reportDate"] = json!(format_report_epoch(timestamp).unwrap());
+            assert!(parse(&changed).is_err());
+        }
+        for count in [2, 65] {
+            let mut changed = original.clone();
+            changed["scanInfo"]["dataSource"] =
+                json!(vec![original["scanInfo"]["dataSource"][0].clone(); count]);
+            assert!(parse(&changed).is_err());
+        }
+        let mut database_name = original.clone();
+        database_name["scanInfo"]["dataSource"][0]["name"] = json!("NVD CVE substituted");
+        assert!(parse(&database_name).is_err());
+        let mut unsorted_references = original.clone();
+        unsorted_references["dependencies"][0]["projectReferences"] = json!(["z", "a"]);
+        assert!(parse(&unsorted_references).is_err());
+        for (pointer, replacement) in [
+            ("/reportSchema", json!("2.0")),
+            ("/scanInfo/engineVersion", json!("unknown")),
+            ("/scanInfo/dataSource", json!([])),
+            ("/scanInfo/dataSource/0/name", json!("other")),
+            (
+                "/scanInfo/dataSource/0/timestamp",
+                json!("2099-01-01T00:00:00Z"),
+            ),
+            ("/projectInfo/name", json!("another-workload")),
+            ("/projectInfo/reportDate", json!("1970-01-01T00:00:00Z")),
+            ("/dependencies", json!([])),
+            ("/dependencies/0/fileName", json!("other.jar")),
+            ("/dependencies/0/filePath", json!("/other/path")),
+            ("/dependencies/0/md5", json!("invalid")),
+            ("/dependencies/0/sha1", json!("invalid")),
+            ("/dependencies/0/sha256", json!("invalid")),
+            ("/dependencies/0/sha256", json!("f".repeat(64))),
+            (
+                "/dependencies/0/packages/0/id",
+                json!("pkg:maven/other/package@1.0"),
+            ),
+            ("/dependencies/0/vulnerabilityIds/0/id", json!("invalid")),
+            (
+                "/dependencies/0/vulnerabilityIds/0/id",
+                json!("cpe:/a:other:package:1.0"),
+            ),
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).unwrap() = replacement;
+            assert!(parse(&changed).is_err(), "{pointer}");
+        }
+        for key in [
+            "suppressedVulnerabilities",
+            "suppressedVulnerabilityIds",
+            "unknown",
+        ] {
+            let mut changed = original.clone();
+            changed["dependencies"][0][key] = json!([]);
+            assert!(parse(&changed).is_err());
+        }
+        let mut missing_findings = original.clone();
+        missing_findings["dependencies"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("vulnerabilities");
+        assert!(parse(&missing_findings).is_err());
+        let mut duplicated = original.clone();
+        duplicated["dependencies"]
+            .as_array_mut()
+            .unwrap()
+            .push(original["dependencies"][0].clone());
+        assert!(parse(&duplicated).is_err());
+    }
+
+    fn rejects_unknown_object_fields(
+        original: &Value,
+        pointers: &[&str],
+        validate: impl Fn(&Value) -> bool,
+    ) {
+        assert!(validate(original), "valid closed-schema fixture");
+        for pointer in pointers {
+            let mut changed = original.clone();
+            let object = changed
+                .pointer_mut(pointer)
+                .expect(pointer)
+                .as_object_mut()
+                .expect(pointer);
+            assert!(
+                object
+                    .insert("unexpected_field".into(), json!(true))
+                    .is_none()
+            );
+            assert!(!validate(&changed), "unknown field at {pointer}");
+        }
+    }
+
+    #[test]
+    fn virtual_owasp_dependencies_require_rooted_identity_and_emit_exact_findings() {
+        let mut fixture = SyntheticFixture::new().unwrap();
+        let artifact = fixture.manifest.gradle_projection[0].artifacts[0].clone();
+        fixture
+            .set_owasp_finding(
+                "CVE-2099-0001",
+                &artifact.package_namespace,
+                &artifact.package_name,
+                &artifact.package_version,
+            )
+            .unwrap();
+        let report = fixture.read_report_value(ProviderId::OwaspNvd).unwrap();
+        let result: WorkloadResult =
+            serde_json::from_value(report["workload_result"][0].clone()).unwrap();
+        let mut original: Value = serde_json::from_str(&result.raw_scanner_output).unwrap();
+        let provider = &fixture.manifest.provider_snapshot[1];
+        let projection = &fixture.manifest.gradle_projection[0];
+        let receipt = process_receipt(
+            &fixture.process_receipts,
+            &format!("owasp_analysis:{}", result.workload_id),
+        )
+        .unwrap();
+        let parse = |value: &Value, scan_root: &str| {
+            let mut findings = Vec::new();
+            parse_owasp_output(
+                &result.workload_id,
+                value,
+                projection,
+                &provider.database_identity_sha256,
+                &provider.materialized_tree_sha256,
+                scan_root,
+                receipt.started_at_epoch,
+                receipt.completed_at_epoch,
+                provider.digest_time_epoch,
+                &mut findings,
+            )?;
+            Ok::<_, AdvisoryError>(findings)
+        };
+        let mut virtual_row = original["dependencies"][0].clone();
+        for key in ["md5", "sha1", "sha256"] {
+            virtual_row.as_object_mut().unwrap().remove(key);
+        }
+        virtual_row["isVirtual"] = json!(true);
+        virtual_row["fileName"] = json!("embedded-module");
+        virtual_row["filePath"] = json!(format!("{}/embedded-module", result.arguments[4]));
+        virtual_row["packages"] = json!([{"id":"pkg:maven/embedded/library@2.0"}]);
+        virtual_row["includedBy"] =
+            json!([{"reference":format!("project:{}", result.workload_id)}]);
+        original["dependencies"]
+            .as_array_mut()
+            .unwrap()
+            .push(virtual_row);
+        let findings = parse(&original, &result.arguments[4]).unwrap();
+        assert_eq!(findings.len(), 2);
+        assert_eq!(findings[1].package_namespace, "embedded");
+        assert_eq!(findings[1].package_name, "library");
+        assert_eq!(findings[1].package_version, "2.0");
+        assert_eq!(findings[1].advisory_id, "CVE-2099-0001");
+        for (key, value) in [
+            ("md5", json!("1".repeat(32))),
+            ("sha1", json!("1".repeat(40))),
+            ("sha256", json!("1".repeat(64))),
+            ("filePath", json!("/outside/module")),
+            ("fileName", json!(artifact.materialized_name)),
+            ("packages", json!([])),
+            ("includedBy", json!([])),
+        ] {
+            let mut changed = original.clone();
+            changed["dependencies"][1][key] = value;
+            assert!(parse(&changed, &result.arguments[4]).is_err(), "{key}");
+        }
+        for key in ["packages", "includedBy"] {
+            let mut changed = original.clone();
+            changed["dependencies"][1]
+                .as_object_mut()
+                .unwrap()
+                .remove(key);
+            assert!(parse(&changed, &result.arguments[4]).is_err());
+        }
+        let mut missing_physical = original.clone();
+        missing_physical["dependencies"]
+            .as_array_mut()
+            .unwrap()
+            .remove(0);
+        assert!(parse(&missing_physical, &result.arguments[4]).is_err());
+        for root in ["relative", "/trailing/"] {
+            assert!(parse(&original, root).is_err());
+        }
+    }
+
+    #[test]
+    fn scanner_execution_rejects_independently_substituted_trusted_receipts() {
+        let mut fixture = SyntheticFixture::new().unwrap();
+        for provider in &fixture.manifest.provider_snapshot {
+            let original =
+                fixture.read_report_value(provider.provider).unwrap()["workload_result"][0].clone();
+            let original_result: WorkloadResult = serde_json::from_value(original.clone()).unwrap();
+            let inventory = fixture
+                .request
+                .inventory
+                .iter()
+                .find(|row| row.id == original_result.workload_id)
+                .unwrap()
+                .clone();
+            let id = format!(
+                "{}:{}",
+                if provider.provider == ProviderId::Rustsec {
+                    "cargo_audit"
+                } else {
+                    "owasp_analysis"
+                },
+                original_result.workload_id
+            );
+            let authority: TrustedProviderEvidence =
+                parse_canonical_authority(&fixture.request.provider_execution_evidence).unwrap();
+            validate_workload_execution(provider, &original_result, &inventory, &fixture.request)
+                .unwrap();
+            let original_bytes = fixture.request.provider_execution_evidence.clone();
+            let authority_value = serde_json::to_value(&authority).unwrap();
+            let index = authority
+                .process_receipt
+                .iter()
+                .position(|row| row.id == id)
+                .unwrap();
+            for (field, replacement) in [
+                ("program_sha256", json!("f".repeat(64))),
+                ("arguments_sha256", json!("f".repeat(64))),
+                ("input_sha256", json!("f".repeat(64))),
+                ("output_sha256", json!("f".repeat(64))),
+                ("stdout_byte_length", json!(1)),
+                ("stdout_sha256", json!("f".repeat(64))),
+                ("exit_code", json!(2)),
+                ("path_binding", json!([])),
+            ] {
+                let mut changed = authority_value.clone();
+                assert_ne!(
+                    changed["process_receipt"][index][field], replacement,
+                    "mutation {field}"
+                );
+                changed["process_receipt"][index][field] = replacement;
+                let changed: TrustedProviderEvidence = serde_json::from_value(changed).unwrap();
+                fixture.request.provider_execution_evidence =
+                    canonical_authority_bytes(&changed).unwrap();
+                validate_trusted_authority(&fixture.request)
+                    .expect("receipt remains structurally trusted");
+                let mut result = original.clone();
+                result["process_receipt_sha256"] =
+                    json!(process_receipt_digest(&changed.process_receipt[index]).unwrap());
+                let result: WorkloadResult = serde_json::from_value(result).unwrap();
+                assert!(
+                    validate_workload_execution(provider, &result, &inventory, &fixture.request)
+                        .is_err(),
+                    "{field}"
+                );
+            }
+            fixture.request.provider_execution_evidence = original_bytes;
+        }
+    }
+
+    fn rejects_typed_changes<T: for<'de> Deserialize<'de> + Serialize>(
+        original: &T,
+        changes: &[(&str, Value)],
+        validate: impl Fn(&T) -> bool,
+    ) {
+        assert!(validate(original), "accepted typed fixture");
+        let value = serde_json::to_value(original).unwrap();
+        for (pointer, replacement) in changes {
+            let mut changed = value.clone();
+            *changed.pointer_mut(pointer).expect(pointer) = replacement.clone();
+            assert_ne!(changed, value, "mutation must change {pointer}");
+            let changed: T =
+                serde_json::from_value(changed).expect("mutation preserves wire types");
+            assert!(
+                !validate(&changed),
+                "invalid typed field accepted: {pointer}"
+            );
+        }
+    }
+
+    #[test]
+    fn provider_admission_binds_artifacts_times_and_execution_receipts() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let trace: NvdNetworkTrace =
+            parse_canonical_authority(&fixture.request.nvd_network_trace).unwrap();
+        for provider in &fixture.manifest.provider_snapshot {
+            let mut changes = vec![
+                ("/acquisition_state", json!("failed")),
+                ("/analysis_state", json!("unavailable")),
+                ("/acquisition_count", json!(0)),
+                ("/bounded_deadline_seconds", json!(0)),
+                ("/network_trace_sha256", json!("invalid")),
+                ("/producer_request_sha256", json!("invalid")),
+                ("/producer_request_sha256", json!("f".repeat(64))),
+                ("/database_identity_sha256", json!("invalid")),
+                ("/archive_format", json!("zip")),
+                ("/archive_expanded_bytes", json!(0)),
+                ("/archive_member_count", json!(0)),
+                ("/archive_payload_bytes", json!(0)),
+                ("/acquired_at_epoch", json!(0)),
+                ("/digest_time_epoch", json!(0)),
+                ("/analyzed_at_epoch", json!(0)),
+                ("/acquired_at_epoch", json!(u64::MAX)),
+                ("/digest_time_epoch", json!(u64::MAX)),
+                ("/analyzed_at_epoch", json!(u64::MAX)),
+                ("/acquisition_kind", json!("untrusted")),
+                ("/network_mode", json!("unrestricted")),
+                ("/archive/path", json!("other.gz")),
+                ("/report/path", json!("other.json")),
+                ("/analysis_environment", json!("ambient")),
+                ("/analysis_arguments", json!([])),
+                ("/acquisition_arguments", json!(["untrusted"])),
+                ("/archive/byte_length", json!(0)),
+                ("/report/byte_length", json!(0)),
+                ("/archive/byte_length", json!(2_147_483_649u64)),
+                ("/report/byte_length", json!(MAX_REPORT_BYTES + 1)),
+                ("/archive/sha256", json!("invalid")),
+                ("/report/sha256", json!("invalid")),
+                ("/archive/logical_uri", json!("file:///untrusted")),
+                ("/report/logical_uri", json!("file:///untrusted")),
+                ("/archive/media_type", json!("application/zip")),
+                ("/report/media_type", json!("text/plain")),
+                ("/archive/logical_role", json!("unknown")),
+                ("/report/logical_role", json!("unknown")),
+            ];
+            if provider.provider == ProviderId::Rustsec {
+                changes.push(("/network_trace_sha256", json!("a".repeat(64))));
+            }
+            rejects_typed_changes(provider, &changes, |changed| {
+                validate_provider(changed, &fixture.request, &trace, &fixture.process_receipts)
+                    .is_ok()
+            });
+        }
+        let provider = &fixture.manifest.provider_snapshot[1];
+        let receipts = &fixture.process_receipts;
+        rejects_typed_changes(
+            receipts,
+            &[
+                ("/0/program_sha256", json!("a".repeat(64))),
+                ("/0/arguments_sha256", json!("a".repeat(64))),
+                ("/0/output_sha256", json!("a".repeat(64))),
+                ("/0/input_sha256", json!("a".repeat(64))),
+                ("/0/path_binding", json!([])),
+                ("/0/completed_at_epoch", json!(0)),
+                ("/0/exit_code", json!(1)),
+            ],
+            |changed| validate_provider(provider, &fixture.request, &trace, changed).is_ok(),
+        );
+    }
+
+    #[test]
+    fn request_inventory_and_projection_fields_are_independently_bound() {
+        let mut fixture = SyntheticFixture::new().unwrap();
+        let inventory = fixture.request.inventory.clone();
+        let original = serde_json::to_value(&inventory[0]).unwrap();
+        for (key, value) in original.as_object().unwrap() {
+            let mut changed = original.clone();
+            changed[key] = match value {
+                Value::Number(_) => json!(0),
+                Value::String(_) | Value::Null => json!("untrusted"),
+                _ => panic!("unexpected inventory field {key}"),
+            };
+            fixture.request.inventory[0] = serde_json::from_value(changed).unwrap();
+            assert!(validate_request(&fixture.request).is_err(), "{key}");
+        }
+        fixture.request.inventory = inventory;
+        validate_request(&fixture.request).unwrap();
+        let projections = &fixture.manifest.gradle_projection;
+        let original = serde_json::to_value(&projections[0]).unwrap();
+        for (key, value) in original.as_object().unwrap() {
+            let mut changed = original.clone();
+            changed[key] = match value {
+                Value::Number(_) => {
+                    if key == "exit_code" {
+                        json!(1)
+                    } else {
+                        json!(0)
+                    }
+                }
+                Value::String(_) => {
+                    if key == "state" {
+                        json!("failed")
+                    } else {
+                        json!("untrusted")
+                    }
+                }
+                Value::Array(_) => json!([]),
+                _ => panic!("unexpected projection field {key}"),
+            };
+            let mut candidate = projections.clone();
+            candidate[0] = serde_json::from_value(changed).unwrap();
+            assert!(
+                validate_gradle_projections(
+                    &candidate,
+                    &fixture.request,
+                    &fixture.process_receipts
+                )
+                .is_err(),
+                "{key}"
+            );
+        }
+        assert!(
+            validate_gradle_projections(&[], &fixture.request, &fixture.process_receipts).is_err()
+        );
+        fixture.request.sources.clear();
+        assert!(validate_request(&fixture.request).is_err());
+        assert!(
+            validate_gradle_projections(projections, &fixture.request, &fixture.process_receipts)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn raw_gradle_variants_bound_attributes_capabilities_and_recursion() {
+        let variant: RawGradleVariant = serde_json::from_value(json!({
+            "attributes":[{"name":"usage", "value":"runtime"}],
+            "capabilities":[{"group":"example", "name":"library", "version":"1.0"}],
+            "external_variant":null,
+        }))
+        .unwrap();
+        rejects_typed_changes(
+            &variant,
+            &[
+                ("/attributes/0/name", json!("")),
+                ("/attributes/0/value", json!("\0")),
+                ("/capabilities/0/group", json!("\0")),
+                ("/capabilities/0/name", json!("")),
+                ("/capabilities/0/version", json!("\0")),
+            ],
+            |changed| validate_raw_variant(changed, 0).is_ok(),
+        );
+        let mut duplicate = variant.clone();
+        duplicate.attributes.push(duplicate.attributes[0].clone());
+        assert!(validate_raw_variant(&duplicate, 0).is_err());
+        duplicate.attributes[1].value = "z".into();
+        assert!(validate_raw_variant(&duplicate, 0).is_err());
+        let mut oversized = variant.clone();
+        oversized.attributes = vec![variant.attributes[0].clone(); MAX_GRADLE_ATTRIBUTES + 1];
+        assert!(validate_raw_variant(&oversized, 0).is_err());
+        oversized = variant.clone();
+        oversized.capabilities = vec![variant.capabilities[0].clone(); MAX_GRADLE_CAPABILITIES + 1];
+        assert!(validate_raw_variant(&oversized, 0).is_err());
+        let mut nested = variant.clone();
+        for _ in 0..MAX_GRADLE_EXTERNAL_VARIANT_DEPTH {
+            let mut parent = variant.clone();
+            parent.external_variant = Some(Box::new(nested));
+            nested = parent;
+        }
+        validate_raw_variant(&nested, 0).unwrap();
+        let mut too_deep = variant.clone();
+        too_deep.external_variant = Some(Box::new(nested));
+        assert!(validate_raw_variant(&too_deep, 0).is_err());
+        assert!(
+            validate_raw_variant_envelope(&RawGradleVariantEnvelope { selected: vec![] }).is_err()
+        );
+        assert!(
+            validate_raw_variant_envelope(&RawGradleVariantEnvelope {
+                selected: vec![variant.clone(); MAX_GRADLE_VARIANTS + 1]
+            })
+            .is_err()
+        );
+        assert!(
+            validate_raw_variant_envelope(&RawGradleVariantEnvelope {
+                selected: vec![variant.clone(), variant]
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn raw_gradle_selectors_reject_mixed_identity_and_invalid_constraints() {
+        let module: RawGradleSelector = serde_json::from_value(json!({
+            "kind":"module", "group":"example", "name":"library", "version":"1.0",
+            "build_root":null, "project_path":null, "attributes":[], "capabilities":[],
+            "version_constraint":{"branch":null, "preferred":"", "required":"1.0", "strict":"", "rejected":["0.9"]}
+        })).unwrap();
+        rejects_typed_changes(
+            &module,
+            &[
+                ("/kind", json!("unknown")),
+                ("/group", json!(null)),
+                ("/name", json!(null)),
+                ("/version", json!(null)),
+                ("/group", json!("")),
+                ("/name", json!("")),
+                ("/version", json!("\0")),
+                ("/build_root", json!(".")),
+                ("/project_path", json!(":app")),
+                ("/version_constraint", json!(null)),
+                ("/version_constraint/branch", json!("\0")),
+                ("/version_constraint/preferred", json!("\0")),
+                ("/version_constraint/required", json!("\0")),
+                ("/version_constraint/strict", json!("\0")),
+                ("/version_constraint/rejected", json!([""])),
+                ("/version_constraint/rejected", json!(["b", "a"])),
+                ("/version_constraint/rejected", json!(["a", "a"])),
+                (
+                    "/version_constraint/rejected",
+                    json!(vec!["x"; MAX_GRADLE_REJECTED_VERSIONS + 1]),
+                ),
+            ],
+            |changed| validate_raw_selector(changed).is_ok(),
+        );
+        let project: RawGradleSelector = serde_json::from_value(json!({
+            "kind":"project", "group":null, "name":null, "version":null, "version_constraint":null,
+            "build_root":".", "project_path":":app:shared", "attributes":[], "capabilities":[]
+        }))
+        .unwrap();
+        rejects_typed_changes(
+            &project,
+            &[
+                ("/group", json!("example")),
+                ("/name", json!("library")),
+                ("/version", json!("1.0")),
+                (
+                    "/version_constraint",
+                    serde_json::to_value(&module.version_constraint).unwrap(),
+                ),
+                ("/build_root", json!(null)),
+                ("/project_path", json!(null)),
+                ("/build_root", json!("../other")),
+                ("/project_path", json!("app")),
+                ("/project_path", json!("::app")),
+            ],
+            |changed| validate_raw_selector(changed).is_ok(),
+        );
+        for selector in [&module, &project] {
+            let core = RawGradleComponentCore {
+                kind: selector.kind.clone(),
+                group: selector.group.clone(),
+                name: selector.name.clone(),
+                version: selector.version.clone(),
+                build_root: selector.build_root.clone(),
+                project_path: selector.project_path.clone(),
+            };
+            validate_raw_component_core(&core).unwrap();
+            let original = serde_json::to_value(&core).unwrap();
+            for (key, value) in original.as_object().unwrap() {
+                let mut changed = original.clone();
+                changed[key] = if value.is_null() {
+                    json!("untrusted")
+                } else {
+                    json!("")
+                };
+                assert!(
+                    validate_raw_component_core(&serde_json::from_value(changed).unwrap()).is_err(),
+                    "{key}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn owasp_virtual_lineage_rejects_orphans_cycles_and_alias_collisions() {
+        fn dependency(alias: &str, parents: &[&str], is_virtual: bool) -> ParsedOwaspDependency {
+            ParsedOwaspDependency {
+                aliases: vec![alias.into()],
+                included_by: parents.iter().map(|value| (*value).into()).collect(),
+                is_virtual,
+                file_name: alias.into(),
+                package_ids: vec![],
+                vulnerabilities: vec![],
+            }
+        }
+        assert!(
+            validate_owasp_lineage(
+                "root",
+                &[
+                    dependency("physical", &[], false),
+                    dependency("parent", &["project:root"], true),
+                    dependency("child", &["parent", "physical"], true),
+                    dependency("sibling", &["parent"], true),
+                ]
+            )
+            .is_ok()
+        );
+        for rows in [
+            vec![dependency("orphan", &[], true)],
+            vec![dependency("child", &["absent"], true)],
+            vec![dependency("a", &["b"], true), dependency("b", &["a"], true)],
+            vec![
+                dependency("duplicate", &[], false),
+                dependency("duplicate", &[], false),
+            ],
+            vec![dependency("root", &[], false)],
+        ] {
+            assert!(validate_owasp_lineage("root", &rows).is_err());
+        }
+    }
+
+    #[test]
+    fn rustsec_affected_missing_required_fields_returns_a_typed_error() {
+        for field in ["arch", "functions", "os"] {
+            let mut value = json!({"arch":[], "functions":{}, "os":[]});
+            value.as_object_mut().unwrap().remove(field);
+            let error = validate_rustsec_affected(&value).expect_err(field);
+            assert_eq!(error.kind(), AdvisoryFailureKind::InvalidReport);
+        }
+    }
+
+    // Exercise a complete accepted wire object, then corrupt each node's JSON
+    // type independently. A malformed nested row must never be ignored merely
+    // because another part of the report remains valid.
+    fn rejects_wrong_node_types(value: &Value, validate: impl Fn(&Value) -> bool) {
+        fn paths(value: &Value, prefix: String, out: &mut Vec<String>) {
+            out.push(prefix.clone());
+            match value {
+                Value::Object(object) => {
+                    for (key, child) in object {
+                        let key = key.replace('~', "~0").replace('/', "~1");
+                        paths(child, format!("{prefix}/{key}"), out);
+                    }
+                }
+                Value::Array(rows) => {
+                    for (index, child) in rows.iter().enumerate() {
+                        paths(child, format!("{prefix}/{index}"), out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert!(validate(value), "positive wire fixture must be accepted");
+        let mut pointers = Vec::new();
+        paths(value, String::new(), &mut pointers);
+        for pointer in pointers {
+            let mut changed = value.clone();
+            let node = changed.pointer_mut(&pointer).expect("fixture pointer");
+            *node = match node {
+                Value::Object(_) | Value::Null => json!([]),
+                Value::Array(_) => json!({}),
+                Value::String(_) => json!(false),
+                Value::Number(_) => json!("invalid-number"),
+                Value::Bool(_) => json!(0),
+            };
+            assert!(!validate(&changed), "wrong type accepted at {pointer}");
+        }
+    }
+
+    #[test]
+    fn rustsec_nested_package_affected_and_version_rows_fail_closed() {
+        let dependency =
+            json!({"name":"dep", "source":"registry+https://example.test", "version":"1.2.3"});
+        rejects_wrong_node_types(&dependency, valid_rustsec_dependency);
+        let package = json!({
+            "name":"example", "version":"1.0.0", "source":"registry+https://example.test",
+            "checksum":"a".repeat(64), "replace":dependency, "dependencies":[dependency]
+        });
+        rejects_wrong_node_types(&package, |value| validate_rustsec_package(value).is_ok());
+        for (pointer, replacement) in [
+            ("/name", json!("")),
+            ("/version", json!("..")),
+            ("/checksum", json!("g".repeat(64))),
+            ("/dependencies", json!([])),
+        ] {
+            let mut invalid = package.clone();
+            *invalid.pointer_mut(pointer).unwrap() = replacement;
+            assert!(validate_rustsec_package(&invalid).is_err(), "{pointer}");
+        }
+        assert!(
+            validate_rustsec_package(&json!({
+                "name":"example", "version":"1.0.0", "source":null, "checksum":null, "replace":null
+            }))
+            .is_ok()
+        );
+        let affected = json!({"arch":["aarch64"], "os":["linux"], "functions":{"example::Thing<T,U>::_method":["<1.0.0"]}});
+        rejects_wrong_node_types(&affected, |value| validate_rustsec_affected(value).is_ok());
+        assert!(validate_rustsec_affected(&Value::Null).is_ok());
+        for path in [
+            "",
+            "example",
+            "::method",
+            "example::",
+            "0crate::method",
+            "crate::bad-name",
+            "crate::méthod",
+        ] {
+            assert!(!valid_rust_function_path(path), "{path}");
+        }
+        rejects_wrong_node_types(
+            &json!({"patched":[">=1.0.0"], "unaffected":["<0.5.0"]}),
+            |value| validate_rustsec_versions(value).is_ok(),
+        );
+    }
+
+    #[test]
+    fn rustsec_advisory_optional_metadata_is_validated_when_present() {
+        let mut fixture = SyntheticFixture::new().unwrap();
+        fixture
+            .set_rustsec_finding("RUSTSEC-2099-0001", "example", "1.0.0")
+            .unwrap();
+        let report = fixture.read_report_value(ProviderId::Rustsec).unwrap();
+        let raw: Value = serde_json::from_str(
+            report["workload_result"][0]["raw_scanner_output"]
+                .as_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let mut advisory = raw["vulnerabilities"]["list"][0]["advisory"].clone();
+        for key in ["aliases", "categories", "keywords", "references", "related"] {
+            advisory[key] = json!(["example"]);
+        }
+        for key in ["cvss", "informational", "url"] {
+            advisory[key] = json!("example");
+        }
+        advisory["withdrawn"] = json!("2099-02-28");
+        rejects_wrong_node_types(&advisory, |value| {
+            validate_rustsec_advisory(value, "example").is_ok()
+        });
+        for (key, invalid) in [
+            ("package", "another"),
+            ("id", "CVE-2099-0001"),
+            ("license", ""),
+            ("date", "2099-02-29"),
+            ("withdrawn", "2099/01/01"),
+        ] {
+            let mut changed = advisory.clone();
+            changed[key] = json!(invalid);
+            assert!(
+                validate_rustsec_advisory(&changed, "example").is_err(),
+                "{key}"
+            );
+        }
+        for date in [
+            "",
+            "2099-01001",
+            "2099/01-01",
+            "2099-01/01",
+            "209x-01-01",
+            "2099-13-01",
+            "2099-01-32",
+        ] {
+            assert!(!valid_rustsec_date(&json!(date)), "{date}");
+        }
+        assert!(valid_rustsec_date(&json!("2000-02-29")));
+    }
+
+    #[test]
+    fn manifest_rejects_each_independently_changed_binding() {
+        let fixture = SyntheticFixture::new().unwrap();
+        validate_manifest(&fixture.manifest, &fixture.request).unwrap();
+        let original = serde_json::to_value(&fixture.manifest).unwrap();
+        for (key, value) in original.as_object().unwrap() {
+            let mut changed = original.clone();
+            changed[key] = match value {
+                Value::String(_) => json!("wrong-binding"),
+                Value::Array(_) => json!([]),
+                Value::Object(_) => {
+                    let mut candidate = value.clone();
+                    candidate["digest"] = json!("f".repeat(64));
+                    candidate
+                }
+                _ => panic!("unexpected manifest field {key}"),
+            };
+            if changed == original {
+                continue;
+            }
+            let manifest: SnapshotManifest = serde_json::from_value(changed).unwrap();
+            assert!(
+                validate_manifest(&manifest, &fixture.request).is_err(),
+                "unbound manifest field {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn trusted_authority_rejects_each_changed_envelope_field() {
+        let mut fixture = SyntheticFixture::new().unwrap();
+        for slot in 0..5 {
+            let original = match slot {
+                0 => &fixture.request.producer_request,
+                1 => &fixture.request.step_297_tool_manifest,
+                2 => &fixture.request.fresh_tool_observation,
+                3 => &fixture.request.nvd_network_trace,
+                _ => &fixture.request.provider_execution_evidence,
+            }
+            .clone();
+            let value: Value = serde_json::from_slice(&original).unwrap();
+            for (key, field) in value.as_object().unwrap() {
+                // These two values are bound by manifest admission after the
+                // trusted envelope has been admitted; that boundary is above.
+                if matches!(
+                    key.as_str(),
+                    "candidate_advisory_input_sha256" | "suppressions"
+                ) {
+                    continue;
+                }
+                let mut changed = value.clone();
+                changed[key] = match field {
+                    Value::String(_) => json!("wrong-binding"),
+                    Value::Number(_) => json!(u64::MAX),
+                    Value::Array(_) => json!([]),
+                    _ => panic!("unexpected authority field {key}"),
+                };
+                let bytes = canonical_authority_bytes(&changed).unwrap();
+                match slot {
+                    0 => fixture.request.producer_request = bytes,
+                    1 => fixture.request.step_297_tool_manifest = bytes,
+                    2 => fixture.request.fresh_tool_observation = bytes,
+                    3 => fixture.request.nvd_network_trace = bytes,
+                    _ => fixture.request.provider_execution_evidence = bytes,
+                }
+                assert!(
+                    validate_trusted_authority(&fixture.request).is_err(),
+                    "slot {slot} field {key}"
+                );
+                match slot {
+                    0 => fixture.request.producer_request = original.clone(),
+                    1 => fixture.request.step_297_tool_manifest = original.clone(),
+                    2 => fixture.request.fresh_tool_observation = original.clone(),
+                    3 => fixture.request.nvd_network_trace = original.clone(),
+                    _ => fixture.request.provider_execution_evidence = original.clone(),
+                }
+            }
+        }
+        fixture.request.producer_request.push(b' ');
+        assert!(validate_trusted_authority(&fixture.request).is_err());
+    }
+
+    #[test]
+    fn process_receipts_reject_identity_environment_bounds_and_order_faults() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let original = serde_json::to_value(&fixture.process_receipts).unwrap();
+        validate_process_receipts(&fixture.process_receipts, fixture.request.evaluation_epoch)
+            .unwrap();
+        for (pointer, replacement) in [
+            ("/0/id", json!("unknown")),
+            ("/0/state", json!("failed")),
+            ("/0/program_sha256", json!("invalid")),
+            ("/0/runtime_sha256", json!(["invalid"])),
+            ("/0/arguments_sha256", json!("invalid")),
+            ("/0/environment_sha256", json!("invalid")),
+            ("/0/working_directory_sha256", json!("invalid")),
+            ("/0/working_directory/logical_uri", json!("untrusted")),
+            ("/0/path_binding/0/logical_role", json!("..")),
+            ("/0/path_binding/0/identity_sha256", json!("invalid")),
+            ("/0/stdin_closed", json!(false)),
+            ("/0/deadline_seconds", json!(0)),
+            ("/0/started_at_epoch", json!(0)),
+            ("/0/completed_at_epoch", json!(0)),
+            ("/0/completed_at_epoch", json!(u64::MAX)),
+            ("/1/started_at_epoch", json!(1)),
+            ("/0/stdout_byte_length", json!(67_108_865u64)),
+            ("/0/stderr_byte_length", json!(67_108_865u64)),
+            ("/0/stdout_sha256", json!("invalid")),
+            ("/0/stderr_sha256", json!("invalid")),
+            ("/0/input_sha256", json!("invalid")),
+            ("/0/output_sha256", json!("invalid")),
+            ("/0/environment/0/name", json!("UNTRUSTED")),
+            ("/0/environment/0/logical_value", json!("untrusted")),
+            ("/0/environment/0/value_sha256", json!("invalid")),
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).expect(pointer) = replacement;
+            let receipts: Vec<TrustedProcessReceipt> = serde_json::from_value(changed).unwrap();
+            assert!(
+                validate_process_receipts(&receipts, fixture.request.evaluation_epoch).is_err(),
+                "{pointer}"
+            );
+        }
+        let mut duplicate_binding = fixture.process_receipts.clone();
+        let repeated = duplicate_binding[0].path_binding[0].clone();
+        duplicate_binding[0].path_binding.push(repeated);
+        assert!(
+            validate_process_receipts(&duplicate_binding, fixture.request.evaluation_epoch)
+                .is_err()
+        );
+        for state in [
+            OperationState::Failed,
+            OperationState::TimedOut,
+            OperationState::Unavailable,
+        ] {
+            assert!(require_complete(state).is_err());
+        }
+    }
+
+    #[test]
+    fn bounded_tokens_dates_and_canonical_counters_accept_only_their_grammar() {
+        for value in [
+            "",
+            "01",
+            "-1",
+            "+1",
+            "1.0",
+            "1e2",
+            " 1",
+            "١",
+            "18446744073709551616",
+        ] {
+            assert_eq!(parse_canonical_u64(value), None, "{value}");
+        }
+        assert_eq!(parse_canonical_u64("0"), Some(0));
+        assert_eq!(parse_canonical_u64("18446744073709551615"), Some(u64::MAX));
+        for value in [
+            "",
+            "x",
+            "RUSTSEC-2026",
+            "RUSTSEC-26-0001",
+            "RUSTSEC-202x-0001",
+            "RUSTSEC-2026-abcd",
+            "CVE-2026-0001",
+        ] {
+            assert!(!valid_advisory_id(ProviderId::Rustsec, value), "{value}");
+        }
+        assert!(valid_advisory_id(ProviderId::OwaspNvd, "CVE-2026-12345"));
+        assert!(valid_hex("0123456789abcdef", 16));
+        for value in ["G", "g", "é", "\0"] {
+            assert!(!valid_hex(value, value.len()));
+        }
+        assert!(valid_identifier("relative/normal"));
+        for value in [
+            "",
+            "/absolute",
+            "../parent",
+            "a/../b",
+            "a\\b",
+            "a\0b",
+            "a\nb",
+        ] {
+            assert!(!valid_identifier(value), "{value:?}");
+        }
+        assert!(valid_exact_identity_token("a-Z_1./:@+", 32));
+        for value in ["..", "with space", "é", "\n", "long"] {
+            assert!(!valid_exact_identity_token(value, 3));
+        }
+        assert!(valid_ascii_text("", 0, true));
+        assert!(valid_ascii_text("abc", 3, false));
+        for value in ["", "abcd", "é", "a\nb"] {
+            assert!(!valid_ascii_text(value, 3, false));
+        }
+        assert!(valid_exact_string_array(&json!(["abc"]), 1, 3));
+        for value in [
+            json!(["a", "b"]),
+            json!(["abcd"]),
+            json!([""]),
+            json!([null]),
+            json!({}),
+        ] {
+            assert!(!valid_exact_string_array(&value, 1, 3));
+        }
+        assert!(require_strict_canonical_order(&[1, 2]).is_ok());
+        assert!(require_strict_canonical_order(&[2, 1]).is_err());
+        assert!(require_strict_canonical_order(&[1, 1]).is_err());
+    }
+
+    #[test]
+    fn owasp_optional_rows_are_validated_and_duplicates_are_rejected() {
+        let identifiers = json!([{"id":"cpe:/a:example:library:1.0", "notes":"note", "url":"https://example.test", "confidence":"HIGH"}]);
+        rejects_wrong_node_types(&identifiers, |value| {
+            parse_owasp_identifiers(Some(value), true).is_ok()
+        });
+        assert!(parse_owasp_identifiers(Some(&identifiers), false).is_err());
+        assert!(parse_owasp_identifiers(None, false).unwrap().is_empty());
+        let included = json!([{"reference":"project:root", "type":"DIRECT"}]);
+        rejects_wrong_node_types(&included, |value| {
+            parse_owasp_included_by(Some(value)).is_ok()
+        });
+        rejects_unknown_object_fields(&included, &["/0"], |value| {
+            parse_owasp_included_by(Some(value)).is_ok()
+        });
+        assert!(parse_owasp_included_by(None).unwrap().is_empty());
+        for value in [
+            json!([]),
+            json!([{"id":"b"},{"id":"a"}]),
+            json!([{"id":"a"},{"id":"a"}]),
+        ] {
+            assert!(parse_owasp_identifiers(Some(&value), false).is_err());
+        }
+        for value in [
+            json!([]),
+            json!([{"reference":"b"},{"reference":"a"}]),
+            json!([{"reference":"a"},{"reference":"a"}]),
+        ] {
+            assert!(parse_owasp_included_by(Some(&value)).is_err());
+        }
+        let mut evidence = json!({});
+        for (key, kind) in [
+            ("productEvidence", "product"),
+            ("vendorEvidence", "vendor"),
+            ("versionEvidence", "version"),
+        ] {
+            evidence[key] = json!([{"confidence":"HIGH", "name":"name", "source":"manifest", "type":kind, "value":"value"}]);
+        }
+        rejects_wrong_node_types(&evidence, valid_owasp_evidence);
+        rejects_unknown_object_fields(
+            &evidence,
+            &[
+                "",
+                "/productEvidence/0",
+                "/vendorEvidence/0",
+                "/versionEvidence/0",
+            ],
+            valid_owasp_evidence,
+        );
+        evidence["productEvidence"][0]["type"] = json!("vendor");
+        assert!(!valid_owasp_evidence(&evidence));
+        let references = json!([{"source":"NVD", "name":"advisory", "url":"https://example.test"}]);
+        rejects_wrong_node_types(&references, valid_owasp_references);
+        rejects_unknown_object_fields(&references, &["/0"], valid_owasp_references);
+        assert!(valid_owasp_references(&json!([])));
+        let software = json!([{"software":{
+            "id":"cpe:/a:example:library:1.0", "versionEndExcluding":"2.0", "versionEndIncluding":"1.9",
+            "versionStartExcluding":"0.1", "versionStartIncluding":"0.2", "vulnerabilityIdMatched":"true", "vulnerable":"false"
+        }}]);
+        rejects_wrong_node_types(&software, |value| {
+            parse_owasp_vulnerable_software(value).is_ok()
+        });
+        rejects_unknown_object_fields(&software, &["/0", "/0/software"], |value| {
+            parse_owasp_vulnerable_software(value).is_ok()
+        });
+        let mut duplicated = software.clone();
+        duplicated.as_array_mut().unwrap().push(software[0].clone());
+        assert!(parse_owasp_vulnerable_software(&duplicated).is_err());
+        for (key, value) in [
+            ("vulnerabilityIdMatched", "false"),
+            ("vulnerable", "true"),
+            ("id", "invalid"),
+        ] {
+            let mut changed = software.clone();
+            changed[0]["software"][key] = json!(value);
+            assert!(parse_owasp_vulnerable_software(&changed).is_err());
+        }
+        let vulnerabilities = json!([{
+            "name":"CVE-2099-0001", "description":"description", "notes":"notes", "references":references,
+            "source":"NVD", "severity":"HIGH", "unscored":"true", "cwes":["CWE-20"], "vulnerableSoftware":software,
+            "cvssv2": {"accessComplexity":"LOW", "accessVector":"NETWORK", "authenticationr":"NONE", "availabilityImpact":"PARTIAL", "confidentialityImpact":"PARTIAL", "integrityImpact":"PARTIAL", "score":7.5, "severity":"HIGH"},
+            "cvssv3": {"attackComplexity":"LOW", "attackVector":"NETWORK", "availabilityImpact":"HIGH", "baseScore":9.8, "baseSeverity":"CRITICAL", "confidentialityImpact":"HIGH", "integrityImpact":"HIGH", "privilegesRequired":"NONE", "scope":"UNCHANGED", "userInteraction":"NONE"},
+            "cvssv4": {"baseScore":9.3, "environmentalScore":9.0, "threatScore":8.0, "version":"4.0"}
+        }]);
+        rejects_wrong_node_types(&vulnerabilities, |value| {
+            parse_owasp_vulnerabilities(Some(value)).is_ok()
+        });
+        rejects_unknown_object_fields(
+            &vulnerabilities,
+            &["/0", "/0/cvssv2", "/0/cvssv3", "/0/cvssv4"],
+            |value| parse_owasp_vulnerabilities(Some(value)).is_ok(),
+        );
+        let mut unsorted_cwes = vulnerabilities.clone();
+        unsorted_cwes[0]["cwes"] = json!(["CWE-99", "CWE-20"]);
+        assert!(parse_owasp_vulnerabilities(Some(&unsorted_cwes)).is_err());
+        assert!(parse_owasp_vulnerabilities(None).unwrap().is_empty());
+        for (key, value) in [
+            ("name", "RUSTSEC-2099-0001"),
+            ("source", "OTHER"),
+            ("unscored", "false"),
+        ] {
+            let mut changed = vulnerabilities.clone();
+            changed[0][key] = json!(value);
+            assert!(parse_owasp_vulnerabilities(Some(&changed)).is_err());
+        }
+        let mut duplicated = vulnerabilities.clone();
+        duplicated
+            .as_array_mut()
+            .unwrap()
+            .push(vulnerabilities[0].clone());
+        assert!(parse_owasp_vulnerabilities(Some(&duplicated)).is_err());
+    }
+
+    #[test]
+    fn owasp_related_artifacts_bind_file_digests_and_virtual_lineage() {
+        let physical = json!([{"fileName":"example.jar", "filePath":"/fixture/example.jar", "isVirtual":false,
+            "md5":"1".repeat(32), "sha1":"2".repeat(40), "sha256":"3".repeat(64),
+            "packageIds":[{"id":"pkg:maven/example/library@1.0"}]}]);
+        let expected = BTreeMap::new();
+        rejects_wrong_node_types(&physical, |value| {
+            parse_owasp_related(Some(value), &expected).is_ok()
+        });
+        rejects_unknown_object_fields(&physical, &["/0"], |value| {
+            parse_owasp_related(Some(value), &expected).is_ok()
+        });
+        let virtual_row =
+            json!([{"fileName":"project", "filePath":"project:root", "isVirtual":true}]);
+        rejects_wrong_node_types(&virtual_row, |value| {
+            parse_owasp_related(Some(value), &expected).is_ok()
+        });
+        for key in ["md5", "sha1", "sha256"] {
+            let mut changed = physical.clone();
+            changed[0][key] = json!("invalid");
+            assert!(parse_owasp_related(Some(&changed), &expected).is_err());
+            let mut changed = virtual_row.clone();
+            changed[0][key] = json!("invalid");
+            assert!(parse_owasp_related(Some(&changed), &expected).is_err());
+        }
+        let mut repeated = physical.clone();
+        repeated.as_array_mut().unwrap().push(physical[0].clone());
+        assert!(parse_owasp_related(Some(&repeated), &expected).is_err());
+        assert!(
+            parse_owasp_related(None, &expected)
+                .unwrap()
+                .aliases
+                .is_empty()
+        );
+        for value in [
+            "",
+            "pkg:cargo/example@1.0",
+            "pkg:maven/example",
+            "pkg:maven/example@1.0",
+            "pkg:maven//example@1.0",
+            "pkg:maven/example/library@",
+            "pkg:maven/example/library@1.0?x",
+            "pkg:maven/example/library%20@1.0",
+        ] {
+            assert!(parse_exact_package_url(value).is_err(), "{value}");
+        }
+        assert_eq!(
+            parse_exact_package_url("pkg:maven/example/library@1.0").unwrap(),
+            (
+                "maven".into(),
+                "example".into(),
+                "library".into(),
+                "1.0".into()
+            )
+        );
+    }
+
+    #[test]
+    fn nvd_pagination_requires_complete_contiguous_pages_and_time_windows() {
+        let fixture = SyntheticFixture::new().unwrap();
+        let producer: TrustedProducerRequest =
+            parse_canonical_authority(&fixture.request.producer_request).unwrap();
+        let baseline: NvdNetworkTrace =
+            parse_canonical_authority(&fixture.request.nvd_network_trace).unwrap();
+        let receipts = &fixture.process_receipts;
+        validate_nvd_trace(&producer, &baseline, receipts).unwrap();
+        let original = serde_json::to_value(&baseline).unwrap();
+        for (pointer, replacement) in [
+            ("/request/0/sequence", json!(0)),
+            ("/request/0/method", json!("POST")),
+            ("/request/0/scheme", json!("http")),
+            ("/request/0/authority", json!("example.test")),
+            ("/request/0/path", json!("/other")),
+            ("/request/0/started_at_epoch", json!(0)),
+            ("/request/0/completed_at_epoch", json!(0)),
+            ("/request/0/completed_at_epoch", json!(u64::MAX)),
+            ("/request/0/response_status", json!(500)),
+            ("/request/0/response_byte_length", json!(0)),
+            (
+                "/request/0/response_byte_length",
+                json!(MAX_NVD_AGGREGATE_BYTES + 1),
+            ),
+            (
+                "/request/0/response_byte_length",
+                json!(MAX_NVD_RESPONSE_BYTES + 1),
+            ),
+            ("/request/0/response_sha256", json!("invalid")),
+            ("/request/0/response_start_index", json!(1)),
+            ("/request/0/response_results_per_page", json!(0)),
+            ("/request/0/response_total_results", json!(0)),
+        ] {
+            let mut changed = original.clone();
+            *changed.pointer_mut(pointer).unwrap() = replacement;
+            let trace: NvdNetworkTrace = serde_json::from_value(changed).unwrap();
+            assert!(
+                validate_nvd_trace(&producer, &trace, receipts).is_err(),
+                "{pointer}"
+            );
+        }
+        for key in [
+            "lastModStartDate",
+            "lastModEndDate",
+            "startIndex",
+            "resultsPerPage",
+        ] {
+            let mut changed = baseline.clone();
+            changed.request[0]
+                .query
+                .iter_mut()
+                .find(|row| row.name == key)
+                .unwrap()
+                .value = "invalid".into();
+            assert!(
+                validate_nvd_trace(&producer, &changed, receipts).is_err(),
+                "{key}"
+            );
+        }
+        let set_query = |row: &mut NvdRequestTrace, name: &str, value: String| {
+            row.query
+                .iter_mut()
+                .find(|query| query.name == name)
+                .unwrap()
+                .value = value;
+        };
+        let mut pages = baseline.clone();
+        assert_eq!(pages.request.len(), 1);
+        let page_size = pages.request[0].response_results_per_page;
+        pages.request[0].response_total_results = page_size + 1;
+        let mut second = pages.request[0].clone();
+        second.sequence = 2;
+        second.started_at_epoch = second.completed_at_epoch;
+        second.response_start_index = page_size;
+        set_query(&mut second, "startIndex", page_size.to_string());
+        pages.request.push(second);
+        validate_nvd_trace(&producer, &pages, receipts).unwrap();
+        let mut total_drift = pages.clone();
+        total_drift.request[1].response_total_results += 1;
+        assert!(validate_nvd_trace(&producer, &total_drift, receipts).is_err());
+        let mut backwards_time = pages.clone();
+        backwards_time.request[1].started_at_epoch = backwards_time.request[0].started_at_epoch;
+        assert!(validate_nvd_trace(&producer, &backwards_time, receipts).is_err());
+        let mut initial_offset = baseline.clone();
+        initial_offset.request[0].response_start_index = 1;
+        set_query(&mut initial_offset.request[0], "startIndex", "1".into());
+        assert!(validate_nvd_trace(&producer, &initial_offset, receipts).is_err());
+        let mut extra_query = baseline.clone();
+        let repeated_query = extra_query.request[0].query[0].clone();
+        extra_query.request[0].query.push(repeated_query);
+        assert!(validate_nvd_trace(&producer, &extra_query, receipts).is_err());
+        let mut reordered = baseline.clone();
+        reordered.request[0].query.swap(0, 1);
+        assert!(validate_nvd_trace(&producer, &reordered, receipts).is_err());
+        let mut truncated = pages.clone();
+        truncated.request.pop();
+        assert!(validate_nvd_trace(&producer, &truncated, receipts).is_err());
+        for gap in [0, page_size + 1] {
+            let mut changed = pages.clone();
+            changed.request[1].response_start_index = gap;
+            set_query(&mut changed.request[1], "startIndex", gap.to_string());
+            assert!(validate_nvd_trace(&producer, &changed, receipts).is_err());
+        }
+        let mut windows = baseline.clone();
+        let end = windows.request[0]
+            .query
+            .iter()
+            .find(|row| row.name == "lastModEndDate")
+            .unwrap()
+            .value
+            .clone();
+        let next_start = parse_report_epoch(&end).unwrap() + 1;
+        let mut second = windows.request[0].clone();
+        second.sequence = 2;
+        second.started_at_epoch = second.completed_at_epoch;
+        set_query(
+            &mut second,
+            "lastModStartDate",
+            format_report_epoch(next_start).unwrap(),
+        );
+        set_query(
+            &mut second,
+            "lastModEndDate",
+            format_report_epoch(next_start + 1).unwrap(),
+        );
+        windows.request.push(second);
+        validate_nvd_trace(&producer, &windows, receipts).unwrap();
+        let mut offset_window = windows.clone();
+        offset_window.request[1].response_start_index = 1;
+        set_query(&mut offset_window.request[1], "startIndex", "1".into());
+        assert!(validate_nvd_trace(&producer, &offset_window, receipts).is_err());
+        let mut reversed_window = windows.clone();
+        set_query(
+            &mut reversed_window.request[1],
+            "lastModStartDate",
+            format_report_epoch(next_start + 2).unwrap(),
+        );
+        assert!(validate_nvd_trace(&producer, &reversed_window, receipts).is_err());
+        set_query(
+            &mut windows.request[1],
+            "lastModStartDate",
+            format_report_epoch(next_start + 1).unwrap(),
+        );
+        assert!(validate_nvd_trace(&producer, &windows, receipts).is_err());
     }
 }

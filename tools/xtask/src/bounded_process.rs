@@ -899,6 +899,79 @@ mod unix {
             (false, false) => unreachable!("output stop requires an exceeded stream"),
         }
     }
+
+    #[cfg(test)]
+    mod stream_tests {
+        use super::*;
+        use std::collections::VecDeque;
+
+        #[test]
+        fn draining_preserves_interrupted_and_nonblocking_streams_but_closes_failures() {
+            struct ScriptedReader(VecDeque<Result<Vec<u8>, io::ErrorKind>>);
+            impl Read for ScriptedReader {
+                fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+                    match self.0.pop_front().unwrap_or(Ok(Vec::new())) {
+                        Ok(bytes) => {
+                            output[..bytes.len()].copy_from_slice(&bytes);
+                            Ok(bytes.len())
+                        }
+                        Err(kind) => Err(io::Error::new(kind, "fixture read failure")),
+                    }
+                }
+            }
+            let mut stream = Some(ScriptedReader(VecDeque::from([
+                Err(io::ErrorKind::Interrupted),
+                Ok(b"abc".to_vec()),
+                Err(io::ErrorKind::WouldBlock),
+                Err(io::ErrorKind::BrokenPipe),
+            ])));
+            let mut capture = Capture::new(8);
+            drain_stream(&mut stream, &mut capture).unwrap();
+            assert!(stream.is_some());
+            assert_eq!(capture.bytes, b"abc");
+            assert_eq!(
+                drain_stream(&mut stream, &mut capture).unwrap_err().kind(),
+                ProcessFailureKind::Read
+            );
+            assert!(stream.is_none());
+            drain_stream(&mut stream, &mut capture).unwrap();
+            assert_eq!(capture.bytes, b"abc");
+        }
+
+        #[test]
+        fn draining_has_a_fairness_budget_and_retains_only_the_configured_prefix() {
+            let mut stream = Some(io::Cursor::new(vec![b'x'; MAX_DRAIN_BYTES_PER_PASS + 1]));
+            let mut capture = Capture::new(MAX_DRAIN_BYTES_PER_PASS * 2);
+            drain_stream(&mut stream, &mut capture).unwrap();
+            assert_eq!(capture.bytes.len(), MAX_DRAIN_BYTES_PER_PASS);
+            assert!(stream.is_some());
+            drain_stream(&mut stream, &mut capture).unwrap();
+            assert!(stream.is_none());
+            assert_eq!(capture.bytes.len(), MAX_DRAIN_BYTES_PER_PASS + 1);
+            let mut stream = Some(io::Cursor::new(b"abcdef"));
+            let mut capture = Capture::new(3);
+            drain_stream(&mut stream, &mut capture).unwrap();
+            assert!(capture.exceeded);
+            assert_eq!(capture.bytes, b"abc");
+            drain_stream(&mut stream, &mut capture).unwrap();
+            assert!(stream.is_none());
+            assert_eq!(capture.bytes, b"abc");
+        }
+
+        #[test]
+        fn cleanup_keeps_the_original_error_when_later_cleanup_also_fails() {
+            let original = ProcessError::new(ProcessFailureKind::Read);
+            let mut first = None;
+            remember_first(&mut first, None);
+            assert!(first.is_none());
+            remember_first(&mut first, Some(original));
+            remember_first(
+                &mut first,
+                Some(ProcessError::new(ProcessFailureKind::InvalidConfiguration)),
+            );
+            assert_eq!(first.unwrap().kind(), ProcessFailureKind::Read);
+        }
+    }
 }
 
 pub(crate) fn self_test() -> Result<(), String> {
@@ -1232,6 +1305,26 @@ mod tests {
     fn environment_boundaries_fail_closed() {
         use std::os::unix::ffi::OsStringExt;
 
+        for name in [
+            "".to_owned(),
+            "A".repeat(MAX_ENVIRONMENT_NAME_BYTES + 1),
+            "A\0B".to_owned(),
+            "É".to_owned(),
+            "1INVALID".to_owned(),
+            "BAD-NAME".to_owned(),
+        ] {
+            assert_eq!(
+                environment_rejection(&name),
+                Some(EnvironmentRejection::InvalidNameOrNul)
+            );
+        }
+        assert_eq!(
+            environment_rejection("CARGO_TARGET_FIXTURE_RUSTFLAGS"),
+            Some(EnvironmentRejection::ForbiddenControl)
+        );
+        assert_eq!(environment_rejection("CARGO_TARGET_FIXTURE"), None);
+        assert_eq!(environment_rejection("_FIXTURE_1"), None);
+
         let mut environment = ReplacementEnvironment::default();
         environment
             .insert("RSHR_VISIBLE", "first")
@@ -1283,6 +1376,8 @@ mod tests {
     #[test]
     fn hard_configuration_maximums_fail_before_spawn() {
         for request in [
+            ProcessRequest::new(""),
+            ProcessRequest::new("/usr/bin/true").deadline(Duration::ZERO),
             ProcessRequest::new("/usr/bin/true").deadline(MAX_DEADLINE + Duration::from_secs(1)),
             ProcessRequest::new("/usr/bin/true")
                 .output_limits(MAX_STREAM_LIMIT + 1, MAX_STREAM_LIMIT),
