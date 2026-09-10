@@ -92,11 +92,11 @@ pub fn evaluate_visibility<'a>(
         if input.position.generation() != generation {
             return Err(Error::CorruptStoredEvent);
         }
-        if input.stage != AdmissionStage::Visible {
+        if input.stage == AdmissionStage::Raw {
             continue;
         }
         let envelope = input.event.envelope();
-        if envelope.kind_u32() == KIND_DELETION_REQUEST {
+        if input.stage == AdmissionStage::Visible && envelope.kind_u32() == KIND_DELETION_REQUEST {
             deletion_requests.push(parse_deletion_request(input.event)?);
         }
         let (coordinate, ephemeral) = match event_head_candidate_for_nip01_event(envelope) {
@@ -119,6 +119,9 @@ pub fn evaluate_visibility<'a>(
             EventHeadCandidateResult::NotPersisted => (None, true),
             EventHeadCandidateResult::Malformed(_) => return Err(Error::CorruptStoredEvent),
         };
+        if input.stage != AdmissionStage::Visible {
+            continue;
+        }
         candidates.push(Candidate {
             position: input.position,
             event: input.event,
@@ -359,6 +362,94 @@ mod tests {
                 }),
         )
         .expect("visibility")
+    }
+
+    #[test]
+    fn verified_head_supersedes_visible_payload_without_becoming_visible() {
+        for (kind, tags) in [(0, vec![]), (30_023, vec![vec!["d", "same"]])] {
+            let old = signed_event(AUTHOR, 10, kind, tags.clone(), r#"{"name":"old"}"#);
+            let invalid = signed_event(AUTHOR, 20, kind, tags, "malformed payload");
+            let before = evaluate([
+                (&old, AdmissionStage::Visible),
+                (&invalid, AdmissionStage::Raw),
+            ]);
+            assert!(before.is_visible(old.id()));
+            let after = evaluate([
+                (&old, AdmissionStage::Visible),
+                (&invalid, AdmissionStage::Verified),
+            ]);
+            assert!(!after.is_visible(old.id()));
+            assert!(!after.is_visible(invalid.id()));
+            assert_eq!(after.snapshot().current_heads()[0].event_id, *invalid.id());
+            assert_eq!(after.snapshot().superseded_event_ids(), &[*old.id()]);
+            assert_ne!(before.snapshot().digest(), after.snapshot().digest());
+            let reverse = evaluate([
+                (&invalid, AdmissionStage::Verified),
+                (&old, AdmissionStage::Visible),
+            ]);
+            assert_eq!(after.snapshot(), reverse.snapshot());
+        }
+    }
+
+    #[test]
+    fn verified_heads_keep_canonical_ties_and_empty_address_coordinates() {
+        let a = signed_event(AUTHOR, 10, 30_023, vec![], "a");
+        let b = signed_event(AUTHOR, 10, 30_023, vec![vec!["d", ""]], "b");
+        let (winner, loser) = if a.id() < b.id() { (&a, &b) } else { (&b, &a) };
+        let result = evaluate([
+            (loser, AdmissionStage::Visible),
+            (winner, AdmissionStage::Verified),
+        ]);
+        assert_eq!(result.snapshot().current_heads().len(), 1);
+        assert_eq!(result.snapshot().current_heads()[0].event_id, *winner.id());
+        assert!(result.snapshot().visible_event_ids().is_empty());
+        let reverse = evaluate([
+            (winner, AdmissionStage::Verified),
+            (loser, AdmissionStage::Visible),
+        ]);
+        assert_eq!(result.snapshot(), reverse.snapshot());
+        let visible_winner = evaluate([
+            (winner, AdmissionStage::Visible),
+            (loser, AdmissionStage::Verified),
+        ]);
+        assert!(visible_winner.is_visible(winner.id()));
+        assert!(!visible_winner.is_visible(loser.id()));
+    }
+
+    #[test]
+    fn verified_deletion_has_no_authority_and_valid_deletion_precedes_target() {
+        let target = signed_event(AUTHOR, 10, 0, vec![], "profile");
+        let deletion = signed_event(
+            AUTHOR,
+            20,
+            5,
+            vec![vec!["e", target.id().to_hex().as_str()]],
+            "",
+        );
+        let forged = signed_event(
+            OTHER_AUTHOR,
+            20,
+            5,
+            vec![vec!["e", target.id().to_hex().as_str()]],
+            "",
+        );
+        let malformed = signed_event(AUTHOR, 30, 5, vec![], "");
+        for stage in [AdmissionStage::Raw, AdmissionStage::Verified] {
+            let result = evaluate([
+                (&deletion, stage),
+                (&malformed, stage),
+                (&forged, AdmissionStage::Visible),
+                (&target, AdmissionStage::Visible),
+            ]);
+            assert!(result.is_visible(target.id()));
+            assert_eq!(result.snapshot().deletion_request_ids(), &[*forged.id()]);
+        }
+        let result = evaluate([
+            (&deletion, AdmissionStage::Visible),
+            (&target, AdmissionStage::Visible),
+        ]);
+        assert!(!result.is_visible(target.id()));
+        assert_eq!(result.snapshot().suppressed_event_ids(), &[*target.id()]);
     }
 
     #[test]

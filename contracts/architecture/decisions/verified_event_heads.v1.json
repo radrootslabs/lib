@@ -1,0 +1,12 @@
+{
+  "schema": "radroots.verified-event-heads.v1",
+  "status": "implemented",
+  "owners": ["radroots_sync", "radroots_storage", "radroots_storage_sqlite"],
+  "ingest": "Perform actual canonical event-ID and NIP-01 signature verification before any policy decision. Contract validation failure defaults to rejection. A host may explicitly choose signature-verified retention through a decision with only Reject and Verified variants; this path cannot grant visibility. Preserve atomic ingestion, provenance and idempotency.",
+  "head_selection": "Select current replaceable and addressable heads from signature-verified and visible admissions using existing canonical coordinate, timestamp and event-ID rules before payload visibility. Raw records have no head authority. A verified-only winner supersedes an older visible record without itself becoming visible, and deletion of a winner never revives a predecessor.",
+  "coordinates": "Use the existing total NIP-01 selector unchanged: addressable events with missing or empty first d values select the empty address coordinate. Do not add application-specific coordinate validation. Preserve the existing defensive corruption rejection if the selector ever reports a malformed candidate.",
+  "deletion": "Only contract-valid visible deletion requests participate in author-authorized suppression. Retain deletion-before-target evidence and existing address cutoff semantics; verified-only or raw deletion requests have no suppression authority.",
+  "invalidation": "The deterministic shared visibility snapshot digest represents selected heads, admitted deletion requests and resulting visibility. Admission advancement can change this digest without changing the raw event count. Consumers must not use raw count alone as visibility freshness evidence.",
+  "compatibility": "The opt-in sync policy method has a default that preserves existing contract-failure rejection. Existing valid-event policy, wire schemas, package identities, database schema and source boundaries remain unchanged. Retained verified heads intentionally correct stale visible fallback in the shared reducer.",
+  "non_goals": ["application payload policy", "application database ownership", "new protocol or transport", "unverified observation authority", "release publication or deferred platform activation"]
+}

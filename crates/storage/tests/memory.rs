@@ -151,6 +151,51 @@ fn visible_admission(event: SignedEvent, at: u64) -> EventAdmission {
 }
 
 #[test]
+fn verified_replacement_changes_visibility_without_increasing_raw_count() {
+    let store = MemoryStorage::new(SourceGeneration::new([19; 32]).unwrap());
+    let old = signed_event_with(10, 0, vec![], r#"{"display_name":"Old Farm","bot":false}"#);
+    let newer = signed_event_with(20, 0, vec![], "malformed profile");
+    block_on(store.admit(visible_admission(old.clone(), 10))).unwrap();
+    let raw = admission(newer.clone(), 20);
+    block_on(store.admit(raw.clone())).unwrap();
+    let before = block_on(store.rebuild_visibility()).unwrap();
+    assert_eq!(before.visible_event_ids(), &[*old.id()]);
+    let verified = RawEvent::new(newer.envelope().clone())
+        .verify_id()
+        .unwrap()
+        .verify_signature(&Allow)
+        .unwrap();
+    let advanced = block_on(
+        store.admit(
+            EventAdmission::verified(
+                ObservedEvent::new(newer.clone(), raw.provenance().clone()),
+                verified,
+            )
+            .unwrap(),
+        ),
+    )
+    .unwrap();
+    assert_eq!(
+        advanced.disposition(),
+        radroots_storage::event::AdmissionDisposition::Advanced
+    );
+    let after = block_on(store.rebuild_visibility()).unwrap();
+    assert_ne!(before.digest(), after.digest());
+    assert_eq!(after.current_heads()[0].event_id, *newer.id());
+    assert!(after.visible_event_ids().is_empty());
+    assert_eq!(
+        block_on(EventStore::status(&store)).unwrap().raw_events(),
+        2
+    );
+    assert!(
+        block_on(store.query_visible(EventQuery::all(EventQueryBounds::first(10).unwrap())))
+            .unwrap()
+            .items()
+            .is_empty()
+    );
+}
+
+#[test]
 fn memory_visibility_rebuild_is_current_delete_aware_and_atomic_parity_safe() {
     let generation = SourceGeneration::new([17; 32]).expect("generation");
     let direct = MemoryStorage::new(generation);

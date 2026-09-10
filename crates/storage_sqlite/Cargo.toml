@@ -54,6 +54,7 @@ sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
 
 [dev-dependencies]
 hex = { workspace = true }
+radroots_storage = { workspace = true, default-features = false, features = ["memory", "serde"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }
 toml = { workspace = true }

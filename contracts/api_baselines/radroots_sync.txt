@@ -4,6 +4,9 @@ pub enum radroots_sync::ingest::AdmissionDecision
 pub radroots_sync::ingest::AdmissionDecision::Reject
 pub radroots_sync::ingest::AdmissionDecision::Verified
 pub radroots_sync::ingest::AdmissionDecision::Visible
+pub enum radroots_sync::ingest::ContractFailureDecision
+pub radroots_sync::ingest::ContractFailureDecision::Reject
+pub radroots_sync::ingest::ContractFailureDecision::Verified
 pub struct radroots_sync::ingest::IngestBatchReceipt
 impl radroots_sync::ingest::IngestBatchReceipt
 pub fn radroots_sync::ingest::IngestBatchReceipt::accepted(&self) -> usize
@@ -20,14 +23,17 @@ impl radroots_sync::ingest::RegistryPolicy
 pub const fn radroots_sync::ingest::RegistryPolicy::verified() -> Self
 pub const fn radroots_sync::ingest::RegistryPolicy::visible() -> Self
 impl radroots_sync::ingest::AdmissionPolicy for radroots_sync::ingest::RegistryPolicy
+pub fn radroots_sync::ingest::RegistryPolicy::contract_failure(&self, &radroots_event::verification::SignatureVerifiedEvent) -> radroots_sync::ingest::ContractFailureDecision
 pub fn radroots_sync::ingest::RegistryPolicy::decide(&self, &radroots_event::verification::ContractValidatedEvent) -> radroots_sync::ingest::AdmissionDecision
 pub fn radroots_sync::ingest::RegistryPolicy::policy_id(&self) -> &'static str
 pub fn radroots_sync::ingest::RegistryPolicy::select_contract(&self, &radroots_event::verification::SignatureVerifiedEvent) -> core::option::Option<&'static str>
 pub trait radroots_sync::ingest::AdmissionPolicy: core::marker::Send + core::marker::Sync
+pub fn radroots_sync::ingest::AdmissionPolicy::contract_failure(&self, &radroots_event::verification::SignatureVerifiedEvent) -> radroots_sync::ingest::ContractFailureDecision
 pub fn radroots_sync::ingest::AdmissionPolicy::decide(&self, &radroots_event::verification::ContractValidatedEvent) -> radroots_sync::ingest::AdmissionDecision
 pub fn radroots_sync::ingest::AdmissionPolicy::policy_id(&self) -> &'static str
 pub fn radroots_sync::ingest::AdmissionPolicy::select_contract(&self, &radroots_event::verification::SignatureVerifiedEvent) -> core::option::Option<&'static str>
 impl radroots_sync::ingest::AdmissionPolicy for radroots_sync::ingest::RegistryPolicy
+pub fn radroots_sync::ingest::RegistryPolicy::contract_failure(&self, &radroots_event::verification::SignatureVerifiedEvent) -> radroots_sync::ingest::ContractFailureDecision
 pub fn radroots_sync::ingest::RegistryPolicy::decide(&self, &radroots_event::verification::ContractValidatedEvent) -> radroots_sync::ingest::AdmissionDecision
 pub fn radroots_sync::ingest::RegistryPolicy::policy_id(&self) -> &'static str
 pub fn radroots_sync::ingest::RegistryPolicy::select_contract(&self, &radroots_event::verification::SignatureVerifiedEvent) -> core::option::Option<&'static str>

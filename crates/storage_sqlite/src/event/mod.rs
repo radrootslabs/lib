@@ -946,6 +946,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn verified_replacement_and_same_count_advance_match_memory_after_reopen() {
+        let generation = SourceGeneration::new([19; 32]).unwrap();
+        let store = store(generation).await;
+        let memory = radroots_storage::memory::MemoryStorage::new(generation);
+        let old = signed_event_with(
+            r#"{"display_name":"Old Farm","bot":false}"#,
+            false,
+            10,
+            0,
+            vec![],
+        );
+        let newer = signed_event_with("malformed profile", false, 20, 0, vec![]);
+        let admissions = [
+            EventAdmission::visible(observed(old.clone(), 10, None), visible(&old)).unwrap(),
+            EventAdmission::raw(observed(newer.clone(), 20, None)),
+            EventAdmission::verified(observed(newer.clone(), 20, None), verified(&newer)).unwrap(),
+        ];
+        let mut previous_digest = None;
+        for (index, admission) in admissions.into_iter().enumerate() {
+            assert_eq!(
+                store.admit(admission.clone()).await.unwrap(),
+                memory.admit(admission).await.unwrap()
+            );
+            let reopened =
+                SqliteStorage::new(store.pool.clone(), generation, EventStoreMode::ReadWrite);
+            let snapshot = reopened.rebuild_visibility().await.unwrap();
+            assert_eq!(snapshot, memory.rebuild_visibility().await.unwrap());
+            let query = EventQuery::all(EventQueryBounds::first(10).unwrap());
+            assert_eq!(
+                reopened.query_visible(query.clone()).await.unwrap(),
+                memory.query_visible(query).await.unwrap()
+            );
+            if index == 2 {
+                assert_ne!(previous_digest, Some(snapshot.digest()));
+                assert!(snapshot.visible_event_ids().is_empty());
+                assert_eq!(snapshot.current_heads()[0].event_id, *newer.id());
+                assert_eq!(reopened.status().await.unwrap().raw_events(), 2);
+            } else {
+                assert_eq!(snapshot.visible_event_ids(), &[*old.id()]);
+            }
+            previous_digest = Some(snapshot.digest());
+        }
+    }
+
+    #[tokio::test]
     async fn visibility_rebuild_survives_reopen_and_matches_current_head_deletion_queries() {
         let generation = SourceGeneration::new([18; 32]).expect("generation");
         let store = store(generation).await;

@@ -6,6 +6,12 @@ The package owns the shared ingest, pull, projection, push, policy, and status
 boundaries. It does not create an executor, spawn workers, install timers, own
 process lifecycle, store UI state, or branch on concrete transport adapters.
 
+Ingest performs real event-ID and signature verification before host policy.
+Contract failure defaults to rejection. A host can explicitly retain such a
+signed observation through `AdmissionPolicy::contract_failure` for canonical
+replacement evidence; its closed decision permits only rejection or verified
+retention, never visibility. Invalid IDs and signatures cannot reach this policy.
+
 Pull receipts retain the last available outcome for each target and bounded
 cumulative target summaries across returned pages. A later complete outcome
 does not erase an earlier incomplete or missing outcome. Summaries preserve

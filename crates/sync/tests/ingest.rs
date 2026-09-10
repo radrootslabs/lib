@@ -257,6 +257,153 @@ fn valid_visible_ingest_is_atomic_and_preserves_provenance() {
     );
 }
 
+struct RetainInvalid {
+    calls: AtomicU8,
+    explicit_contract: bool,
+}
+
+impl AdmissionPolicy for RetainInvalid {
+    fn policy_id(&self) -> &'static str {
+        "test.retain-invalid.v1"
+    }
+    fn select_contract(
+        &self,
+        _: &radroots_event::admission::SignatureVerifiedEvent,
+    ) -> Option<&'static str> {
+        self.explicit_contract
+            .then_some("radroots.food.availability.v1")
+    }
+    fn contract_failure(
+        &self,
+        _: &radroots_event::admission::SignatureVerifiedEvent,
+    ) -> radroots_sync::ingest::ContractFailureDecision {
+        self.calls.fetch_add(1, Ordering::Relaxed);
+        radroots_sync::ingest::ContractFailureDecision::Verified
+    }
+    fn decide(&self, _: &radroots_event::admission::ContractValidatedEvent) -> AdmissionDecision {
+        AdmissionDecision::Visible
+    }
+}
+
+fn observed_profile(created_at: u64, content: &str, valid_signature: bool) -> ObservedEvent {
+    let pair = Keypair::from_secret_key(
+        &Secp256k1::new(),
+        &SecretKey::from_slice(&[1; 32]).expect("fixture key"),
+    );
+    let mut wire = radroots_event::wire::Nip01EventWire {
+        id: "0".repeat(64),
+        pubkey: pair.x_only_public_key().0.to_string(),
+        created_at,
+        kind: 0,
+        tags: vec![],
+        content: content.to_owned(),
+        sig: "42".repeat(64),
+        extra: Default::default(),
+    };
+    let id = wire.computed_event_id().expect("id");
+    wire.id = id.to_hex();
+    if valid_signature {
+        wire.sig = Secp256k1::new()
+            .sign_schnorr_no_aux_rand(&Message::from_digest(*id.as_bytes()), &pair)
+            .to_string();
+    }
+    let raw = serde_json::json!({"id":wire.id,"pubkey":wire.pubkey,"created_at":wire.created_at,"kind":wire.kind,"tags":wire.tags,"content":wire.content,"sig":wire.sig}).to_string();
+    let event = SignedEvent::from_wire_verified_id(wire, raw).expect("ID-valid signed profile");
+    let target = Target::new(TransportId::NOSTR, "wss://relay.example").expect("target");
+    ObservedEvent::new(
+        event,
+        EventProvenance::new(
+            TransportId::NOSTR,
+            target.fingerprint().clone(),
+            created_at * 1000,
+        )
+        .expect("provenance"),
+    )
+}
+
+#[test]
+fn contract_failure_defaults_to_reject_and_opt_in_retains_only_verified_heads() {
+    let (engine, storage) = setup_engine(1);
+    let old = observed_profile(10, r#"{"display_name":"Old Farm","bot":false}"#, true);
+    let newer = observed_profile(20, "not JSON", true);
+    let forged = observed_profile(30, "not JSON", false);
+    block_on(engine.ingest(old.clone(), &RegistryPolicy::visible())).expect("old visible");
+    assert_eq!(
+        block_on(engine.ingest(newer.clone(), &RegistryPolicy::visible())).unwrap_err(),
+        Error::VerificationFailed
+    );
+    assert_eq!(block_on(storage.status()).expect("status").raw_events(), 1);
+    let policy = RetainInvalid {
+        calls: AtomicU8::new(0),
+        explicit_contract: false,
+    };
+    let batch = block_on(engine.ingest_batch(vec![forged, newer.clone(), old], &policy));
+    assert_eq!(batch.accepted(), 2);
+    assert_eq!(batch.rejected(), 1);
+    assert_eq!(batch.outcomes()[0], Err(Error::VerificationFailed));
+    assert_eq!(
+        batch.outcomes()[1].as_ref().unwrap().admission().stage(),
+        AdmissionStage::Verified
+    );
+    assert_eq!(policy.calls.load(Ordering::Relaxed), 1);
+    let status = block_on(storage.status()).expect("status");
+    assert_eq!(status.raw_events(), 2);
+    assert_eq!(status.verified_events(), 2);
+    assert_eq!(status.visible_events(), 0);
+    assert!(
+        block_on(storage.query_visible(EventQuery::all(EventQueryBounds::first(10).unwrap())))
+            .unwrap()
+            .items()
+            .is_empty()
+    );
+    let snapshot = block_on(storage.rebuild_visibility()).unwrap();
+    assert_eq!(snapshot.current_heads()[0].event_id, *newer.event().id());
+}
+
+#[test]
+fn explicit_contract_failure_retention_advances_to_visible_without_new_raw_record() {
+    let (engine, storage) = setup_engine(1);
+    let profile = observed_profile(10, r#"{"display_name":"Farm","bot":false}"#, true);
+    let policy = RetainInvalid {
+        calls: AtomicU8::new(0),
+        explicit_contract: true,
+    };
+    let retained = block_on(engine.ingest(profile.clone(), &policy)).expect("retained");
+    assert_eq!(retained.admission().stage(), AdmissionStage::Verified);
+    let before = block_on(storage.rebuild_visibility()).unwrap();
+    assert!(before.visible_event_ids().is_empty());
+    let advanced = block_on(engine.ingest(profile, &RegistryPolicy::visible())).expect("advanced");
+    assert_eq!(
+        advanced.admission().disposition(),
+        AdmissionDisposition::Advanced
+    );
+    assert_eq!(block_on(storage.status()).unwrap().raw_events(), 1);
+    let after = block_on(storage.rebuild_visibility()).unwrap();
+    assert_ne!(before.digest(), after.digest());
+    assert_eq!(
+        after.visible_event_ids(),
+        &[*retained.admission().event_id()]
+    );
+    assert_eq!(policy.calls.load(Ordering::Relaxed), 1);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn contract_failure_wire_decision_cannot_authorize_visibility() {
+    use radroots_sync::ingest::ContractFailureDecision;
+    for value in [
+        ContractFailureDecision::Reject,
+        ContractFailureDecision::Verified,
+    ] {
+        let encoded = serde_json::to_string(&value).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ContractFailureDecision>(&encoded).unwrap(),
+            value
+        );
+    }
+    assert!(serde_json::from_str::<ContractFailureDecision>(r#""visible""#).is_err());
+}
+
 #[test]
 fn admission_policy_selects_and_fully_validates_admission_only_wire_profiles() {
     let (engine, storage) = setup_engine(1);

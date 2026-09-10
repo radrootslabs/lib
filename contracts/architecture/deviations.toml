@@ -2,6 +2,35 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-017"
+date = "2026-09-10"
+status = "closed"
+approval = "Explicit user authorization covers necessary shared-owner prerequisites, verified commits and non-force source publication."
+affected_steps = ["157", "174", "204"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage",
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sync",
+]
+source_evidence = [
+  "Shared sync rejects contract-invalid signed observations before the host can choose verified-only retention.",
+  "Shared visibility selects replacement heads only from Visible records, allowing an older visible payload to survive a newer retained signature-verified head.",
+]
+replacement_action = "Implement contracts/architecture/decisions/verified_event_heads.v1.json: explicit default-reject verified retention and canonical head selection before payload visibility, without adding product policy to shared storage."
+verification = [
+  "Reproduce stale fallback and verify raw, malformed, signature, tie, author, deletion-before-target, order, stage advancement and memory/SQLite parity cases.",
+  "Review additive public API and pass affected owner and SDK tests, unchanged coverage thresholds, workspace contracts and release preflight.",
+]
+unresolved_risk = "Owner, backend, SDK, additive API, unchanged coverage and workspace qualification pass. Verified heads intentionally suppress older visible payloads; only opt-in policies retain contract-invalid signed observations. No external release or deferred platform qualification is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The original stale-fallback regression now passes with raw-to-verified advancement, canonical ties, empty coordinates, reversed arrival order and author-authorized deletion-before-target.",
+  "Real signed sync ingestion preserves default rejection and rejects bad signatures before host retention; opt-in failures stay Verified and valid later admission advances at the same raw count.",
+  "Memory and reopened SQLite return matching admission receipts, visibility snapshots and bounded queries. All isolated owner and SDK lanes pass; only the defaulted retention method and closed decision are additive API changes.",
+  "Fresh storage, SQLite, sync and SDK coverage and all 45 required reports/aggregate pass with unchanged thresholds, together with complete workspace, portable and release-preflight gates.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-016"
 date = "2026-09-10"
 status = "closed"

@@ -92,6 +92,14 @@ source generation, monotonically increasing position, and every unique
 transport provenance observation. Queries are bounded and generation-aware;
 backends fail closed on corrupt rows or source changes.
 
+Current replacement heads are selected from verified and visible admissions
+before interpreting application payloads. A verified-only winner supersedes an
+older visible record without itself becoming visible. Raw records cannot select
+heads, and only visible contract-valid author-authorized deletion requests
+suppress events. Deleted winners never revive predecessors. Consumers use the
+shared visibility snapshot digest to detect admission changes even when the raw
+event count remains unchanged.
+
 The journal records a command lifecycle under a validated idempotency key and
 optimistic revision. The outbox persists explicit multi-target delivery plans,
 leases, attempts, normalized receipts, partial success, and satisfaction

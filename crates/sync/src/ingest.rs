@@ -34,6 +34,20 @@ pub enum AdmissionDecision {
     Visible,
 }
 
+/// Host retention decision for an authentically signed, contract-invalid event.
+///
+/// This decision cannot authorize visibility. It may preserve canonical
+/// replacement evidence before an application can interpret the payload.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContractFailureDecision {
+    /// Reject without mutating canonical storage.
+    Reject,
+    /// Retain signature-verified evidence without granting visibility.
+    Verified,
+}
+
 /// Deterministic host policy for canonical admission and visibility.
 ///
 /// Implementations must be side-effect free. The engine may evaluate a policy
@@ -47,6 +61,12 @@ pub trait AdmissionPolicy: Send + Sync {
     /// selection; any returned identity is still fully contract-validated.
     fn select_contract(&self, _event: &SignatureVerifiedEvent) -> Option<&'static str> {
         None
+    }
+
+    /// Decides retention after contract failure and real cryptographic verification.
+    /// Existing policies reject by default; invalid IDs or signatures never reach it.
+    fn contract_failure(&self, _event: &SignatureVerifiedEvent) -> ContractFailureDecision {
+        ContractFailureDecision::Reject
     }
 
     /// Decides whether a contract-valid event is rejected, verified-only, or visible.
@@ -155,28 +175,37 @@ impl Engine {
                 .clone()
                 .validate_contract_for_admission(contract_id),
             None => verify::contract(verified.clone()),
-        }
-        .map_err(|_| Error::VerificationFailed)?;
-        let decision = policy.decide(&validated);
-        if decision == AdmissionDecision::Reject {
-            return Err(Error::PolicyRejected);
-        }
-
-        let admission = match decision {
-            AdmissionDecision::Verified => EventAdmission::verified(observed.clone(), verified),
-            AdmissionDecision::Visible => {
-                let evidence = DecisionEvidence {
-                    policy_id: policy.policy_id(),
+        };
+        let (decision, admission) = match validated {
+            Ok(validated) => {
+                let decision = policy.decide(&validated);
+                let admission = match decision {
+                    AdmissionDecision::Verified => {
+                        EventAdmission::verified(observed.clone(), verified)
+                    }
+                    AdmissionDecision::Visible => {
+                        let evidence = DecisionEvidence {
+                            policy_id: policy.policy_id(),
+                        };
+                        let visible = validated
+                            .admit_with(&evidence)
+                            .and_then(|event| event.make_visible_with(&evidence))
+                            .map_err(|never| match never {})?;
+                        EventAdmission::visible(observed.clone(), visible)
+                    }
+                    AdmissionDecision::Reject => return Err(Error::PolicyRejected),
                 };
-                let visible = validated
-                    .admit_with(&evidence)
-                    .and_then(|event| event.make_visible_with(&evidence))
-                    .map_err(|never| match never {})?;
-                EventAdmission::visible(observed.clone(), visible)
+                (decision, admission)
             }
-            AdmissionDecision::Reject => unreachable!("rejection returned before admission"),
-        }
-        .map_err(map_storage_error)?;
+            Err(_) => match policy.contract_failure(&verified) {
+                ContractFailureDecision::Reject => return Err(Error::VerificationFailed),
+                ContractFailureDecision::Verified => (
+                    AdmissionDecision::Verified,
+                    EventAdmission::verified(observed.clone(), verified),
+                ),
+            },
+        };
+        let admission = admission.map_err(map_storage_error)?;
 
         let sync_id = self.ids.next_id(OperationKind::Ingest)?;
         let requested_at_unix_ms = self.clock.now_unix_ms()?;
