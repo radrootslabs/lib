@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-016"
+date = "2026-09-10"
+status = "closed"
+approval = "Standing user authorization covers necessary shared-owner repairs, verified checkpoint commits and non-force producer publication."
+affected_steps = ["201"]
+spec_anchors = [
+  "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr",
+]
+source_evidence = [
+  "The concrete REQ asks for 1000 events, but exactly 1000 followed by EOSE is currently normalized as Complete.",
+  "After a 500-event first page, another 500 equal-time events produce Complete with no cursor despite additional capped or older history.",
+]
+replacement_action = "Implement contracts/architecture/decisions/nostr_fetch_windows.v1.json within the existing adapter: partial capped coverage, lossless paging of received candidates and finite explicit older-window continuation."
+verification = [
+  "Reproduce capped EOSE false-completion, then verify ordinary and capped ties, duplicate relays, older history, malformed/boundary inputs and scoped continuation through injected and loopback sources.",
+  "Pass affected package and SDK checks, unchanged public API and coverage thresholds, full workspace and required release-preflight gates before publication.",
+]
+unresolved_risk = "Current owner, SDK, API, coverage and workspace gates pass. A saturated timestamp can still hide additional events; the partial yield and explicit older continuation never claim lossless or global-history recovery."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The false-complete regression now passes with 501, 1000 and 1001 equal-time events, cross-relay deduplication, explicit older continuation and canonical scoped cursor rejection.",
+  "A real WebSocket relay returns exactly 1000 signed same-time events and EOSE; both received pages and the explicit older query pass without reconnect backoff or automatic boundary skipping.",
+  "Malformed/out-of-bound and zero-time cases fail closed. Public transport and SDK APIs remain byte-identical. Fresh affected coverage, all 45 reports and aggregate, complete workspace and release-preflight checks pass without threshold changes.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-015"
 date = "2026-09-09"
 status = "closed"

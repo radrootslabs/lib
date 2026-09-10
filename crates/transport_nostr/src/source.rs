@@ -22,6 +22,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod budget;
 use budget::FetchBudget;
 
+#[path = "source_window.rs"]
+mod window;
+
+#[cfg(test)]
+#[path = "source_paging_tests.rs"]
+mod paging_tests;
+
 const UPSTREAM_FETCH_LIMIT: usize = 1_000;
 const CURSOR_PREFIX: &str = "nostr-v2";
 const CURSOR_SCOPE_DOMAIN: &[u8] = b"radroots.transport-nostr.fetch-cursor.v2\0";
@@ -296,9 +303,10 @@ impl EventSource for NostrTransport {
             let cursor_scope = request_scope(&request);
             let cursor = request
                 .cursor()
-                .map(|cursor| parse_cursor(cursor, cursor_scope.as_str()))
+                .map(|cursor| window::Position::parse(cursor, cursor_scope.as_str()))
                 .transpose()?;
-            let selector_until = request.selector().until_unix_seconds();
+            let effective_until =
+                window::effective_until(request.selector().until_unix_seconds(), cursor.as_ref());
             let now_ms = unix_time_ms();
             let remaining_ms = request.bounds().deadline_unix_ms().saturating_sub(now_ms);
             let timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
@@ -354,12 +362,7 @@ impl EventSource for NostrTransport {
                 .fetch(SourceQuery {
                     relays: targets.keys().cloned().collect(),
                     selector: request.selector().clone(),
-                    until_unix_seconds: match (selector_until, cursor.as_ref()) {
-                        (Some(until), Some(cursor)) => Some(until.min(cursor.created_at_unix_s())),
-                        (Some(until), None) => Some(until),
-                        (None, Some(cursor)) => Some(cursor.created_at_unix_s()),
-                        (None, None) => None,
-                    },
+                    until_unix_seconds: effective_until,
                     connect_timeout: Duration::from_millis(
                         timeout_ms.min(self.config().connect_timeout_ms()),
                     ),
@@ -368,6 +371,8 @@ impl EventSource for NostrTransport {
                 })
                 .await;
             let mut candidates = Vec::new();
+            let mut capped_window = false;
+            let mut older_boundary = None;
             let parse_budget = FetchBudget::default();
             let mut malformed_by_relay = BTreeMap::<RelayUrl, usize>::new();
             let mut reported = BTreeSet::new();
@@ -399,6 +404,10 @@ impl EventSource for NostrTransport {
                         continue;
                     }
                 };
+                let capped_eose = terminal == FetchTargetState::Complete
+                    && raw_events.len() >= UPSTREAM_FETCH_LIMIT;
+                capped_window |= capped_eose;
+                let mut oldest_matching = None;
                 for (index, raw) in raw_events.into_iter().enumerate() {
                     if index >= UPSTREAM_FETCH_LIMIT || !parse_budget.event(raw.len()) {
                         if terminal != FetchTargetState::Cancelled {
@@ -407,7 +416,15 @@ impl EventSource for NostrTransport {
                         break;
                     }
                     match radroots_event_codec::decode::signed_event(raw.as_str()) {
-                        Ok(event) if request.selector().matches(&event) => {
+                        Ok(event)
+                            if request.selector().matches(&event)
+                                && effective_until
+                                    .is_none_or(|until| event.created_at() <= until) =>
+                        {
+                            oldest_matching =
+                                Some(oldest_matching.map_or(event.created_at(), |oldest: u64| {
+                                    oldest.min(event.created_at())
+                                }));
                             candidates.push(Candidate {
                                 relay: relay.clone(),
                                 created_at: event.created_at(),
@@ -421,6 +438,12 @@ impl EventSource for NostrTransport {
                         }
                     }
                 }
+                if capped_eose && let Some(oldest) = oldest_matching {
+                    older_boundary =
+                        Some(older_boundary.map_or(oldest, |boundary: u64| boundary.max(oldest)));
+                }
+                // A capped EOSE proves relay availability, while the page's
+                // coverage stays partial. It must not start reconnect backoff.
                 self.status.record_read(
                     &relay,
                     terminal == FetchTargetState::Complete,
@@ -434,9 +457,9 @@ impl EventSource for NostrTransport {
                         FetchTargetState::Cancelled,
                     )
                     .with_message("relay fetch deadline elapsed before EOSE")
-                } else if terminal == FetchTargetState::Partial {
+                } else if terminal == FetchTargetState::Partial || capped_eose {
                     FetchTargetOutcome::new(target.fingerprint().clone(), FetchTargetState::Partial)
-                        .with_message("relay result exceeded the bounded fetch inventory")
+                        .with_message("relay result reached the bounded fetch inventory")
                 } else if malformed == 0 {
                     FetchTargetOutcome::new(
                         target.fingerprint().clone(),
@@ -463,7 +486,7 @@ impl EventSource for NostrTransport {
             }
             candidates.sort_by(compare_candidate);
             if let Some(cursor) = &cursor {
-                candidates.retain(|candidate| candidate_is_after_cursor(candidate, cursor));
+                candidates.retain(|candidate| cursor.includes(candidate));
             }
             let mut seen = BTreeSet::new();
             candidates.retain(|candidate| seen.insert(candidate.event_id.clone()));
@@ -476,6 +499,11 @@ impl EventSource for NostrTransport {
                     "{CURSOR_PREFIX}:{}:{}:{cursor_scope}",
                     last.created_at, last.event_id,
                 ))?)
+            } else if capped_window {
+                NextPage::Cancelled {
+                    resume_from: older_boundary
+                        .and_then(|boundary| window::before_boundary(boundary, &cursor_scope)),
+                }
             } else {
                 NextPage::Complete
             };
@@ -1293,12 +1321,29 @@ mod tests {
                 .iter()
                 .filter(|outcome| outcome.state() == FetchTargetState::Complete)
                 .count(),
-            4
+            0
         );
         assert_eq!(
             page.target_outcomes()
                 .iter()
                 .filter(|outcome| outcome.state() == FetchTargetState::Partial)
+                .count(),
+            5
+        );
+        let report = transport.relay_status();
+        assert_eq!(
+            report
+                .relays()
+                .iter()
+                .filter(|relay| relay.read().state() == crate::RelayEvidenceState::Available)
+                .count(),
+            4
+        );
+        assert_eq!(
+            report
+                .relays()
+                .iter()
+                .filter(|relay| relay.read().state() == crate::RelayEvidenceState::Unavailable)
                 .count(),
             1
         );

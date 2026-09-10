@@ -136,8 +136,9 @@ transport-neutral kind, author, exact indexed single-letter tag, and event-time
 selectors into Nostr filters, reapplies those selectors defensively, applies
 the request page bound, deduplicates events by event ID, preserves per-relay
 provenance, and emits an opaque versioned cursor bound to the exact target set
-and selector when more results remain. Equal timestamps are ordered by event ID
-so overlap-safe reconnect pagination cannot skip peers. Malformed relay events
+and selector when more collected results remain. Equal timestamps are ordered
+by event ID so all received peers can be paged without timestamp-only loss.
+Malformed relay events
 are ignored and reported as a partial target outcome rather than admitted.
 Fetch reports `Complete` only after the exact subscription receives EOSE
 strictly before its absolute deadline. Deadline expiry is `Cancelled`, and a
@@ -152,7 +153,22 @@ limits both frames and complete messages to 512 KiB before upstream decoding.
 Shared canonical decoding rechecks the event, aggregate-byte and inventory
 bounds before candidate collection. A fetch returns at most the caller's
 validated 1,000-event page limit. EOSE describes only the requested relay
-subscription and never proves complete global history.
+subscription and never proves complete global history. A response reaching the
+1,000-event cap is `Partial` even when EOSE follows: the relay may still conceal
+other events at the same timestamp or older history. Capped EOSE proves relay
+availability and does not start connection-failure backoff.
+
+After all collected candidates have been paged, a capped window returns
+`NextPage::Cancelled` with an optional opaque older-window continuation. Shared
+pull yields control at that boundary. Callers must disclose the partial
+coverage before explicitly continuing older discovery; additional same-time
+events remain unproven and are not declared recovered. The continuation moves
+strictly before the capped timestamp using the same exact target/selector scope.
+Malformed-only or out-of-bound results cannot invent a continuation; timestamp
+zero cannot underflow. Ordinary `nostr-v2` event cursors remain supported; the
+additive `nostr-until-v1` form is interpreted only by this concrete adapter.
+No automatic retry, unlimited scan, new protocol or global completeness claim
+is implied by either form.
 
 Live subscriptions use the same explicit readable targets and selector
 translation. A caller checkpoint is scoped to one exact target and selector;

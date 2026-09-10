@@ -321,6 +321,8 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
             "sink.rs".to_owned(),
             "source.rs".to_owned(),
             "source_budget.rs".to_owned(),
+            "source_paging_tests.rs".to_owned(),
+            "source_window.rs".to_owned(),
             "status.rs".to_owned(),
             "subscription.rs".to_owned(),
         ])

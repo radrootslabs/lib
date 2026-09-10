@@ -1,0 +1,19 @@
+{
+  "schema": "radroots.nostr-fetch-windows.v1",
+  "owner": "radroots_transport_nostr",
+  "status": "implemented",
+  "scope": "Existing bounded Nostr EVENT/REQ discovery with exact target/selector-bound opaque continuation.",
+  "upstream_event_limit": 1000,
+  "capped_eose": "EOSE at the requested 1000-event cap is partial coverage. It may prove current relay availability but cannot prove exhaustion of the requested window. Preserve connection-failure backoff separately from a successful capped query.",
+  "ordinary_pages": "Retain the existing nostr-v2 timestamp/event-ID cursor while collected deduplicated candidates remain. Every received candidate in the bounded window must be available before yielding an older-window continuation.",
+  "saturated_window": "When capped EOSE leaves no additional collected candidate, return NextPage::Cancelled with an optional explicit older-window cursor. Shared pull returns control; callers must disclose partial coverage before deliberately continuing older. Additional same-time events may remain inaccessible at the cap and are never declared recovered.",
+  "older_cursor": "The additive nostr-until-v1:<inclusive_until>:<scope> form contains a canonical decimal u64 and the exact existing target/selector scope digest. Its bound is strictly before the maximum of the oldest matching timestamps in capped EOSE relay windows. Match the effective remote until bound defensively before deriving a boundary; never advance from malformed-only or out-of-bound inventory. Timestamp zero has no older continuation. Existing ordinary v2 cursors remain supported without changing their meaning.",
+  "bounds": "Preserve all existing relay, connection, deadline, raw-byte, parse, event and page limits. Retain only a scalar oldest matching timestamp per current relay batch and one aggregate capped boundary. No ID exclusion set, history buffer, automatic retry or new transport is introduced.",
+  "compatibility": "Public Rust types, generated SDK surfaces, wire event schemas and package/dependency identities remain unchanged. The new opaque continuation is only interpreted by the concrete owner; callers must preserve typed partial outcomes and pull termination.",
+  "non_goals": [
+    "complete or lossless global history",
+    "new Nostr extension, NIP-77 or transport",
+    "app projection, scheduler or database ownership",
+    "release, Nix, device or deployment activation"
+  ]
+}
