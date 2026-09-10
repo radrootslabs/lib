@@ -6,6 +6,8 @@ pub mod authored;
 pub mod authored_atomic;
 pub mod authored_delivery;
 pub mod authored_draft;
+pub mod authored_draft_query;
+pub mod authored_draft_submission;
 pub mod backup;
 mod error;
 pub mod event;

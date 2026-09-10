@@ -1417,6 +1417,45 @@ impl AtomicStorage for MemoryStorage {
     }
 }
 
+fn prepare_authored_memory(
+    candidate: &mut State,
+    value: crate::authored_atomic::PrepareAuthoredOperation,
+) -> Result<AuthoredAtomicOutcome, Error> {
+    if candidate
+        .authored_operations
+        .iter()
+        .any(|operation| operation.operation_id() == value.operation().operation_id())
+        || value.artifacts().iter().any(|artifact| {
+            candidate
+                .authored_artifacts
+                .iter()
+                .any(|existing| existing.artifact_id() == artifact.artifact_id())
+        })
+        || value.delivery_plans().iter().any(|plan| {
+            candidate
+                .authored_delivery_plans
+                .iter()
+                .any(|existing| existing.plan_id() == plan.plan_id())
+        })
+    {
+        return Err(Error::AtomicCommitConflict);
+    }
+    candidate
+        .authored_operations
+        .push(value.operation().clone());
+    candidate
+        .authored_artifacts
+        .extend(value.artifacts().iter().cloned());
+    candidate
+        .authored_delivery_plans
+        .extend(value.delivery_plans().iter().cloned());
+    Ok(AuthoredAtomicOutcome::Prepared {
+        operation: value.operation().clone(),
+        artifacts: value.artifacts().to_vec(),
+        delivery_plans: value.delivery_plans().to_vec(),
+    })
+}
+
 impl AuthoredAtomicStorage for MemoryStorage {
     fn execute_authored(
         &self,
@@ -1429,7 +1468,7 @@ impl AuthoredAtomicStorage for MemoryStorage {
                 .iter()
                 .find(|receipt| receipt.commit_id() == command.commit_id())
             {
-                if existing.digest() != command.digest() {
+                if !existing.matches_command(&command) {
                     return Err(Error::AtomicCommitConflict);
                 }
                 return AuthoredAtomicReceipt::from_durable_parts(
@@ -1444,35 +1483,45 @@ impl AuthoredAtomicStorage for MemoryStorage {
             let mut candidate = state.clone();
             let outcome = match command.clone() {
                 AuthoredAtomicCommand::Prepare(value) => {
-                    if candidate.authored_operations.iter().any(|operation| {
-                        operation.operation_id() == value.operation().operation_id()
-                    }) || value.artifacts().iter().any(|artifact| {
-                        candidate
-                            .authored_artifacts
-                            .iter()
-                            .any(|existing| existing.artifact_id() == artifact.artifact_id())
-                    }) || value.delivery_plans().iter().any(|plan| {
-                        candidate
-                            .authored_delivery_plans
-                            .iter()
-                            .any(|existing| existing.plan_id() == plan.plan_id())
-                    }) {
+                    prepare_authored_memory(&mut candidate, value)?
+                }
+                AuthoredAtomicCommand::PrepareFromDraft(value) => {
+                    value.validate()?;
+                    let head = candidate
+                        .authored_drafts
+                        .iter()
+                        .filter(|draft| draft.draft_id() == value.source().draft_id())
+                        .max_by_key(|draft| draft.revision());
+                    if !head.is_some_and(|head| value.source().matches(head)) {
+                        return Err(Error::DraftRevisionConflict);
+                    }
+                    if candidate
+                        .authored_drafts
+                        .iter()
+                        .any(|draft| draft.draft_id() == value.intent().draft_id())
+                    {
+                        return Err(Error::DraftRevisionConflict);
+                    }
+                    let ordinary = AuthoredAtomicCommand::Prepare(value.preparation().clone());
+                    if candidate
+                        .authored_atomic_receipts
+                        .iter()
+                        .any(|receipt| receipt.commit_id() == ordinary.commit_id())
+                    {
                         return Err(Error::AtomicCommitConflict);
                     }
+                    let prepared =
+                        prepare_authored_memory(&mut candidate, value.preparation().clone())?;
+                    candidate.authored_drafts.push(value.intent().clone());
                     candidate
-                        .authored_operations
-                        .push(value.operation().clone());
-                    candidate
-                        .authored_artifacts
-                        .extend(value.artifacts().iter().cloned());
-                    candidate
-                        .authored_delivery_plans
-                        .extend(value.delivery_plans().iter().cloned());
-                    AuthoredAtomicOutcome::Prepared {
-                        operation: value.operation().clone(),
-                        artifacts: value.artifacts().to_vec(),
-                        delivery_plans: value.delivery_plans().to_vec(),
-                    }
+                        .authored_atomic_receipts
+                        .push(AuthoredAtomicReceipt::new(
+                            &ordinary,
+                            AtomicCommitDisposition::Committed,
+                            ordinary.requested_at_unix_ms(),
+                            prepared,
+                        )?);
+                    AuthoredAtomicOutcome::Submitted(value)
                 }
                 AuthoredAtomicCommand::Claim(value) => match value.target() {
                     ClaimAuthoredTarget::ArtifactSigning(artifact_id) => {
@@ -1783,6 +1832,62 @@ impl AuthoredAtomicStorage for MemoryStorage {
 }
 
 impl AuthoredDraftStore for MemoryStorage {
+    fn query_authored_drafts(
+        &self,
+        query: crate::authored_draft_query::AuthoredDraftQuery,
+    ) -> BoxFuture<'_, Result<crate::authored_draft_query::AuthoredDraftPage, Error>> {
+        Box::pin(async move {
+            use crate::authored_draft_query::{
+                AUTHORED_DRAFT_PAGE_PAYLOAD_MAX_BYTES, AuthoredDraftPage, AuthoredDraftQueryRecord,
+            };
+            let state = self.state()?;
+            let mut heads: std::collections::BTreeMap<AuthoredDraftId, &AuthoredDraft> =
+                std::collections::BTreeMap::new();
+            let capacity = usize::from(query.limit()) + 1;
+            for draft in &state.authored_drafts {
+                if !query.matches(draft)
+                    || query
+                        .after()
+                        .is_some_and(|after| *draft.draft_id().as_bytes() <= after)
+                {
+                    continue;
+                }
+                if let Some(head) = heads.get_mut(&draft.draft_id()) {
+                    if draft.revision() > head.revision() {
+                        *head = draft;
+                    }
+                    continue;
+                }
+                // Retain only the smallest requested IDs and one lookahead.
+                // Draft identity metadata is immutable across revisions.
+                if heads.len() == capacity {
+                    if heads
+                        .last_key_value()
+                        .is_some_and(|(last, _)| draft.draft_id() >= *last)
+                    {
+                        continue;
+                    }
+                    heads.pop_last();
+                }
+                heads.insert(draft.draft_id(), draft);
+            }
+            let mut records = Vec::new();
+            let mut bytes = 0usize;
+            let mut has_more = false;
+            for draft in heads.values() {
+                if records.len() == usize::from(query.limit())
+                    || bytes + draft.payload().len() > AUTHORED_DRAFT_PAGE_PAYLOAD_MAX_BYTES
+                {
+                    has_more = true;
+                    break;
+                }
+                bytes += draft.payload().len();
+                records.push(AuthoredDraftQueryRecord::Draft((*draft).clone()));
+            }
+            AuthoredDraftPage::new(&query, records, has_more)
+        })
+    }
+
     fn append_authored_draft(
         &self,
         draft: AuthoredDraft,

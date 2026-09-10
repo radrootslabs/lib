@@ -5,7 +5,11 @@ use radroots_transport::BoxFuture;
 use sha2::{Digest, Sha256};
 use std::{string::String, vec::Vec};
 
-use crate::{Error, journal::OperationInstanceId};
+use crate::{
+    Error,
+    authored_draft_query::{AuthoredDraftPage, AuthoredDraftQuery, AuthoredDraftScope},
+    journal::OperationInstanceId,
+};
 
 pub const AUTHORED_DRAFT_PAYLOAD_MAX_BYTES: usize = 4 * 1024 * 1024;
 pub const AUTHORED_DRAFT_SCHEMA_MAX_BYTES: usize = 128;
@@ -119,6 +123,7 @@ pub struct AuthoredDraft {
     revision: AuthoredDraftRevision,
     author: [u8; 32],
     payload_schema: String,
+    scope: Option<AuthoredDraftScope>,
     payload: Vec<u8>,
     payload_sha256: [u8; 32],
     stage: AuthoredDraftStage,
@@ -134,6 +139,8 @@ struct AuthoredDraftRevisionWire {
     revision: AuthoredDraftRevision,
     author: [u8; 32],
     payload_schema: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    scope: Option<AuthoredDraftScope>,
     payload: Vec<u8>,
     payload_sha256: [u8; 32],
     stage: AuthoredDraftStage,
@@ -147,11 +154,12 @@ impl TryFrom<AuthoredDraftRevisionWire> for AuthoredDraft {
     type Error = Error;
 
     fn try_from(value: AuthoredDraftRevisionWire) -> Result<Self, Self::Error> {
-        Self::reconstruct(
+        Self::reconstruct_scoped(
             value.draft_id,
             value.revision,
             value.author,
             value.payload_schema,
+            value.scope,
             value.payload,
             value.payload_sha256,
             value.stage,
@@ -170,6 +178,7 @@ impl From<AuthoredDraft> for AuthoredDraftRevisionWire {
             revision: value.revision,
             author: value.author,
             payload_schema: value.payload_schema,
+            scope: value.scope,
             payload: value.payload,
             payload_sha256: value.payload_sha256,
             stage: value.stage,
@@ -222,11 +231,12 @@ impl AuthoredDraft {
         updated_at_unix_ms: u64,
     ) -> Result<Self, Error> {
         let payload_sha256 = Sha256::digest(payload.as_slice()).into();
-        let next = Self::reconstruct(
+        let next = Self::reconstruct_scoped(
             self.draft_id,
             self.revision.next()?,
             self.author,
             self.payload_schema.clone(),
+            self.scope,
             payload,
             payload_sha256,
             stage,
@@ -251,11 +261,41 @@ impl AuthoredDraft {
         created_at_unix_ms: u64,
         updated_at_unix_ms: u64,
     ) -> Result<Self, Error> {
+        Self::reconstruct_scoped(
+            draft_id,
+            revision,
+            author,
+            payload_schema,
+            None,
+            payload,
+            payload_sha256,
+            stage,
+            operation_id,
+            created_at_unix_ms,
+            updated_at_unix_ms,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn reconstruct_scoped(
+        draft_id: AuthoredDraftId,
+        revision: AuthoredDraftRevision,
+        author: [u8; 32],
+        payload_schema: impl Into<String>,
+        scope: Option<AuthoredDraftScope>,
+        payload: Vec<u8>,
+        payload_sha256: [u8; 32],
+        stage: AuthoredDraftStage,
+        operation_id: Option<OperationInstanceId>,
+        created_at_unix_ms: u64,
+        updated_at_unix_ms: u64,
+    ) -> Result<Self, Error> {
         let value = Self {
             draft_id,
             revision,
             author,
             payload_schema: payload_schema.into(),
+            scope,
             payload,
             payload_sha256,
             stage,
@@ -297,6 +337,7 @@ impl AuthoredDraft {
         let identity_matches = self.draft_id == previous.draft_id
             && self.author == previous.author
             && self.payload_schema == previous.payload_schema
+            && self.scope == previous.scope
             && self.created_at_unix_ms == previous.created_at_unix_ms
             && self.revision == previous.revision.next()?
             && self.updated_at_unix_ms >= previous.updated_at_unix_ms;
@@ -364,6 +405,18 @@ impl AuthoredDraft {
     pub fn payload_schema(&self) -> &str {
         self.payload_schema.as_str()
     }
+    /// Selects an immutable scope while constructing an initial local record.
+    pub fn with_scope(mut self, scope: AuthoredDraftScope) -> Result<Self, Error> {
+        if self.revision != AuthoredDraftRevision::INITIAL || self.scope.is_some() {
+            return Err(Error::InvalidAuthoredDraft);
+        }
+        self.scope = Some(scope);
+        Ok(self)
+    }
+    pub const fn scope(&self) -> Option<AuthoredDraftScope> {
+        self.scope
+    }
+
     pub fn payload(&self) -> &[u8] {
         self.payload.as_slice()
     }
@@ -409,6 +462,11 @@ impl DraftAppendReceipt {
 }
 
 pub trait AuthoredDraftStore: Send + Sync {
+    fn query_authored_drafts(
+        &self,
+        query: AuthoredDraftQuery,
+    ) -> BoxFuture<'_, Result<AuthoredDraftPage, Error>>;
+
     fn append_authored_draft(
         &self,
         draft: AuthoredDraft,

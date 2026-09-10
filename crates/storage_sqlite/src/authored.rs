@@ -183,7 +183,7 @@ async fn execute_transaction(
     .map_err(map_backend)?
     {
         let committed = decode_receipt_row(&row)?;
-        if committed.digest() != command.digest() {
+        if !committed.matches_command(command) {
             return Err(Error::AtomicCommitConflict);
         }
         return AuthoredAtomicReceipt::from_durable_parts(
@@ -196,6 +196,14 @@ async fn execute_transaction(
     }
 
     let outcome = execute_command(transaction, command.clone()).await?;
+    commit_outcome(transaction, command, outcome).await
+}
+
+async fn commit_outcome(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    command: &AuthoredAtomicCommand,
+    outcome: AuthoredAtomicOutcome,
+) -> Result<AuthoredAtomicReceipt, Error> {
     let receipt = AuthoredAtomicReceipt::new(
         command,
         AtomicCommitDisposition::Committed,
@@ -223,35 +231,62 @@ async fn execute_transaction(
     Ok(receipt)
 }
 
+async fn prepare_operation(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    value: radroots_storage::authored_atomic::PrepareAuthoredOperation,
+) -> Result<AuthoredAtomicOutcome, Error> {
+    if row_exists(
+        transaction,
+        "SELECT 1 FROM radroots_runtime_authored_operations WHERE operation_id = ?",
+        value.operation().operation_id().as_bytes(),
+    )
+    .await?
+        || any_artifact_exists(transaction, value.artifacts()).await?
+        || any_plan_exists(transaction, value.delivery_plans()).await?
+    {
+        return Err(Error::AtomicCommitConflict);
+    }
+    persist_operation(transaction, value.operation()).await?;
+    for artifact in value.artifacts() {
+        persist_artifact(transaction, artifact).await?;
+    }
+    for plan in value.delivery_plans() {
+        persist_plan(transaction, plan).await?;
+    }
+    Ok(AuthoredAtomicOutcome::Prepared {
+        operation: value.operation().clone(),
+        artifacts: value.artifacts().to_vec(),
+        delivery_plans: value.delivery_plans().to_vec(),
+    })
+}
+
 async fn execute_command(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     command: AuthoredAtomicCommand,
 ) -> Result<AuthoredAtomicOutcome, Error> {
     match command {
-        AuthoredAtomicCommand::Prepare(value) => {
-            if row_exists(
-                transaction,
-                "SELECT 1 FROM radroots_runtime_authored_operations WHERE operation_id = ?",
-                value.operation().operation_id().as_bytes(),
-            )
-            .await?
-                || any_artifact_exists(transaction, value.artifacts()).await?
-                || any_plan_exists(transaction, value.delivery_plans()).await?
+        AuthoredAtomicCommand::Prepare(value) => prepare_operation(transaction, value).await,
+        AuthoredAtomicCommand::PrepareFromDraft(value) => {
+            value.validate()?;
+            let head =
+                crate::authored_draft::load_head_tx(transaction, value.source().draft_id()).await?;
+            if !head
+                .as_ref()
+                .is_some_and(|head| value.source().matches(head))
             {
-                return Err(Error::AtomicCommitConflict);
+                return Err(Error::DraftRevisionConflict);
             }
-            persist_operation(transaction, value.operation()).await?;
-            for artifact in value.artifacts() {
-                persist_artifact(transaction, artifact).await?;
+            if crate::authored_draft::load_head_tx(transaction, value.intent().draft_id())
+                .await?
+                .is_some()
+            {
+                return Err(Error::DraftRevisionConflict);
             }
-            for plan in value.delivery_plans() {
-                persist_plan(transaction, plan).await?;
-            }
-            Ok(AuthoredAtomicOutcome::Prepared {
-                operation: value.operation().clone(),
-                artifacts: value.artifacts().to_vec(),
-                delivery_plans: value.delivery_plans().to_vec(),
-            })
+            let ordinary = AuthoredAtomicCommand::Prepare(value.preparation().clone());
+            let prepared = prepare_operation(transaction, value.preparation().clone()).await?;
+            crate::authored_draft::insert_draft_tx(transaction, value.intent()).await?;
+            commit_outcome(transaction, &ordinary, prepared).await?;
+            Ok(AuthoredAtomicOutcome::Submitted(value))
         }
         AuthoredAtomicCommand::Claim(value) => match value.target() {
             ClaimAuthoredTarget::ArtifactSigning(id) => {
@@ -942,7 +977,9 @@ fn decode_receipt_row(row: &SqliteRow) -> Result<AuthoredAtomicReceipt, Error> {
     let requested = u64_from_i64(column(row, "requested_at_unix_ms")?)?;
     let committed = u64_from_i64(column(row, "committed_at_unix_ms")?)?;
     let snapshot = decode_snapshot::<ReceiptSnapshot>(column(row, "receipt")?)?;
-    if committed < requested {
+    if committed < requested
+        || matches!(&snapshot.outcome, AuthoredAtomicOutcome::Submitted(value) if value.preparation().requested_at_unix_ms() != requested)
+    {
         return Err(Error::AtomicCommitFailed);
     }
     AuthoredAtomicReceipt::from_durable_parts(
@@ -1046,6 +1083,9 @@ fn decode_snapshot<T: DeserializeOwned>(bytes: Vec<u8>) -> Result<T, Error> {
 
 fn command_target(command: &AuthoredAtomicCommand) -> [u8; 16] {
     match command {
+        AuthoredAtomicCommand::PrepareFromDraft(value) => {
+            *value.preparation().operation().operation_id().as_bytes()
+        }
         AuthoredAtomicCommand::Prepare(value) => *value.operation().operation_id().as_bytes(),
         AuthoredAtomicCommand::Claim(value) => match value.target() {
             ClaimAuthoredTarget::ArtifactSigning(id)
@@ -1069,7 +1109,7 @@ fn command_target(command: &AuthoredAtomicCommand) -> [u8; 16] {
 
 fn command_phase(command: &AuthoredAtomicCommand) -> &'static str {
     match command {
-        AuthoredAtomicCommand::Prepare(_) => "prepare",
+        AuthoredAtomicCommand::Prepare(_) | AuthoredAtomicCommand::PrepareFromDraft(_) => "prepare",
         AuthoredAtomicCommand::Claim(_) => "claim",
         AuthoredAtomicCommand::ApplySigned(_) => "signing",
         AuthoredAtomicCommand::ApplyAdmission(_) => "admission",
@@ -1257,7 +1297,7 @@ mod tests {
         )
     }
 
-    fn prepare() -> (AuthoredAtomicCommand, AuthoredEventPlan) {
+    pub(super) fn prepare() -> (AuthoredAtomicCommand, AuthoredEventPlan) {
         let (operation_id, artifact_id, plan_id) = ids();
         let event_plan = plan();
         let artifact = AuthoredArtifact::planned(artifact_id, operation_id, 0, &event_plan, 10)
@@ -2462,3 +2502,8 @@ mod tests {
         assert!(plan.contains("radroots_runtime_authored_delivery_ready_idx"));
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_draft_submission_tests.rs"]
+mod draft_submission_tests;

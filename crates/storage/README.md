@@ -111,6 +111,28 @@ Idempotency-key construction validates borrowed input before allocating its
 bounded owned representation, so rejected oversized input cannot force a
 second attacker-sized allocation at this public boundary.
 
+## Draft queries and atomic submission
+
+`AuthoredDraftStore::query_authored_drafts` returns bounded current-head pages
+under an independently selected author, payload schema and optional immutable
+scope. Continue using the returned scoped cursor. Corrupt rows have individual
+repair locators; applications retain their evidence and continue other work.
+Pages scan stable draft IDs, so a later sweep must revisit new IDs inserted
+behind the cursor. A page holds at most 256 records and 4 MiB of decoded payload.
+
+`AuthoredAtomicCommand::PrepareFromDraft` joins a captured source revision,
+a distinct initial intent and the existing authored preparation in one commit.
+The application puts the complete frozen semantic request in the intent payload
+and owns strict payload validation. Reserve a stable command ID before effects.
+The author and command identify the receipt; context, source, intent and every
+preparation field are compared for exact replay. Replay precedes fresh source
+CAS and survives later editing. The source remains editable. The stored
+submission receipt retains the immutable source-to-intent association, and the
+ordinary Prepare receipt allows existing signing orchestration to resume.
+
+No signing or transport effect occurs in this storage transaction. Public
+backends must implement the new query method and submission command explicitly.
+
 ## Protected metadata and security
 
 `private_artifact` stores bounded metadata and opaque durable secret references.

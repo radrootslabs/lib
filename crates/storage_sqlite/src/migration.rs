@@ -371,7 +371,7 @@ async fn metadata(
 fn validate_plan(plan: &MigrationPlan) -> Result<(), Error> {
     let valid = plan.minimum_version > 0
         && plan.minimum_version <= plan.current_version
-        && plan.current_version <= 13
+        && plan.current_version <= 14
         && plan.steps.len() == usize::try_from(plan.current_version).unwrap_or(usize::MAX)
         && plan
             .steps
@@ -489,6 +489,7 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
         11 => Some("PRAGMA user_version = 11"),
         12 => Some("PRAGMA user_version = 12"),
         13 => Some("PRAGMA user_version = 13"),
+        14 => Some("PRAGMA user_version = 14"),
         _ => None,
     }
 }
@@ -503,13 +504,13 @@ mod tests {
     const TEST_V1_OBJECTS: &[&str] = &["radroots_test_one"];
     const TEST_V2_OBJECTS: &[&str] = &["radroots_test_one", "radroots_test_two"];
 
-    async fn connection() -> SqliteConnection {
+    pub(super) async fn connection() -> SqliteConnection {
         SqliteConnection::connect("sqlite::memory:")
             .await
             .expect("memory SQLite")
     }
 
-    async fn pragma(connection: &mut SqliteConnection, name: &str) -> i64 {
+    pub(super) async fn pragma(connection: &mut SqliteConnection, name: &str) -> i64 {
         let sql = match name {
             "application_id" => "PRAGMA application_id",
             "user_version" => "PRAGMA user_version",
@@ -521,7 +522,7 @@ mod tests {
             .expect("pragma")
     }
 
-    async fn establish_runtime_version(connection: &mut SqliteConnection, version: u32) {
+    pub(super) async fn establish_runtime_version(connection: &mut SqliteConnection, version: u32) {
         for migration_version in 1..=version {
             sqlx::raw_sql(
                 runtime::migration_sql(migration_version).expect("registered runtime SQL"),
@@ -715,7 +716,7 @@ mod tests {
             .execute(&mut newer)
             .await
             .expect("application id");
-        sqlx::raw_sql("PRAGMA user_version = 14")
+        sqlx::raw_sql("PRAGMA user_version = 15")
             .execute(&mut newer)
             .await
             .expect("newer version");
@@ -724,10 +725,10 @@ mod tests {
             Err(Error::SchemaTooNew {
                 database: RUNTIME_DATABASE,
                 supported: runtime::CURRENT_VERSION,
-                actual: 14,
+                actual: 15,
             })
         ));
-        assert_eq!(pragma(&mut newer, "user_version").await, 14);
+        assert_eq!(pragma(&mut newer, "user_version").await, 15);
 
         let mut wrong_identity = connection().await;
         establish_runtime_version(&mut wrong_identity, 1).await;
@@ -856,3 +857,8 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "migration_draft_query_tests.rs"]
+mod draft_query_tests;

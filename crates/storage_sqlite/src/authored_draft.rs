@@ -11,7 +11,18 @@ use sqlx::{Row, sqlite::SqliteRow};
 
 const SNAPSHOT_MAX_BYTES: usize = 16 * 1024 * 1024;
 
+#[path = "authored_draft_query.rs"]
+mod query;
+
 impl AuthoredDraftStore for SqliteStorage {
+    fn query_authored_drafts(
+        &self,
+        query: radroots_storage::authored_draft_query::AuthoredDraftQuery,
+    ) -> BoxFuture<'_, Result<radroots_storage::authored_draft_query::AuthoredDraftPage, Error>>
+    {
+        Box::pin(async move { query::page(self, query).await })
+    }
+
     fn append_authored_draft(
         &self,
         draft: AuthoredDraft,
@@ -71,25 +82,7 @@ impl AuthoredDraftStore for SqliteStorage {
                 }
             }
 
-            let snapshot = encode_snapshot(&draft)?;
-            sqlx::query(
-                "INSERT INTO radroots_runtime_authored_draft_revisions (
-                   draft_id, revision, author, stage, operation_id, payload_sha256,
-                   created_at_unix_ms, updated_at_unix_ms, snapshot
-                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            )
-            .bind(draft.draft_id().as_bytes().as_slice())
-            .bind(i64_from_u64(draft.revision().get())?)
-            .bind(draft.author().as_slice())
-            .bind(stage_code(draft.stage()))
-            .bind(draft.operation_id().map(|id| id.as_bytes().to_vec()))
-            .bind(draft.payload_sha256().as_slice())
-            .bind(i64_from_u64(draft.created_at_unix_ms())?)
-            .bind(i64_from_u64(draft.updated_at_unix_ms())?)
-            .bind(snapshot)
-            .execute(&mut *transaction)
-            .await
-            .map_err(map_backend)?;
+            insert_draft_tx(&mut transaction, &draft).await?;
             transaction.commit().await.map_err(map_backend)?;
             Ok(DraftAppendReceipt::new(
                 draft,
@@ -217,6 +210,17 @@ fn decode_row(row: &SqliteRow) -> Result<AuthoredDraft, Error> {
         (Some(raw), Some(expected)) => raw.as_slice() == expected.as_bytes(),
         _ => false,
     };
+    let schema = row
+        .try_get::<String, _>("payload_schema")
+        .map_err(|_| Error::CorruptAuthoredDraft)?;
+    let scope = row
+        .try_get::<Option<Vec<u8>>, _>("payload_scope")
+        .map_err(|_| Error::CorruptAuthoredDraft)?;
+    if schema != draft.payload_schema()
+        || scope != draft.scope().map(|scope| scope.as_bytes().to_vec())
+    {
+        return Err(Error::CorruptAuthoredDraft);
+    }
     if draft.draft_id().as_bytes() != &draft_id
         || draft.revision().get() != revision
         || draft.author() != &author
@@ -282,7 +286,7 @@ mod tests {
         .unwrap()
     }
 
-    async fn open_store(temp: &TempDir) -> SqliteStorage {
+    pub(super) async fn open_store(temp: &TempDir) -> SqliteStorage {
         let paths = Paths::from_directory(temp.path()).unwrap();
         SqliteStorage::open(
             OpenOptions::new(paths, OpenMode::Create)
@@ -491,8 +495,8 @@ mod tests {
         sqlx::query(
             "INSERT INTO radroots_runtime_authored_draft_revisions (
                draft_id, revision, author, stage, operation_id, payload_sha256,
-               created_at_unix_ms, updated_at_unix_ms, snapshot
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+               created_at_unix_ms, updated_at_unix_ms, snapshot, payload_schema, payload_scope
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(draft_id.as_slice())
         .bind(revision)
@@ -503,6 +507,8 @@ mod tests {
         .bind(created_at_unix_ms)
         .bind(updated_at_unix_ms)
         .bind(encode_snapshot(draft).unwrap())
+        .bind(draft.payload_schema())
+        .bind(draft.scope().map(|scope| scope.as_bytes().to_vec()))
         .execute(store.pool())
         .await
         .unwrap();
@@ -624,4 +630,45 @@ mod tests {
             );
         }
     }
+}
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_draft_query_tests.rs"]
+mod query_tests;
+
+pub(crate) async fn load_head_tx(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    id: AuthoredDraftId,
+) -> Result<Option<AuthoredDraft>, Error> {
+    sqlx::query("SELECT * FROM radroots_runtime_authored_draft_revisions WHERE draft_id = ? ORDER BY revision DESC LIMIT 1")
+        .bind(id.as_bytes().as_slice()).fetch_optional(&mut **transaction).await.map_err(map_backend)?
+        .as_ref().map(decode_row).transpose()
+}
+pub(crate) async fn insert_draft_tx(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    draft: &AuthoredDraft,
+) -> Result<(), Error> {
+    let snapshot = encode_snapshot(draft)?;
+    sqlx::query(
+        "INSERT INTO radroots_runtime_authored_draft_revisions (
+                   draft_id, revision, author, stage, operation_id, payload_sha256,
+                   created_at_unix_ms, updated_at_unix_ms, snapshot, payload_schema, payload_scope
+                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(draft.draft_id().as_bytes().as_slice())
+    .bind(i64_from_u64(draft.revision().get())?)
+    .bind(draft.author().as_slice())
+    .bind(stage_code(draft.stage()))
+    .bind(draft.operation_id().map(|id| id.as_bytes().to_vec()))
+    .bind(draft.payload_sha256().as_slice())
+    .bind(i64_from_u64(draft.created_at_unix_ms())?)
+    .bind(i64_from_u64(draft.updated_at_unix_ms())?)
+    .bind(snapshot)
+    .bind(draft.payload_schema())
+    .bind(draft.scope().map(|scope| scope.as_bytes().to_vec()))
+    .execute(&mut **transaction)
+    .await
+    .map_err(map_backend)?;
+    Ok(())
 }

@@ -14,6 +14,7 @@ use crate::{
         WorkFailure, WorkPhase,
     },
     authored_delivery::{AuthoredDeliveryPlan, AuthoredDeliveryPlanId, DeliveryAttemptOutcome},
+    authored_draft_submission::PrepareFromDraft,
     journal::OperationInstanceId,
 };
 
@@ -50,6 +51,11 @@ impl WorkFence {
     }
 }
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(try_from = "PrepareWire", into = "PrepareWire")
+)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrepareAuthoredOperation {
     operation: AuthoredOperation,
@@ -57,6 +63,42 @@ pub struct PrepareAuthoredOperation {
     delivery_plans: Vec<AuthoredDeliveryPlan>,
     input_digest: AtomicCommitDigest,
     requested_at_unix_ms: u64,
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrepareWire {
+    operation: AuthoredOperation,
+    artifacts: Vec<AuthoredArtifact>,
+    delivery_plans: Vec<AuthoredDeliveryPlan>,
+    input_digest: AtomicCommitDigest,
+    requested_at_unix_ms: u64,
+}
+#[cfg(feature = "serde")]
+impl TryFrom<PrepareWire> for PrepareAuthoredOperation {
+    type Error = Error;
+    fn try_from(v: PrepareWire) -> Result<Self, Error> {
+        Self::new(
+            v.operation,
+            v.artifacts,
+            v.delivery_plans,
+            v.input_digest,
+            v.requested_at_unix_ms,
+        )
+    }
+}
+#[cfg(feature = "serde")]
+impl From<PrepareAuthoredOperation> for PrepareWire {
+    fn from(v: PrepareAuthoredOperation) -> Self {
+        Self {
+            operation: v.operation,
+            artifacts: v.artifacts,
+            delivery_plans: v.delivery_plans,
+            input_digest: v.input_digest,
+            requested_at_unix_ms: v.requested_at_unix_ms,
+        }
+    }
 }
 
 impl PrepareAuthoredOperation {
@@ -372,6 +414,7 @@ impl CancelAuthoredWork {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredAtomicCommand {
     Prepare(PrepareAuthoredOperation),
+    PrepareFromDraft(Box<PrepareFromDraft>),
     Claim(ClaimAuthoredWork),
     ApplySigned(ApplySignedArtifact),
     ApplyAdmission(ApplyAdmissionResult),
@@ -382,6 +425,9 @@ pub enum AuthoredAtomicCommand {
 
 impl AuthoredAtomicCommand {
     pub fn commit_id(&self) -> AtomicCommitId {
+        if let Self::PrepareFromDraft(value) = self {
+            return value.commit_id();
+        }
         let digest = self.digest();
         let mut hasher = Sha256::new();
         hash_field(&mut hasher, b"radroots.authored.atomic.id.v2");
@@ -403,6 +449,12 @@ impl AuthoredAtomicCommand {
         hash_field(&mut hasher, self.phase_bytes());
         hash_field(&mut hasher, &self.target_bytes());
         match self {
+            Self::PrepareFromDraft(value) => {
+                hash_field(&mut hasher, value.commit_id().as_bytes());
+                hash_field(&mut hasher, value.source().payload_sha256());
+                hash_field(&mut hasher, value.intent().payload_sha256());
+                hash_field(&mut hasher, value.preparation().input_digest().as_bytes());
+            }
             Self::Prepare(value) => hash_field(&mut hasher, value.input_digest.as_bytes()),
             Self::Claim(value) => {
                 hash_field(&mut hasher, value.claim.token());
@@ -423,6 +475,7 @@ impl AuthoredAtomicCommand {
 
     pub const fn requested_at_unix_ms(&self) -> u64 {
         match self {
+            Self::PrepareFromDraft(value) => value.preparation().requested_at_unix_ms(),
             Self::Prepare(value) => value.requested_at_unix_ms,
             Self::Claim(value) => value.claim.acquired_at_unix_ms(),
             Self::ApplySigned(value) => value.applied_at_unix_ms,
@@ -435,6 +488,7 @@ impl AuthoredAtomicCommand {
 
     fn phase_bytes(&self) -> &'static [u8] {
         match self {
+            Self::PrepareFromDraft(_) => b"draft_submission_v1",
             Self::Prepare(_) => b"prepare",
             Self::Claim(_) => b"claim",
             Self::ApplySigned(_) => b"signing",
@@ -451,6 +505,9 @@ impl AuthoredAtomicCommand {
 
     fn target_bytes(&self) -> [u8; 16] {
         match self {
+            Self::PrepareFromDraft(value) => {
+                *value.preparation().operation().operation_id().as_bytes()
+            }
             Self::Prepare(value) => *value.operation.operation_id().as_bytes(),
             Self::Claim(value) => match &value.target {
                 ClaimAuthoredTarget::ArtifactSigning(id)
@@ -479,7 +536,7 @@ impl AuthoredAtomicCommand {
             Self::ApplyAdmission(value) => Some(value.fence.generation),
             Self::ApplyDelivery(value) => Some(value.fence.generation),
             Self::ApplyFailure(value) => Some(value.fence.generation),
-            Self::Prepare(_) | Self::Cancel(_) => None,
+            Self::Prepare(_) | Self::PrepareFromDraft(_) | Self::Cancel(_) => None,
         }
     }
 }
@@ -488,6 +545,7 @@ impl AuthoredAtomicCommand {
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthoredAtomicOutcome {
+    Submitted(Box<PrepareFromDraft>),
     Prepared {
         operation: AuthoredOperation,
         artifacts: Vec<AuthoredArtifact>,
@@ -507,6 +565,22 @@ pub struct AuthoredAtomicReceipt {
 }
 
 impl AuthoredAtomicReceipt {
+    /// Exact submission replay compares the entire validated captured request.
+    pub fn matches_command(&self, command: &AuthoredAtomicCommand) -> bool {
+        if self.commit_id != command.commit_id() || self.digest != command.digest() {
+            return false;
+        }
+        match (command, &self.outcome) {
+            (
+                AuthoredAtomicCommand::PrepareFromDraft(request),
+                AuthoredAtomicOutcome::Submitted(committed),
+            ) => request == committed,
+            (AuthoredAtomicCommand::PrepareFromDraft(_), _)
+            | (_, AuthoredAtomicOutcome::Submitted(_)) => false,
+            _ => true,
+        }
+    }
+
     pub fn new(
         command: &AuthoredAtomicCommand,
         disposition: AtomicCommitDisposition,
@@ -515,6 +589,17 @@ impl AuthoredAtomicReceipt {
     ) -> Result<Self, Error> {
         if committed_at_unix_ms < command.requested_at_unix_ms() {
             return Err(Error::AtomicWorkflowMismatch);
+        }
+        match (command, &outcome) {
+            (
+                AuthoredAtomicCommand::PrepareFromDraft(request),
+                AuthoredAtomicOutcome::Submitted(value),
+            ) if request == value => value.validate()?,
+            (AuthoredAtomicCommand::PrepareFromDraft(_), _)
+            | (_, AuthoredAtomicOutcome::Submitted(_)) => {
+                return Err(Error::AtomicWorkflowMismatch);
+            }
+            _ => {}
         }
         Ok(Self {
             commit_id: command.commit_id(),
@@ -534,6 +619,15 @@ impl AuthoredAtomicReceipt {
     ) -> Result<Self, Error> {
         if committed_at_unix_ms == 0 || !outcome.is_valid() {
             return Err(Error::AtomicWorkflowMismatch);
+        }
+        if let AuthoredAtomicOutcome::Submitted(value) = &outcome {
+            let command = AuthoredAtomicCommand::PrepareFromDraft(value.clone());
+            if commit_id != command.commit_id()
+                || digest != command.digest()
+                || committed_at_unix_ms < command.requested_at_unix_ms()
+            {
+                return Err(Error::AtomicWorkflowMismatch);
+            }
         }
         Ok(Self {
             commit_id,
@@ -582,6 +676,7 @@ impl AuthoredAtomicOutcome {
                             && plan.validate().is_ok()
                     })
             }
+            Self::Submitted(value) => value.validate().is_ok(),
             Self::Artifact(artifact) => artifact.validate().is_ok(),
             Self::DeliveryPlan(plan) => plan.validate().is_ok(),
         }

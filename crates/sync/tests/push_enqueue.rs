@@ -487,6 +487,7 @@ impl AuthoredAtomicStorage for FaultStorage {
                 radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared { .. } => 1,
                 radroots_storage::authored_atomic::AuthoredAtomicOutcome::Artifact(_) => 2,
                 radroots_storage::authored_atomic::AuthoredAtomicOutcome::DeliveryPlan(_) => 3,
+                radroots_storage::authored_atomic::AuthoredAtomicOutcome::Submitted(_) => 5,
             };
             let fault = self.fault_kind.load(Ordering::Relaxed);
             if (fault != kind && !(fault == 4 && kind == 1))
@@ -2263,4 +2264,44 @@ async fn sqlite_authored_delivery_retry_survives_reopen() {
     assert_eq!(completed.plan().attempt_count(), 2);
     assert_eq!(completed.plan().state(), AuthoredDeliveryState::Satisfied);
     assert_eq!(sink.requests.lock().expect("request log").len(), 1);
+}
+
+#[test]
+fn captured_preparation_matches_engine_without_changing_ordinary_replay_identity() {
+    use radroots_storage::authored_atomic::AuthoredAtomicCommand;
+    let signer = Arc::new(MockSigner::new(SignBehavior::Pending));
+    let (engine, _) = setup_engine(signer.clone());
+    let push = request(91, "wss://captured.example");
+    let captured = push.authored_preparation(1_800_000_200_000).unwrap();
+    assert!(push.authored_preparation(0).is_err());
+    assert!(
+        block_on(engine.push_status(push.operation_id()))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
+    let later = push.authored_preparation(1_800_000_200_001).unwrap();
+    assert_ne!(
+        captured, later,
+        "the composite command compares captured time exactly"
+    );
+    let original_command = AuthoredAtomicCommand::Prepare(captured.clone());
+    let later_command = AuthoredAtomicCommand::Prepare(later);
+    assert_eq!(original_command.commit_id(), later_command.commit_id());
+    assert_eq!(original_command.digest(), later_command.digest());
+    let prepared = block_on(engine.prepare_push(push)).unwrap();
+    assert_eq!(prepared.operation(), captured.operation());
+    assert_eq!(
+        [prepared.artifact()],
+        captured.artifacts().iter().collect::<Vec<_>>().as_slice()
+    );
+    assert_eq!(
+        [prepared.delivery_plan()],
+        captured
+            .delivery_plans()
+            .iter()
+            .collect::<Vec<_>>()
+            .as_slice()
+    );
+    assert_eq!(signer.calls.load(Ordering::Relaxed), 0);
 }

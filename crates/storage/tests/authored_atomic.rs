@@ -1016,3 +1016,6 @@ fn memory_executes_all_cancellation_targets_and_revision_fences() {
         AuthoredDeliveryState::Cancelled
     );
 }
+
+#[path = "authored_atomic/draft_submission.rs"]
+mod draft_submission;

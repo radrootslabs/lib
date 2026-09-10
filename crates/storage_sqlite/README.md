@@ -8,6 +8,20 @@ apply only the governed forward migrations. Fresh stores require a
 host-supplied `SourceGeneration` and creation timestamp; the crate never reads
 hidden entropy or a wall clock.
 
+Runtime schema v14 adds generic schema/scope metadata and an index for bounded
+draft-head queries. Migration preserves every original revision snapshot,
+including corrupt historical evidence. Known foreign schemas and scopes are
+filtered before decoding; unknown historical schemas expose only an opaque
+author-bound corruption locator. Each page releases its read snapshot before
+returning a continuation and reads at most 16 MiB of serialized snapshots.
+
+Draft submission uses the existing WAL/FULL writer and authored tables. One
+transaction writes the immutable intent, operation, artifacts, delivery plans,
+ordinary Prepare receipt and source-association receipt. Exact replay precedes
+source-head CAS, including after reopen or later editing. Existing atomic
+receipt snapshots retain their 4 MiB limit; oversized submissions fail without
+partial writes. No additional public database or connection API is introduced.
+
 Backend status and the last integrity result are passive. Hosts invoke
 `check_integrity` explicitly with their own positive timestamp when they want
 full SQLite and foreign-key validation across both owned files. `close` drains

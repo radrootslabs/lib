@@ -201,6 +201,7 @@ pub const fn radroots_sync::push::PushPreparation::operation(&self) -> &radroots
 pub struct radroots_sync::push::PushRequest
 impl radroots_sync::push::PushRequest
 pub const fn radroots_sync::push::PushRequest::actor(&self) -> &radroots_signing::actor::Actor
+pub fn radroots_sync::push::PushRequest::authored_preparation(&self, u64) -> core::result::Result<radroots_storage::authored_atomic::PrepareAuthoredOperation, radroots_sync::policy::Error>
 pub const fn radroots_sync::push::PushRequest::cancellation(&self) -> radroots_signing::request::CancellationPolicy
 pub const fn radroots_sync::push::PushRequest::delivery_deadline_unix_ms(&self) -> u64
 pub const fn radroots_sync::push::PushRequest::idempotency_key(&self) -> &radroots_storage::journal::IdempotencyKey
@@ -351,6 +352,7 @@ pub const fn radroots_sync::push::PushPreparation::operation(&self) -> &radroots
 pub struct radroots_sync::PushRequest
 impl radroots_sync::push::PushRequest
 pub const fn radroots_sync::push::PushRequest::actor(&self) -> &radroots_signing::actor::Actor
+pub fn radroots_sync::push::PushRequest::authored_preparation(&self, u64) -> core::result::Result<radroots_storage::authored_atomic::PrepareAuthoredOperation, radroots_sync::policy::Error>
 pub const fn radroots_sync::push::PushRequest::cancellation(&self) -> radroots_signing::request::CancellationPolicy
 pub const fn radroots_sync::push::PushRequest::delivery_deadline_unix_ms(&self) -> u64
 pub const fn radroots_sync::push::PushRequest::idempotency_key(&self) -> &radroots_storage::journal::IdempotencyKey

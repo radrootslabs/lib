@@ -200,6 +200,7 @@ pub radroots_storage::authored_atomic::AuthoredAtomicCommand::ApplySigned(radroo
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Cancel(radroots_storage::authored_atomic::CancelAuthoredWork)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Claim(radroots_storage::authored_atomic::ClaimAuthoredWork)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Prepare(radroots_storage::authored_atomic::PrepareAuthoredOperation)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::PrepareFromDraft(alloc::boxed::Box<radroots_storage::authored_draft_submission::PrepareFromDraft>)
 impl radroots_storage::authored_atomic::AuthoredAtomicCommand
 pub fn radroots_storage::authored_atomic::AuthoredAtomicCommand::commit_id(&self) -> radroots_storage::atomic::AtomicCommitId
 pub fn radroots_storage::authored_atomic::AuthoredAtomicCommand::digest(&self) -> radroots_storage::atomic::AtomicCommitDigest
@@ -211,6 +212,7 @@ pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared
 pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared::artifacts: alloc::vec::Vec<radroots_storage::authored::AuthoredArtifact>
 pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared::delivery_plans: alloc::vec::Vec<radroots_storage::authored_delivery::AuthoredDeliveryPlan>
 pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared::operation: radroots_storage::authored::AuthoredOperation
+pub radroots_storage::authored_atomic::AuthoredAtomicOutcome::Submitted(alloc::boxed::Box<radroots_storage::authored_draft_submission::PrepareFromDraft>)
 pub enum radroots_storage::authored_atomic::AuthoredWorkTarget
 pub radroots_storage::authored_atomic::AuthoredWorkTarget::Artifact(radroots_storage::authored::AuthoredArtifactId)
 pub radroots_storage::authored_atomic::AuthoredWorkTarget::DeliveryPlan(radroots_storage::authored_delivery::AuthoredDeliveryPlanId)
@@ -261,6 +263,7 @@ pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::committed
 pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::digest(&self) -> radroots_storage::atomic::AtomicCommitDigest
 pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::disposition(&self) -> radroots_storage::atomic::AtomicCommitDisposition
 pub fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::from_durable_parts(radroots_storage::atomic::AtomicCommitId, radroots_storage::atomic::AtomicCommitDigest, radroots_storage::atomic::AtomicCommitDisposition, u64, radroots_storage::authored_atomic::AuthoredAtomicOutcome) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::matches_command(&self, &radroots_storage::authored_atomic::AuthoredAtomicCommand) -> bool
 pub fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::new(&radroots_storage::authored_atomic::AuthoredAtomicCommand, radroots_storage::atomic::AtomicCommitDisposition, u64, radroots_storage::authored_atomic::AuthoredAtomicOutcome) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::authored_atomic::AuthoredAtomicReceipt::outcome(&self) -> &radroots_storage::authored_atomic::AuthoredAtomicOutcome
 pub struct radroots_storage::authored_atomic::CancelAuthoredWork
@@ -390,11 +393,13 @@ pub fn radroots_storage::authored_draft::AuthoredDraft::payload_schema(&self) ->
 pub const fn radroots_storage::authored_draft::AuthoredDraft::payload_sha256(&self) -> &[u8; 32]
 pub fn radroots_storage::authored_draft::AuthoredDraft::reconstruct(radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision, [u8; 32], impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<u8>, [u8; 32], radroots_storage::authored_draft::AuthoredDraftStage, core::option::Option<radroots_storage::journal::OperationInstanceId>, u64, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::authored_draft::AuthoredDraft::revision(&self) -> radroots_storage::authored_draft::AuthoredDraftRevision
+pub const fn radroots_storage::authored_draft::AuthoredDraft::scope(&self) -> core::option::Option<radroots_storage::authored_draft_query::AuthoredDraftScope>
 pub const fn radroots_storage::authored_draft::AuthoredDraft::stage(&self) -> radroots_storage::authored_draft::AuthoredDraftStage
 pub fn radroots_storage::authored_draft::AuthoredDraft::successor(&self, alloc::vec::Vec<u8>, radroots_storage::authored_draft::AuthoredDraftStage, core::option::Option<radroots_storage::journal::OperationInstanceId>, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::authored_draft::AuthoredDraft::updated_at_unix_ms(&self) -> u64
 pub fn radroots_storage::authored_draft::AuthoredDraft::validate(&self) -> core::result::Result<(), radroots_storage::Error>
 pub fn radroots_storage::authored_draft::AuthoredDraft::validate_successor_of(&self, &Self) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored_draft::AuthoredDraft::with_scope(self, radroots_storage::authored_draft_query::AuthoredDraftScope) -> core::result::Result<Self, radroots_storage::Error>
 pub struct radroots_storage::authored_draft::AuthoredDraftId(_)
 impl radroots_storage::authored_draft::AuthoredDraftId
 pub const fn radroots_storage::authored_draft::AuthoredDraftId::as_bytes(&self) -> &[u8; 16]
@@ -428,11 +433,78 @@ pub fn radroots_storage::authored_draft::AuthoredDraftStore::append_authored_dra
 pub fn radroots_storage::authored_draft::AuthoredDraftStore::authored_draft_head(&self, radroots_storage::authored_draft::AuthoredDraftId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 pub fn radroots_storage::authored_draft::AuthoredDraftStore::authored_draft_heads(&self, [u8; 32], u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 pub fn radroots_storage::authored_draft::AuthoredDraftStore::authored_draft_revision(&self, radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::authored_draft::AuthoredDraftStore::query_authored_drafts(&self, radroots_storage::authored_draft_query::AuthoredDraftQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft_query::AuthoredDraftPage, radroots_storage::Error>>
 impl radroots_storage::authored_draft::AuthoredDraftStore for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::append_authored_draft(&self, radroots_storage::authored_draft::AuthoredDraft, core::option::Option<radroots_storage::authored_draft::AuthoredDraftRevision>) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft::DraftAppendReceipt, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_draft_head(&self, radroots_storage::authored_draft::AuthoredDraftId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_draft_heads(&self, [u8; 32], u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_draft_revision(&self, radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_authored_drafts(&self, radroots_storage::authored_draft_query::AuthoredDraftQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft_query::AuthoredDraftPage, radroots_storage::Error>>
+pub mod radroots_storage::authored_draft_query
+pub enum radroots_storage::authored_draft_query::AuthoredDraftQueryRecord
+pub radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::Corrupt
+pub radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::Corrupt::draft_key: [u8; 16]
+pub radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::Corrupt::revision: radroots_storage::authored_draft::AuthoredDraftRevision
+pub radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::Draft(radroots_storage::authored_draft::AuthoredDraft)
+impl radroots_storage::authored_draft_query::AuthoredDraftQueryRecord
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::draft_id(&self) -> core::result::Result<radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::Error>
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::draft_key(&self) -> [u8; 16]
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::revision(&self) -> radroots_storage::authored_draft::AuthoredDraftRevision
+impl core::fmt::Debug for radroots_storage::authored_draft_query::AuthoredDraftQueryRecord
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQueryRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::authored_draft_query::AuthoredDraftCursor
+pub struct radroots_storage::authored_draft_query::AuthoredDraftPage
+impl radroots_storage::authored_draft_query::AuthoredDraftPage
+pub fn radroots_storage::authored_draft_query::AuthoredDraftPage::into_records(self) -> alloc::vec::Vec<radroots_storage::authored_draft_query::AuthoredDraftQueryRecord>
+pub fn radroots_storage::authored_draft_query::AuthoredDraftPage::new(&radroots_storage::authored_draft_query::AuthoredDraftQuery, alloc::vec::Vec<radroots_storage::authored_draft_query::AuthoredDraftQueryRecord>, bool) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftPage::next_cursor(&self) -> core::option::Option<&radroots_storage::authored_draft_query::AuthoredDraftCursor>
+pub fn radroots_storage::authored_draft_query::AuthoredDraftPage::records(&self) -> &[radroots_storage::authored_draft_query::AuthoredDraftQueryRecord]
+pub struct radroots_storage::authored_draft_query::AuthoredDraftQuery
+impl radroots_storage::authored_draft_query::AuthoredDraftQuery
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::after(&self) -> core::option::Option<[u8; 16]>
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::author(&self) -> &[u8; 32]
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::cursor_after(&self, [u8; 16]) -> radroots_storage::authored_draft_query::AuthoredDraftCursor
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::limit(&self) -> u16
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::matches(&self, &radroots_storage::authored_draft::AuthoredDraft) -> bool
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::new([u8; 32], impl core::convert::AsRef<str>, core::option::Option<radroots_storage::authored_draft_query::AuthoredDraftScope>, u16) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::payload_schema(&self) -> &str
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::scope(&self) -> core::option::Option<radroots_storage::authored_draft_query::AuthoredDraftScope>
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::with_cursor(self, &radroots_storage::authored_draft_query::AuthoredDraftCursor) -> core::result::Result<Self, radroots_storage::Error>
+pub struct radroots_storage::authored_draft_query::AuthoredDraftScope(_)
+impl radroots_storage::authored_draft_query::AuthoredDraftScope
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftScope::as_bytes(&self) -> &[u8; 32]
+pub fn radroots_storage::authored_draft_query::AuthoredDraftScope::new([u8; 32]) -> core::result::Result<Self, radroots_storage::Error>
+impl core::convert::From<radroots_storage::authored_draft_query::AuthoredDraftScope> for [u8; 32]
+pub fn [u8; 32]::from(radroots_storage::authored_draft_query::AuthoredDraftScope) -> Self
+impl core::convert::TryFrom<[u8; 32]> for radroots_storage::authored_draft_query::AuthoredDraftScope
+pub type radroots_storage::authored_draft_query::AuthoredDraftScope::Error = radroots_storage::Error
+pub fn radroots_storage::authored_draft_query::AuthoredDraftScope::try_from([u8; 32]) -> core::result::Result<Self, radroots_storage::Error>
+pub const radroots_storage::authored_draft_query::AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION: u16
+pub const radroots_storage::authored_draft_query::AUTHORED_DRAFT_PAGE_PAYLOAD_MAX_BYTES: usize
+pub const radroots_storage::authored_draft_query::AUTHORED_DRAFT_PAGE_SNAPSHOT_MAX_BYTES: usize
+pub mod radroots_storage::authored_draft_submission
+pub struct radroots_storage::authored_draft_submission::AuthoredDraftSource
+impl radroots_storage::authored_draft_submission::AuthoredDraftSource
+pub const fn radroots_storage::authored_draft_submission::AuthoredDraftSource::author(&self) -> &[u8; 32]
+pub fn radroots_storage::authored_draft_submission::AuthoredDraftSource::capture(&radroots_storage::authored_draft::AuthoredDraft) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_draft_submission::AuthoredDraftSource::draft_id(&self) -> radroots_storage::authored_draft::AuthoredDraftId
+pub fn radroots_storage::authored_draft_submission::AuthoredDraftSource::matches(&self, &radroots_storage::authored_draft::AuthoredDraft) -> bool
+pub fn radroots_storage::authored_draft_submission::AuthoredDraftSource::payload_schema(&self) -> &str
+pub const fn radroots_storage::authored_draft_submission::AuthoredDraftSource::payload_sha256(&self) -> &[u8; 32]
+pub const fn radroots_storage::authored_draft_submission::AuthoredDraftSource::revision(&self) -> radroots_storage::authored_draft::AuthoredDraftRevision
+pub const fn radroots_storage::authored_draft_submission::AuthoredDraftSource::scope(&self) -> core::option::Option<radroots_storage::authored_draft_query::AuthoredDraftScope>
+pub struct radroots_storage::authored_draft_submission::PrepareFromDraft
+impl radroots_storage::authored_draft_submission::PrepareFromDraft
+pub const fn radroots_storage::authored_draft_submission::PrepareFromDraft::command_id(&self) -> radroots_storage::atomic::AtomicCommitId
+pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::commit_id(&self) -> radroots_storage::atomic::AtomicCommitId
+pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::commit_id_for(&[u8; 32], radroots_storage::atomic::AtomicCommitId) -> radroots_storage::atomic::AtomicCommitId
+pub const fn radroots_storage::authored_draft_submission::PrepareFromDraft::intent(&self) -> &radroots_storage::authored_draft::AuthoredDraft
+pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::new(radroots_storage::atomic::AtomicCommitId, radroots_storage::authored_draft_submission::AuthoredDraftSource, radroots_storage::authored_draft::AuthoredDraft, radroots_storage::authored_atomic::PrepareAuthoredOperation) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_draft_submission::PrepareFromDraft::preparation(&self) -> &radroots_storage::authored_atomic::PrepareAuthoredOperation
+pub const fn radroots_storage::authored_draft_submission::PrepareFromDraft::source(&self) -> &radroots_storage::authored_draft_submission::AuthoredDraftSource
+pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::validate(&self) -> core::result::Result<(), radroots_storage::Error>
+impl core::fmt::Debug for radroots_storage::authored_draft_submission::PrepareFromDraft
+pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_storage::backup
 pub enum radroots_storage::backup::BackupMemberKind
 pub radroots_storage::backup::BackupMemberKind::Metadata
@@ -823,6 +895,7 @@ pub fn radroots_storage::memory::MemoryStorage::append_authored_draft(&self, rad
 pub fn radroots_storage::memory::MemoryStorage::authored_draft_head(&self, radroots_storage::authored_draft::AuthoredDraftId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_draft_heads(&self, [u8; 32], u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_draft_revision(&self, radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_authored_drafts(&self, radroots_storage::authored_draft_query::AuthoredDraftQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft_query::AuthoredDraftPage, radroots_storage::Error>>
 impl radroots_storage::backup::StorageReliability for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::begin_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::begin_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>

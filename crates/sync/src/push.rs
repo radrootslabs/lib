@@ -97,6 +97,45 @@ impl PushRequest {
         })
     }
 
+    /// Builds the existing pure preparation at a caller-captured stable time.
+    /// No storage, signer, clock or network is invoked. Retain this value for
+    /// atomic submission replay, which compares captured timestamps exactly.
+    pub fn authored_preparation(
+        &self,
+        captured_at_unix_ms: u64,
+    ) -> Result<PrepareAuthoredOperation, Error> {
+        let (operation_id, artifact_id, delivery_plan_id) = authored_ids(self.operation_id)?;
+        let operation =
+            AuthoredOperation::new(operation_id, vec![artifact_id], captured_at_unix_ms)
+                .map_err(map_storage_error)?;
+        let artifact = AuthoredArtifact::planned(
+            artifact_id,
+            operation_id,
+            0,
+            self.plan(),
+            captured_at_unix_ms,
+        )
+        .map_err(map_storage_error)?;
+        let intent = AuthoredDeliveryIntent::new(
+            delivery_request_id(self.operation_id),
+            self.targets.clone(),
+            self.satisfaction.clone(),
+            self.delivery_deadline_unix_ms,
+        )
+        .map_err(map_storage_error)?;
+        let delivery_plan =
+            AuthoredDeliveryPlan::new(delivery_plan_id, artifact_id, intent, captured_at_unix_ms)
+                .map_err(map_storage_error)?;
+        PrepareAuthoredOperation::new(
+            operation,
+            vec![artifact],
+            vec![delivery_plan],
+            authored_push_input_digest(self)?,
+            captured_at_unix_ms,
+        )
+        .map_err(map_storage_error)
+    }
+
     pub const fn operation_id(&self) -> SyncId {
         self.operation_id
     }
@@ -260,31 +299,7 @@ impl Engine {
     pub async fn prepare_push(&self, request: PushRequest) -> Result<PushPreparation, Error> {
         let prepared_at = self.clock.now_unix_ms()?;
         let (operation_id, artifact_id, delivery_plan_id) = authored_ids(request.operation_id)?;
-        let operation = AuthoredOperation::new(operation_id, vec![artifact_id], prepared_at)
-            .map_err(map_storage_error)?;
-        let artifact =
-            AuthoredArtifact::planned(artifact_id, operation_id, 0, request.plan(), prepared_at)
-                .map_err(map_storage_error)?;
-        let intent = AuthoredDeliveryIntent::new(
-            delivery_request_id(request.operation_id),
-            request.targets.clone(),
-            request.satisfaction.clone(),
-            request.delivery_deadline_unix_ms,
-        )
-        .map_err(map_storage_error)?;
-        let delivery_plan =
-            AuthoredDeliveryPlan::new(delivery_plan_id, artifact_id, intent, prepared_at)
-                .map_err(map_storage_error)?;
-        let command = AuthoredAtomicCommand::Prepare(
-            PrepareAuthoredOperation::new(
-                operation,
-                vec![artifact],
-                vec![delivery_plan],
-                authored_push_input_digest(&request)?,
-                prepared_at,
-            )
-            .map_err(map_storage_error)?,
-        );
+        let command = AuthoredAtomicCommand::Prepare(request.authored_preparation(prepared_at)?);
         let receipt = self
             .storage
             .execute_authored(command)

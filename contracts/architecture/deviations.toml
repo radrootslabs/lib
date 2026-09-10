@@ -2,6 +2,27 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-018"
+date = "2026-09-10"
+status = "closed"
+approval = "Standing user authorization covers all necessary shared-owner prerequisites, verified commits and non-force publication through RCLD-TERA-100."
+affected_steps = ["158", "163", "173", "178", "207"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sync"]
+source_evidence = ["The current shared host has immutable draft append CAS and authored Prepare, but no typed transaction joining them.", "The unfiltered draft-head Vec can fail wholesale on a foreign or corrupt snapshot and offers no continuation."]
+replacement_action = "Implement contracts/architecture/decisions/authored_draft_submission.v1.json within existing storage, SQLite and Sync ownership for C054/P054, before ordered consumer adoption."
+verification = ["Qualify typed exact replay, atomic rollback/reopen, concurrent save/submit, bounded isolated pages and forward migration compatibility.", "Review public enum/trait additions and pass affected profiles, unchanged coverage, workspace and release preflight."]
+unresolved_risk = "Current owner, SDK, API, unchanged coverage and complete workspace/release-preflight qualification pass. Application schema policy and ordered consumer adoption remain with the application; deferred platform, physical-device and signed-release qualification are not claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Memory and real SQLite qualify stable author/command identity, complete semantic comparison independent of caller digest, replay before CAS after later edits, distinct intentional submissions and ordinary Prepare resumption.",
+  "SQLite qualifies sixteen before/after record fault windows, abandoned precommit, actual COMMIT failure, capacity exhaustion, concurrent save/submit, lost callback, reopen, read-only and explicit close.",
+  "Bounded scoped pages isolate corrupt metadata/payloads, preserve legacy unscoped bytes and enforce count and byte budgets. The reference backend uses at most limit+1 scratch heads and scans1000 reversed records without losing revisions or continuation.",
+  "Runtime14 migrates atomically without rewriting original snapshots or historical checksums. The actual prior13ac binary rejects14 in read-only and writable modes with both database files unchanged.",
+  "Reviewed pre-release trait/enum additions and the pure Sync preparation helper pass current owner, SDK, full workspace, Rustdoc, contract, dependency, portable and release-preflight gates. All45 required coverage reports pass unchanged90% thresholds with explicit retained-measurement provenance.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-017"
 date = "2026-09-10"
 status = "closed"

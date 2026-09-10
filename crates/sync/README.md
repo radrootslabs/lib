@@ -22,3 +22,10 @@ scope; a receipt never proves complete global history.
 
 Publication remains disabled while behavior is implemented and qualified in
 the subsequent Release V1 sync checkpoints.
+
+Advanced hosts can call `PushRequest::authored_preparation` with an explicitly
+captured timestamp to build the same pure preparation used by `prepare_push`.
+Retain this value when composing a storage draft submission: composite replay
+compares captured timestamps exactly. Building it performs no storage, signing,
+clock or network operation. Ordinary preparation identity and replay semantics
+remain unchanged.
