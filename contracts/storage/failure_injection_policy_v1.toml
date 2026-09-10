@@ -56,3 +56,13 @@ lock_close_points = [
 ]
 restore_recovery = "idempotent_forward_completion_before_connection_open"
 failure_reporting = "stable_typed_error_without_backend_details"
+
+[authored_write]
+acknowledgment = "only_after_successful_commit_or_exact_committed_replay"
+commit_fault = "deferred_foreign_key_at_actual_commit"
+capacity_fault = "bounded_sqlite_max_page_count"
+write_denied_fault = "owned_connection_query_only"
+busy_fault = "owned_begin_immediate_with_bounded_timeout"
+process_termination_points = ["after_acknowledgment", "during_uncommitted_insert"]
+power_loss_qualified = false
+protected_data_policy_owner = "native_host"

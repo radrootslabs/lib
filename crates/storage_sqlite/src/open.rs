@@ -715,6 +715,7 @@ fn connect_options(path: &Path, mode: OpenMode, busy_timeout: Duration) -> Sqlit
         .foreign_keys(true)
         .busy_timeout(busy_timeout)
         .synchronous(SqliteSynchronous::Full)
+        .pragma("fullfsync", "ON")
         .disable_statement_logging();
     if mode.is_writable() {
         options = options.journal_mode(SqliteJournalMode::Wal);
@@ -880,10 +881,15 @@ async fn verify_connection(
         .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
     let expected_busy_timeout = i64::try_from(busy_timeout.as_millis())
         .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+    let fullfsync = sqlx::query_scalar::<_, i64>("PRAGMA fullfsync")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
     if foreign_keys == 1
         && journal_mode.eq_ignore_ascii_case("wal")
         && configured_busy_timeout == expected_busy_timeout
         && synchronous == 2
+        && fullfsync == 1
     {
         Ok(())
     } else {
@@ -1026,6 +1032,7 @@ mod policy_tests {
         foreign_keys: bool,
         journal_mode: String,
         synchronous: String,
+        fullfsync: bool,
         busy_timeout_min_ms: u64,
         busy_timeout_default_ms: u64,
         busy_timeout_max_ms: u64,
@@ -1049,6 +1056,7 @@ mod policy_tests {
         assert!(policy.foreign_keys);
         assert_eq!(policy.journal_mode, "wal");
         assert_eq!(policy.synchronous, "full");
+        assert!(policy.fullfsync);
         assert_eq!(policy.busy_timeout_min_ms, 1);
         assert_eq!(policy.busy_timeout_default_ms, 5_000);
         assert_eq!(policy.busy_timeout_max_ms, 60_000);
@@ -1060,3 +1068,8 @@ mod policy_tests {
         assert!(!policy.raw_handles_public);
     }
 }
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_durability_policy_tests.rs"]
+mod authored_durability_policy_tests;

@@ -4,6 +4,9 @@ max_connections_per_database = 4
 foreign_keys = true
 journal_mode = "wal"
 synchronous = "full"
+# Request the VFS full flush where supported; SQLite may fall back to fsync.
+# This flag alone does not establish physical power-loss durability.
+fullfsync = true
 busy_timeout_min_ms = 1
 busy_timeout_default_ms = 5000
 busy_timeout_max_ms = 60000

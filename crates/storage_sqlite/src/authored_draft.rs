@@ -637,6 +637,11 @@ mod tests {
 #[path = "authored_draft_query_tests.rs"]
 mod query_tests;
 
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_durability_tests.rs"]
+mod durability_tests;
+
 pub(crate) async fn load_head_tx(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: AuthoredDraftId,

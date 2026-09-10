@@ -22,6 +22,21 @@ source-head CAS, including after reopen or later editing. Existing atomic
 receipt snapshots retain their 4 MiB limit; oversized submissions fail without
 partial writes. No additional public database or connection API is introduced.
 
+Every connection in both owned pools uses `synchronous=FULL` and requests
+`fullfsync=ON`; writable stores retain WAL. Authored append acknowledges only
+after a successful SQLite COMMIT, or an exact replay of an already committed
+revision. Connection-policy validation rejects a missing full-sync request.
+The existing owner supplies this policy without a second database or journal.
+
+Qualification covers actual deferred-constraint COMMIT failure, bounded SQLite
+page-capacity exhaustion, lock contention, denied writes, closed/read-only
+stores, and child process termination before and after acknowledgment. Failed writes retain the
+previous revision and return a typed failure without a success receipt. These
+tests do not fill the host disk or establish physical power-loss survival.
+SQLite requests `F_FULLFSYNC` where its VFS supports it and may fall back to
+`fsync`; actual filesystem, device and power-cut behavior remains a separate
+host qualification. Native protected-data policy remains the host's concern.
+
 Backend status and the last integrity result are passive. Hosts invoke
 `check_integrity` explicitly with their own positive timestamp when they want
 full SQLite and foreign-key validation across both owned files. `close` drains
