@@ -374,17 +374,19 @@ pub(crate) async fn complete_native_upload(
         )
     })?;
     let verified_upload = verify_descriptor(&request, &expected_url, descriptor, 1)?;
-    let retrieved = retrieve(
-        config,
-        BlossomInboundRequest::new(
-            verified_upload.url().as_blob_url().clone(),
-            Some(request.media_type().clone()),
-            Some(request.byte_size()),
-            Some(request.dimensions()),
-        )?,
-        cancellation,
+    let inbound = BlossomInboundRequest::new(
+        verified_upload.url().as_blob_url().clone(),
+        Some(request.media_type().clone()),
+        Some(request.byte_size()),
+        Some(request.dimensions()),
     )
-    .await?;
+    .map_err(|error| with_operation(error, true, 1))?;
+    let retrieved = retrieve(config, inbound, cancellation)
+        .await
+        .map_err(|error| {
+            let attempts = 1_u8.saturating_add(error.attempts());
+            with_operation(error, true, attempts)
+        })?;
     if retrieved.bytes() != request.bytes() {
         return Err(failure(
             BlossomErrorKind::RetrievedBytesMismatch,
@@ -1459,6 +1461,9 @@ fn little_u24(bytes: &[u8]) -> Option<u32> {
 }
 
 #[cfg(test)]
+mod native_completion_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use radroots_blossom::Sha256;
@@ -1468,7 +1473,7 @@ mod tests {
 
     static LOOPBACK_TEST_GUARD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-    fn png(width: u32, height: u32) -> Vec<u8> {
+    pub(super) fn png(width: u32, height: u32) -> Vec<u8> {
         let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
         bytes.extend_from_slice(&width.to_be_bytes());
         bytes.extend_from_slice(&height.to_be_bytes());
@@ -1877,7 +1882,7 @@ mod tests {
         Stall,
     }
 
-    async fn read_request(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
+    pub(super) async fn read_request(stream: &mut tokio::net::TcpStream) -> Vec<u8> {
         let mut request = Vec::new();
         let header_end = loop {
             let mut chunk = [0_u8; 1024];
@@ -2079,7 +2084,7 @@ mod tests {
         (origin, task)
     }
 
-    fn upload_request(_origin: &str, bytes: Vec<u8>) -> BlossomUploadRequest {
+    pub(super) fn upload_request(_origin: &str, bytes: Vec<u8>) -> BlossomUploadRequest {
         BlossomUploadRequest::new(
             Arc::from(bytes),
             MediaType::parse("image/png").expect("media type"),
@@ -2089,7 +2094,7 @@ mod tests {
         .expect("upload request")
     }
 
-    fn config(origin: &str) -> BlossomConfig {
+    pub(super) fn config(origin: &str) -> BlossomConfig {
         BlossomConfig::from_profile(simulator_profile(origin))
             .with_network_policy(
                 Duration::from_secs(2),

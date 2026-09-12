@@ -1455,6 +1455,8 @@ impl BlossomSlot {
 
     /// Verifies a host-executed BUD-02 response, then performs the canonical
     /// BUD-01 exact-byte retrieval before returning an upload receipt.
+    /// Later verification failure or cancellation preserves the native upload's
+    /// possible remote effect and includes that upload in the attempt count.
     pub async fn complete_native_upload(
         &self,
         transaction: BlossomUploadTransaction,

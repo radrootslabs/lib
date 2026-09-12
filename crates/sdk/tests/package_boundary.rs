@@ -155,6 +155,7 @@ fn package_contains_only_reachable_sources_and_registered_targets() {
         BTreeSet::from([
             "adapters/mod.rs".to_owned(),
             "adapters/blossom.rs".to_owned(),
+            "adapters/blossom/native_completion_tests.rs".to_owned(),
             "adapters/radrootsd.rs".to_owned(),
             "capability.rs".to_owned(),
             "client.rs".to_owned(),
