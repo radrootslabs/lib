@@ -96,7 +96,46 @@ pub struct PrepareFromDraft {
     preparation: PrepareAuthoredOperation,
 }
 impl PrepareFromDraft {
+    /// Captures an intent whose prerequisites are complete and operation is associated.
     pub fn new(
+        command_id: AtomicCommitId,
+        source: AuthoredDraftSource,
+        intent: AuthoredDraft,
+        preparation: PrepareAuthoredOperation,
+    ) -> Result<Self, Error> {
+        if !matches!(
+            intent.stage(),
+            AuthoredDraftStage::ReadyToSign | AuthoredDraftStage::Queued
+        ) {
+            return Err(Error::AtomicWorkflowMismatch);
+        }
+        Self::from_parts(command_id, source, intent, preparation)
+    }
+
+    /// Captures an operation before caller-owned prerequisites are complete.
+    ///
+    /// The waiting draft has no operation association or signing authority. Its
+    /// original complete snapshot and prepared operation are bound immutably in
+    /// the composite receipt. The caller owns prerequisite progression and must
+    /// later associate that same operation without changing its captured plan.
+    pub fn new_waiting(
+        command_id: AtomicCommitId,
+        source: AuthoredDraftSource,
+        intent: AuthoredDraft,
+        preparation: PrepareAuthoredOperation,
+    ) -> Result<Self, Error> {
+        if !matches!(
+            intent.stage(),
+            AuthoredDraftStage::Draft
+                | AuthoredDraftStage::MediaPreparing
+                | AuthoredDraftStage::MediaUploading
+        ) {
+            return Err(Error::AtomicWorkflowMismatch);
+        }
+        Self::from_parts(command_id, source, intent, preparation)
+    }
+
+    fn from_parts(
         command_id: AtomicCommitId,
         source: AuthoredDraftSource,
         intent: AuthoredDraft,
@@ -117,15 +156,20 @@ impl PrepareFromDraft {
         self.intent.validate()?;
         let operation = self.preparation.operation();
         let at = self.preparation.requested_at_unix_ms();
+        let operation_matches = match self.intent.stage() {
+            AuthoredDraftStage::Draft
+            | AuthoredDraftStage::MediaPreparing
+            | AuthoredDraftStage::MediaUploading => self.intent.operation_id().is_none(),
+            AuthoredDraftStage::ReadyToSign | AuthoredDraftStage::Queued => {
+                self.intent.operation_id() == Some(operation.operation_id())
+            }
+            AuthoredDraftStage::Cancelled => false,
+        };
         if self.intent.draft_id() == self.source.draft_id
             || self.intent.author() != &self.source.author
             || self.intent.scope() != self.source.scope
             || self.intent.revision() != AuthoredDraftRevision::INITIAL
-            || !matches!(
-                self.intent.stage(),
-                AuthoredDraftStage::ReadyToSign | AuthoredDraftStage::Queued
-            )
-            || self.intent.operation_id() != Some(operation.operation_id())
+            || !operation_matches
             || self.intent.created_at_unix_ms() != at
             || self.intent.updated_at_unix_ms() != at
             || at < self.source.updated_at_unix_ms
@@ -263,7 +307,7 @@ struct SubmissionWire {
 impl TryFrom<SubmissionWire> for PrepareFromDraft {
     type Error = Error;
     fn try_from(v: SubmissionWire) -> Result<Self, Error> {
-        Self::new(v.command_id, v.source, v.intent, v.preparation)
+        Self::from_parts(v.command_id, v.source, v.intent, v.preparation)
     }
 }
 #[cfg(feature = "serde")]

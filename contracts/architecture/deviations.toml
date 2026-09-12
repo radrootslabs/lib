@@ -2,6 +2,27 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-019"
+date = "2026-09-12"
+status = "closed"
+approval = "Explicit user authorization covers necessary shared-owner prerequisites, verified checkpoints and non-force origin/master publication."
+affected_steps = ["158", "163", "173", "178"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite"]
+source_evidence = ["Composite submission accepts only ready/queued drafts, whose payload is correctly immutable.", "A caller must durably capture an operation before its prerequisites complete without falsely marking the draft ready or relaxing queued-payload freezing."]
+replacement_action = "Implement the explicit waiting constructor and compatibility contract in contracts/architecture/decisions/authored_draft_submission.v2.json using the existing transaction and receipt owners."
+verification = ["Preserve the original constructor, exact ready serialization, all capture invariants and queued-payload freezing.", "Qualify waiting-state replay, source CAS, every transaction fault, prerequisite progress and reopened receipt against Memory and SQLite.", "Pass affected profiles, API freshness, unchanged coverage thresholds and workspace/release preflight before publication."]
+unresolved_risk = "Owner, SDK, exact API, unchanged coverage, full workspace, generator and release-preflight qualification pass. Each application still owns readiness policy and exact adoption; deferred device and signed-release scope is unclaimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The original ready constructor and wire fields are unchanged. Explicit waiting construction shares all source, author, scope, time, revision and unsent-operation validation; there is one additive public constructor and no API removals.",
+  "Memory and SQLite prove replay after prerequisite progress, later source edits and lost callbacks; changed full requests conflict even when the composite digest is unchanged. Fresh requests still obey source CAS.",
+  "The real SQLite harness covers64 before/after record windows across queued and all three waiting stages, plus actual COMMIT failure, abandoned precommit, SQLITE_FULL and concurrent save/submission. No new schema, connection, transaction or queued-payload mutation is introduced.",
+  "Affected owner tests303, actual SDK tests119 and explicit memory/serde tests146 pass without ignored tests. Full workspace check/test/clippy, Rustdoc, contracts, architecture, DTO/API boundaries, dependency graph, governed portable targets and preflight pass.",
+  "All45 required coverage reports pass unchanged90% thresholds. Storage, SQLite, Sync and SDK were freshly measured;41 source-identical measurements retain their original evidence identities. Both SDK generator opt-ins were explicitly selected and passed current frozen-output/freshness assertions.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-018"
 date = "2026-09-10"
 status = "closed"

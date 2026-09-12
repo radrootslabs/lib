@@ -1,0 +1,20 @@
+{
+  "schema": "radroots.authored-draft-submission.v2",
+  "status": "implemented",
+  "supersedes_without_mutation": "contracts/architecture/decisions/authored_draft_submission.v1.json",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "ready_constructor": "PrepareFromDraft::new retains its exact ReadyToSign/Queued admission and operation association requirements.",
+  "waiting_constructor": "PrepareFromDraft::new_waiting explicitly accepts an initial Draft, MediaPreparing or MediaUploading intent with no draft operation ID. The composite receipt immutably associates its complete captured request with the prepared operation. This is not signing or delivery authority.",
+  "invariants": "Both constructors require the same distinct intent identity, source author and scope, initial revisions, fixed capture time, initial unsent planned artifacts and delivery plans. No queued-payload freezing rule changes. The full intent snapshot and preparation remain immutable in the composite receipt even while the application's waiting draft head records prerequisite progress.",
+  "transaction": "Reuse the existing atomic source-head CAS, intent/operation/artifact/delivery insertion and both receipts. No SQL/schema/connection/transaction API changes. Exact replay precedes current-head CAS and compares every captured field independently of caller digests.",
+  "application_boundary": "The application validates prerequisite progress, preserves captured semantic content and policy, and associates the original prepared operation when it becomes ready. Shared storage does not interpret media, form, user-presence or target policy and does not start signing or delivery.",
+  "compatibility": "The existing serialized fields and ready-request bytes are unchanged. Validated decoding additionally admits waiting requests. Old readers reject these previously invalid states; there is no schema migration or rewrite. Stable command, intent, operation and receipt IDs and existing ReadyToSign/Queued transitions remain unchanged.",
+  "verification": [
+    "Ready constructor still rejects every waiting stage; waiting constructor rejects ready, queued and cancelled intents.",
+    "Waiting requests preserve all author/scope/time/revision/artifact checks and exact semantic conflict detection.",
+    "Memory and SQLite replay after prerequisite progress and later source edits returns the original immutable receipt.",
+    "SQLite faults before/after every record and receipt roll back; reopen recovers a lost callback without duplicating work.",
+    "Old ready serialization and queued payload immutability are unchanged; portable profiles, API, coverage and workspace preflight pass."
+  ],
+  "non_goals": ["application prerequisite policy", "signing authorization", "new journal or database schema", "deferred platform or release qualification"]
+}

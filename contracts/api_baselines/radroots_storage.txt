@@ -500,6 +500,7 @@ pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::commit_id(
 pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::commit_id_for(&[u8; 32], radroots_storage::atomic::AtomicCommitId) -> radroots_storage::atomic::AtomicCommitId
 pub const fn radroots_storage::authored_draft_submission::PrepareFromDraft::intent(&self) -> &radroots_storage::authored_draft::AuthoredDraft
 pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::new(radroots_storage::atomic::AtomicCommitId, radroots_storage::authored_draft_submission::AuthoredDraftSource, radroots_storage::authored_draft::AuthoredDraft, radroots_storage::authored_atomic::PrepareAuthoredOperation) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::new_waiting(radroots_storage::atomic::AtomicCommitId, radroots_storage::authored_draft_submission::AuthoredDraftSource, radroots_storage::authored_draft::AuthoredDraft, radroots_storage::authored_atomic::PrepareAuthoredOperation) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::authored_draft_submission::PrepareFromDraft::preparation(&self) -> &radroots_storage::authored_atomic::PrepareAuthoredOperation
 pub const fn radroots_storage::authored_draft_submission::PrepareFromDraft::source(&self) -> &radroots_storage::authored_draft_submission::AuthoredDraftSource
 pub fn radroots_storage::authored_draft_submission::PrepareFromDraft::validate(&self) -> core::result::Result<(), radroots_storage::Error>

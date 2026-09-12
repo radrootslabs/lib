@@ -25,6 +25,9 @@ async fn open(temp: &TempDir, mode: OpenMode) -> SqliteStorage {
     SqliteStorage::open(options).await.unwrap()
 }
 fn fixture() -> (AuthoredDraft, PrepareFromDraft) {
+    fixture_stage(AuthoredDraftStage::Queued)
+}
+fn fixture_stage(stage: AuthoredDraftStage) -> (AuthoredDraft, PrepareFromDraft) {
     let (ordinary, plan) = super::tests::prepare();
     let AuthoredAtomicCommand::Prepare(preparation) = ordinary else {
         unreachable!()
@@ -50,15 +53,24 @@ fn fixture() -> (AuthoredDraft, PrepareFromDraft) {
         "fixture.intent.v1",
         payload.clone(),
         Sha256::digest(&payload).into(),
-        AuthoredDraftStage::Queued,
-        Some(preparation.operation().operation_id()),
+        stage,
+        matches!(
+            stage,
+            AuthoredDraftStage::ReadyToSign | AuthoredDraftStage::Queued
+        )
+        .then_some(preparation.operation().operation_id()),
         10,
         10,
     )
     .unwrap()
     .with_scope(scope)
     .unwrap();
-    let request = PrepareFromDraft::new(
+    let constructor = if intent.operation_id().is_some() {
+        PrepareFromDraft::new
+    } else {
+        PrepareFromDraft::new_waiting
+    };
+    let request = constructor(
         AtomicCommitId::new([4; 16]).unwrap(),
         AuthoredDraftSource::capture(&source).unwrap(),
         intent,
@@ -109,10 +121,21 @@ async fn empty_submission(
 
 #[tokio::test]
 async fn submission_survives_lost_callback_reopen_and_matches_memory_after_later_save() {
+    for stage in [
+        AuthoredDraftStage::Queued,
+        AuthoredDraftStage::ReadyToSign,
+        AuthoredDraftStage::Draft,
+        AuthoredDraftStage::MediaPreparing,
+        AuthoredDraftStage::MediaUploading,
+    ] {
+        replay_after_progress(stage).await;
+    }
+}
+async fn replay_after_progress(stage: AuthoredDraftStage) {
     let temp = TempDir::new().unwrap();
     let store = open(&temp, OpenMode::Create).await;
     let memory = MemoryStorage::default();
-    let (source, request) = fixture();
+    let (source, request) = fixture_stage(stage);
     store
         .append_authored_draft(source.clone(), None)
         .await
@@ -126,6 +149,23 @@ async fn submission_survives_lost_callback_reopen_and_matches_memory_after_later
         store.execute_authored(command(&request)).await.unwrap(),
         expected
     );
+    if request.intent().operation_id().is_none() {
+        let progress = request
+            .intent()
+            .successor(
+                b"verified prerequisite status".to_vec(),
+                AuthoredDraftStage::ReadyToSign,
+                Some(request.preparation().operation().operation_id()),
+                11,
+            )
+            .unwrap();
+        for target in [&store as &dyn AuthoredDraftStore, &memory] {
+            target
+                .append_authored_draft(progress.clone(), Some(request.intent().revision()))
+                .await
+                .unwrap();
+        }
+    }
     let newer = source
         .successor(b"later edit".to_vec(), AuthoredDraftStage::Draft, None, 11)
         .unwrap();
@@ -146,6 +186,16 @@ async fn submission_survives_lost_callback_reopen_and_matches_memory_after_later
     );
     assert_eq!(replay.disposition(), AtomicCommitDisposition::Replay);
     assert_eq!(replay.outcome(), expected.outcome());
+    assert_eq!(
+        store
+            .authored_draft_head(request.intent().draft_id())
+            .await
+            .unwrap(),
+        memory
+            .authored_draft_head(request.intent().draft_id())
+            .await
+            .unwrap()
+    );
     let ordinary = AuthoredAtomicCommand::Prepare(request.preparation().clone());
     assert_eq!(
         store.execute_authored(ordinary.clone()).await.unwrap(),
@@ -176,7 +226,17 @@ async fn submission_survives_lost_callback_reopen_and_matches_memory_after_later
 
 #[tokio::test]
 async fn submission_rolls_back_before_and_after_every_record_and_receipt_insert() {
-    let (source, request) = fixture();
+    for stage in [
+        AuthoredDraftStage::Queued,
+        AuthoredDraftStage::Draft,
+        AuthoredDraftStage::MediaPreparing,
+        AuthoredDraftStage::MediaUploading,
+    ] {
+        rollback_at_every_write(stage).await;
+    }
+}
+async fn rollback_at_every_write(stage: AuthoredDraftStage) {
+    let (source, request) = fixture_stage(stage);
     let ordinary = AuthoredAtomicCommand::Prepare(request.preparation().clone());
     let hex = |id: AtomicCommitId| {
         id.as_bytes()
@@ -241,9 +301,17 @@ async fn submission_rolls_back_before_and_after_every_record_and_receipt_insert(
 
 #[tokio::test]
 async fn abandoned_precommit_and_sqlite_full_preserve_source_without_success_association() {
+    for stage in [
+        AuthoredDraftStage::Queued,
+        AuthoredDraftStage::MediaPreparing,
+    ] {
+        abandoned_and_full(stage).await;
+    }
+}
+async fn abandoned_and_full(stage: AuthoredDraftStage) {
     let temp = TempDir::new().unwrap();
     let store = open(&temp, OpenMode::Create).await;
-    let (source, request) = fixture();
+    let (source, request) = fixture_stage(stage);
     store
         .append_authored_draft(source.clone(), None)
         .await
@@ -296,10 +364,18 @@ async fn abandoned_precommit_and_sqlite_full_preserve_source_without_success_ass
 
 #[tokio::test]
 async fn concurrent_duplicates_and_save_have_one_atomic_order() {
+    for stage in [
+        AuthoredDraftStage::Queued,
+        AuthoredDraftStage::MediaPreparing,
+    ] {
+        concurrent_submit_and_save(stage).await;
+    }
+}
+async fn concurrent_submit_and_save(stage: AuthoredDraftStage) {
     for _ in 0..4 {
         let temp = TempDir::new().unwrap();
         let store = open(&temp, OpenMode::Create).await;
-        let (source, request) = fixture();
+        let (source, request) = fixture_stage(stage);
         store
             .append_authored_draft(source.clone(), None)
             .await
@@ -365,9 +441,17 @@ async fn concurrent_duplicates_and_save_have_one_atomic_order() {
 
 #[tokio::test]
 async fn commit_failure_returns_no_success_and_rolls_back_every_authored_write() {
+    for stage in [
+        AuthoredDraftStage::Queued,
+        AuthoredDraftStage::MediaPreparing,
+    ] {
+        commit_failure(stage).await;
+    }
+}
+async fn commit_failure(stage: AuthoredDraftStage) {
     let temp = TempDir::new().unwrap();
     let store = open(&temp, OpenMode::Create).await;
-    let (source, request) = fixture();
+    let (source, request) = fixture_stage(stage);
     store
         .append_authored_draft(source.clone(), None)
         .await

@@ -530,3 +530,202 @@ fn submission_cannot_adopt_unassociated_existing_intent_or_operation() {
         }
     });
 }
+
+#[test]
+fn waiting_submission_requires_explicit_construction_and_retains_all_bindings() {
+    let source = source();
+    let ready = request(&source, 1, 2);
+    for stage in [
+        AuthoredDraftStage::Draft,
+        AuthoredDraftStage::MediaPreparing,
+        AuthoredDraftStage::MediaUploading,
+        AuthoredDraftStage::ReadyToSign,
+        AuthoredDraftStage::Queued,
+        AuthoredDraftStage::Cancelled,
+    ] {
+        let waiting = matches!(
+            stage,
+            AuthoredDraftStage::Draft
+                | AuthoredDraftStage::MediaPreparing
+                | AuthoredDraftStage::MediaUploading
+        );
+        let intent = AuthoredDraft::reconstruct(
+            ready.intent().draft_id(),
+            AuthoredDraftRevision::INITIAL,
+            *source.author(),
+            ready.intent().payload_schema(),
+            ready.intent().payload().to_vec(),
+            *ready.intent().payload_sha256(),
+            stage,
+            (!waiting).then_some(ready.preparation().operation().operation_id()),
+            10,
+            10,
+        )
+        .unwrap()
+        .with_scope(source.scope().unwrap())
+        .unwrap();
+        let result = PrepareFromDraft::new_waiting(
+            ready.command_id(),
+            ready.source().clone(),
+            intent.clone(),
+            ready.preparation().clone(),
+        );
+        if !waiting {
+            assert_eq!(result, Err(Error::AtomicWorkflowMismatch));
+            continue;
+        }
+        assert_eq!(
+            PrepareFromDraft::new(
+                ready.command_id(),
+                ready.source().clone(),
+                intent,
+                ready.preparation().clone()
+            ),
+            Err(Error::AtomicWorkflowMismatch)
+        );
+        let request = result.unwrap();
+        assert_eq!(request.intent().operation_id(), None);
+        assert_eq!(request.commit_id(), ready.commit_id());
+        let wire = serde_json::to_value(&request).unwrap();
+        assert_eq!(
+            serde_json::from_value::<PrepareFromDraft>(wire.clone()).unwrap(),
+            request
+        );
+        for (pointer, value) in [
+            ("/intent/operation_id", serde_json::json!([2; 16].to_vec())),
+            ("/intent/revision", serde_json::json!(2)),
+            ("/intent/author", serde_json::json!([1; 32].to_vec())),
+            ("/intent/scope", serde_json::Value::Null),
+            ("/intent/updated_at_unix_ms", serde_json::json!(11)),
+            ("/intent/stage", serde_json::json!("cancelled")),
+            ("/preparation/artifacts", serde_json::json!([])),
+        ] {
+            let mut invalid = wire.clone();
+            *invalid.pointer_mut(pointer).unwrap() = value;
+            assert!(
+                serde_json::from_value::<PrepareFromDraft>(invalid).is_err(),
+                "{stage:?} {pointer}"
+            );
+        }
+        block_on(async {
+            let store = MemoryStorage::default();
+            store
+                .append_authored_draft(source.clone(), None)
+                .await
+                .unwrap();
+            let expected = store
+                .execute_authored(command(request.clone()))
+                .await
+                .unwrap();
+            // The caller records prerequisite progress without rewriting the captured request.
+            let progress = request
+                .intent()
+                .successor(
+                    b"prerequisite verified".to_vec(),
+                    AuthoredDraftStage::ReadyToSign,
+                    Some(request.preparation().operation().operation_id()),
+                    11,
+                )
+                .unwrap();
+            store
+                .append_authored_draft(progress.clone(), Some(request.intent().revision()))
+                .await
+                .unwrap();
+            assert!(
+                progress
+                    .successor(
+                        b"changed semantic payload".to_vec(),
+                        AuthoredDraftStage::Queued,
+                        progress.operation_id(),
+                        12
+                    )
+                    .is_err()
+            );
+            let queued = progress
+                .successor(
+                    progress.payload().to_vec(),
+                    AuthoredDraftStage::Queued,
+                    progress.operation_id(),
+                    12,
+                )
+                .unwrap();
+            store
+                .append_authored_draft(queued.clone(), Some(progress.revision()))
+                .await
+                .unwrap();
+            let edit = source
+                .successor(
+                    b"later composer edit".to_vec(),
+                    AuthoredDraftStage::Draft,
+                    None,
+                    13,
+                )
+                .unwrap();
+            store
+                .append_authored_draft(edit.clone(), Some(source.revision()))
+                .await
+                .unwrap();
+            let replay = store
+                .execute_authored(command(request.clone()))
+                .await
+                .unwrap();
+            assert_eq!(replay.disposition(), AtomicCommitDisposition::Replay);
+            assert_eq!(replay.outcome(), expected.outcome());
+            assert_eq!(
+                store.authored_draft_head(queued.draft_id()).await.unwrap(),
+                Some(queued)
+            );
+            for changed_pointer in ["/intent/payload", "/source/payload_sha256", "/intent/stage"] {
+                let mut changed = wire.clone();
+                if changed_pointer == "/intent/payload" {
+                    let payload = b"different captured intent";
+                    changed["intent"]["payload"] = serde_json::json!(payload.to_vec());
+                    changed["intent"]["payload_sha256"] =
+                        serde_json::json!(Sha256::digest(payload).to_vec());
+                } else if changed_pointer == "/source/payload_sha256" {
+                    changed["source"]["payload_sha256"] = serde_json::json!([7; 32].to_vec());
+                } else {
+                    changed["intent"]["stage"] =
+                        serde_json::json!(if stage == AuthoredDraftStage::Draft {
+                            "media_preparing"
+                        } else {
+                            "draft"
+                        });
+                }
+                let changed = serde_json::from_value::<PrepareFromDraft>(changed).unwrap();
+                assert_eq!(
+                    changed.preparation().input_digest(),
+                    request.preparation().input_digest()
+                );
+                if changed_pointer == "/intent/stage" {
+                    assert_eq!(
+                        command(changed.clone()).digest(),
+                        command(request.clone()).digest()
+                    );
+                }
+                assert_eq!(
+                    store.execute_authored(command(changed)).await,
+                    Err(Error::AtomicCommitConflict)
+                );
+            }
+            let mut fresh = wire.clone();
+            fresh["command_id"] = serde_json::json!([3; 16].to_vec());
+            let fresh = serde_json::from_value::<PrepareFromDraft>(fresh).unwrap();
+            assert_eq!(
+                store.execute_authored(command(fresh.clone())).await,
+                Err(Error::DraftRevisionConflict)
+            );
+            assert!(
+                store
+                    .authored_receipt(fresh.commit_id())
+                    .await
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(
+                store.authored_draft_head(source.draft_id()).await.unwrap(),
+                Some(edit)
+            );
+        });
+    }
+}
