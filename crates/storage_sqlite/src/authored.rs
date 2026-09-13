@@ -1270,7 +1270,7 @@ mod tests {
         .expect("authored plan")
     }
 
-    fn signed(plan: &AuthoredEventPlan) -> SignedEvent {
+    pub(super) fn signed(plan: &AuthoredEventPlan) -> SignedEvent {
         let wire = Nip01EventWire {
             id: plan.expected_event_id().to_hex(),
             pubkey: plan.author().to_hex(),
@@ -1285,7 +1285,7 @@ mod tests {
         SignedEvent::from_wire_verified_id(wire, raw).expect("signed event")
     }
 
-    fn ids() -> (
+    pub(super) fn ids() -> (
         OperationInstanceId,
         AuthoredArtifactId,
         AuthoredDeliveryPlanId,
@@ -1329,7 +1329,7 @@ mod tests {
         (AuthoredAtomicCommand::Prepare(command), event_plan)
     }
 
-    fn fence(claim: &WorkClaim) -> WorkFence {
+    pub(super) fn fence(claim: &WorkClaim) -> WorkFence {
         WorkFence::new(*claim.token(), claim.generation(), claim.row_revision()).unwrap()
     }
 
@@ -2507,3 +2507,8 @@ mod tests {
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "authored_draft_submission_tests.rs"]
 mod draft_submission_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_signed_durability_tests.rs"]
+mod signed_durability_tests;
