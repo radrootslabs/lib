@@ -99,6 +99,11 @@ display, cache, or otherwise act on an unapproved URL. URL approval is a narrow
 transport policy, not host reputation, content safety, malware scanning, or
 application media policy.
 
+`BlobUrl::upload_url` projects the BUD-02 `/upload` URL at the same scheme,
+host and port. It preserves the canonical blob reference used for retrieval
+verification and grants no transport authority. Upload callers must still
+enforce their configured endpoint policy and bind authorization to exact bytes.
+
 `ByteVerifiedDescriptor` can only be produced after an approved descriptor's
 hash, byte length, and approved media type match supplied bytes or a locally
 computed `ByteCommitment`. It proves local descriptor-to-byte agreement. It is

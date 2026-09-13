@@ -6,7 +6,6 @@
 //! the reference for transport; it does not perform a request or establish host
 //! reputation, byte integrity, authenticity, or application media safety.
 
-#[cfg(feature = "serde")]
 use alloc::string::String;
 use alloc::string::ToString;
 use core::{fmt, str::FromStr};
@@ -53,6 +52,17 @@ impl BlobUrl {
 
     pub fn as_str(&self) -> &str {
         self.url.as_str()
+    }
+
+    /// Returns the BUD-02 upload URL at this blob's exact origin.
+    ///
+    /// This is a structural projection, not transport authorization. Callers
+    /// must still enforce endpoint policy and bind the upload to exact bytes.
+    /// The canonical blob reference remains unchanged for retrieval verification.
+    pub fn upload_url(&self) -> String {
+        let mut url = self.url.clone();
+        url.set_path("/upload");
+        url.to_string()
     }
 
     pub fn scheme(&self) -> &str {

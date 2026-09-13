@@ -10,6 +10,38 @@ const ASCII_MUTATION_ALPHABET: &[u8] =
     b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/:?#%\\ @\t\n\r\0;=+";
 
 #[test]
+fn upload_url_preserves_origin_without_replacing_or_approving_the_blob() {
+    let hash = Sha256::digest(b"bound upload bytes");
+    for (origin, expected) in [
+        ("https://media.example", "https://media.example/upload"),
+        ("https://media.example:443", "https://media.example/upload"),
+        (
+            "https://media.example:8443",
+            "https://media.example:8443/upload",
+        ),
+        ("http://127.0.0.1:21100", "http://127.0.0.1:21100/upload"),
+        ("http://[::1]:21100", "http://[::1]:21100/upload"),
+        (
+            "https://[2001:db8::1]:8443",
+            "https://[2001:db8::1]:8443/upload",
+        ),
+        ("http://insecure.example", "http://insecure.example/upload"),
+    ] {
+        for extension in ["", ".png", ".jpeg"] {
+            let blob = BlobUrl::parse(&format!("{origin}/{hash}{extension}")).unwrap();
+            let original = blob.to_string();
+            let approved_before = blob.clone().approve();
+            assert_eq!(blob.upload_url(), expected);
+            assert_eq!(blob.upload_url(), expected);
+            assert_eq!(blob.to_string(), original);
+            assert_eq!(blob.hash_path().hash(), hash);
+            assert_eq!(blob.clone().approve(), approved_before);
+            assert!(BlobUrl::parse(&blob.upload_url()).is_err());
+        }
+    }
+}
+
+#[test]
 fn deterministic_parser_mutation_corpus_never_panics_and_round_trips_successes() {
     let fixed = [
         "",

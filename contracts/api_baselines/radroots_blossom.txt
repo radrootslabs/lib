@@ -212,6 +212,7 @@ pub fn radroots_blossom::url::BlobUrl::is_loopback_http(&self) -> bool
 pub fn radroots_blossom::url::BlobUrl::parse(&str) -> core::result::Result<Self, radroots_blossom::Error>
 pub fn radroots_blossom::url::BlobUrl::port(&self) -> core::option::Option<u16>
 pub fn radroots_blossom::url::BlobUrl::scheme(&self) -> &str
+pub fn radroots_blossom::url::BlobUrl::upload_url(&self) -> alloc::string::String
 impl core::fmt::Display for radroots_blossom::url::BlobUrl
 pub fn radroots_blossom::url::BlobUrl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::str::traits::FromStr for radroots_blossom::url::BlobUrl
@@ -300,6 +301,7 @@ pub fn radroots_blossom::url::BlobUrl::is_loopback_http(&self) -> bool
 pub fn radroots_blossom::url::BlobUrl::parse(&str) -> core::result::Result<Self, radroots_blossom::Error>
 pub fn radroots_blossom::url::BlobUrl::port(&self) -> core::option::Option<u16>
 pub fn radroots_blossom::url::BlobUrl::scheme(&self) -> &str
+pub fn radroots_blossom::url::BlobUrl::upload_url(&self) -> alloc::string::String
 impl core::fmt::Display for radroots_blossom::url::BlobUrl
 pub fn radroots_blossom::url::BlobUrl::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::str::traits::FromStr for radroots_blossom::url::BlobUrl
