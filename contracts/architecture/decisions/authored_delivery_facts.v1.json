@@ -1,0 +1,23 @@
+{
+  "schema": "radroots.authored-delivery-facts.v1",
+  "status": "approved",
+  "owners": [
+    "radroots_storage",
+    "radroots_storage_sqlite"
+  ],
+  "command": "authored_atomic::RecordDeliveryFact; AuthoredAtomicCommand::RecordDelivery",
+  "provenance": "The owning transaction retrieves its immutable original delivery Claim receipt. Bind exact plan, artifact, signed request including raw bytes, intent, complete claim and original row identity. Caller-supplied receipts are not storage authority. Expiry and supersession do not invalidate facts.",
+  "scheduling": "Facts are an orthogonal append-only collection with their own observation times and immutable atomic receipts. Recording facts does not alter scheduling state, revision, updated time, live claim, legacy attempts or retry. Ordinary mutations always load the current plan inside the serialized transaction and retain their exact fences. Scheduling callers must reconcile current facts and stop intent before new effects.",
+  "stop": "Retain the first explicit stop time. Pending or retryable plans become Cancelled and lose scheduling authority; settled states retain their outcome and stop intent. The legacy direct cancel API remains strict. Stop does not erase or revoke external acceptance.",
+  "evidence": "One immutable final sink result per complete original claim. Equal replay changes nothing, conflicting results fail closed. Cumulative satisfaction folds legacy attempts and all delivery facts without retroactively rewriting legacy attempt satisfaction. Facts may arrive out of observation order. Receipt time is at least the observation and current scheduling time.",
+  "bounds": "Preserve the 1024 legacy scheduling-attempt limit and 4194304-byte SQLite snapshot limit. Facts have an independent finite 1024-entry limit; no eviction or implicit threshold increase. At capacity, new claims are rejected and a distinct late fact returns the existing typed overflow without changing stored data or claiming success. Exact replay remains admissible.",
+  "migration": {
+    "version": 16,
+    "name": "authored_delivery_facts",
+    "sha256": "f78d35fbe60255f152c4e7a8c23add6677ac3ae74eed7db1f3d8ef4ba0b8f3c3",
+    "compatibility": "All previous SQL, checksums, command hashes and retained receipts remain unchanged. Add a nullable normalized first-stop time and append-only normalized facts. Old Cancelled snapshots infer the stop from their row time; other old snapshots default to no facts or stop. Legacy v10 conversion writes only v11 columns before this forward migration."
+  },
+  "atomicity": "Memory commits a validated candidate; SQLite persists the plan, normalized facts and immutable atomic receipt in the same transaction, returning only after COMMIT. Failure rolls back every write. Each delivery-plan read validates its normalized children within one read snapshot and releases that snapshot before returning.",
+  "consumer": "Sync adoption is separate. These storage mechanics alone do not claim whole-operation cancellation, UI integration or remote rollback.",
+  "identity": "The new logical delivery_fact_v1 command binds plan, artifact, full original claim and normalized outcome details, excluding observation time. The original claim binds the exact request. Receipt replay additionally compares the full typed outcome; invalid request bindings cannot replay as a valid result. All historical command hashes are unchanged."
+}

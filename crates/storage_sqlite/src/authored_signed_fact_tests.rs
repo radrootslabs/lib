@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use super::signed_fact_fixture as fixture;
 use fixture::*;
 
-async fn open(temp: &TempDir, mode: OpenMode) -> SqliteStorage {
+pub(super) async fn open(temp: &TempDir, mode: OpenMode) -> SqliteStorage {
     let options = OpenOptions::new(Paths::from_directory(temp.path()).unwrap(), mode);
     let options = if matches!(mode, OpenMode::Create) {
         options
@@ -24,7 +24,9 @@ async fn open(temp: &TempDir, mode: OpenMode) -> SqliteStorage {
     SqliteStorage::open(options).await.unwrap()
 }
 
-async fn prepared(temp: &TempDir) -> (SqliteStorage, radroots_event::SignedEvent, WorkClaim) {
+pub(super) async fn prepared(
+    temp: &TempDir,
+) -> (SqliteStorage, radroots_event::SignedEvent, WorkClaim) {
     let store = open(temp, OpenMode::Create).await;
     let (preparation, event) = prepare();
     store.execute_authored(preparation).await.unwrap();

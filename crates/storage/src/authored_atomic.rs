@@ -2,6 +2,8 @@
 
 mod signing_evidence;
 pub use signing_evidence::RecordSignedArtifact;
+mod delivery_evidence;
+pub use delivery_evidence::RecordDeliveryFact;
 
 use core::num::NonZeroU64;
 use radroots_event::SignedEvent;
@@ -132,9 +134,11 @@ impl PrepareAuthoredOperation {
             .map(AuthoredDeliveryPlan::plan_id)
             .collect();
         if plan_ids.len() != delivery_plans.len()
-            || delivery_plans
-                .iter()
-                .any(|plan| !artifact_ids.contains(&plan.artifact_id()) || plan.validate().is_err())
+            || delivery_plans.iter().any(|plan| {
+                !artifact_ids.contains(&plan.artifact_id())
+                    || plan.validate().is_err()
+                    || !plan.delivery_facts().is_empty()
+            })
         {
             return Err(Error::AtomicWorkflowMismatch);
         }
@@ -423,6 +427,7 @@ pub enum AuthoredAtomicCommand {
     RecordSigned(RecordSignedArtifact),
     ApplyAdmission(ApplyAdmissionResult),
     ApplyDelivery(ApplyDeliveryAttempt),
+    RecordDelivery(RecordDeliveryFact),
     ApplyFailure(ApplyWorkFailure),
     Cancel(CancelAuthoredWork),
 }
@@ -482,6 +487,17 @@ impl AuthoredAtomicCommand {
                 hash_failure(&mut hasher, value.failure.as_ref());
             }
             Self::ApplyDelivery(value) => hash_delivery(&mut hasher, &value.outcome),
+            Self::RecordDelivery(value) => {
+                hash_field(&mut hasher, value.artifact_id().as_bytes());
+                let claim = value.claim();
+                hash_field(&mut hasher, claim.token());
+                hash_field(&mut hasher, claim.owner().as_bytes());
+                hasher.update(claim.generation().get().to_be_bytes());
+                hasher.update(claim.row_revision().get().to_be_bytes());
+                hasher.update(claim.acquired_at_unix_ms().to_be_bytes());
+                hasher.update(claim.expires_at_unix_ms().to_be_bytes());
+                value.hash_outcome(&mut hasher);
+            }
             Self::ApplyFailure(value) => hash_failure(&mut hasher, Some(&value.failure)),
             Self::Cancel(value) => hasher.update(value.cancelled_at_unix_ms.to_be_bytes()),
         }
@@ -497,6 +513,7 @@ impl AuthoredAtomicCommand {
             Self::RecordSigned(value) => value.observed_at_unix_ms(),
             Self::ApplyAdmission(value) => value.applied_at_unix_ms,
             Self::ApplyDelivery(value) => value.applied_at_unix_ms,
+            Self::RecordDelivery(value) => value.observed_at_unix_ms(),
             Self::ApplyFailure(value) => value.applied_at_unix_ms,
             Self::Cancel(value) => value.cancelled_at_unix_ms,
         }
@@ -511,6 +528,7 @@ impl AuthoredAtomicCommand {
             Self::RecordSigned(_) => b"signed_fact_v1",
             Self::ApplyAdmission(_) => b"admission",
             Self::ApplyDelivery(_) => b"delivery",
+            Self::RecordDelivery(_) => b"delivery_fact_v1",
             Self::ApplyFailure(value) => match value.failure.phase() {
                 WorkPhase::Signing => b"signing_failure",
                 WorkPhase::Admission => b"admission_failure",
@@ -535,6 +553,7 @@ impl AuthoredAtomicCommand {
             Self::RecordSigned(value) => *value.artifact_id().as_bytes(),
             Self::ApplyAdmission(value) => *value.artifact_id.as_bytes(),
             Self::ApplyDelivery(value) => *value.plan_id.as_bytes(),
+            Self::RecordDelivery(value) => *value.plan_id().as_bytes(),
             Self::ApplyFailure(value) => match &value.target {
                 AuthoredWorkTarget::Artifact(id) => *id.as_bytes(),
                 AuthoredWorkTarget::DeliveryPlan(id) => *id.as_bytes(),
@@ -554,6 +573,7 @@ impl AuthoredAtomicCommand {
             Self::Claim(value) => Some(value.claim.generation()),
             Self::ApplyAdmission(value) => Some(value.fence.generation),
             Self::ApplyDelivery(value) => Some(value.fence.generation),
+            Self::RecordDelivery(value) => Some(value.claim().generation()),
             Self::ApplyFailure(value) => Some(value.fence.generation),
             Self::Prepare(_) | Self::PrepareFromDraft(_) | Self::Cancel(_) => None,
         }
@@ -591,6 +611,11 @@ impl AuthoredAtomicReceipt {
         }
         match (command, &self.outcome) {
             (
+                AuthoredAtomicCommand::RecordDelivery(value),
+                AuthoredAtomicOutcome::DeliveryPlan(plan),
+            ) => value.matches_plan(plan),
+            (AuthoredAtomicCommand::RecordDelivery(_), _) => false,
+            (
                 AuthoredAtomicCommand::RecordSigned(value),
                 AuthoredAtomicOutcome::Artifact(artifact),
             ) => signed_fact_matches(value, artifact),
@@ -621,6 +646,15 @@ impl AuthoredAtomicReceipt {
             return Err(Error::AtomicWorkflowMismatch);
         }
         match (command, &outcome) {
+            (
+                AuthoredAtomicCommand::RecordDelivery(value),
+                AuthoredAtomicOutcome::DeliveryPlan(plan),
+            ) if value.matches_plan(plan) && committed_at_unix_ms >= plan.updated_at_unix_ms() => {
+                plan.validate()?
+            }
+            (AuthoredAtomicCommand::RecordDelivery(_), _) => {
+                return Err(Error::AtomicWorkflowMismatch);
+            }
             (
                 AuthoredAtomicCommand::RecordSigned(value),
                 AuthoredAtomicOutcome::Artifact(artifact),

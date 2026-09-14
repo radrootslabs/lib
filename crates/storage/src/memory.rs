@@ -1642,6 +1642,21 @@ impl AuthoredAtomicStorage for MemoryStorage {
                     }
                     AuthoredAtomicOutcome::Artifact(artifact)
                 }
+                AuthoredAtomicCommand::RecordDelivery(value) => {
+                    let claim_id = value.claim_command().commit_id();
+                    let original = candidate
+                        .authored_atomic_receipts
+                        .iter()
+                        .find(|receipt| receipt.commit_id() == claim_id)
+                        .ok_or(Error::AtomicWorkflowMismatch)?;
+                    let plan = candidate
+                        .authored_delivery_plans
+                        .iter_mut()
+                        .find(|plan| plan.plan_id() == value.plan_id())
+                        .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
+                    value.apply_to(plan, original)?;
+                    AuthoredAtomicOutcome::DeliveryPlan(plan.clone())
+                }
                 AuthoredAtomicCommand::ApplyDelivery(value) => {
                     let plan = candidate
                         .authored_delivery_plans
@@ -1800,12 +1815,18 @@ impl AuthoredAtomicStorage for MemoryStorage {
                         if plan.revision() != value.expected_revision() {
                             return Err(Error::InvalidAuthoredDeliveryPlan);
                         }
-                        plan.cancel(value.cancelled_at_unix_ms())?;
+                        plan.request_stop(value.cancelled_at_unix_ms())?;
                         AuthoredAtomicOutcome::DeliveryPlan(plan.clone())
                     }
                 },
             };
             let committed_at = match (&command, &outcome) {
+                (
+                    AuthoredAtomicCommand::RecordDelivery(_),
+                    AuthoredAtomicOutcome::DeliveryPlan(plan),
+                ) => command
+                    .requested_at_unix_ms()
+                    .max(plan.updated_at_unix_ms()),
                 (
                     AuthoredAtomicCommand::RecordSigned(_),
                     AuthoredAtomicOutcome::Artifact(artifact),

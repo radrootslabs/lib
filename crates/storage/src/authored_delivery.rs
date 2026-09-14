@@ -1,5 +1,8 @@
 //! Independent durable delivery-plan, attempt, retry, and evidence models.
 
+mod facts;
+pub use facts::AuthoredDeliveryFact;
+
 use core::num::{NonZeroU32, NonZeroU64};
 use radroots_transport::{
     DeliveryReceipt, DeliveryRequest, SinkFailure,
@@ -215,6 +218,8 @@ pub struct AuthoredDeliveryPlan {
     request: Option<DeliveryRequest>,
     state: AuthoredDeliveryState,
     attempts: Vec<AuthoredDeliveryAttempt>,
+    delivery_facts: Vec<AuthoredDeliveryFact>,
+    stop_requested_at_unix_ms: Option<u64>,
     attempt_count: u32,
     retry: Option<RetrySchedule>,
     claim: Option<WorkClaim>,
@@ -240,6 +245,8 @@ impl AuthoredDeliveryPlan {
             request: None,
             state: AuthoredDeliveryState::Pending,
             attempts: Vec::new(),
+            delivery_facts: Vec::new(),
+            stop_requested_at_unix_ms: None,
             attempt_count: 0,
             retry: None,
             claim: None,
@@ -269,6 +276,7 @@ impl AuthoredDeliveryPlan {
     }
 
     pub fn validate(&self) -> Result<(), Error> {
+        self.validate_facts()?;
         if self.created_at_unix_ms == 0
             || self.updated_at_unix_ms < self.created_at_unix_ms
             || self.request_digest != delivery_intent_digest(&self.intent)
@@ -365,6 +373,8 @@ impl AuthoredDeliveryPlan {
                 || claim.generation() <= existing.generation()
         });
         if self.state.is_terminal()
+            || self.stop_requested_at_unix_ms.is_some()
+            || self.delivery_facts.len() >= DELIVERY_PLAN_ATTEMPTS_MAX as usize
             || self.request.is_none()
             || existing_blocks
             || claim.row_revision() != self.revision
@@ -559,11 +569,25 @@ impl AuthoredDeliveryPlan {
         if self.state.is_terminal() {
             return Err(Error::InvalidAuthoredDeliveryPlan);
         }
+        self.request_stop(cancelled_at_unix_ms)
+    }
+
+    /// Retains the first stop intent, including when delivery already settled.
+    pub fn request_stop(&mut self, cancelled_at_unix_ms: u64) -> Result<(), Error> {
+        if cancelled_at_unix_ms < self.created_at_unix_ms {
+            return Err(Error::InvalidAuthoredDeliveryPlan);
+        }
+        if self.stop_requested_at_unix_ms.is_some() {
+            return Ok(());
+        }
         let previous = self.clone();
-        self.state = AuthoredDeliveryState::Cancelled;
+        self.stop_requested_at_unix_ms = Some(cancelled_at_unix_ms);
+        if !self.state.is_terminal() {
+            self.state = AuthoredDeliveryState::Cancelled;
+            self.last_failure = None;
+        }
         self.claim = None;
         self.retry = None;
-        self.last_failure = None;
         if let Err(error) = self.advance(cancelled_at_unix_ms) {
             *self = previous;
             return Err(error);
@@ -757,6 +781,10 @@ struct AuthoredDeliveryPlanWire {
     request: Option<DeliveryRequest>,
     state: AuthoredDeliveryState,
     attempts: Vec<AuthoredDeliveryAttempt>,
+    #[serde(default)]
+    delivery_facts: Vec<AuthoredDeliveryFact>,
+    #[serde(default)]
+    stop_requested_at_unix_ms: Option<u64>,
     attempt_count: u32,
     retry: Option<RetrySchedule>,
     claim: Option<WorkClaim>,
@@ -778,6 +806,11 @@ impl TryFrom<AuthoredDeliveryPlanWire> for AuthoredDeliveryPlan {
             request: value.request,
             state: value.state,
             attempts: value.attempts,
+            delivery_facts: value.delivery_facts,
+            stop_requested_at_unix_ms: value.stop_requested_at_unix_ms.or_else(|| {
+                (value.state == AuthoredDeliveryState::Cancelled)
+                    .then_some(value.updated_at_unix_ms)
+            }),
             attempt_count: value.attempt_count,
             retry: value.retry,
             claim: value.claim,
@@ -800,6 +833,8 @@ impl From<AuthoredDeliveryPlan> for AuthoredDeliveryPlanWire {
             request: value.request,
             state: value.state,
             attempts: value.attempts,
+            delivery_facts: value.delivery_facts,
+            stop_requested_at_unix_ms: value.stop_requested_at_unix_ms,
             attempt_count: value.attempt_count,
             retry: value.retry,
             claim: value.claim,

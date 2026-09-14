@@ -36,7 +36,7 @@ fn plan(current: u32, fail: bool) -> MigrationPlan {
     }
 }
 
-async fn seed(connection: &mut SqliteConnection) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+pub(super) async fn seed(connection: &mut SqliteConnection) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let (command, _) = signed_fact_fixture::prepare();
     let AuthoredAtomicCommand::Prepare(prepared) = &command else {
         unreachable!()
@@ -83,7 +83,10 @@ async fn seed(connection: &mut SqliteConnection) -> (Vec<u8>, Vec<u8>, Vec<u8>) 
     )
 }
 
-async fn retained(connection: &mut SqliteConnection, expected: &(Vec<u8>, Vec<u8>, Vec<u8>)) {
+pub(super) async fn retained(
+    connection: &mut SqliteConnection,
+    expected: &(Vec<u8>, Vec<u8>, Vec<u8>),
+) {
     let artifact: Vec<u8> =
         sqlx::query_scalar("SELECT snapshot FROM radroots_runtime_authored_artifacts")
             .fetch_one(&mut *connection)
@@ -103,7 +106,7 @@ async fn v15_preserves_v14_rows_and_receipts_and_prior_schema_policy_fails_close
     establish_runtime_version(&mut connection, 14).await;
     let old = seed(&mut connection).await;
     assert!(matches!(
-        migrate_runtime(&mut connection, OpenMode::ReadOnly).await,
+        migrate(&mut connection, OpenMode::ReadOnly, &plan(15, false)).await,
         Err(Error::SchemaMigrationRequired {
             actual: 14,
             current: 15,
@@ -111,10 +114,14 @@ async fn v15_preserves_v14_rows_and_receipts_and_prior_schema_policy_fails_close
         })
     ));
     assert_eq!(
-        migrate_runtime(&mut connection, OpenMode::ReadWriteExisting)
-            .await
-            .unwrap()
-            .applied(),
+        migrate(
+            &mut connection,
+            OpenMode::ReadWriteExisting,
+            &plan(15, false)
+        )
+        .await
+        .unwrap()
+        .applied(),
         1
     );
     assert_eq!(pragma(&mut connection, "user_version").await, 15);
@@ -136,7 +143,7 @@ async fn v15_preserves_v14_rows_and_receipts_and_prior_schema_policy_fails_close
         ));
     }
     assert_eq!(
-        migrate_runtime(&mut connection, OpenMode::ReadOnly)
+        migrate(&mut connection, OpenMode::ReadOnly, &plan(15, false))
             .await
             .unwrap()
             .applied(),

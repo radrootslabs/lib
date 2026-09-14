@@ -371,7 +371,7 @@ async fn metadata(
 fn validate_plan(plan: &MigrationPlan) -> Result<(), Error> {
     let valid = plan.minimum_version > 0
         && plan.minimum_version <= plan.current_version
-        && plan.current_version <= 15
+        && plan.current_version <= 16
         && plan.steps.len() == usize::try_from(plan.current_version).unwrap_or(usize::MAX)
         && plan
             .steps
@@ -491,6 +491,7 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
         13 => Some("PRAGMA user_version = 13"),
         14 => Some("PRAGMA user_version = 14"),
         15 => Some("PRAGMA user_version = 15"),
+        16 => Some("PRAGMA user_version = 16"),
         _ => None,
     }
 }
@@ -717,7 +718,9 @@ mod tests {
             .execute(&mut newer)
             .await
             .expect("application id");
-        sqlx::raw_sql("PRAGMA user_version = 16")
+        let newer_version = 17;
+        assert_eq!(newer_version, runtime::CURRENT_VERSION + 1);
+        sqlx::raw_sql("PRAGMA user_version = 17")
             .execute(&mut newer)
             .await
             .expect("newer version");
@@ -726,10 +729,13 @@ mod tests {
             Err(Error::SchemaTooNew {
                 database: RUNTIME_DATABASE,
                 supported: runtime::CURRENT_VERSION,
-                actual: 16,
-            })
+                actual,
+            }) if actual == newer_version
         ));
-        assert_eq!(pragma(&mut newer, "user_version").await, 16);
+        assert_eq!(
+            pragma(&mut newer, "user_version").await,
+            i64::from(newer_version)
+        );
 
         let mut wrong_identity = connection().await;
         establish_runtime_version(&mut wrong_identity, 1).await;
@@ -868,3 +874,8 @@ mod draft_query_tests;
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "migration_signed_facts_tests.rs"]
 mod signed_facts_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "migration_delivery_facts_tests.rs"]
+mod delivery_facts_tests;

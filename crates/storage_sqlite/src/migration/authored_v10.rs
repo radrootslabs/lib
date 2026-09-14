@@ -312,7 +312,7 @@ pub(crate) async fn apply(
             .await
             .map_err(|_| metadata_error())?;
         persist_imported_artifact(transaction, &artifact).await?;
-        authored::persist_plan(transaction, &plan)
+        authored::persist_plan_v11(transaction, &plan)
             .await
             .map_err(|_| metadata_error())?;
     }

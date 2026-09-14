@@ -1,4 +1,6 @@
 use crate::SqliteStorage;
+#[path = "authored_delivery_facts.rs"]
+mod delivery_facts;
 use radroots_storage::{
     Error,
     atomic::{AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId},
@@ -205,6 +207,11 @@ async fn commit_outcome(
     outcome: AuthoredAtomicOutcome,
 ) -> Result<AuthoredAtomicReceipt, Error> {
     let committed_at = match (command, &outcome) {
+        (AuthoredAtomicCommand::RecordDelivery(_), AuthoredAtomicOutcome::DeliveryPlan(plan)) => {
+            command
+                .requested_at_unix_ms()
+                .max(plan.updated_at_unix_ms())
+        }
         (AuthoredAtomicCommand::RecordSigned(_), AuthoredAtomicOutcome::Artifact(artifact)) => {
             command
                 .requested_at_unix_ms()
@@ -406,6 +413,23 @@ async fn execute_command(
             persist_artifact(transaction, &artifact).await?;
             Ok(AuthoredAtomicOutcome::Artifact(artifact))
         }
+        AuthoredAtomicCommand::RecordDelivery(value) => {
+            let row = sqlx::query(
+                "SELECT commit_id, commit_digest, requested_at_unix_ms,
+                        committed_at_unix_ms, receipt
+                 FROM radroots_runtime_authored_atomic_commits WHERE commit_id = ?",
+            )
+            .bind(value.claim_command().commit_id().as_bytes().as_slice())
+            .fetch_optional(&mut **transaction)
+            .await
+            .map_err(map_backend)?
+            .ok_or(Error::AtomicWorkflowMismatch)?;
+            let original = decode_receipt_row(&row)?;
+            let mut plan = load_plan_tx(transaction, value.plan_id()).await?;
+            value.apply_to(&mut plan, &original)?;
+            persist_plan(transaction, &plan).await?;
+            Ok(AuthoredAtomicOutcome::DeliveryPlan(plan))
+        }
         AuthoredAtomicCommand::ApplyDelivery(value) => {
             let mut plan = load_plan_tx(transaction, value.plan_id()).await?;
             match value.outcome().clone() {
@@ -498,7 +522,7 @@ async fn execute_command(
             CancelAuthoredTarget::DeliveryPlan(id) => {
                 let mut plan = load_plan_tx(transaction, *id).await?;
                 require_revision(plan.revision().get(), value.expected_revision().get())?;
-                plan.cancel(value.cancelled_at_unix_ms())?;
+                plan.request_stop(value.cancelled_at_unix_ms())?;
                 persist_plan(transaction, &plan).await?;
                 Ok(AuthoredAtomicOutcome::DeliveryPlan(plan))
             }
@@ -672,6 +696,15 @@ pub(crate) async fn persist_plan(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     plan: &AuthoredDeliveryPlan,
 ) -> Result<(), Error> {
+    persist_plan_v11(transaction, plan).await?;
+    delivery_facts::persist(transaction, plan).await
+}
+
+// Legacy conversion runs before the delivery-facts forward migration.
+pub(crate) async fn persist_plan_v11(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    plan: &AuthoredDeliveryPlan,
+) -> Result<(), Error> {
     let claim = plan.claim_evidence();
     sqlx::query(
         "INSERT INTO radroots_runtime_authored_delivery_plans (
@@ -787,36 +820,45 @@ async fn load_plan_tx(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     plan_id: AuthoredDeliveryPlanId,
 ) -> Result<AuthoredDeliveryPlan, Error> {
-    let plan =
-        sqlx::query("SELECT * FROM radroots_runtime_authored_delivery_plans WHERE plan_id = ?")
-            .bind(plan_id.as_bytes().as_slice())
-            .fetch_optional(&mut **transaction)
-            .await
-            .map_err(map_backend)?
-            .as_ref()
-            .map(decode_plan_row)
-            .transpose()?
-            .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
-    validate_plan_children_tx(transaction, &plan).await?;
-    Ok(plan)
+    load_optional_plan_tx(transaction, plan_id)
+        .await?
+        .ok_or(Error::InvalidAuthoredDeliveryPlan)
 }
 
-async fn load_plan_pool(
-    storage: &SqliteStorage,
+async fn load_optional_plan_tx(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
     plan_id: AuthoredDeliveryPlanId,
 ) -> Result<Option<AuthoredDeliveryPlan>, Error> {
     let Some(row) =
         sqlx::query("SELECT * FROM radroots_runtime_authored_delivery_plans WHERE plan_id = ?")
             .bind(plan_id.as_bytes().as_slice())
-            .fetch_optional(storage.pool())
+            .fetch_optional(&mut **transaction)
             .await
             .map_err(map_backend)?
     else {
         return Ok(None);
     };
     let plan = decode_plan_row(&row)?;
-    validate_plan_children_pool(storage, &plan).await?;
+    validate_plan_children_tx(transaction, &plan).await?;
     Ok(Some(plan))
+}
+
+async fn load_plan_pool(
+    storage: &SqliteStorage,
+    plan_id: AuthoredDeliveryPlanId,
+) -> Result<Option<AuthoredDeliveryPlan>, Error> {
+    // Plan and append-only facts must come from the same read snapshot even
+    // when a late result commits between the individual SELECT statements.
+    let mut transaction = storage.pool().begin().await.map_err(map_backend)?;
+    let result = load_optional_plan_tx(&mut transaction, plan_id).await;
+    let rollback = transaction.rollback().await.map_err(map_backend);
+    match result {
+        Ok(plan) => {
+            rollback?;
+            Ok(plan)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 async fn validate_plan_children_tx(
@@ -839,30 +881,13 @@ async fn validate_plan_children_tx(
     .fetch_all(&mut **transaction)
     .await
     .map_err(map_backend)?;
-    validate_plan_children(plan, &targets, &attempts)
-}
-
-async fn validate_plan_children_pool(
-    storage: &SqliteStorage,
-    plan: &AuthoredDeliveryPlan,
-) -> Result<(), Error> {
-    let targets = sqlx::query(
-        "SELECT ordinal, target_fingerprint, target_snapshot
-         FROM radroots_runtime_authored_delivery_targets WHERE plan_id = ? ORDER BY ordinal",
-    )
-    .bind(plan.plan_id().as_bytes().as_slice())
-    .fetch_all(storage.pool())
-    .await
-    .map_err(map_backend)?;
-    let attempts = sqlx::query(
-        "SELECT attempt, satisfaction, recorded_at_unix_ms, outcome_snapshot
-         FROM radroots_runtime_authored_delivery_attempts WHERE plan_id = ? ORDER BY attempt",
-    )
-    .bind(plan.plan_id().as_bytes().as_slice())
-    .fetch_all(storage.pool())
-    .await
-    .map_err(map_backend)?;
-    validate_plan_children(plan, &targets, &attempts)
+    validate_plan_children(plan, &targets, &attempts)?;
+    let facts = sqlx::query(delivery_facts::SELECT)
+        .bind(plan.plan_id().as_bytes().as_slice())
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(map_backend)?;
+    delivery_facts::validate(plan, &facts)
 }
 
 fn validate_plan_children(
@@ -966,6 +991,11 @@ fn decode_plan_row(row: &SqliteRow) -> Result<AuthoredDeliveryPlan, Error> {
         || column::<Vec<u8>>(row, "request_digest")?.as_slice() != value.request_digest()
         || column::<String>(row, "state")? != delivery_state_name(value.state())
         || column::<i64>(row, "attempt_count")? != i64::from(value.attempt_count())
+        || column::<Option<i64>>(row, "stop_requested_at_unix_ms")?
+            != value
+                .stop_requested_at_unix_ms()
+                .map(i64_from_u64)
+                .transpose()?
         || !claim_columns_match(row, "claim", value.claim_evidence())?
         || column::<Option<i64>>(row, "retry_not_before_unix_ms")?
             != value
@@ -1148,6 +1178,7 @@ fn command_target(command: &AuthoredAtomicCommand) -> [u8; 16] {
         },
         AuthoredAtomicCommand::ApplySigned(value) => *value.artifact_id().as_bytes(),
         AuthoredAtomicCommand::RecordSigned(value) => *value.artifact_id().as_bytes(),
+        AuthoredAtomicCommand::RecordDelivery(value) => *value.plan_id().as_bytes(),
         AuthoredAtomicCommand::ApplyAdmission(value) => *value.artifact_id().as_bytes(),
         AuthoredAtomicCommand::ApplyDelivery(value) => *value.plan_id().as_bytes(),
         AuthoredAtomicCommand::ApplyFailure(value) => match value.target() {
@@ -1168,7 +1199,9 @@ fn command_phase(command: &AuthoredAtomicCommand) -> &'static str {
         AuthoredAtomicCommand::Claim(_) => "claim",
         AuthoredAtomicCommand::ApplySigned(_) | AuthoredAtomicCommand::RecordSigned(_) => "signing",
         AuthoredAtomicCommand::ApplyAdmission(_) => "admission",
-        AuthoredAtomicCommand::ApplyDelivery(_) => "delivery",
+        AuthoredAtomicCommand::ApplyDelivery(_) | AuthoredAtomicCommand::RecordDelivery(_) => {
+            "delivery"
+        }
         AuthoredAtomicCommand::ApplyFailure(value) => match value.failure().phase() {
             WorkPhase::Signing => "signing_failure",
             WorkPhase::Admission => "admission_failure",
@@ -2604,6 +2637,11 @@ mod signed_durability_tests;
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "authored_signed_fact_tests.rs"]
 mod signed_fact_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_delivery_fact_tests.rs"]
+mod delivery_fact_tests;
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
