@@ -222,6 +222,14 @@ impl Engine {
         if now_unix_ms == 0 {
             return Err(Error::ClockUnavailable);
         }
+        if plan.request().is_some()
+            && plan
+                .delivery_satisfaction()
+                .map_err(|_| Error::StorageFailed)?
+                == radroots_transport::policy::SatisfactionState::Satisfied
+        {
+            return Ok(SyncRetryDecision::Satisfied);
+        }
         match plan.state() {
             AuthoredDeliveryState::Satisfied => return Ok(SyncRetryDecision::Satisfied),
             AuthoredDeliveryState::Exhausted

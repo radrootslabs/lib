@@ -45,3 +45,19 @@ unresolved; recovery follows the declared replay capability and never invents
 a new preimage, event timestamp, or key. Sync creates no worker or timer to
 retain a discarded future. Delivery-wide stop reconciliation is a separate
 contract from authored signing evidence.
+
+Authored delivery retains validated raw results against their original durable
+claim even after stop, expiry or replacement of that claim. A late callback can
+change scheduling only under its original still-current lease. Fresh calls
+reconcile pending facts before any further delivery; reconciliation invokes no
+transport. Every retry uses the same persisted signed request and target policy.
+Stop prevents further local work and preserves unknown and accepted effects.
+
+`PushStatus::delivery_history` exposes consistent bounded claim provenance.
+Use its explicit no-issued proof and unresolved-history classification together
+with the plan's cumulative delivery satisfaction and first stop. The existing
+settlement counters describe scheduling state; they do not prove remote absence.
+After a post-delivery clock failure, Sync retains the raw non-expiring result
+with the known pre-effect time as a causal lower bound and returns
+`ClockUnavailable` without retry scheduling. This is not a measured response
+time and does not change strict signing or expiring authorization requirements.

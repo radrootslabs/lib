@@ -57,10 +57,16 @@ const CONTENT: &str = "frozen-content";
 #[path = "push_enqueue/signing_evidence.rs"]
 mod signing_evidence;
 
+#[path = "push_enqueue/delivery_evidence.rs"]
+mod delivery_evidence;
+
 struct MockSink;
 
 struct FaultStorage {
     inner: Arc<MemoryStorage>,
+    delivery_injection: Mutex<Option<delivery_evidence::Injection>>,
+    receipt_mutation: Mutex<Option<delivery_evidence::ReceiptMutation>>,
+    history_mutation: Mutex<Option<(usize, delivery_evidence::HistoryMutation)>>,
     fault_kind: AtomicUsize,
     remaining: AtomicUsize,
     admit_error: AtomicUsize,
@@ -70,6 +76,9 @@ struct FaultStorage {
 impl FaultStorage {
     fn new(generation: u8) -> Self {
         Self {
+            delivery_injection: Mutex::new(None),
+            receipt_mutation: Mutex::new(None),
+            history_mutation: Mutex::new(None),
             inner: Arc::new(MemoryStorage::new(
                 SourceGeneration::new([generation; 32]).expect("generation"),
             )),
@@ -476,8 +485,18 @@ impl AuthoredAtomicStorage for FaultStorage {
         Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::Error>,
     > {
         Box::pin(async move {
+            delivery_evidence::inject(self, &command, true).await;
             let receipt =
-                AuthoredAtomicStorage::execute_authored(self.inner.as_ref(), command).await?;
+                AuthoredAtomicStorage::execute_authored(self.inner.as_ref(), command.clone())
+                    .await?;
+            delivery_evidence::inject(self, &command, false).await;
+            if matches!(
+                receipt.outcome(),
+                radroots_storage::authored_atomic::AuthoredAtomicOutcome::DeliveryPlan(_)
+            ) && let Some(mutation) = self.receipt_mutation.lock().unwrap().take()
+            {
+                return Ok(delivery_evidence::mutate_receipt(receipt, mutation));
+            }
             if let radroots_storage::authored_atomic::AuthoredAtomicOutcome::Prepared { .. } =
                 receipt.outcome()
             {
@@ -585,6 +604,37 @@ impl AuthoredAtomicStorage for FaultStorage {
         >,
     > {
         AuthoredAtomicStorage::authored_delivery_plan(self.inner.as_ref(), id)
+    }
+    fn authored_delivery_history(
+        &self,
+        id: radroots_storage::authored_delivery::AuthoredDeliveryPlanId,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::authored_delivery::AuthoredDeliveryHistory>,
+            radroots_storage::Error,
+        >,
+    > {
+        Box::pin(async move {
+            let history = self.inner.authored_delivery_history(id).await?;
+            let mutation = {
+                let mut armed = self.history_mutation.lock().unwrap();
+                if let Some((remaining, _)) = armed.as_mut() {
+                    *remaining -= 1;
+                }
+                if armed.as_ref().is_some_and(|(remaining, _)| *remaining == 0) {
+                    armed.take().map(|(_, mutation)| mutation)
+                } else {
+                    None
+                }
+            };
+            Ok(match (history, mutation) {
+                (Some(history), Some(mutation)) => {
+                    Some(delivery_evidence::mutate_history(history, mutation))
+                }
+                (history, _) => history,
+            })
+        })
     }
 }
 

@@ -1,0 +1,13 @@
+{
+  "schema": "radroots.sync-delivery-evidence.v1",
+  "status": "approved",
+  "owner": "radroots_sync",
+  "producer_contracts": ["authored_delivery_reconciliation.v1.json"],
+  "binding": "Every transport invocation uses the exact persisted signed request under a backend-owned original claim. Validate raw final sink results and retain them with RecordDeliveryFact before retry normalization. Invalid adapter contracts produce the existing bound invalid_transport_contract failure, never fabricated acceptance.",
+  "authority": "Validate each claim, fact and reconciliation receipt against its exact command and reload current backend history. Late callbacks may reconcile only under their own still-current unexpired claim. Stop, expiry or supersession never erases a valid fact and never grants that callback fresh scheduling authority. A fresh call reconciles pending facts as a complete bounded action before any subsequent transport invocation.",
+  "history": "Expose the consistent bounded AuthoredDeliveryHistory through PushStatus. Proven no-issued-attempt, unresolved or incomplete history, raw acceptance, first stop and scheduling settlement remain distinct. Legacy settlement fields retain scheduling semantics. Missing backend history fails closed; no client infers no effect from an empty attempt list.",
+  "retry": "Preserve raw outcomes, provider retry bounds, the existing delay and attempt cap. Count new facts once; recognize legacy applications using both the original claim attempt ordinal and valid lease interval. Reconciliation rejects conflicting legacy observations without deleting either fact. Retry and deadline exhaustion preserve immutable intent for explicit host recovery.",
+  "clock": "A validated non-expiring delivery result is retained even when the post-effect host clock fails, using the known valid pre-effect timestamp only as a causal lower bound. Return ClockUnavailable after retaining it and do not reconcile scheduling in that callback. Do not claim a measured response timestamp or alter event time. Fresh reconciliation cannot advance host time to a future fact. Strict signer evidence and expiring authorization clock requirements are unchanged.",
+  "lifetime": "Sync creates no executor, worker, timer or hidden retry. The host must retain and poll an admitted future to deliver a late result. Dropping it leaves durable unresolved provenance; cancellation is not remote rollback.",
+  "scope": "Standalone shared Sync only. Tera native adoption, UI status and whole-operation stop are separate checkpoints. No credential mutation, release publication or deployment."
+}

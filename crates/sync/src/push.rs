@@ -19,14 +19,14 @@ use radroots_storage::{
         OperationSettlement, RetrySchedule, SigningState, WorkClaim, WorkFailure, WorkPhase,
     },
     authored_atomic::{
-        ApplyAdmissionResult, ApplyDeliveryAttempt, ApplyWorkFailure, AuthoredAtomicCommand,
-        AuthoredAtomicOutcome, AuthoredWorkTarget, CancelAuthoredTarget, CancelAuthoredWork,
-        ClaimAuthoredTarget, ClaimAuthoredWork, PrepareAuthoredOperation, RecordSignedArtifact,
-        WorkFence,
+        ApplyAdmissionResult, ApplyWorkFailure, AuthoredAtomicCommand, AuthoredAtomicOutcome,
+        AuthoredWorkTarget, CancelAuthoredTarget, CancelAuthoredWork, ClaimAuthoredTarget,
+        ClaimAuthoredWork, PrepareAuthoredOperation, RecordSignedArtifact, WorkFence,
     },
     authored_delivery::{
-        AuthoredDeliveryIntent, AuthoredDeliveryPlan, AuthoredDeliveryPlanId,
-        AuthoredDeliveryState, DELIVERY_PLAN_ATTEMPTS_MAX, DeliveryAttemptOutcome,
+        AuthoredDeliveryHistory, AuthoredDeliveryIntent, AuthoredDeliveryPlan,
+        AuthoredDeliveryPlanId, AuthoredDeliveryState, DELIVERY_PLAN_ATTEMPTS_MAX,
+        DeliveryAttemptOutcome,
     },
     event::{AdmissionDisposition, EventAdmission, EventStore},
     journal::{IdempotencyKey, OperationInstanceId},
@@ -45,6 +45,8 @@ use crate::{
     ingest::{AdmissionDecision, AdmissionPolicy, RegistryPolicy},
     policy::{Error, OperationKind, SyncId},
 };
+
+mod delivery;
 
 const SIGNING_CLAIM_OWNER_EXACT: &str = "radroots-sync-signing-exact";
 const SIGNING_CLAIM_OWNER_LOCAL: &str = "radroots-sync-signing-local";
@@ -206,7 +208,7 @@ impl PushPreparation {
 pub struct PushStatus {
     operation: AuthoredOperation,
     artifact: AuthoredArtifact,
-    delivery_plan: AuthoredDeliveryPlan,
+    delivery_history: AuthoredDeliveryHistory,
     settlement: OperationSettlement,
 }
 
@@ -218,7 +220,11 @@ impl PushStatus {
         &self.artifact
     }
     pub const fn delivery_plan(&self) -> &AuthoredDeliveryPlan {
-        &self.delivery_plan
+        self.delivery_history.plan()
+    }
+    /// Consistent original-claim history; missing provenance remains unknown.
+    pub const fn delivery_history(&self) -> &AuthoredDeliveryHistory {
+        &self.delivery_history
     }
     pub const fn settlement(&self) -> OperationSettlement {
         self.settlement
@@ -352,13 +358,17 @@ impl Engine {
             .await
             .map_err(map_storage_error)?
             .ok_or(Error::StorageFailed)?;
-        let delivery_plan = self
+        let delivery_history = self
             .storage
-            .authored_delivery_plan(expected_plan_id)
+            .authored_delivery_history(expected_plan_id)
             .await
             .map_err(map_storage_error)?
             .ok_or(Error::StorageFailed)?;
-        if artifact.operation_id() != operation.operation_id()
+        delivery_history.validate().map_err(map_storage_error)?;
+        let delivery_plan = delivery_history.plan();
+        if artifact.artifact_id() != expected_artifact_id
+            || delivery_plan.plan_id() != expected_plan_id
+            || artifact.operation_id() != operation.operation_id()
             || delivery_plan.artifact_id() != artifact.artifact_id()
         {
             return Err(Error::StorageFailed);
@@ -366,13 +376,13 @@ impl Engine {
         let settlement = OperationSettlement::evaluate_complete(
             &operation,
             core::slice::from_ref(&artifact),
-            core::slice::from_ref(&delivery_plan),
+            core::slice::from_ref(delivery_plan),
         )
         .map_err(map_storage_error)?;
         Ok(Some(PushStatus {
             operation,
             artifact,
-            delivery_plan,
+            delivery_history,
             settlement,
         }))
     }
@@ -393,7 +403,7 @@ impl Engine {
             .clock
             .now_unix_ms()?
             .max(status.artifact.updated_at_unix_ms())
-            .max(status.delivery_plan.updated_at_unix_ms());
+            .max(status.delivery_plan().updated_at_unix_ms());
 
         let artifact_target = match status.artifact.signing_state() {
             SigningState::Planned | SigningState::Retryable => Some(
@@ -429,26 +439,44 @@ impl Engine {
                 .ok_or(Error::StorageFailed)?;
         }
 
-        if matches!(
-            status.delivery_plan.state(),
-            AuthoredDeliveryState::Pending | AuthoredDeliveryState::Retryable
-        ) {
-            self.storage
-                .execute_authored(AuthoredAtomicCommand::Cancel(
-                    CancelAuthoredWork::new(
-                        CancelAuthoredTarget::DeliveryPlan(status.delivery_plan.plan_id()),
-                        status.delivery_plan.revision(),
-                        now,
-                    )
-                    .map_err(map_storage_error)?,
-                ))
+        if status.delivery_plan().stop_requested_at_unix_ms().is_none() {
+            let command = AuthoredAtomicCommand::Cancel(
+                CancelAuthoredWork::new(
+                    CancelAuthoredTarget::DeliveryPlan(status.delivery_plan().plan_id()),
+                    status.delivery_plan().revision(),
+                    now,
+                )
+                .map_err(map_storage_error)?,
+            );
+            let receipt = self
+                .storage
+                .execute_authored(command.clone())
                 .await
                 .map_err(map_storage_error)?;
+            if !receipt.matches_command(&command) {
+                return Err(Error::StorageFailed);
+            }
+            let AuthoredAtomicOutcome::DeliveryPlan(stopped) = receipt.outcome() else {
+                return Err(Error::StorageFailed);
+            };
+            if stopped.validate().is_err()
+                || stopped.plan_id() != status.delivery_plan().plan_id()
+                || stopped.artifact_id() != status.artifact.artifact_id()
+                || stopped.request() != status.delivery_plan().request()
+                || stopped.stop_requested_at_unix_ms() != Some(now)
+                || status.delivery_plan().revision().get().checked_add(1)
+                    != Some(stopped.revision().get())
+            {
+                return Err(Error::StorageFailed);
+            }
             changed = true;
             status = self
                 .push_status(operation_id)
                 .await?
                 .ok_or(Error::StorageFailed)?;
+            if status.delivery_plan().stop_requested_at_unix_ms().is_none() {
+                return Err(Error::StorageFailed);
+            }
         }
 
         Ok(PushCancellationReceipt { status, changed })
@@ -461,7 +489,7 @@ impl Engine {
             .push_status(request.operation_id)
             .await?
             .ok_or(Error::StorageFailed)?;
-        if status.delivery_plan.state() == AuthoredDeliveryState::Cancelled {
+        if status.delivery_plan().state() == AuthoredDeliveryState::Cancelled {
             self.cancel_push(request.operation_id).await?;
             return Err(Error::SigningCancelled);
         }
@@ -587,7 +615,7 @@ impl Engine {
                     return Err(Error::StorageFailed);
                 }
                 if expected_request.cancellation_signal().is_cancelled()
-                    || status.delivery_plan.state() == AuthoredDeliveryState::Cancelled
+                    || status.delivery_plan().state() == AuthoredDeliveryState::Cancelled
                 {
                     let stopped = self.cancel_push(request.operation_id).await?;
                     if stopped
@@ -715,6 +743,7 @@ impl Engine {
             .push_status(operation_id)
             .await?
             .ok_or(Error::StorageFailed)?;
+        let delivery_stopped = status.delivery_plan().stop_requested_at_unix_ms().is_some();
         let artifact = status.artifact;
         if artifact.signing_state() != SigningState::Signed {
             return Err(Error::InvalidSignerOutput);
@@ -725,7 +754,7 @@ impl Engine {
                 replay: true,
             });
         }
-        if status.delivery_plan.state() == AuthoredDeliveryState::Cancelled {
+        if delivery_stopped {
             self.cancel_push(operation_id).await?;
             return Err(Error::AdmissionFailed);
         }
@@ -847,141 +876,6 @@ impl Engine {
             artifact: artifact.clone(),
             replay: false,
         })
-    }
-
-    /// Claims and executes one durable authored delivery plan.
-    ///
-    /// Terminal plans replay without invoking the sink. Retry timing and the
-    /// request deadline are enforced from durable intent before any adapter
-    /// call, and every adapter result is fenced into the plan as evidence.
-    pub async fn deliver_push(
-        &self,
-        operation_id: SyncId,
-    ) -> Result<DeliveryExecutionReceipt, Error> {
-        let sink = self.sink.as_deref().ok_or(Error::MissingSink)?;
-        let status = self
-            .push_status(operation_id)
-            .await?
-            .ok_or(Error::StorageFailed)?;
-        if status.artifact.signing_state() != SigningState::Signed {
-            return Err(Error::InvalidSignerOutput);
-        }
-        if !status.artifact.admission_state().is_admitted() {
-            return Err(Error::AdmissionFailed);
-        }
-        let plan = status.delivery_plan;
-        if plan.state().is_terminal() {
-            return Ok(DeliveryExecutionReceipt { plan, replay: true });
-        }
-        let request = plan.request().cloned().ok_or(Error::InvalidSignerOutput)?;
-        let now = self.clock.now_unix_ms()?.max(plan.updated_at_unix_ms());
-        if plan
-            .claim_evidence()
-            .is_some_and(|claim| now < claim.expires_at_unix_ms())
-        {
-            return Err(Error::WorkClaimConflict);
-        }
-        if plan
-            .retry()
-            .is_some_and(|retry| now < retry.not_before_unix_ms())
-        {
-            return Err(Error::DeliveryDeferred);
-        }
-        let (claimed, fence) = self.claim_delivery_plan(plan, now).await?;
-        let execution_started_at = self.clock.now_unix_ms()?.max(claimed.updated_at_unix_ms());
-        let result = if execution_started_at >= request.deadline_unix_ms() {
-            DeliveryAttemptOutcome::SinkFailure(
-                SinkFailure::for_request(
-                    &request,
-                    "delivery_deadline_exceeded",
-                    Retryability::Terminal,
-                    None,
-                    None,
-                    Vec::new(),
-                )
-                .map_err(|_| Error::InvalidDeliveryRequest)?,
-            )
-        } else {
-            match sink.deliver(request.clone()).await {
-                Ok(receipt) if receipt.validate_for_request(&request).is_ok() => {
-                    DeliveryAttemptOutcome::Receipt(receipt)
-                }
-                Ok(_) => {
-                    DeliveryAttemptOutcome::SinkFailure(SinkFailure::invalid_contract(&request))
-                }
-                Err(failure) if failure.validate_for_request(&request).is_ok() => {
-                    DeliveryAttemptOutcome::SinkFailure(failure)
-                }
-                Err(_) => {
-                    DeliveryAttemptOutcome::SinkFailure(SinkFailure::invalid_contract(&request))
-                }
-            }
-        };
-        let attempted_at = self.clock.now_unix_ms()?.max(execution_started_at);
-        let outcome = match result {
-            DeliveryAttemptOutcome::SinkFailure(failure) => DeliveryAttemptOutcome::SinkFailure(
-                normalize_sink_failure(&request, failure, attempted_at)?,
-            ),
-            outcome => outcome,
-        };
-        let satisfaction = claimed
-            .evaluate_next_attempt(&outcome)
-            .map_err(map_storage_error)?;
-        let retry = delivery_retry_schedule(&claimed, &outcome, satisfaction, attempted_at)?;
-        let command = AuthoredAtomicCommand::ApplyDelivery(
-            ApplyDeliveryAttempt::new(claimed.plan_id(), fence, outcome, retry, attempted_at)
-                .map_err(map_storage_error)?,
-        );
-        let receipt = self
-            .storage
-            .execute_authored(command)
-            .await
-            .map_err(map_claim_error)?;
-        let AuthoredAtomicOutcome::DeliveryPlan(plan) = receipt.outcome() else {
-            return Err(Error::StorageFailed);
-        };
-        Ok(DeliveryExecutionReceipt {
-            plan: plan.clone(),
-            replay: false,
-        })
-    }
-
-    async fn claim_delivery_plan(
-        &self,
-        plan: AuthoredDeliveryPlan,
-        acquired_at: u64,
-    ) -> Result<(AuthoredDeliveryPlan, WorkFence), Error> {
-        let generation = plan
-            .claim_evidence()
-            .map_or(1, |claim| claim.generation().get().saturating_add(1));
-        let generation = NonZeroU64::new(generation).ok_or(Error::StorageFailed)?;
-        let expires_at = acquired_at
-            .checked_add(self.deadlines.timeout_ms(OperationKind::Deliver))
-            .ok_or(Error::DeadlineOverflow)?;
-        let claim = WorkClaim::new(
-            *self.ids.next_id(OperationKind::Deliver)?.as_bytes(),
-            DELIVERY_CLAIM_OWNER,
-            generation,
-            acquired_at,
-            expires_at,
-            plan.revision(),
-        )
-        .map_err(map_storage_error)?;
-        let fence = WorkFence::new(*claim.token(), claim.generation(), claim.row_revision())
-            .map_err(map_storage_error)?;
-        let command = AuthoredAtomicCommand::Claim(ClaimAuthoredWork::new(
-            ClaimAuthoredTarget::DeliveryPlan(plan.plan_id()),
-            claim,
-        ));
-        let receipt = self
-            .storage
-            .execute_authored(command)
-            .await
-            .map_err(map_claim_error)?;
-        let AuthoredAtomicOutcome::DeliveryPlan(claimed) = receipt.outcome() else {
-            return Err(Error::StorageFailed);
-        };
-        Ok((claimed.clone(), fence))
     }
 
     async fn claim_artifact(
@@ -1131,16 +1025,11 @@ fn normalize_sink_failure(
 }
 
 fn delivery_retry_schedule(
-    plan: &AuthoredDeliveryPlan,
+    attempt: NonZeroU32,
     outcome: &DeliveryAttemptOutcome,
     satisfaction: SatisfactionState,
     attempted_at_unix_ms: u64,
 ) -> Result<Option<RetrySchedule>, Error> {
-    let attempt = plan
-        .attempt_count()
-        .checked_add(1)
-        .and_then(NonZeroU32::new)
-        .ok_or(Error::StorageFailed)?;
     if satisfaction != SatisfactionState::Pending || attempt.get() >= DELIVERY_PLAN_ATTEMPTS_MAX {
         return Ok(None);
     }
@@ -1667,26 +1556,45 @@ mod tests {
         .unwrap();
         let receipt_outcome = DeliveryAttemptOutcome::Receipt(receipt);
         assert!(
-            delivery_retry_schedule(&plan, &receipt_outcome, SatisfactionState::Satisfied, 100)
-                .unwrap()
-                .is_none()
+            delivery_retry_schedule(
+                NonZeroU32::new(plan.attempt_count() + 1).unwrap(),
+                &receipt_outcome,
+                SatisfactionState::Satisfied,
+                100
+            )
+            .unwrap()
+            .is_none()
         );
-        let schedule =
-            delivery_retry_schedule(&plan, &receipt_outcome, SatisfactionState::Pending, 100)
-                .unwrap()
-                .unwrap();
+        let schedule = delivery_retry_schedule(
+            NonZeroU32::new(plan.attempt_count() + 1).unwrap(),
+            &receipt_outcome,
+            SatisfactionState::Pending,
+            100,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(schedule.not_before_unix_ms(), 1_100);
         let retry_outcome = DeliveryAttemptOutcome::SinkFailure(normalized);
         assert!(
-            delivery_retry_schedule(&plan, &retry_outcome, SatisfactionState::Pending, 100)
-                .unwrap()
-                .is_some()
+            delivery_retry_schedule(
+                NonZeroU32::new(plan.attempt_count() + 1).unwrap(),
+                &retry_outcome,
+                SatisfactionState::Pending,
+                100
+            )
+            .unwrap()
+            .is_some()
         );
         let terminal_outcome = DeliveryAttemptOutcome::SinkFailure(terminal);
         assert!(
-            delivery_retry_schedule(&plan, &terminal_outcome, SatisfactionState::Pending, 100)
-                .unwrap()
-                .is_none()
+            delivery_retry_schedule(
+                NonZeroU32::new(plan.attempt_count() + 1).unwrap(),
+                &terminal_outcome,
+                SatisfactionState::Pending,
+                100
+            )
+            .unwrap()
+            .is_none()
         );
 
         for policy in [
