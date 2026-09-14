@@ -1,5 +1,8 @@
 //! Atomic authored-operation commands with deterministic phase identities.
 
+mod signing_evidence;
+pub use signing_evidence::RecordSignedArtifact;
+
 use core::num::NonZeroU64;
 use radroots_event::SignedEvent;
 use radroots_transport::BoxFuture;
@@ -417,6 +420,7 @@ pub enum AuthoredAtomicCommand {
     PrepareFromDraft(Box<PrepareFromDraft>),
     Claim(ClaimAuthoredWork),
     ApplySigned(ApplySignedArtifact),
+    RecordSigned(RecordSignedArtifact),
     ApplyAdmission(ApplyAdmissionResult),
     ApplyDelivery(ApplyDeliveryAttempt),
     ApplyFailure(ApplyWorkFailure),
@@ -462,6 +466,17 @@ impl AuthoredAtomicCommand {
                 hasher.update(value.claim.row_revision().get().to_be_bytes());
             }
             Self::ApplySigned(value) => hash_field(&mut hasher, value.event.raw_json().as_bytes()),
+            Self::RecordSigned(value) => {
+                hash_field(&mut hasher, value.operation_id().as_bytes());
+                let claim = value.claim();
+                hash_field(&mut hasher, claim.token());
+                hash_field(&mut hasher, claim.owner().as_bytes());
+                hasher.update(claim.generation().get().to_be_bytes());
+                hasher.update(claim.row_revision().get().to_be_bytes());
+                hasher.update(claim.acquired_at_unix_ms().to_be_bytes());
+                hasher.update(claim.expires_at_unix_ms().to_be_bytes());
+                hash_field(&mut hasher, value.event().raw_json().as_bytes());
+            }
             Self::ApplyAdmission(value) => {
                 hasher.update([value.state as u8]);
                 hash_failure(&mut hasher, value.failure.as_ref());
@@ -479,6 +494,7 @@ impl AuthoredAtomicCommand {
             Self::Prepare(value) => value.requested_at_unix_ms,
             Self::Claim(value) => value.claim.acquired_at_unix_ms(),
             Self::ApplySigned(value) => value.applied_at_unix_ms,
+            Self::RecordSigned(value) => value.observed_at_unix_ms(),
             Self::ApplyAdmission(value) => value.applied_at_unix_ms,
             Self::ApplyDelivery(value) => value.applied_at_unix_ms,
             Self::ApplyFailure(value) => value.applied_at_unix_ms,
@@ -492,6 +508,7 @@ impl AuthoredAtomicCommand {
             Self::Prepare(_) => b"prepare",
             Self::Claim(_) => b"claim",
             Self::ApplySigned(_) => b"signing",
+            Self::RecordSigned(_) => b"signed_fact_v1",
             Self::ApplyAdmission(_) => b"admission",
             Self::ApplyDelivery(_) => b"delivery",
             Self::ApplyFailure(value) => match value.failure.phase() {
@@ -515,6 +532,7 @@ impl AuthoredAtomicCommand {
                 ClaimAuthoredTarget::DeliveryPlan(id) => *id.as_bytes(),
             },
             Self::ApplySigned(value) => *value.artifact_id.as_bytes(),
+            Self::RecordSigned(value) => *value.artifact_id().as_bytes(),
             Self::ApplyAdmission(value) => *value.artifact_id.as_bytes(),
             Self::ApplyDelivery(value) => *value.plan_id.as_bytes(),
             Self::ApplyFailure(value) => match &value.target {
@@ -532,6 +550,7 @@ impl AuthoredAtomicCommand {
     fn generation(&self) -> Option<NonZeroU64> {
         match self {
             Self::ApplySigned(value) => Some(value.fence.generation),
+            Self::RecordSigned(value) => Some(value.claim().generation()),
             Self::Claim(value) => Some(value.claim.generation()),
             Self::ApplyAdmission(value) => Some(value.fence.generation),
             Self::ApplyDelivery(value) => Some(value.fence.generation),
@@ -572,6 +591,11 @@ impl AuthoredAtomicReceipt {
         }
         match (command, &self.outcome) {
             (
+                AuthoredAtomicCommand::RecordSigned(value),
+                AuthoredAtomicOutcome::Artifact(artifact),
+            ) => signed_fact_matches(value, artifact),
+            (AuthoredAtomicCommand::RecordSigned(_), _) => false,
+            (
                 AuthoredAtomicCommand::PrepareFromDraft(request),
                 AuthoredAtomicOutcome::Submitted(committed),
             ) => request == committed,
@@ -590,7 +614,20 @@ impl AuthoredAtomicReceipt {
         if committed_at_unix_ms < command.requested_at_unix_ms() {
             return Err(Error::AtomicWorkflowMismatch);
         }
+        if let (AuthoredAtomicCommand::RecordSigned(_), AuthoredAtomicOutcome::Artifact(artifact)) =
+            (command, &outcome)
+            && committed_at_unix_ms < artifact.updated_at_unix_ms()
+        {
+            return Err(Error::AtomicWorkflowMismatch);
+        }
         match (command, &outcome) {
+            (
+                AuthoredAtomicCommand::RecordSigned(value),
+                AuthoredAtomicOutcome::Artifact(artifact),
+            ) if signed_fact_matches(value, artifact) => artifact.validate()?,
+            (AuthoredAtomicCommand::RecordSigned(_), _) => {
+                return Err(Error::AtomicWorkflowMismatch);
+            }
             (
                 AuthoredAtomicCommand::PrepareFromDraft(request),
                 AuthoredAtomicOutcome::Submitted(value),
@@ -652,6 +689,14 @@ impl AuthoredAtomicReceipt {
     pub const fn outcome(&self) -> &AuthoredAtomicOutcome {
         &self.outcome
     }
+}
+
+fn signed_fact_matches(value: &RecordSignedArtifact, artifact: &AuthoredArtifact) -> bool {
+    artifact.operation_id() == value.operation_id()
+        && artifact.artifact_id() == value.artifact_id()
+        && artifact
+            .signed()
+            .is_some_and(|signed| signed.event() == value.event())
 }
 
 impl AuthoredAtomicOutcome {

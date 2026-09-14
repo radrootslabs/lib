@@ -4,8 +4,8 @@ use radroots_event::SignedEvent;
 use radroots_event_codec::{Codec, verify};
 use radroots_storage::{
     authored::{
-        AdmissionState, AuthoredArtifact, AuthoredArtifactId, AuthoredOperation, FailureClass,
-        RetrySchedule, WorkClaim, WorkFailure, WorkPhase,
+        AdmissionState, ArtifactOrigin, AuthoredArtifact, AuthoredArtifactId, AuthoredOperation,
+        FailureClass, RetrySchedule, WorkClaim, WorkFailure, WorkPhase,
     },
     authored_delivery::{AuthoredDeliveryPlan, AuthoredDeliveryPlanId, AuthoredDeliveryState},
     journal::{JournalState, OperationRecord},
@@ -311,9 +311,7 @@ pub(crate) async fn apply(
         authored::persist_operation(transaction, &operation)
             .await
             .map_err(|_| metadata_error())?;
-        authored::persist_artifact(transaction, &artifact)
-            .await
-            .map_err(|_| metadata_error())?;
+        persist_imported_artifact(transaction, &artifact).await?;
         authored::persist_plan(transaction, &plan)
             .await
             .map_err(|_| metadata_error())?;
@@ -430,6 +428,40 @@ fn convert_candidate(
     .map_err(|_| metadata_error())?;
     replay_evidence(&mut plan, &candidate.outbox)?;
     Ok((operation, artifact, plan))
+}
+
+// This conversion runs immediately after v11 DDL, before successor columns exist.
+async fn persist_imported_artifact(
+    transaction: &mut sqlx::Transaction<'_, Sqlite>,
+    artifact: &AuthoredArtifact,
+) -> Result<(), Error> {
+    artifact.validate().map_err(|_| metadata_error())?;
+    if artifact.origin() != ArtifactOrigin::ImportedSigned
+        || artifact.admission_state() != AdmissionState::Inserted
+    {
+        return Err(metadata_error());
+    }
+    let signed = artifact.signed().ok_or_else(metadata_error)?;
+    sqlx::query(
+        "INSERT INTO radroots_runtime_authored_artifacts (
+           artifact_id, operation_id, ordinal, origin, signing_state, admission_state,
+           signed_raw_json, signed_raw_sha256,
+           created_at_unix_ms, updated_at_unix_ms, revision, snapshot
+         ) VALUES (?, ?, ?, 'imported_signed', 'signed', 'inserted', ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(artifact.artifact_id().as_bytes().as_slice())
+    .bind(artifact.operation_id().as_bytes().as_slice())
+    .bind(i64::from(artifact.ordinal()))
+    .bind(signed.event().raw_json().as_bytes())
+    .bind(signed.raw_json_sha256().as_slice())
+    .bind(i64_from_u64(artifact.created_at_unix_ms())?)
+    .bind(i64_from_u64(artifact.updated_at_unix_ms())?)
+    .bind(i64_from_u64(artifact.revision().get())?)
+    .bind(authored::encode_snapshot(artifact).map_err(|_| metadata_error())?)
+    .execute(&mut **transaction)
+    .await
+    .map_err(|_| metadata_error())?;
+    Ok(())
 }
 
 fn replay_evidence(plan: &mut AuthoredDeliveryPlan, legacy: &OutboxRecord) -> Result<(), Error> {

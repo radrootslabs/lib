@@ -1,0 +1,22 @@
+{
+  "schema": "radroots.authored-signed-facts.v1",
+  "status": "approved",
+  "owners": [
+    "radroots_storage",
+    "radroots_storage_sqlite"
+  ],
+  "command": "authored_atomic::RecordSignedArtifact; AuthoredAtomicCommand::RecordSigned",
+  "provenance": "The owning transaction retrieves the immutable original signing Claim receipt. Exact operation, artifact, plan, complete claim and original row identity must match; lease expiry is irrelevant to evidence and remains binding on scheduling.",
+  "cryptography": "Verify event ID and Schnorr signature using existing event-codec; compare every retained plan field. No signing dependency, signer call, ambient clock or network.",
+  "immutability": "First exact signed bytes are immutable. Equal bytes from the same or another valid historical attempt are idempotent. Different raw bytes conflict even for the same event ID. The new logical signed_fact_v1 hash includes operation, artifact, full claim and raw event, excluding observation time; existing command hashes remain unchanged.",
+  "stop": "Cancelled and FailedTerminal logical signing states may retain signed bytes. Their admission state stays Pending and cannot acquire admission or delivery claims. Terminal delivery plans remain unchanged. Remaining global delivery stop/attempt semantics are separate.",
+  "time": "Observation time is positive and at least claim acquisition. Artifact row and committed receipt time use the maximum of observation and current artifact row time; the command retains its requested observation. Earlier observations cannot move durable row or commit time backwards. Existing command time rules remain unchanged.",
+  "migration": {
+    "version": 15,
+    "name": "authored_signed_facts",
+    "sha256": "d7ed7312b36f6ae633d2018d71d1bc0117097523ff46ecfaca8a99ca739aa026",
+    "compatibility": "Preserve every prior SQL/checksum, v1-v9 contract, old snapshot and receipt bytes. A nullable signing_stop column projects stopped-plus-signed snapshots as physical signed state plus stop, preserving the v11 CHECK. An update guard preserves first bytes and stops. Prior schema policy rejects version15; prior model validation rejects stopped-plus-signed snapshots."
+  },
+  "atomicity": "Memory commits a validated candidate; SQLite records artifact, eligible delivery bindings and receipt in one BEGIN IMMEDIATE transaction and returns only after COMMIT. Failures roll back all writes.",
+  "consumer": "Sync and concrete hosts must revalidate request identities, reconcile current durable state after receipt replay, and apply cancellation/deadline scheduling policy before further effects."
+}

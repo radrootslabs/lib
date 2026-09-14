@@ -85,6 +85,19 @@ local durable commit point:
 `AtomicStorage::commit` is the aggregate local workflow boundary. Network
 publication is outside this crate and is not implied by either state.
 
+`AuthoredAtomicCommand::RecordSigned` retains an already-created, cryptographically
+verified signature after its original signing lease expires or is superseded.
+The backend retrieves and checks its immutable signing claim receipt, including
+the full claim, operation, artifact and exact retained plan. This command performs
+no signing and supplies no permission to schedule another phase. Active
+`ApplySigned` and work claims retain their strict fences.
+
+The first exact signed bytes are immutable. Repeated identical evidence is
+idempotent; different raw bytes conflict. Cancelled or terminally failed signing
+may retain valid bytes while preserving its stop and failure state, with no
+admission or delivery claim. Receipt replay returns historical state, so hosts
+must query current durable status before deciding what work may follow.
+
 ## Events, journal, outbox, and projections
 
 Event storage preserves the exact signed event, verification/admission stage,

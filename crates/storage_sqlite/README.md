@@ -2,6 +2,19 @@
 
 SQLite storage backend for Radroots.
 
+Runtime schema v15 permits late verified authored signatures to remain durable
+alongside a signing stop. The logical snapshot preserves cancelled or terminal
+state; a separate SQL stop column preserves the original signed/raw constraint.
+Prior snapshots, receipt identities, migration bytes and checksums remain
+unchanged. Older schema policies reject the new version. An update guard prevents
+replacement of the first signed bytes or removal of the retained signing stop.
+
+Recording a late fact verifies the backend's immutable original claim receipt
+inside the same transaction as the artifact, eligible delivery bindings and new
+receipt. Expiry does not invalidate evidence, and evidence does not renew work
+authority. Explicitly stopped delivery plans remain stopped. A success receipt
+is returned only after the actual SQLite COMMIT.
+
 The backend owns separate `runtime.sqlite` and `private.sqlite` files. Writable
 opens hold a process advisory lock, use WAL with bounded busy handling, and
 apply only the governed forward migrations. Fresh stores require a

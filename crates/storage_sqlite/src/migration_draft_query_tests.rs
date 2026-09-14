@@ -50,16 +50,20 @@ async fn draft_metadata_upgrade_preserves_source_and_rejects_prior_schema_policy
     establish_runtime_version(&mut connection, 13).await;
     let snapshots = seed(&mut connection).await;
     assert!(matches!(
-        migrate_runtime(&mut connection, OpenMode::ReadOnly).await,
+        migrate(&mut connection, OpenMode::ReadOnly, &plan(14, false)).await,
         Err(Error::SchemaMigrationRequired {
             current: 14,
             actual: 13,
             ..
         })
     ));
-    let report = migrate_runtime(&mut connection, OpenMode::ReadWriteExisting)
-        .await
-        .unwrap();
+    let report = migrate(
+        &mut connection,
+        OpenMode::ReadWriteExisting,
+        &plan(14, false),
+    )
+    .await
+    .unwrap();
     assert_eq!(report.applied(), 1);
     assert_eq!(pragma(&mut connection, "user_version").await, 14);
     let actual: Vec<Vec<u8>> = sqlx::query_scalar(
@@ -93,7 +97,7 @@ async fn draft_metadata_upgrade_preserves_source_and_rejects_prior_schema_policy
         .is_err()
     );
     assert_eq!(
-        migrate_runtime(&mut connection, OpenMode::ReadOnly)
+        migrate(&mut connection, OpenMode::ReadOnly, &plan(14, false))
             .await
             .unwrap()
             .applied(),
@@ -136,8 +140,12 @@ async fn metadata_migration_failure_rolls_back_columns_index_guards_and_version(
             .await
             .is_err()
     );
-    migrate_runtime(&mut connection, OpenMode::ReadWriteExisting)
-        .await
-        .unwrap();
+    migrate(
+        &mut connection,
+        OpenMode::ReadWriteExisting,
+        &plan(14, false),
+    )
+    .await
+    .unwrap();
     connection.close().await.unwrap();
 }

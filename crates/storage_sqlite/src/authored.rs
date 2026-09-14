@@ -204,10 +204,18 @@ async fn commit_outcome(
     command: &AuthoredAtomicCommand,
     outcome: AuthoredAtomicOutcome,
 ) -> Result<AuthoredAtomicReceipt, Error> {
+    let committed_at = match (command, &outcome) {
+        (AuthoredAtomicCommand::RecordSigned(_), AuthoredAtomicOutcome::Artifact(artifact)) => {
+            command
+                .requested_at_unix_ms()
+                .max(artifact.updated_at_unix_ms())
+        }
+        _ => command.requested_at_unix_ms(),
+    };
     let receipt = AuthoredAtomicReceipt::new(
         command,
         AtomicCommitDisposition::Committed,
-        command.requested_at_unix_ms(),
+        committed_at,
         outcome,
     )?;
     sqlx::query(
@@ -309,11 +317,54 @@ async fn execute_command(
             }
             ClaimAuthoredTarget::DeliveryPlan(id) => {
                 let mut plan = load_plan_tx(transaction, *id).await?;
+                let artifact = load_artifact_tx(transaction, plan.artifact_id()).await?;
+                if artifact.signing_state() != SigningState::Signed {
+                    return Err(Error::InvalidAuthoredTransition);
+                }
                 plan.claim(value.claim().clone(), value.claim().acquired_at_unix_ms())?;
                 persist_plan(transaction, &plan).await?;
                 Ok(AuthoredAtomicOutcome::DeliveryPlan(plan))
             }
         },
+        AuthoredAtomicCommand::RecordSigned(value) => {
+            let row = sqlx::query(
+                "SELECT commit_id, commit_digest, requested_at_unix_ms,
+                        committed_at_unix_ms, receipt
+                 FROM radroots_runtime_authored_atomic_commits WHERE commit_id = ?",
+            )
+            .bind(value.claim_command().commit_id().as_bytes().as_slice())
+            .fetch_optional(&mut **transaction)
+            .await
+            .map_err(map_backend)?
+            .ok_or(Error::AtomicWorkflowMismatch)?;
+            let original = decode_receipt_row(&row)?;
+            let mut artifact = load_artifact_tx(transaction, value.artifact_id()).await?;
+            let already_signed = artifact.signed().is_some();
+            value.apply_to(&mut artifact, &original)?;
+            persist_artifact(transaction, &artifact).await?;
+            if !already_signed && artifact.signing_state() == SigningState::Signed {
+                let plan_ids = sqlx::query_scalar::<_, Vec<u8>>(
+                    "SELECT plan_id FROM radroots_runtime_authored_delivery_plans
+                     WHERE artifact_id = ? ORDER BY plan_id",
+                )
+                .bind(value.artifact_id().as_bytes().as_slice())
+                .fetch_all(&mut **transaction)
+                .await
+                .map_err(map_backend)?;
+                for bytes in plan_ids {
+                    let id = AuthoredDeliveryPlanId::new(array(bytes)?)?;
+                    let mut plan = load_plan_tx(transaction, id).await?;
+                    if !plan.state().is_terminal() {
+                        plan.bind_signed_event(
+                            value.event().clone(),
+                            value.observed_at_unix_ms().max(plan.updated_at_unix_ms()),
+                        )?;
+                        persist_plan(transaction, &plan).await?;
+                    }
+                }
+            }
+            Ok(AuthoredAtomicOutcome::Artifact(artifact))
+        }
         AuthoredAtomicCommand::ApplySigned(value) => {
             let mut artifact = load_artifact_tx(transaction, value.artifact_id()).await?;
             require_artifact_claim(
@@ -534,8 +585,9 @@ pub(crate) async fn persist_artifact(
            signing_claim_expires_at_unix_ms, admission_claim_token,
            admission_claim_generation, admission_claim_revision,
            admission_claim_expires_at_unix_ms, retry_not_before_unix_ms,
-           last_failure_code, created_at_unix_ms, updated_at_unix_ms, revision, snapshot
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           last_failure_code, created_at_unix_ms, updated_at_unix_ms, revision, snapshot,
+           signing_stop
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(artifact_id) DO UPDATE SET
            operation_id=excluded.operation_id, ordinal=excluded.ordinal, origin=excluded.origin,
            signing_state=excluded.signing_state, admission_state=excluded.admission_state,
@@ -552,13 +604,13 @@ pub(crate) async fn persist_artifact(
            retry_not_before_unix_ms=excluded.retry_not_before_unix_ms,
            last_failure_code=excluded.last_failure_code,
            updated_at_unix_ms=excluded.updated_at_unix_ms, revision=excluded.revision,
-           snapshot=excluded.snapshot",
+           snapshot=excluded.snapshot, signing_stop=excluded.signing_stop",
     )
     .bind(artifact.artifact_id().as_bytes().as_slice())
     .bind(artifact.operation_id().as_bytes().as_slice())
     .bind(i64::from(artifact.ordinal()))
     .bind(origin_name(artifact.origin()))
-    .bind(signing_name(artifact.signing_state()))
+    .bind(physical_signing_name(artifact))
     .bind(admission_name(artifact.admission_state()))
     .bind(artifact.plan().map(|plan| plan.wire_json()))
     .bind(
@@ -609,6 +661,7 @@ pub(crate) async fn persist_artifact(
     .bind(i64_from_u64(artifact.updated_at_unix_ms())?)
     .bind(i64_from_u64(artifact.revision().get())?)
     .bind(encode_snapshot(artifact)?)
+    .bind(signing_stop(artifact))
     .execute(&mut **transaction)
     .await
     .map_err(map_backend)?;
@@ -879,7 +932,8 @@ fn decode_artifact_row(row: &SqliteRow) -> Result<AuthoredArtifact, Error> {
         || column::<Vec<u8>>(row, "operation_id")?.as_slice() != value.operation_id().as_bytes()
         || column::<i64>(row, "ordinal")? != i64::from(value.ordinal())
         || column::<String>(row, "origin")? != origin_name(value.origin())
-        || column::<String>(row, "signing_state")? != signing_name(value.signing_state())
+        || column::<String>(row, "signing_state")? != physical_signing_name(&value)
+        || column::<Option<String>>(row, "signing_stop")?.as_deref() != signing_stop(&value)
         || column::<String>(row, "admission_state")? != admission_name(value.admission_state())
         || plan_wire.as_deref() != value.plan().map(|plan| plan.wire_json())
         || raw.as_deref()
@@ -1066,7 +1120,7 @@ fn require_revision(actual: u64, expected: u64) -> Result<(), Error> {
     Ok(())
 }
 
-fn encode_snapshot<T: Serialize>(value: &T) -> Result<Vec<u8>, Error> {
+pub(crate) fn encode_snapshot<T: Serialize>(value: &T) -> Result<Vec<u8>, Error> {
     let bytes = serde_json::to_vec(value).map_err(|_| Error::AtomicCommitFailed)?;
     if bytes.len() < 2 || bytes.len() > SNAPSHOT_MAX_BYTES {
         return Err(Error::AtomicCommitFailed);
@@ -1093,6 +1147,7 @@ fn command_target(command: &AuthoredAtomicCommand) -> [u8; 16] {
             ClaimAuthoredTarget::DeliveryPlan(id) => *id.as_bytes(),
         },
         AuthoredAtomicCommand::ApplySigned(value) => *value.artifact_id().as_bytes(),
+        AuthoredAtomicCommand::RecordSigned(value) => *value.artifact_id().as_bytes(),
         AuthoredAtomicCommand::ApplyAdmission(value) => *value.artifact_id().as_bytes(),
         AuthoredAtomicCommand::ApplyDelivery(value) => *value.plan_id().as_bytes(),
         AuthoredAtomicCommand::ApplyFailure(value) => match value.target() {
@@ -1111,7 +1166,7 @@ fn command_phase(command: &AuthoredAtomicCommand) -> &'static str {
     match command {
         AuthoredAtomicCommand::Prepare(_) | AuthoredAtomicCommand::PrepareFromDraft(_) => "prepare",
         AuthoredAtomicCommand::Claim(_) => "claim",
-        AuthoredAtomicCommand::ApplySigned(_) => "signing",
+        AuthoredAtomicCommand::ApplySigned(_) | AuthoredAtomicCommand::RecordSigned(_) => "signing",
         AuthoredAtomicCommand::ApplyAdmission(_) => "admission",
         AuthoredAtomicCommand::ApplyDelivery(_) => "delivery",
         AuthoredAtomicCommand::ApplyFailure(value) => match value.failure().phase() {
@@ -1138,6 +1193,27 @@ const fn signing_name(value: SigningState) -> &'static str {
         SigningState::Indeterminate => "indeterminate",
         SigningState::FailedTerminal => "failed_terminal",
         SigningState::Cancelled => "cancelled",
+    }
+}
+
+const fn physical_signing_name(artifact: &AuthoredArtifact) -> &'static str {
+    if artifact.signed().is_some() {
+        "signed"
+    } else {
+        signing_name(artifact.signing_state())
+    }
+}
+
+const fn signing_stop(artifact: &AuthoredArtifact) -> Option<&'static str> {
+    if artifact.signed().is_some()
+        && matches!(
+            artifact.signing_state(),
+            SigningState::Cancelled | SigningState::FailedTerminal
+        )
+    {
+        Some(signing_name(artifact.signing_state()))
+    } else {
+        None
     }
 }
 
@@ -2274,6 +2350,17 @@ mod tests {
         let store = signed_store().await;
         let artifact = store.authored_artifact(ids().1).await.unwrap().unwrap();
         let signed = artifact.signed().expect("signed artifact");
+        assert!(
+            sqlx::query("UPDATE radroots_runtime_authored_artifacts SET signed_raw_json = x'7b7d'")
+                .execute(&store.pool)
+                .await
+                .is_err()
+        );
+        // Simulate corruption below the write guard to retain read-side validation coverage.
+        sqlx::query("DROP TRIGGER radroots_runtime_authored_artifacts_signed_fact_guard")
+            .execute(&store.pool)
+            .await
+            .unwrap();
         sqlx::query("UPDATE radroots_runtime_authored_artifacts SET signed_raw_json = x'7b7d'")
             .execute(&store.pool)
             .await
@@ -2512,3 +2599,13 @@ mod draft_submission_tests;
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "authored_signed_durability_tests.rs"]
 mod signed_durability_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_signed_fact_tests.rs"]
+mod signed_fact_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_signed_fact_fixture.rs"]
+pub(crate) mod signed_fact_fixture;

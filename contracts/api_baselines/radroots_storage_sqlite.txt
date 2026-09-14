@@ -1,0 +1,618 @@
+pub mod radroots_storage_sqlite
+pub mod radroots_storage_sqlite::backup
+pub mod radroots_storage_sqlite::config
+pub struct radroots_storage_sqlite::config::OpenOptions
+impl radroots_storage_sqlite::config::OpenOptions
+pub fn radroots_storage_sqlite::config::OpenOptions::backup_root(&self) -> core::option::Option<&std::path::Path>
+pub fn radroots_storage_sqlite::config::OpenOptions::busy_timeout(&self) -> core::time::Duration
+pub fn radroots_storage_sqlite::config::OpenOptions::foreign_keys_enabled(&self) -> bool
+pub fn radroots_storage_sqlite::config::OpenOptions::mode(&self) -> radroots_storage_sqlite::open::OpenMode
+pub fn radroots_storage_sqlite::config::OpenOptions::new(radroots_storage_sqlite::open::Paths, radroots_storage_sqlite::open::OpenMode) -> Self
+pub fn radroots_storage_sqlite::config::OpenOptions::paths(&self) -> &radroots_storage_sqlite::open::Paths
+pub fn radroots_storage_sqlite::config::OpenOptions::source_generation(&self) -> core::option::Option<radroots_storage::event::SourceGeneration>
+pub fn radroots_storage_sqlite::config::OpenOptions::source_generation_created_at_unix_ms(&self) -> core::option::Option<u64>
+pub fn radroots_storage_sqlite::config::OpenOptions::validate_filesystem(&self) -> core::result::Result<(), radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::wal_enabled(&self) -> bool
+pub fn radroots_storage_sqlite::config::OpenOptions::with_backup_root(self, impl core::convert::Into<std::path::PathBuf>) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::with_busy_timeout(self, core::time::Duration) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::with_source_generation(self, radroots_storage::event::SourceGeneration, u64) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::writer_policy(&self) -> radroots_storage::status::WriterPolicy
+pub mod radroots_storage_sqlite::integrity
+pub mod radroots_storage_sqlite::legacy
+#[non_exhaustive] pub enum radroots_storage_sqlite::legacy::LegacyImportDisposition
+pub radroots_storage_sqlite::legacy::LegacyImportDisposition::HostHandoff
+pub radroots_storage_sqlite::legacy::LegacyImportDisposition::Import
+impl radroots_storage_sqlite::legacy::LegacyImportDisposition
+pub const fn radroots_storage_sqlite::legacy::LegacyImportDisposition::as_str(self) -> &'static str
+#[non_exhaustive] pub enum radroots_storage_sqlite::legacy::LegacyImportMemberState
+pub radroots_storage_sqlite::legacy::LegacyImportMemberState::Complete
+pub radroots_storage_sqlite::legacy::LegacyImportMemberState::Pending
+pub radroots_storage_sqlite::legacy::LegacyImportMemberState::Ready
+pub radroots_storage_sqlite::legacy::LegacyImportMemberState::Staging
+impl radroots_storage_sqlite::legacy::LegacyImportMemberState
+pub const fn radroots_storage_sqlite::legacy::LegacyImportMemberState::as_str(self) -> &'static str
+#[non_exhaustive] pub enum radroots_storage_sqlite::legacy::LegacyImportState
+pub radroots_storage_sqlite::legacy::LegacyImportState::Classified
+pub radroots_storage_sqlite::legacy::LegacyImportState::Committing
+pub radroots_storage_sqlite::legacy::LegacyImportState::Complete
+pub radroots_storage_sqlite::legacy::LegacyImportState::Ready
+pub radroots_storage_sqlite::legacy::LegacyImportState::Staging
+impl radroots_storage_sqlite::legacy::LegacyImportState
+pub const fn radroots_storage_sqlite::legacy::LegacyImportState::as_str(self) -> &'static str
+#[non_exhaustive] pub enum radroots_storage_sqlite::legacy::LegacyOutboxTable
+pub radroots_storage_sqlite::legacy::LegacyOutboxTable::DeliveryAttempts
+pub radroots_storage_sqlite::legacy::LegacyOutboxTable::DeliveryPlans
+pub radroots_storage_sqlite::legacy::LegacyOutboxTable::DeliveryTargets
+pub radroots_storage_sqlite::legacy::LegacyOutboxTable::Events
+pub radroots_storage_sqlite::legacy::LegacyOutboxTable::Operations
+impl radroots_storage_sqlite::legacy::LegacyOutboxTable
+pub const fn radroots_storage_sqlite::legacy::LegacyOutboxTable::as_str(self) -> &'static str
+#[non_exhaustive] pub enum radroots_storage_sqlite::legacy::LegacyPrivateTable
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::CursorKeys
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::FarmLocations
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::Metadata
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::Nip46Sessions
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::RotationProgress
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::SigningSecrets
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::TradeArtifacts
+pub radroots_storage_sqlite::legacy::LegacyPrivateTable::WrappedProfileKeys
+impl radroots_storage_sqlite::legacy::LegacyPrivateTable
+pub const fn radroots_storage_sqlite::legacy::LegacyPrivateTable::as_str(self) -> &'static str
+#[non_exhaustive] pub enum radroots_storage_sqlite::legacy::LegacySchema
+pub radroots_storage_sqlite::legacy::LegacySchema::EventStoreV1
+pub radroots_storage_sqlite::legacy::LegacySchema::EventStoreV2
+pub radroots_storage_sqlite::legacy::LegacySchema::EventStoreV3
+pub radroots_storage_sqlite::legacy::LegacySchema::EventStoreV4
+pub radroots_storage_sqlite::legacy::LegacySchema::OutboxV1
+pub radroots_storage_sqlite::legacy::LegacySchema::PrivateV1
+pub radroots_storage_sqlite::legacy::LegacySchema::StudioV1HostHandoff
+impl radroots_storage_sqlite::legacy::LegacySchema
+pub const fn radroots_storage_sqlite::legacy::LegacySchema::as_str(self) -> &'static str
+pub const fn radroots_storage_sqlite::legacy::LegacySchema::disposition(self) -> radroots_storage_sqlite::legacy::LegacyImportDisposition
+#[non_exhaustive] pub enum radroots_storage_sqlite::legacy::LegacySourceKind
+pub radroots_storage_sqlite::legacy::LegacySourceKind::EventStore
+pub radroots_storage_sqlite::legacy::LegacySourceKind::Outbox
+pub radroots_storage_sqlite::legacy::LegacySourceKind::Private
+pub radroots_storage_sqlite::legacy::LegacySourceKind::Studio
+impl radroots_storage_sqlite::legacy::LegacySourceKind
+pub const fn radroots_storage_sqlite::legacy::LegacySourceKind::as_str(self) -> &'static str
+pub struct radroots_storage_sqlite::legacy::ClassifiedLegacyImport
+impl radroots_storage_sqlite::legacy::ClassifiedLegacyImport
+pub fn radroots_storage_sqlite::legacy::ClassifiedLegacyImport::bundle_path(&self) -> &std::path::Path
+pub const fn radroots_storage_sqlite::legacy::ClassifiedLegacyImport::import_id(&self) -> radroots_storage_sqlite::legacy::LegacyImportId
+pub fn radroots_storage_sqlite::legacy::ClassifiedLegacyImport::sources(&self) -> &[radroots_storage_sqlite::legacy::LegacySourceClassification]
+pub const fn radroots_storage_sqlite::legacy::ClassifiedLegacyImport::target_generation(&self) -> radroots_storage::event::SourceGeneration
+pub struct radroots_storage_sqlite::legacy::LegacyEventStagePage
+impl radroots_storage_sqlite::legacy::LegacyEventStagePage
+pub const fn radroots_storage_sqlite::legacy::LegacyEventStagePage::is_complete(&self) -> bool
+pub const fn radroots_storage_sqlite::legacy::LegacyEventStagePage::resume_cursor(&self) -> core::option::Option<&[u8; 8]>
+pub const fn radroots_storage_sqlite::legacy::LegacyEventStagePage::staged_row_count(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyEventStagePage::staged_rows(&self) -> u16
+pub struct radroots_storage_sqlite::legacy::LegacyImportCommitReceipt
+impl radroots_storage_sqlite::legacy::LegacyImportCommitReceipt
+pub const fn radroots_storage_sqlite::legacy::LegacyImportCommitReceipt::completed_at_unix_ms(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyImportCommitReceipt::imported_row_count(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyImportCommitReceipt::validation_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub struct radroots_storage_sqlite::legacy::LegacyImportId(_)
+impl radroots_storage_sqlite::legacy::LegacyImportId
+pub const fn radroots_storage_sqlite::legacy::LegacyImportId::as_bytes(&self) -> &[u8; 16]
+pub const fn radroots_storage_sqlite::legacy::LegacyImportId::new([u8; 16]) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub struct radroots_storage_sqlite::legacy::LegacyImportJournal
+impl radroots_storage_sqlite::legacy::LegacyImportJournal
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::classification_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::completed_at_unix_ms(&self) -> core::option::Option<u64>
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::import_id(&self) -> radroots_storage_sqlite::legacy::LegacyImportId
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::manifest_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub fn radroots_storage_sqlite::legacy::LegacyImportJournal::members(&self) -> &[radroots_storage_sqlite::legacy::LegacyImportMemberJournal]
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::started_at_unix_ms(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::state(&self) -> radroots_storage_sqlite::legacy::LegacyImportState
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::target_generation(&self) -> radroots_storage::event::SourceGeneration
+pub const fn radroots_storage_sqlite::legacy::LegacyImportJournal::updated_at_unix_ms(&self) -> u64
+pub struct radroots_storage_sqlite::legacy::LegacyImportMemberJournal
+impl radroots_storage_sqlite::legacy::LegacyImportMemberJournal
+pub const fn radroots_storage_sqlite::legacy::LegacyImportMemberJournal::classification(&self) -> &radroots_storage_sqlite::legacy::LegacySourceClassification
+pub fn radroots_storage_sqlite::legacy::LegacyImportMemberJournal::resume_cursor(&self) -> core::option::Option<&[u8]>
+pub const fn radroots_storage_sqlite::legacy::LegacyImportMemberJournal::staged_row_count(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyImportMemberJournal::state(&self) -> radroots_storage_sqlite::legacy::LegacyImportMemberState
+pub const fn radroots_storage_sqlite::legacy::LegacyImportMemberJournal::updated_at_unix_ms(&self) -> u64
+pub struct radroots_storage_sqlite::legacy::LegacyImportPlan
+impl radroots_storage_sqlite::legacy::LegacyImportPlan
+pub fn radroots_storage_sqlite::legacy::LegacyImportPlan::backup_root(&self) -> &std::path::Path
+pub const fn radroots_storage_sqlite::legacy::LegacyImportPlan::import_id(&self) -> radroots_storage_sqlite::legacy::LegacyImportId
+pub fn radroots_storage_sqlite::legacy::LegacyImportPlan::new(radroots_storage_sqlite::legacy::LegacyImportId, alloc::vec::Vec<radroots_storage_sqlite::legacy::LegacySource>, impl core::convert::Into<std::path::PathBuf>, u64) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub const fn radroots_storage_sqlite::legacy::LegacyImportPlan::requested_at_unix_ms(&self) -> u64
+pub fn radroots_storage_sqlite::legacy::LegacyImportPlan::sources(&self) -> &[radroots_storage_sqlite::legacy::LegacySource]
+pub struct radroots_storage_sqlite::legacy::LegacyImportValidation
+impl radroots_storage_sqlite::legacy::LegacyImportValidation
+pub const fn radroots_storage_sqlite::legacy::LegacyImportValidation::imported_row_count(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyImportValidation::validation_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub struct radroots_storage_sqlite::legacy::LegacyOutboxStagePage
+impl radroots_storage_sqlite::legacy::LegacyOutboxStagePage
+pub const fn radroots_storage_sqlite::legacy::LegacyOutboxStagePage::is_complete(&self) -> bool
+pub const fn radroots_storage_sqlite::legacy::LegacyOutboxStagePage::resume_cursor(&self) -> &[u8; 9]
+pub const fn radroots_storage_sqlite::legacy::LegacyOutboxStagePage::staged_row_count(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyOutboxStagePage::staged_rows(&self) -> u16
+pub const fn radroots_storage_sqlite::legacy::LegacyOutboxStagePage::table(&self) -> radroots_storage_sqlite::legacy::LegacyOutboxTable
+pub struct radroots_storage_sqlite::legacy::LegacyPrivateStagePage
+impl radroots_storage_sqlite::legacy::LegacyPrivateStagePage
+pub const fn radroots_storage_sqlite::legacy::LegacyPrivateStagePage::is_complete(&self) -> bool
+pub fn radroots_storage_sqlite::legacy::LegacyPrivateStagePage::resume_cursor(&self) -> &[u8]
+pub const fn radroots_storage_sqlite::legacy::LegacyPrivateStagePage::staged_row_count(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyPrivateStagePage::staged_rows(&self) -> u16
+pub const fn radroots_storage_sqlite::legacy::LegacyPrivateStagePage::table(&self) -> radroots_storage_sqlite::legacy::LegacyPrivateTable
+pub struct radroots_storage_sqlite::legacy::LegacySource
+impl radroots_storage_sqlite::legacy::LegacySource
+pub const fn radroots_storage_sqlite::legacy::LegacySource::kind(&self) -> radroots_storage_sqlite::legacy::LegacySourceKind
+pub fn radroots_storage_sqlite::legacy::LegacySource::new(radroots_storage_sqlite::legacy::LegacySourceKind, impl core::convert::Into<std::path::PathBuf>) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::legacy::LegacySource::path(&self) -> &std::path::Path
+pub struct radroots_storage_sqlite::legacy::LegacySourceClassification
+impl radroots_storage_sqlite::legacy::LegacySourceClassification
+pub const fn radroots_storage_sqlite::legacy::LegacySourceClassification::catalog_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub const fn radroots_storage_sqlite::legacy::LegacySourceClassification::kind(&self) -> radroots_storage_sqlite::legacy::LegacySourceKind
+pub const fn radroots_storage_sqlite::legacy::LegacySourceClassification::schema(&self) -> radroots_storage_sqlite::legacy::LegacySchema
+pub const fn radroots_storage_sqlite::legacy::LegacySourceClassification::user_version(&self) -> u32
+pub struct radroots_storage_sqlite::legacy::LegacySourceSnapshot
+impl radroots_storage_sqlite::legacy::LegacySourceSnapshot
+pub const fn radroots_storage_sqlite::legacy::LegacySourceSnapshot::byte_length(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacySourceSnapshot::kind(&self) -> radroots_storage_sqlite::legacy::LegacySourceKind
+pub fn radroots_storage_sqlite::legacy::LegacySourceSnapshot::relative_path(&self) -> &str
+pub const fn radroots_storage_sqlite::legacy::LegacySourceSnapshot::sha256(&self) -> radroots_storage::backup::MemberDigest
+pub struct radroots_storage_sqlite::legacy::LegacyStudioHandoff
+impl radroots_storage_sqlite::legacy::LegacyStudioHandoff
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoff::byte_length(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoff::catalog_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub fn radroots_storage_sqlite::legacy::LegacyStudioHandoff::evidence_path(&self) -> &std::path::Path
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoff::handoff_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoff::import_id(&self) -> radroots_storage_sqlite::legacy::LegacyImportId
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoff::source_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub struct radroots_storage_sqlite::legacy::LegacyStudioHandoffReceipt
+impl radroots_storage_sqlite::legacy::LegacyStudioHandoffReceipt
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoffReceipt::handoff_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoffReceipt::host_commitment_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub const fn radroots_storage_sqlite::legacy::LegacyStudioHandoffReceipt::new(radroots_storage::backup::MemberDigest, radroots_storage::backup::MemberDigest) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub struct radroots_storage_sqlite::legacy::PreparedLegacyImport
+impl radroots_storage_sqlite::legacy::PreparedLegacyImport
+pub fn radroots_storage_sqlite::legacy::PreparedLegacyImport::bundle_path(&self) -> &std::path::Path
+pub const fn radroots_storage_sqlite::legacy::PreparedLegacyImport::import_id(&self) -> radroots_storage_sqlite::legacy::LegacyImportId
+pub const fn radroots_storage_sqlite::legacy::PreparedLegacyImport::manifest_byte_length(&self) -> u64
+pub const fn radroots_storage_sqlite::legacy::PreparedLegacyImport::manifest_sha256(&self) -> radroots_storage::backup::MemberDigest
+pub fn radroots_storage_sqlite::legacy::PreparedLegacyImport::snapshots(&self) -> &[radroots_storage_sqlite::legacy::LegacySourceSnapshot]
+pub const fn radroots_storage_sqlite::legacy::PreparedLegacyImport::target_generation(&self) -> radroots_storage::event::SourceGeneration
+pub const radroots_storage_sqlite::legacy::LEGACY_STAGE_PAGE_LIMIT_MAX: u16
+pub mod radroots_storage_sqlite::lock
+pub mod radroots_storage_sqlite::migration
+pub mod radroots_storage_sqlite::migration::private
+pub struct radroots_storage_sqlite::migration::private::MigrationDescriptor
+impl radroots_storage_sqlite::migration::private::MigrationDescriptor
+pub const fn radroots_storage_sqlite::migration::private::MigrationDescriptor::name(self) -> &'static str
+pub const fn radroots_storage_sqlite::migration::private::MigrationDescriptor::owned_objects(self) -> &'static [&'static str]
+pub const fn radroots_storage_sqlite::migration::private::MigrationDescriptor::up_sha256(self) -> &'static str
+pub const fn radroots_storage_sqlite::migration::private::MigrationDescriptor::version(self) -> u32
+pub const radroots_storage_sqlite::migration::private::CURRENT_VERSION: u32
+pub const radroots_storage_sqlite::migration::private::MIGRATIONS: &[radroots_storage_sqlite::migration::private::MigrationDescriptor]
+pub const radroots_storage_sqlite::migration::private::MINIMUM_VERSION: u32
+pub mod radroots_storage_sqlite::migration::runtime
+pub struct radroots_storage_sqlite::migration::runtime::MigrationDescriptor
+impl radroots_storage_sqlite::migration::runtime::MigrationDescriptor
+pub const fn radroots_storage_sqlite::migration::runtime::MigrationDescriptor::name(self) -> &'static str
+pub const fn radroots_storage_sqlite::migration::runtime::MigrationDescriptor::owned_objects(self) -> &'static [&'static str]
+pub const fn radroots_storage_sqlite::migration::runtime::MigrationDescriptor::up_sha256(self) -> &'static str
+pub const fn radroots_storage_sqlite::migration::runtime::MigrationDescriptor::version(self) -> u32
+pub const radroots_storage_sqlite::migration::runtime::CURRENT_VERSION: u32
+pub const radroots_storage_sqlite::migration::runtime::MIGRATIONS: &[radroots_storage_sqlite::migration::runtime::MigrationDescriptor]
+pub const radroots_storage_sqlite::migration::runtime::MINIMUM_VERSION: u32
+pub struct radroots_storage_sqlite::migration::AuthoredV10Preflight
+impl radroots_storage_sqlite::migration::AuthoredV10Preflight
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::attempt_count(&self) -> u64
+pub fn radroots_storage_sqlite::migration::AuthoredV10Preflight::blocked_operation_ids(&self) -> &[[u8; 16]]
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::event_count(&self) -> u64
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::importable_count(&self) -> u64
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::invalid_or_unsupported(&self) -> u64
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::is_eligible(&self) -> bool
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::operation_count(&self) -> u64
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::outbox_count(&self) -> u64
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::prepared_or_recoverable(&self) -> u64
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::signed_without_complete_event(&self) -> u64
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::source_digest(&self) -> &[u8; 32]
+pub const fn radroots_storage_sqlite::migration::AuthoredV10Preflight::target_count(&self) -> u64
+pub async fn radroots_storage_sqlite::migration::preflight_authored_v10(&radroots_storage_sqlite::open::Paths) -> core::result::Result<radroots_storage_sqlite::migration::AuthoredV10Preflight, radroots_storage_sqlite::open::Error>
+pub mod radroots_storage_sqlite::open
+#[non_exhaustive] pub enum radroots_storage_sqlite::open::Error
+pub radroots_storage_sqlite::open::Error::AuthoredMigrationBlocked
+pub radroots_storage_sqlite::open::Error::AuthoredMigrationBlocked::invalid_or_unsupported: u64
+pub radroots_storage_sqlite::open::Error::AuthoredMigrationBlocked::prepared_or_recoverable: u64
+pub radroots_storage_sqlite::open::Error::AuthoredMigrationBlocked::signed_without_complete_event: u64
+pub radroots_storage_sqlite::open::Error::BackupBackendUnavailable
+pub radroots_storage_sqlite::open::Error::BackupBundleAlreadyExists(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::BackupBundleMissing(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::BackupCaptureFailed
+pub radroots_storage_sqlite::open::Error::BackupCaptureFailed::member: &'static str
+pub radroots_storage_sqlite::open::Error::BackupFilesystem
+pub radroots_storage_sqlite::open::Error::BackupFilesystem::operation: &'static str
+pub radroots_storage_sqlite::open::Error::BackupFilesystem::source: core::io::error::Error
+pub radroots_storage_sqlite::open::Error::BackupRootRequired
+pub radroots_storage_sqlite::open::Error::BackupUnexpectedEntry(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::BackupVerificationFailed
+pub radroots_storage_sqlite::open::Error::BackupVerificationFailed::member: &'static str
+pub radroots_storage_sqlite::open::Error::ConnectionPolicyMismatch
+pub radroots_storage_sqlite::open::Error::ConnectionPolicyMismatch::database: &'static str
+pub radroots_storage_sqlite::open::Error::CorruptSourceGeneration
+pub radroots_storage_sqlite::open::Error::DatabaseCloseFailed
+pub radroots_storage_sqlite::open::Error::DatabaseCloseFailed::database: &'static str
+pub radroots_storage_sqlite::open::Error::DatabaseCorrupt
+pub radroots_storage_sqlite::open::Error::DatabaseCorrupt::database: &'static str
+pub radroots_storage_sqlite::open::Error::DatabaseOpenFailed
+pub radroots_storage_sqlite::open::Error::DatabaseOpenFailed::database: &'static str
+pub radroots_storage_sqlite::open::Error::Inspect
+pub radroots_storage_sqlite::open::Error::Inspect::path: std::path::PathBuf
+pub radroots_storage_sqlite::open::Error::Inspect::source: core::io::error::Error
+pub radroots_storage_sqlite::open::Error::InvalidBackupRoot(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::InvalidBusyTimeout
+pub radroots_storage_sqlite::open::Error::InvalidBusyTimeout::actual: core::time::Duration
+pub radroots_storage_sqlite::open::Error::InvalidBusyTimeout::maximum: core::time::Duration
+pub radroots_storage_sqlite::open::Error::InvalidBusyTimeout::minimum: core::time::Duration
+pub radroots_storage_sqlite::open::Error::InvalidLegacyImportJournal
+pub radroots_storage_sqlite::open::Error::InvalidLegacyImportPlan
+pub radroots_storage_sqlite::open::Error::InvalidLegacyImportStageRequest
+pub radroots_storage_sqlite::open::Error::InvalidLegacySource(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::InvalidPath(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::InvalidSourceGenerationTimestamp
+pub radroots_storage_sqlite::open::Error::InvalidSourceGenerationTimestamp::actual: u64
+pub radroots_storage_sqlite::open::Error::LegacyImportBackupAlreadyExists(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::LegacyImportBackupFailed
+pub radroots_storage_sqlite::open::Error::LegacyImportBackupFailed::source_kind: &'static str
+pub radroots_storage_sqlite::open::Error::LegacyImportConflict
+pub radroots_storage_sqlite::open::Error::LegacyImportEvidenceInvalid
+pub radroots_storage_sqlite::open::Error::LegacyImportFilesystem
+pub radroots_storage_sqlite::open::Error::LegacyImportFilesystem::operation: &'static str
+pub radroots_storage_sqlite::open::Error::LegacyImportFilesystem::source: core::io::error::Error
+pub radroots_storage_sqlite::open::Error::LegacyImportJournalFailed
+pub radroots_storage_sqlite::open::Error::LegacyImportMigrationHistoryInvalid
+pub radroots_storage_sqlite::open::Error::LegacyImportRowInvalid
+pub radroots_storage_sqlite::open::Error::LegacyImportRowInvalid::legacy_sequence: i64
+pub radroots_storage_sqlite::open::Error::LegacyImportRowInvalid::source_kind: &'static str
+pub radroots_storage_sqlite::open::Error::LegacyImportSourceInvalid
+pub radroots_storage_sqlite::open::Error::LegacyImportSourceInvalid::source_kind: &'static str
+pub radroots_storage_sqlite::open::Error::LegacyImportStagingFailed
+pub radroots_storage_sqlite::open::Error::LegacyImportTargetMismatch
+pub radroots_storage_sqlite::open::Error::MissingFile(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::MissingParent(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::NotAFile(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::ParentNotDirectory(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::PathsOverlap(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::RestoreFilesystem
+pub radroots_storage_sqlite::open::Error::RestoreFilesystem::operation: &'static str
+pub radroots_storage_sqlite::open::Error::RestoreFilesystem::source: core::io::error::Error
+pub radroots_storage_sqlite::open::Error::RestoreMarkerCorrupt(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::RestoreRecoveryConflict(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::RestoreReplacementFailed
+pub radroots_storage_sqlite::open::Error::RestoreReplacementFailed::member: &'static str
+pub radroots_storage_sqlite::open::Error::RestoreRequiresWritableStorage
+pub radroots_storage_sqlite::open::Error::RestoreStagingAlreadyExists(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::RestoreStagingFailed
+pub radroots_storage_sqlite::open::Error::RestoreStagingFailed::member: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaCatalogMismatch
+pub radroots_storage_sqlite::open::Error::SchemaCatalogMismatch::database: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaCatalogMismatch::version: u32
+pub radroots_storage_sqlite::open::Error::SchemaIdentityMismatch
+pub radroots_storage_sqlite::open::Error::SchemaIdentityMismatch::actual: u32
+pub radroots_storage_sqlite::open::Error::SchemaIdentityMismatch::database: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaIdentityMismatch::expected: u32
+pub radroots_storage_sqlite::open::Error::SchemaMetadataUnavailable
+pub radroots_storage_sqlite::open::Error::SchemaMetadataUnavailable::database: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaMigrationFailed
+pub radroots_storage_sqlite::open::Error::SchemaMigrationFailed::database: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaMigrationFailed::target_version: u32
+pub radroots_storage_sqlite::open::Error::SchemaMigrationRequired
+pub radroots_storage_sqlite::open::Error::SchemaMigrationRequired::actual: u32
+pub radroots_storage_sqlite::open::Error::SchemaMigrationRequired::current: u32
+pub radroots_storage_sqlite::open::Error::SchemaMigrationRequired::database: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaTooNew
+pub radroots_storage_sqlite::open::Error::SchemaTooNew::actual: u32
+pub radroots_storage_sqlite::open::Error::SchemaTooNew::database: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaTooNew::supported: u32
+pub radroots_storage_sqlite::open::Error::SchemaTooOld
+pub radroots_storage_sqlite::open::Error::SchemaTooOld::actual: u32
+pub radroots_storage_sqlite::open::Error::SchemaTooOld::database: &'static str
+pub radroots_storage_sqlite::open::Error::SchemaTooOld::minimum: u32
+pub radroots_storage_sqlite::open::Error::SourceGenerationMismatch
+pub radroots_storage_sqlite::open::Error::SourceGenerationRequired
+pub radroots_storage_sqlite::open::Error::SourceGenerationUnavailable
+pub radroots_storage_sqlite::open::Error::SymlinkPath(std::path::PathBuf)
+pub radroots_storage_sqlite::open::Error::UnexpectedFileName
+pub radroots_storage_sqlite::open::Error::UnexpectedFileName::expected: &'static str
+pub radroots_storage_sqlite::open::Error::UnexpectedFileName::path: std::path::PathBuf
+pub radroots_storage_sqlite::open::Error::UnrecognizedSchema
+pub radroots_storage_sqlite::open::Error::UnrecognizedSchema::database: &'static str
+pub radroots_storage_sqlite::open::Error::UnsupportedBackupVersion
+pub radroots_storage_sqlite::open::Error::UnsupportedLegacySchema
+pub radroots_storage_sqlite::open::Error::UnsupportedLegacySchema::catalog_sha256: alloc::string::String
+pub radroots_storage_sqlite::open::Error::UnsupportedLegacySchema::source_kind: &'static str
+pub radroots_storage_sqlite::open::Error::UnsupportedLegacySchema::user_version: i64
+pub radroots_storage_sqlite::open::Error::WriterAlreadyActive
+pub radroots_storage_sqlite::open::Error::WriterAlreadyActive::path: std::path::PathBuf
+pub radroots_storage_sqlite::open::Error::WriterLockFailed
+pub radroots_storage_sqlite::open::Error::WriterLockFailed::path: std::path::PathBuf
+pub radroots_storage_sqlite::open::Error::WriterLockFailed::source: core::io::error::Error
+pub radroots_storage_sqlite::open::Error::WriterLockOpen
+pub radroots_storage_sqlite::open::Error::WriterLockOpen::path: std::path::PathBuf
+pub radroots_storage_sqlite::open::Error::WriterLockOpen::source: core::io::error::Error
+pub radroots_storage_sqlite::open::Error::WriterUnlockFailed
+pub radroots_storage_sqlite::open::Error::WriterUnlockFailed::path: std::path::PathBuf
+pub radroots_storage_sqlite::open::Error::WriterUnlockFailed::source: core::io::error::Error
+impl core::error::Error for radroots_storage_sqlite::open::Error
+pub fn radroots_storage_sqlite::open::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_storage_sqlite::open::Error
+pub fn radroots_storage_sqlite::open::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_storage_sqlite::open::OpenMode
+pub radroots_storage_sqlite::open::OpenMode::Create
+pub radroots_storage_sqlite::open::OpenMode::ReadOnly
+pub radroots_storage_sqlite::open::OpenMode::ReadWriteExisting
+impl radroots_storage_sqlite::open::OpenMode
+pub fn radroots_storage_sqlite::open::OpenMode::is_writable(self) -> bool
+pub fn radroots_storage_sqlite::open::OpenMode::may_create(self) -> bool
+pub struct radroots_storage_sqlite::open::Paths
+impl radroots_storage_sqlite::open::Paths
+pub fn radroots_storage_sqlite::open::Paths::from_directory(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::open::Paths::from_files(impl core::convert::Into<std::path::PathBuf>, impl core::convert::Into<std::path::PathBuf>) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::open::Paths::private(&self) -> &std::path::Path
+pub fn radroots_storage_sqlite::open::Paths::runtime(&self) -> &std::path::Path
+pub mod radroots_storage_sqlite::status
+#[non_exhaustive] pub enum radroots_storage_sqlite::Error
+pub radroots_storage_sqlite::Error::AuthoredMigrationBlocked
+pub radroots_storage_sqlite::Error::AuthoredMigrationBlocked::invalid_or_unsupported: u64
+pub radroots_storage_sqlite::Error::AuthoredMigrationBlocked::prepared_or_recoverable: u64
+pub radroots_storage_sqlite::Error::AuthoredMigrationBlocked::signed_without_complete_event: u64
+pub radroots_storage_sqlite::Error::BackupBackendUnavailable
+pub radroots_storage_sqlite::Error::BackupBundleAlreadyExists(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::BackupBundleMissing(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::BackupCaptureFailed
+pub radroots_storage_sqlite::Error::BackupCaptureFailed::member: &'static str
+pub radroots_storage_sqlite::Error::BackupFilesystem
+pub radroots_storage_sqlite::Error::BackupFilesystem::operation: &'static str
+pub radroots_storage_sqlite::Error::BackupFilesystem::source: core::io::error::Error
+pub radroots_storage_sqlite::Error::BackupRootRequired
+pub radroots_storage_sqlite::Error::BackupUnexpectedEntry(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::BackupVerificationFailed
+pub radroots_storage_sqlite::Error::BackupVerificationFailed::member: &'static str
+pub radroots_storage_sqlite::Error::ConnectionPolicyMismatch
+pub radroots_storage_sqlite::Error::ConnectionPolicyMismatch::database: &'static str
+pub radroots_storage_sqlite::Error::CorruptSourceGeneration
+pub radroots_storage_sqlite::Error::DatabaseCloseFailed
+pub radroots_storage_sqlite::Error::DatabaseCloseFailed::database: &'static str
+pub radroots_storage_sqlite::Error::DatabaseCorrupt
+pub radroots_storage_sqlite::Error::DatabaseCorrupt::database: &'static str
+pub radroots_storage_sqlite::Error::DatabaseOpenFailed
+pub radroots_storage_sqlite::Error::DatabaseOpenFailed::database: &'static str
+pub radroots_storage_sqlite::Error::Inspect
+pub radroots_storage_sqlite::Error::Inspect::path: std::path::PathBuf
+pub radroots_storage_sqlite::Error::Inspect::source: core::io::error::Error
+pub radroots_storage_sqlite::Error::InvalidBackupRoot(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::InvalidBusyTimeout
+pub radroots_storage_sqlite::Error::InvalidBusyTimeout::actual: core::time::Duration
+pub radroots_storage_sqlite::Error::InvalidBusyTimeout::maximum: core::time::Duration
+pub radroots_storage_sqlite::Error::InvalidBusyTimeout::minimum: core::time::Duration
+pub radroots_storage_sqlite::Error::InvalidLegacyImportJournal
+pub radroots_storage_sqlite::Error::InvalidLegacyImportPlan
+pub radroots_storage_sqlite::Error::InvalidLegacyImportStageRequest
+pub radroots_storage_sqlite::Error::InvalidLegacySource(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::InvalidPath(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::InvalidSourceGenerationTimestamp
+pub radroots_storage_sqlite::Error::InvalidSourceGenerationTimestamp::actual: u64
+pub radroots_storage_sqlite::Error::LegacyImportBackupAlreadyExists(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::LegacyImportBackupFailed
+pub radroots_storage_sqlite::Error::LegacyImportBackupFailed::source_kind: &'static str
+pub radroots_storage_sqlite::Error::LegacyImportConflict
+pub radroots_storage_sqlite::Error::LegacyImportEvidenceInvalid
+pub radroots_storage_sqlite::Error::LegacyImportFilesystem
+pub radroots_storage_sqlite::Error::LegacyImportFilesystem::operation: &'static str
+pub radroots_storage_sqlite::Error::LegacyImportFilesystem::source: core::io::error::Error
+pub radroots_storage_sqlite::Error::LegacyImportJournalFailed
+pub radroots_storage_sqlite::Error::LegacyImportMigrationHistoryInvalid
+pub radroots_storage_sqlite::Error::LegacyImportRowInvalid
+pub radroots_storage_sqlite::Error::LegacyImportRowInvalid::legacy_sequence: i64
+pub radroots_storage_sqlite::Error::LegacyImportRowInvalid::source_kind: &'static str
+pub radroots_storage_sqlite::Error::LegacyImportSourceInvalid
+pub radroots_storage_sqlite::Error::LegacyImportSourceInvalid::source_kind: &'static str
+pub radroots_storage_sqlite::Error::LegacyImportStagingFailed
+pub radroots_storage_sqlite::Error::LegacyImportTargetMismatch
+pub radroots_storage_sqlite::Error::MissingFile(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::MissingParent(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::NotAFile(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::ParentNotDirectory(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::PathsOverlap(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::RestoreFilesystem
+pub radroots_storage_sqlite::Error::RestoreFilesystem::operation: &'static str
+pub radroots_storage_sqlite::Error::RestoreFilesystem::source: core::io::error::Error
+pub radroots_storage_sqlite::Error::RestoreMarkerCorrupt(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::RestoreRecoveryConflict(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::RestoreReplacementFailed
+pub radroots_storage_sqlite::Error::RestoreReplacementFailed::member: &'static str
+pub radroots_storage_sqlite::Error::RestoreRequiresWritableStorage
+pub radroots_storage_sqlite::Error::RestoreStagingAlreadyExists(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::RestoreStagingFailed
+pub radroots_storage_sqlite::Error::RestoreStagingFailed::member: &'static str
+pub radroots_storage_sqlite::Error::SchemaCatalogMismatch
+pub radroots_storage_sqlite::Error::SchemaCatalogMismatch::database: &'static str
+pub radroots_storage_sqlite::Error::SchemaCatalogMismatch::version: u32
+pub radroots_storage_sqlite::Error::SchemaIdentityMismatch
+pub radroots_storage_sqlite::Error::SchemaIdentityMismatch::actual: u32
+pub radroots_storage_sqlite::Error::SchemaIdentityMismatch::database: &'static str
+pub radroots_storage_sqlite::Error::SchemaIdentityMismatch::expected: u32
+pub radroots_storage_sqlite::Error::SchemaMetadataUnavailable
+pub radroots_storage_sqlite::Error::SchemaMetadataUnavailable::database: &'static str
+pub radroots_storage_sqlite::Error::SchemaMigrationFailed
+pub radroots_storage_sqlite::Error::SchemaMigrationFailed::database: &'static str
+pub radroots_storage_sqlite::Error::SchemaMigrationFailed::target_version: u32
+pub radroots_storage_sqlite::Error::SchemaMigrationRequired
+pub radroots_storage_sqlite::Error::SchemaMigrationRequired::actual: u32
+pub radroots_storage_sqlite::Error::SchemaMigrationRequired::current: u32
+pub radroots_storage_sqlite::Error::SchemaMigrationRequired::database: &'static str
+pub radroots_storage_sqlite::Error::SchemaTooNew
+pub radroots_storage_sqlite::Error::SchemaTooNew::actual: u32
+pub radroots_storage_sqlite::Error::SchemaTooNew::database: &'static str
+pub radroots_storage_sqlite::Error::SchemaTooNew::supported: u32
+pub radroots_storage_sqlite::Error::SchemaTooOld
+pub radroots_storage_sqlite::Error::SchemaTooOld::actual: u32
+pub radroots_storage_sqlite::Error::SchemaTooOld::database: &'static str
+pub radroots_storage_sqlite::Error::SchemaTooOld::minimum: u32
+pub radroots_storage_sqlite::Error::SourceGenerationMismatch
+pub radroots_storage_sqlite::Error::SourceGenerationRequired
+pub radroots_storage_sqlite::Error::SourceGenerationUnavailable
+pub radroots_storage_sqlite::Error::SymlinkPath(std::path::PathBuf)
+pub radroots_storage_sqlite::Error::UnexpectedFileName
+pub radroots_storage_sqlite::Error::UnexpectedFileName::expected: &'static str
+pub radroots_storage_sqlite::Error::UnexpectedFileName::path: std::path::PathBuf
+pub radroots_storage_sqlite::Error::UnrecognizedSchema
+pub radroots_storage_sqlite::Error::UnrecognizedSchema::database: &'static str
+pub radroots_storage_sqlite::Error::UnsupportedBackupVersion
+pub radroots_storage_sqlite::Error::UnsupportedLegacySchema
+pub radroots_storage_sqlite::Error::UnsupportedLegacySchema::catalog_sha256: alloc::string::String
+pub radroots_storage_sqlite::Error::UnsupportedLegacySchema::source_kind: &'static str
+pub radroots_storage_sqlite::Error::UnsupportedLegacySchema::user_version: i64
+pub radroots_storage_sqlite::Error::WriterAlreadyActive
+pub radroots_storage_sqlite::Error::WriterAlreadyActive::path: std::path::PathBuf
+pub radroots_storage_sqlite::Error::WriterLockFailed
+pub radroots_storage_sqlite::Error::WriterLockFailed::path: std::path::PathBuf
+pub radroots_storage_sqlite::Error::WriterLockFailed::source: core::io::error::Error
+pub radroots_storage_sqlite::Error::WriterLockOpen
+pub radroots_storage_sqlite::Error::WriterLockOpen::path: std::path::PathBuf
+pub radroots_storage_sqlite::Error::WriterLockOpen::source: core::io::error::Error
+pub radroots_storage_sqlite::Error::WriterUnlockFailed
+pub radroots_storage_sqlite::Error::WriterUnlockFailed::path: std::path::PathBuf
+pub radroots_storage_sqlite::Error::WriterUnlockFailed::source: core::io::error::Error
+impl core::error::Error for radroots_storage_sqlite::open::Error
+pub fn radroots_storage_sqlite::open::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_storage_sqlite::open::Error
+pub fn radroots_storage_sqlite::open::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_storage_sqlite::OpenMode
+pub radroots_storage_sqlite::OpenMode::Create
+pub radroots_storage_sqlite::OpenMode::ReadOnly
+pub radroots_storage_sqlite::OpenMode::ReadWriteExisting
+impl radroots_storage_sqlite::open::OpenMode
+pub fn radroots_storage_sqlite::open::OpenMode::is_writable(self) -> bool
+pub fn radroots_storage_sqlite::open::OpenMode::may_create(self) -> bool
+pub struct radroots_storage_sqlite::OpenOptions
+impl radroots_storage_sqlite::config::OpenOptions
+pub fn radroots_storage_sqlite::config::OpenOptions::backup_root(&self) -> core::option::Option<&std::path::Path>
+pub fn radroots_storage_sqlite::config::OpenOptions::busy_timeout(&self) -> core::time::Duration
+pub fn radroots_storage_sqlite::config::OpenOptions::foreign_keys_enabled(&self) -> bool
+pub fn radroots_storage_sqlite::config::OpenOptions::mode(&self) -> radroots_storage_sqlite::open::OpenMode
+pub fn radroots_storage_sqlite::config::OpenOptions::new(radroots_storage_sqlite::open::Paths, radroots_storage_sqlite::open::OpenMode) -> Self
+pub fn radroots_storage_sqlite::config::OpenOptions::paths(&self) -> &radroots_storage_sqlite::open::Paths
+pub fn radroots_storage_sqlite::config::OpenOptions::source_generation(&self) -> core::option::Option<radroots_storage::event::SourceGeneration>
+pub fn radroots_storage_sqlite::config::OpenOptions::source_generation_created_at_unix_ms(&self) -> core::option::Option<u64>
+pub fn radroots_storage_sqlite::config::OpenOptions::validate_filesystem(&self) -> core::result::Result<(), radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::wal_enabled(&self) -> bool
+pub fn radroots_storage_sqlite::config::OpenOptions::with_backup_root(self, impl core::convert::Into<std::path::PathBuf>) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::with_busy_timeout(self, core::time::Duration) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::with_source_generation(self, radroots_storage::event::SourceGeneration, u64) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::config::OpenOptions::writer_policy(&self) -> radroots_storage::status::WriterPolicy
+pub struct radroots_storage_sqlite::Paths
+impl radroots_storage_sqlite::open::Paths
+pub fn radroots_storage_sqlite::open::Paths::from_directory(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::open::Paths::from_files(impl core::convert::Into<std::path::PathBuf>, impl core::convert::Into<std::path::PathBuf>) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+pub fn radroots_storage_sqlite::open::Paths::private(&self) -> &std::path::Path
+pub fn radroots_storage_sqlite::open::Paths::runtime(&self) -> &std::path::Path
+pub struct radroots_storage_sqlite::SqliteStorage
+impl radroots_storage_sqlite::SqliteStorage
+pub async fn radroots_storage_sqlite::SqliteStorage::acknowledge_legacy_studio_handoff(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport, radroots_storage_sqlite::legacy::LegacyStudioHandoffReceipt, u64) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyImportJournal, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::begin_legacy_import(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport, u64) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyImportJournal, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::classify_legacy_import(&self, &radroots_storage_sqlite::legacy::PreparedLegacyImport) -> core::result::Result<radroots_storage_sqlite::legacy::ClassifiedLegacyImport, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::finalize_legacy_import(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport, radroots_storage_sqlite::legacy::LegacyImportValidation, u64) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyImportCommitReceipt, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::legacy_import_journal(&self, radroots_storage_sqlite::legacy::LegacyImportId) -> core::result::Result<core::option::Option<radroots_storage_sqlite::legacy::LegacyImportJournal>, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::prepare_legacy_import(&self, &radroots_storage_sqlite::legacy::LegacyImportPlan) -> core::result::Result<radroots_storage_sqlite::legacy::PreparedLegacyImport, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::prepare_legacy_studio_handoff(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyStudioHandoff, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::stage_legacy_events(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport, u16, u64) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyEventStagePage, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::stage_legacy_outbox(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport, u16, u64) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyOutboxStagePage, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::stage_legacy_private(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport, u16, u64) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyPrivateStagePage, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::validate_legacy_import(&self, &radroots_storage_sqlite::legacy::ClassifiedLegacyImport) -> core::result::Result<radroots_storage_sqlite::legacy::LegacyImportValidation, radroots_storage_sqlite::open::Error>
+impl radroots_storage_sqlite::SqliteStorage
+pub async fn radroots_storage_sqlite::SqliteStorage::capture_backup(&self, &radroots_storage::backup::BackupPlan) -> core::result::Result<radroots_storage::backup::BackupManifest, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::finalize_backup(&self, &radroots_storage::backup::BackupPlan, &radroots_storage::backup::BackupManifest) -> core::result::Result<std::path::PathBuf, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::finalize_restore(&self, &radroots_storage::backup::RestorePlan) -> core::result::Result<(), radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::stage_restore(&self, &radroots_storage::backup::RestorePlan) -> core::result::Result<alloc::vec::Vec<radroots_storage::backup::RestoreMemberStatus>, radroots_storage_sqlite::open::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::verify_backup(&self, &radroots_storage::backup::BackupPlan, &radroots_storage::backup::BackupManifest) -> core::result::Result<(), radroots_storage_sqlite::open::Error>
+impl radroots_storage_sqlite::SqliteStorage
+pub async fn radroots_storage_sqlite::SqliteStorage::check_integrity(&self, u64) -> core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::error::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::integrity(&self) -> core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::error::Error>
+impl radroots_storage_sqlite::SqliteStorage
+pub async fn radroots_storage_sqlite::SqliteStorage::close(&self) -> core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::error::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::storage_status(&self) -> core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::error::Error>
+impl radroots_storage_sqlite::SqliteStorage
+pub async fn radroots_storage_sqlite::SqliteStorage::commit_private_artifact_reseal(&self, radroots_storage::private_artifact::PrivateArtifactResealRequest, &radroots_secrets::envelope::EncryptedEnvelope) -> core::result::Result<radroots_storage::private_artifact::PrivateArtifactResealReceipt, radroots_storage::error::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::encrypted_private_artifact(&self, radroots_storage::private_artifact::PrivateArtifactId) -> core::result::Result<core::option::Option<radroots_secrets::envelope::EncryptedEnvelope>, radroots_storage::error::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::private_artifact_envelope_migration_status(&self) -> core::result::Result<radroots_storage::private_artifact::PrivateArtifactEnvelopeMigrationStatus, radroots_storage::error::Error>
+pub async fn radroots_storage_sqlite::SqliteStorage::put_encrypted_private_artifact(&self, radroots_storage::private_artifact::PrivateArtifactMetadata, &radroots_secrets::envelope::EncryptedEnvelope) -> core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::error::Error>
+impl radroots_storage_sqlite::SqliteStorage
+pub async fn radroots_storage_sqlite::SqliteStorage::open(radroots_storage_sqlite::config::OpenOptions) -> core::result::Result<Self, radroots_storage_sqlite::open::Error>
+impl radroots_storage::atomic::AtomicStorage for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::commit(&self, radroots_storage::atomic::AtomicCommit) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::atomic::AtomicCommitReceipt, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::atomic::AtomicCommitReceipt>, radroots_storage::error::Error>>
+impl radroots_storage::authored_atomic::AuthoredAtomicStorage for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::authored_artifact(&self, radroots_storage::authored::AuthoredArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::authored_delivery_plan(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::execute_authored(&self, radroots_storage::authored_atomic::AuthoredAtomicCommand) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::error::Error>>
+impl radroots_storage::authored_draft::AuthoredDraftStore for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::append_authored_draft(&self, radroots_storage::authored_draft::AuthoredDraft, core::option::Option<radroots_storage::authored_draft::AuthoredDraftRevision>) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft::DraftAppendReceipt, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::authored_draft_head(&self, radroots_storage::authored_draft::AuthoredDraftId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::authored_draft_heads(&self, [u8; 32], u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::authored_draft_revision(&self, radroots_storage::authored_draft::AuthoredDraftId, radroots_storage::authored_draft::AuthoredDraftRevision) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_draft::AuthoredDraft>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::query_authored_drafts(&self, radroots_storage::authored_draft_query::AuthoredDraftQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_draft_query::AuthoredDraftPage, radroots_storage::error::Error>>
+impl radroots_storage::backup::StorageReliability for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::begin_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::begin_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::close(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::integrity(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::error::Error>>
+impl radroots_storage::event::EventStore for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::admit(&self, radroots_storage::event::EventAdmission) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::AdmissionReceipt, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::query_provenance(&self, radroots_event::id::EventId, radroots_storage::event::EventQueryBounds) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredEventProvenance>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::error::Error>>
+impl radroots_storage::journal::Journal for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::by_idempotency_key(&self, radroots_protocol::runtime::v1::OperationId, radroots_storage::journal::IdempotencyKey) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::journal::OperationRecord>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::journal::OperationRecord>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::prepare(&self, radroots_storage::journal::PrepareOperation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::journal::PrepareReceipt, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::recoverable(&self, u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::journal::OperationRecord>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::transition(&self, radroots_storage::journal::JournalTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::journal::OperationRecord, radroots_storage::error::Error>>
+impl radroots_storage::outbox::Outbox for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::claim(&self, radroots_storage::outbox::ClaimOutboxItems) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::outbox::ClaimedOutboxItem>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::enqueue(&self, radroots_storage::outbox::EnqueueOutboxItem) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::outbox::EnqueueReceipt, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::item(&self, radroots_storage::outbox::OutboxItemId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::outbox::OutboxRecord>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::record_attempt(&self, radroots_storage::outbox::DeliveryAttemptEvidence) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::outbox::OutboxRecord, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::release(&self, radroots_storage::outbox::OutboxItemId, radroots_storage::outbox::LeaseId, radroots_storage::outbox::OutboxRevision, u64, core::option::Option<u64>) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::outbox::OutboxRecord, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::outbox::OutboxStatus, radroots_storage::error::Error>>
+impl radroots_storage::private_artifact::PrivateArtifactStore for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::expired(&self, u64, u16) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::private_artifact::PrivateArtifactMetadata>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::mark_expired(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::metadata(&self, radroots_storage::private_artifact::PrivateArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::private_artifact::PrivateArtifactMetadata>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::put_metadata(&self, radroots_storage::private_artifact::PrivateArtifactMetadata) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::reseal_metadata(&self, radroots_storage::private_artifact::PrivateArtifactResealRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactResealReceipt, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactStatus, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::tombstone(&self, radroots_storage::private_artifact::PrivateArtifactId, radroots_storage::private_artifact::PrivateArtifactRevision, u64, radroots_storage::private_artifact::DeletionReason) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::private_artifact::PrivateArtifactMetadata, radroots_storage::error::Error>>
+impl radroots_storage::projection::ProjectionStore for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::checkpoint(&self, radroots_storage::projection::ProjectionCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::event_index_checkpoint(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexCheckpoint>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::event_index_manifest(&self, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::EventIndexManifest>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::invalidate(&self, radroots_storage::projection::ProjectionInvalidation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::ProjectionStatus, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::invalidation(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionInvalidation>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionDocument>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::projection_snapshot(&self, radroots_storage::projection::ProjectionId, [u8; 32]) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionSnapshot>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::put_event_index_checkpoint(&self, radroots_storage::projection::EventIndexCheckpoint) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::error::Error>>
+pub fn radroots_storage_sqlite::SqliteStorage::transition_rebuild(&self, radroots_storage::projection::RebuildTransition) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::error::Error>>
+impl radroots_storage::status::StorageStatusProvider for radroots_storage_sqlite::SqliteStorage
+pub fn radroots_storage_sqlite::SqliteStorage::storage_status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::error::Error>>

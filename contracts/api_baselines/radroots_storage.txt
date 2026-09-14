@@ -201,6 +201,7 @@ pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Cancel(radroots_st
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Claim(radroots_storage::authored_atomic::ClaimAuthoredWork)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Prepare(radroots_storage::authored_atomic::PrepareAuthoredOperation)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::PrepareFromDraft(alloc::boxed::Box<radroots_storage::authored_draft_submission::PrepareFromDraft>)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::RecordSigned(radroots_storage::authored_atomic::RecordSignedArtifact)
 impl radroots_storage::authored_atomic::AuthoredAtomicCommand
 pub fn radroots_storage::authored_atomic::AuthoredAtomicCommand::commit_id(&self) -> radroots_storage::atomic::AtomicCommitId
 pub fn radroots_storage::authored_atomic::AuthoredAtomicCommand::digest(&self) -> radroots_storage::atomic::AtomicCommitDigest
@@ -285,6 +286,16 @@ pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::input_
 pub fn radroots_storage::authored_atomic::PrepareAuthoredOperation::new(radroots_storage::authored::AuthoredOperation, alloc::vec::Vec<radroots_storage::authored::AuthoredArtifact>, alloc::vec::Vec<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::atomic::AtomicCommitDigest, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::operation(&self) -> &radroots_storage::authored::AuthoredOperation
 pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::requested_at_unix_ms(&self) -> u64
+pub struct radroots_storage::authored_atomic::RecordSignedArtifact
+impl radroots_storage::authored_atomic::RecordSignedArtifact
+pub fn radroots_storage::authored_atomic::RecordSignedArtifact::apply_to(&self, &mut radroots_storage::authored::AuthoredArtifact, &radroots_storage::authored_atomic::AuthoredAtomicReceipt) -> core::result::Result<(), radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::RecordSignedArtifact::artifact_id(&self) -> radroots_storage::authored::AuthoredArtifactId
+pub const fn radroots_storage::authored_atomic::RecordSignedArtifact::claim(&self) -> &radroots_storage::authored::WorkClaim
+pub fn radroots_storage::authored_atomic::RecordSignedArtifact::claim_command(&self) -> radroots_storage::authored_atomic::AuthoredAtomicCommand
+pub const fn radroots_storage::authored_atomic::RecordSignedArtifact::event(&self) -> &radroots_event::draft::SignedEvent
+pub fn radroots_storage::authored_atomic::RecordSignedArtifact::new(radroots_storage::journal::OperationInstanceId, radroots_storage::authored::AuthoredArtifactId, radroots_storage::authored::WorkClaim, radroots_event::draft::SignedEvent, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::RecordSignedArtifact::observed_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::RecordSignedArtifact::operation_id(&self) -> radroots_storage::journal::OperationInstanceId
 pub struct radroots_storage::authored_atomic::WorkFence
 impl radroots_storage::authored_atomic::WorkFence
 pub const fn radroots_storage::authored_atomic::WorkFence::generation(&self) -> core::num::nonzero::NonZeroU64

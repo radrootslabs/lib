@@ -1549,6 +1549,20 @@ impl AuthoredAtomicStorage for MemoryStorage {
                         AuthoredAtomicOutcome::Artifact(artifact.clone())
                     }
                     ClaimAuthoredTarget::DeliveryPlan(plan_id) => {
+                        let artifact_id = candidate
+                            .authored_delivery_plans
+                            .iter()
+                            .find(|plan| plan.plan_id() == *plan_id)
+                            .ok_or(Error::InvalidAuthoredDeliveryPlan)?
+                            .artifact_id();
+                        let artifact = candidate
+                            .authored_artifacts
+                            .iter()
+                            .find(|artifact| artifact.artifact_id() == artifact_id)
+                            .ok_or(Error::InvalidAuthoredArtifact)?;
+                        if artifact.signing_state() != crate::authored::SigningState::Signed {
+                            return Err(Error::InvalidAuthoredTransition);
+                        }
                         let plan = candidate
                             .authored_delivery_plans
                             .iter_mut()
@@ -1598,6 +1612,35 @@ impl AuthoredAtomicStorage for MemoryStorage {
                         value.applied_at_unix_ms(),
                     )?;
                     AuthoredAtomicOutcome::Artifact(artifact.clone())
+                }
+                AuthoredAtomicCommand::RecordSigned(value) => {
+                    let claim_id = value.claim_command().commit_id();
+                    let original = candidate
+                        .authored_atomic_receipts
+                        .iter()
+                        .find(|receipt| receipt.commit_id() == claim_id)
+                        .ok_or(Error::AtomicWorkflowMismatch)?;
+                    let artifact = candidate
+                        .authored_artifacts
+                        .iter_mut()
+                        .find(|artifact| artifact.artifact_id() == value.artifact_id())
+                        .ok_or(Error::InvalidAuthoredArtifact)?;
+                    let already_signed = artifact.signed().is_some();
+                    value.apply_to(artifact, original)?;
+                    let artifact = artifact.clone();
+                    if !already_signed
+                        && artifact.signing_state() == crate::authored::SigningState::Signed
+                    {
+                        for plan in candidate.authored_delivery_plans.iter_mut().filter(|plan| {
+                            plan.artifact_id() == value.artifact_id() && !plan.state().is_terminal()
+                        }) {
+                            plan.bind_signed_event(
+                                value.event().clone(),
+                                value.observed_at_unix_ms().max(plan.updated_at_unix_ms()),
+                            )?;
+                        }
+                    }
+                    AuthoredAtomicOutcome::Artifact(artifact)
                 }
                 AuthoredAtomicCommand::ApplyDelivery(value) => {
                     let plan = candidate
@@ -1762,10 +1805,19 @@ impl AuthoredAtomicStorage for MemoryStorage {
                     }
                 },
             };
+            let committed_at = match (&command, &outcome) {
+                (
+                    AuthoredAtomicCommand::RecordSigned(_),
+                    AuthoredAtomicOutcome::Artifact(artifact),
+                ) => command
+                    .requested_at_unix_ms()
+                    .max(artifact.updated_at_unix_ms()),
+                _ => command.requested_at_unix_ms(),
+            };
             let receipt = AuthoredAtomicReceipt::new(
                 &command,
                 AtomicCommitDisposition::Committed,
-                command.requested_at_unix_ms(),
+                committed_at,
                 outcome,
             )?;
             candidate.authored_atomic_receipts.push(receipt.clone());

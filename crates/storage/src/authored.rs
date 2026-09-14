@@ -722,7 +722,14 @@ impl AuthoredArtifact {
         {
             return Err(Error::InvalidAuthoredArtifact);
         }
-        if matches!(self.signing_state, SigningState::Signed) != self.signed.is_some() {
+        let stopped = matches!(
+            self.signing_state,
+            SigningState::Cancelled | SigningState::FailedTerminal
+        );
+        if (self.signing_state == SigningState::Signed && self.signed.is_none())
+            || (self.signed.is_some() && self.signing_state != SigningState::Signed && !stopped)
+            || (stopped && self.admission_state != AdmissionState::Pending)
+        {
             return Err(Error::InvalidAuthoredArtifact);
         }
         if self.signed.is_none() && self.admission_state != AdmissionState::Pending {
@@ -744,6 +751,7 @@ impl AuthoredArtifact {
                 || claim.acquired_at_unix_ms() != self.updated_at_unix_ms
         }) || self.admission_claim.as_ref().is_some_and(|claim| {
             claim.validate().is_err()
+                || self.signing_state != SigningState::Signed
                 || self.signed.is_none()
                 || !matches!(
                     self.admission_state,
@@ -806,7 +814,7 @@ impl AuthoredArtifact {
                 AdmissionState::Retryable | AdmissionState::Rejected | AdmissionState::Cancelled
             ));
         if failure_required {
-            if expected_failure != self.last_failure.as_ref() {
+            if expected_failure.is_none() || expected_failure != self.last_failure.as_ref() {
                 return Err(Error::InvalidAuthoredArtifact);
             }
         } else if self.last_failure.is_some() {
@@ -852,6 +860,41 @@ impl AuthoredArtifact {
             return Err(error);
         }
         if let Err(error) = self.validate() {
+            *self = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn record_signed_fact(
+        &mut self,
+        event: SignedEvent,
+        observed_at_unix_ms: u64,
+    ) -> Result<(), Error> {
+        if !self.origin.is_resignable() {
+            return Err(Error::InvalidAuthoredTransition);
+        }
+        if let Some(existing) = &self.signed {
+            return if existing.event() == &event {
+                Ok(())
+            } else {
+                Err(Error::AtomicCommitConflict)
+            };
+        }
+        let previous = self.clone();
+        self.signed = Some(ExactSignedArtifact::new(event));
+        self.signing_claim = None;
+        self.signing_retry = None;
+        if !matches!(
+            self.signing_state,
+            SigningState::Cancelled | SigningState::FailedTerminal
+        ) {
+            self.signing_state = SigningState::Signed;
+            self.last_failure = None;
+        }
+        // Out-of-order observation must not move row time backwards or erase facts.
+        let at_unix_ms = observed_at_unix_ms.max(self.updated_at_unix_ms);
+        if let Err(error) = self.advance(at_unix_ms).and_then(|()| self.validate()) {
             *self = previous;
             return Err(error);
         }
