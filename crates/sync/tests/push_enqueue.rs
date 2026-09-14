@@ -54,6 +54,9 @@ use secp256k1::{Keypair, Message, Secp256k1, SecretKey};
 
 const CONTENT: &str = "frozen-content";
 
+#[path = "push_enqueue/signing_evidence.rs"]
+mod signing_evidence;
+
 struct MockSink;
 
 struct FaultStorage {
@@ -1074,7 +1077,7 @@ fn typed_only_authored_contract_identity_survives_signing_and_local_admission() 
 }
 
 #[test]
-fn caller_revalidates_late_and_cancelled_signer_success_before_persistence() {
+fn caller_retains_late_and_cancelled_signer_facts_before_reporting_wait_outcome() {
     for (byte, violation, expected) in [
         (
             55,
@@ -1112,7 +1115,20 @@ fn caller_revalidates_late_and_cancelled_signer_success_before_persistence() {
         let status = block_on(engine.push_status(push.operation_id()))
             .expect("status")
             .expect("prepared operation");
-        assert!(status.artifact().signed().is_none());
+        let signed = status
+            .artifact()
+            .signed()
+            .expect("retain verified signer facts");
+        assert_eq!(signed.event().id(), push.plan().expected_event_id());
+        assert_eq!(signed.event().created_at(), push.plan().created_at());
+        assert_eq!(
+            status.artifact().admission_state(),
+            if matches!(violation, BoundaryViolation::CancelsBeforeReturn) {
+                radroots_storage::authored::AdmissionState::Cancelled
+            } else {
+                radroots_storage::authored::AdmissionState::Pending
+            }
+        );
         assert!(status.delivery_plan().attempts().is_empty());
     }
 }

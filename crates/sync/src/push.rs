@@ -8,8 +8,7 @@ use radroots_event_codec::{
 };
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_signing::{
-    Actor, AuthoredArtifactId as SigningArtifactId, SignReceipt, SigningIntentId,
-    SigningOperationId,
+    Actor, AuthoredArtifactId as SigningArtifactId, SigningIntentId, SigningOperationId,
     recovery::{RecoveryDisposition, ReplayCapability, recovery_disposition},
     request::{CancellationPolicy, SignPolicy},
 };
@@ -20,9 +19,9 @@ use radroots_storage::{
         OperationSettlement, RetrySchedule, SigningState, WorkClaim, WorkFailure, WorkPhase,
     },
     authored_atomic::{
-        ApplyAdmissionResult, ApplyDeliveryAttempt, ApplySignedArtifact, ApplyWorkFailure,
-        AuthoredAtomicCommand, AuthoredAtomicOutcome, AuthoredWorkTarget, CancelAuthoredTarget,
-        CancelAuthoredWork, ClaimAuthoredTarget, ClaimAuthoredWork, PrepareAuthoredOperation,
+        ApplyAdmissionResult, ApplyDeliveryAttempt, ApplyWorkFailure, AuthoredAtomicCommand,
+        AuthoredAtomicOutcome, AuthoredWorkTarget, CancelAuthoredTarget, CancelAuthoredWork,
+        ClaimAuthoredTarget, ClaimAuthoredWork, PrepareAuthoredOperation, RecordSignedArtifact,
         WorkFence,
     },
     authored_delivery::{
@@ -457,12 +456,15 @@ impl Engine {
 
     /// Claims and executes one prepared signing artifact.
     pub async fn sign_prepared(&self, request: PushRequest) -> Result<SigningRunReceipt, Error> {
-        let signer = self.signer.as_deref().ok_or(Error::MissingSigner)?;
         self.prepare_push(request.clone()).await?;
         let status = self
             .push_status(request.operation_id)
             .await?
             .ok_or(Error::StorageFailed)?;
+        if status.delivery_plan.state() == AuthoredDeliveryState::Cancelled {
+            self.cancel_push(request.operation_id).await?;
+            return Err(Error::SigningCancelled);
+        }
         let artifact = status.artifact;
         match artifact.signing_state() {
             SigningState::Signed => {
@@ -477,6 +479,7 @@ impl Engine {
             }
             SigningState::Planned | SigningState::Retryable => {}
         }
+        let signer = self.signer.as_deref().ok_or(Error::MissingSigner)?;
 
         let now = self.clock.now_unix_ms()?.max(artifact.updated_at_unix_ms());
         if let Some(existing) = artifact.signing_claim() {
@@ -525,6 +528,7 @@ impl Engine {
         if persisted_plan != request.plan {
             return Err(Error::StorageConflict);
         }
+        let signing_claim = claimed.signing_claim().ok_or(Error::StorageFailed)?.clone();
         let deadline = self.deadlines.deadline_unix_ms(OperationKind::Sign, now)?;
         let signing_operation = SigningOperationId::new(*request.operation_id.as_bytes())
             .map_err(|_| Error::InvalidPushRequest)?;
@@ -541,46 +545,93 @@ impl Engine {
         .map_err(|_| Error::InvalidPushRequest)?;
 
         let expected_request = sign_request.clone();
-        let signer_result = match signer.sign(sign_request).await {
-            Ok(receipt) => match self.clock.now_unix_ms() {
-                Ok(observed_at_unix_ms) => SignReceipt::from_signed_event(
-                    &expected_request,
-                    receipt.signed_event().clone(),
-                    observed_at_unix_ms,
-                ),
-                Err(_) => Err(radroots_signing::Error::new(
-                    radroots_signing::error::Kind::InternalError,
-                )),
-            },
+        let signer_result = match signer.sign_authored_evidence(sign_request).await {
+            Ok(receipt) => {
+                // A missing observation time leaves the durable attempt unresolved;
+                // it is not evidence that signing failed without an effect.
+                let observed_at_unix_ms = self.clock.now_unix_ms()?;
+                receipt.revalidate(&expected_request, observed_at_unix_ms)
+            }
             Err(error) => Err(error),
         };
 
         match signer_result {
             Ok(receipt) => {
-                let command = AuthoredAtomicCommand::ApplySigned(
-                    ApplySignedArtifact::new(
+                let command = AuthoredAtomicCommand::RecordSigned(
+                    RecordSignedArtifact::new(
+                        claimed.operation_id(),
                         claimed.artifact_id(),
-                        fence,
+                        signing_claim,
                         receipt.signed_event().clone(),
-                        receipt.completed_at_unix_ms(),
+                        receipt.observed_at_unix_ms(),
                     )
                     .map_err(map_storage_error)?,
                 );
                 let applied = self
                     .storage
-                    .execute_authored(command)
+                    .execute_authored(command.clone())
                     .await
                     .map_err(map_storage_error)?;
-                let AuthoredAtomicOutcome::Artifact(artifact) = applied.outcome() else {
+                if !applied.matches_command(&command) {
                     return Err(Error::StorageFailed);
-                };
+                }
+                let status = self
+                    .push_status(request.operation_id)
+                    .await?
+                    .ok_or(Error::StorageFailed)?;
+                if status
+                    .artifact
+                    .signed()
+                    .is_none_or(|signed| signed.event() != receipt.signed_event())
+                {
+                    return Err(Error::StorageFailed);
+                }
+                if expected_request.cancellation_signal().is_cancelled()
+                    || status.delivery_plan.state() == AuthoredDeliveryState::Cancelled
+                {
+                    let stopped = self.cancel_push(request.operation_id).await?;
+                    if stopped
+                        .status
+                        .artifact
+                        .signed()
+                        .is_none_or(|signed| signed.event() != receipt.signed_event())
+                    {
+                        return Err(Error::StorageFailed);
+                    }
+                    return Err(Error::SigningCancelled);
+                }
+                match status.artifact.signing_state() {
+                    SigningState::Cancelled => return Err(Error::SigningCancelled),
+                    SigningState::FailedTerminal => return Err(Error::SignerFailed),
+                    SigningState::Signed => {}
+                    _ => return Err(Error::StorageFailed),
+                }
+                if receipt.observed_at_unix_ms() >= deadline {
+                    return Err(Error::SignerDeadlineExceeded);
+                }
                 Ok(SigningRunReceipt {
-                    artifact: artifact.clone(),
-                    replay: false,
+                    artifact: status.artifact,
+                    replay: applied.disposition() == AtomicCommitDisposition::Replay,
                 })
             }
             Err(error) => {
                 let applied_at = self.clock.now_unix_ms()?;
+                let current = self
+                    .push_status(request.operation_id)
+                    .await?
+                    .ok_or(Error::StorageFailed)?;
+                if current.artifact.signed().is_some()
+                    || current.artifact.signing_claim() != claimed.signing_claim()
+                {
+                    // Another worker may have committed evidence or a stop while this one waited.
+                    return Err(match error.kind() {
+                        radroots_signing::error::Kind::DeadlineExceeded => {
+                            Error::SignerDeadlineExceeded
+                        }
+                        radroots_signing::error::Kind::SignerCancelled => Error::SigningCancelled,
+                        _ => Error::SignerFailed,
+                    });
+                }
                 if error.kind() == radroots_signing::error::Kind::DeadlineExceeded
                     && claimed
                         .signing_claim()
@@ -673,6 +724,10 @@ impl Engine {
                 artifact,
                 replay: true,
             });
+        }
+        if status.delivery_plan.state() == AuthoredDeliveryState::Cancelled {
+            self.cancel_push(operation_id).await?;
+            return Err(Error::AdmissionFailed);
         }
         if matches!(
             artifact.admission_state(),

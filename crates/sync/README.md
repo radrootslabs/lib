@@ -29,3 +29,19 @@ Retain this value when composing a storage draft submission: composite replay
 compares captured timestamps exactly. Building it performs no storage, signing,
 clock or network operation. Ordinary preparation identity and replay semantics
 remain unchanged.
+
+Prepared signing consumes the authored-evidence signer hook, revalidates its
+exact request binding, and records verified bytes against the original durable
+claim even after that claim expires or is superseded. It reloads current state
+after receipt replay before returning or permitting admission. Caller deadline
+and cancellation outcomes are reported after retaining valid evidence; stopped
+work cannot restart admission or signing. An already-signed replay does not
+require a signer or credentials. The strict expiring authorization hook remains
+unchanged.
+
+The host must continue polling an in-flight call to deliver its late evidence.
+Dropping the future or losing the observation clock leaves the durable attempt
+unresolved; recovery follows the declared replay capability and never invents
+a new preimage, event timestamp, or key. Sync creates no worker or timer to
+retain a discarded future. Delivery-wide stop reconciliation is a separate
+contract from authored signing evidence.

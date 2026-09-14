@@ -1,0 +1,12 @@
+{
+  "schema": "radroots.sync-signing-evidence.v1",
+  "status": "approved",
+  "owner": "radroots_sync",
+  "producer_contracts": ["authored_signing_evidence.v1.json", "authored_signed_facts.v1.json"],
+  "binding": "Invoke sign_authored_evidence with the exact persisted plan and operation/artifact identity. Revalidate the evidence against the retained request and an injected observation time before RecordSignedArtifact with the complete original durable signing claim.",
+  "reconciliation": "Validate the storage receipt against its exact command, then reload current durable status even on receipt replay. Require the exact retained signed bytes. A stale error cannot overwrite a newer claim, stop or signed fact. Signed replay requires no signer or credential access.",
+  "wait_outcome": "Record valid evidence before reporting deadline or caller cancellation. Apply cancellation to the existing operation before scheduling further work. A cancelled delivery plan prevents new signing and admission, including late resolution of an Indeterminate artifact; already-completed admission remains historical evidence.",
+  "clock_failure": "If post-sign observation time is unavailable, return ClockUnavailable with the original durable attempt unresolved. Do not manufacture a terminal signer failure or observation time; subsequent recovery honors the declared replay capability.",
+  "lifetime": "Executor-neutral Sync creates no worker, timer or runtime. The host must retain and poll the future for late evidence delivery. Dropping it leaves durable claim/preimage recovery, not a promise of background completion.",
+  "boundaries": "No new key, event timestamp, transport, dependency or public type. Strict SignReceipt and expiring Blossom authorization remain unchanged. Global delivery-attempt stop reconciliation remains separate."
+}
