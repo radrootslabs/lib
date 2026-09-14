@@ -36,13 +36,14 @@ async fn read_page(
                 revisions.payload_schema = '' AS unknown_schema
          FROM radroots_runtime_authored_draft_revisions AS revisions
          WHERE revisions.author = ?
-           AND ((revisions.payload_schema = ? AND revisions.payload_scope IS ?)
+           AND ((revisions.payload_schema = ? AND (? OR revisions.payload_scope IS ?))
                 OR revisions.payload_schema = '')
            AND (? IS NULL OR revisions.draft_id > ?)
            AND revisions.revision = (SELECT MAX(head.revision)
              FROM radroots_runtime_authored_draft_revisions AS head WHERE head.draft_id = revisions.draft_id)
          ORDER BY revisions.draft_id LIMIT ?"
     ).bind(query.author().as_slice()).bind(query.payload_schema())
+        .bind(query.is_author_wide())
         .bind(query.scope().map(|value| value.as_bytes().to_vec()))
         .bind(&after).bind(after).bind(i64::from(query.limit()) + 1)
         .fetch_all(&mut **transaction).await.map_err(map_backend)?;

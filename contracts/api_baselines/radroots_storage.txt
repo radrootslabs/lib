@@ -526,6 +526,8 @@ impl radroots_storage::authored_draft_query::AuthoredDraftQuery
 pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::after(&self) -> core::option::Option<[u8; 16]>
 pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::author(&self) -> &[u8; 32]
 pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::cursor_after(&self, [u8; 16]) -> radroots_storage::authored_draft_query::AuthoredDraftCursor
+pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::for_author([u8; 32], impl core::convert::AsRef<str>, u16) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::is_author_wide(&self) -> bool
 pub const fn radroots_storage::authored_draft_query::AuthoredDraftQuery::limit(&self) -> u16
 pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::matches(&self, &radroots_storage::authored_draft::AuthoredDraft) -> bool
 pub fn radroots_storage::authored_draft_query::AuthoredDraftQuery::new([u8; 32], impl core::convert::AsRef<str>, core::option::Option<radroots_storage::authored_draft_query::AuthoredDraftScope>, u16) -> core::result::Result<Self, radroots_storage::Error>
@@ -541,6 +543,7 @@ pub fn [u8; 32]::from(radroots_storage::authored_draft_query::AuthoredDraftScope
 impl core::convert::TryFrom<[u8; 32]> for radroots_storage::authored_draft_query::AuthoredDraftScope
 pub type radroots_storage::authored_draft_query::AuthoredDraftScope::Error = radroots_storage::Error
 pub fn radroots_storage::authored_draft_query::AuthoredDraftScope::try_from([u8; 32]) -> core::result::Result<Self, radroots_storage::Error>
+pub const radroots_storage::authored_draft_query::AUTHORED_DRAFT_AUTHOR_CURSOR_SCHEMA_VERSION: u16
 pub const radroots_storage::authored_draft_query::AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION: u16
 pub const radroots_storage::authored_draft_query::AUTHORED_DRAFT_PAGE_PAYLOAD_MAX_BYTES: usize
 pub const radroots_storage::authored_draft_query::AUTHORED_DRAFT_PAGE_SNAPSHOT_MAX_BYTES: usize

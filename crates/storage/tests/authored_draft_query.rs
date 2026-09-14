@@ -35,6 +35,159 @@ fn query(scope: Option<AuthoredDraftScope>, limit: u16) -> AuthoredDraftQuery {
 }
 
 #[test]
+fn author_wide_cursor_requires_explicit_selection_and_independent_authority() {
+    let q = AuthoredDraftQuery::for_author([9; 32], "fixture.composer.v1", 256).unwrap();
+    assert!(q.is_author_wide());
+    assert_eq!(q.scope(), None);
+    assert!(!query(None, 1).is_author_wide());
+    assert!(AuthoredDraftQuery::for_author([0; 32], "fixture.composer.v1", 1).is_err());
+    let cursor = q.cursor_after([3; 16]);
+    let bytes = serde_json::to_vec(&cursor).unwrap();
+    let decoded: AuthoredDraftCursor = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(decoded, cursor);
+    assert_eq!(
+        q.clone().with_cursor(&decoded).unwrap().after(),
+        Some([3; 16])
+    );
+    assert_eq!(serde_json::to_vec(&decoded).unwrap(), bytes);
+    let wire = serde_json::to_value(&cursor).unwrap();
+    assert_eq!(wire["schema_version"], 2);
+    assert_eq!(wire["selection"], "author_schema");
+    assert!(wire["scope"].is_null());
+    for changed in [
+        query(None, 1),
+        query(Some(AuthoredDraftScope::new([7; 32]).unwrap()), 1),
+        AuthoredDraftQuery::for_author([8; 32], q.payload_schema(), 1).unwrap(),
+        AuthoredDraftQuery::for_author([9; 32], "fixture.other.v1", 1).unwrap(),
+    ] {
+        assert!(changed.with_cursor(&decoded).is_err());
+    }
+    assert!(
+        q.with_cursor(&query(None, 1).cursor_after([3; 16]))
+            .is_err()
+    );
+    for (field, value) in [
+        ("schema_version", serde_json::json!(1)),
+        ("schema_version", serde_json::json!(3)),
+        ("selection", serde_json::Value::Null),
+        ("selection", serde_json::json!("other")),
+        ("scope", serde_json::json!([7; 32].to_vec())),
+        ("author", serde_json::json!([0; 32].to_vec())),
+        ("payload_schema", serde_json::json!("")),
+        ("unknown", serde_json::json!(true)),
+    ] {
+        let mut forged = wire.clone();
+        forged[field] = value;
+        assert!(
+            serde_json::from_value::<AuthoredDraftCursor>(forged).is_err(),
+            "{field}"
+        );
+    }
+    let mut absent = wire;
+    let mut absent_scope = absent.clone();
+    absent_scope.as_object_mut().unwrap().remove("scope");
+    assert!(serde_json::from_value::<AuthoredDraftCursor>(absent_scope).is_err());
+    absent.as_object_mut().unwrap().remove("selection");
+    assert!(serde_json::from_value::<AuthoredDraftCursor>(absent).is_err());
+    let old = query(None, 1).cursor_after([3; 16]);
+    let mut forbidden = serde_json::to_value(&old).unwrap();
+    forbidden["selection"] = serde_json::Value::Null;
+    assert!(serde_json::from_value::<AuthoredDraftCursor>(forbidden).is_err());
+    let expected = format!(
+        "{{\"schema_version\":1,\"author\":{},\"payload_schema\":\"fixture.composer.v1\",\"scope\":null,\"after_id\":{}}}",
+        serde_json::to_string(&[9; 32]).unwrap(),
+        serde_json::to_string(&[3; 16]).unwrap()
+    );
+    assert_eq!(serde_json::to_string(&old).unwrap(), expected);
+}
+
+#[test]
+fn author_wide_memory_pages_cover_a_thousand_scopes_and_preserve_bounds() {
+    let store = MemoryStorage::default();
+    let scope = AuthoredDraftScope::new([7; 32]).unwrap();
+    for id in 1_u128..=1000 {
+        let value = AuthoredDraft::initial(
+            AuthoredDraftId::new(id.to_be_bytes()).unwrap(),
+            [9; 32],
+            "fixture.composer.v1",
+            vec![1],
+            AuthoredDraftStage::Draft,
+            None,
+            10,
+        )
+        .unwrap();
+        let value = if id % 2 == 0 {
+            value.with_scope(scope).unwrap()
+        } else {
+            value
+        };
+        block_on(store.append_authored_draft(value, None)).unwrap();
+    }
+    for (id, author, schema) in [
+        (1001_u128, [8; 32], "fixture.composer.v1"),
+        (1002, [9; 32], "fixture.other.v1"),
+    ] {
+        let value = AuthoredDraft::initial(
+            AuthoredDraftId::new(id.to_be_bytes()).unwrap(),
+            author,
+            schema,
+            vec![1],
+            AuthoredDraftStage::Draft,
+            None,
+            10,
+        )
+        .unwrap();
+        block_on(store.append_authored_draft(value, None)).unwrap();
+    }
+    let q = AuthoredDraftQuery::for_author([9; 32], "fixture.composer.v1", 37).unwrap();
+    let mut cursor = None;
+    let mut expected = 1_u128;
+    loop {
+        let query = cursor.as_ref().map_or_else(
+            || q.clone(),
+            |cursor| q.clone().with_cursor(cursor).unwrap(),
+        );
+        let page = block_on(store.query_authored_drafts(query)).unwrap();
+        assert!(page.records().len() <= 37);
+        for record in page.records() {
+            assert_eq!(record.draft_key(), expected.to_be_bytes());
+            expected += 1;
+        }
+        cursor = page.next_cursor().cloned();
+        if cursor.is_none() {
+            break;
+        }
+    }
+    assert_eq!(expected, 1001);
+    for id in 1003_u128..=1005 {
+        let value = AuthoredDraft::initial(
+            AuthoredDraftId::new(id.to_be_bytes()).unwrap(),
+            [9; 32],
+            "fixture.large.v1",
+            vec![1; 2 * 1024 * 1024],
+            AuthoredDraftStage::Draft,
+            None,
+            10,
+        )
+        .unwrap();
+        let value = if id % 2 == 0 {
+            value.with_scope(scope).unwrap()
+        } else {
+            value
+        };
+        block_on(store.append_authored_draft(value, None)).unwrap();
+    }
+    let q = AuthoredDraftQuery::for_author([9; 32], "fixture.large.v1", 256).unwrap();
+    let first = block_on(store.query_authored_drafts(q.clone())).unwrap();
+    assert_eq!(first.records().len(), 2);
+    let second =
+        block_on(store.query_authored_drafts(q.with_cursor(first.next_cursor().unwrap()).unwrap()))
+            .unwrap();
+    assert_eq!(second.records().len(), 1);
+    assert!(second.next_cursor().is_none());
+}
+
+#[test]
 fn scoped_pages_preserve_revisions_and_do_not_mix_other_schemas_or_scopes() {
     let store = MemoryStorage::default();
     let scope = AuthoredDraftScope::new([7; 32]).unwrap();

@@ -1,0 +1,13 @@
+{
+  "schema": "radroots.authored-draft-inventory.v1",
+  "status": "implemented",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "authority": "Supplement authored_draft_submission.v1 query mechanics without changing its exact optional-scope behavior or historical serialized records.",
+  "selection": "AuthoredDraftQuery::for_author explicitly selects one independently supplied author and exact payload schema across scoped and unscoped current heads. AuthoredDraftQuery::new still selects one exact optional scope; None means unscoped only. Neither constructor infers or changes author or schema from a continuation.",
+  "cursor": "Exact-scope cursors retain byte-identical schema version 1. Author-wide cursors require schema version 2, null scope and the explicit selection marker author_schema. Reject missing or conflicting selection markers, scope on an author-wide cursor, unknown fields, unsupported versions and invalid existing fields. Continuations cannot move between exact-scope and author-wide queries, authors or schemas. Callers retain independent authority selection on every page.",
+  "bounds": {"page_records": 256, "metadata_lookahead": 1, "decoded_page_payload_bytes": 4194304, "serialized_page_snapshot_bytes": 16777216},
+  "backend": "Retain stable ascending draft ID ordering, latest revisions, one released SQLite read snapshot per page, bounded memory retention and explicit continuation after page or byte exhaustion. Existing corrupt-row locators and unknown historical schema policy remain author-bound. Known foreign authors and payload schemas do not enter results. No migration, SQL ownership, dependency, private snapshot or signed operation identity changes.",
+  "consistency": "This is a live bounded traversal, not a frozen multi-page inventory. Updates do not move stable IDs. Callers must serialize their own application mutation admission or resweep for new earlier IDs; storage installs no task, lock outside the read snapshot, or application policy.",
+  "verification": ["old exact-scope and cursor assertions unchanged", "new cursor roundtrip and authority rejection", "memory and SQLite multi-scope parity", "1,000 records across page boundaries with concurrent revisions", "corrupt and foreign records and SQLite reopen", "existing byte bounds", "public API, full coverage thresholds, workspace and release preflight"],
+  "non_goals": ["publication policy", "application schema interpretation", "author enumeration", "unbounded result collections", "new database", "signing or transport", "release qualification"]
+}

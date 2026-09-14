@@ -175,6 +175,14 @@ SQLite status requires its governed lock, WAL, and busy-timeout contract.
 
 ## Serialization
 
+`AuthoredDraftQuery::new` selects an exact author, schema and optional scope;
+an absent scope selects only unscoped drafts. `AuthoredDraftQuery::for_author`
+explicitly traverses that author's schema across all scopes using the same
+bounded pages. Its version-2 continuation includes an explicit selection marker
+and cannot be used for an exact-scope query or another author/schema. Existing
+version-1 continuations keep their original bytes and meaning. Both traversals
+are live views: callers must revisit earlier IDs when new work can be inserted.
+
 The optional `serde` feature serializes passive identities, requests, records,
 receipts, status values, manifests, and coordination metadata. Deserialization
 revalidates invariants rather than trusting encoded revisions, digests, paths,

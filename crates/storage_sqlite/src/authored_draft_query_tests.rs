@@ -30,6 +30,132 @@ fn draft(
 fn query(scope: Option<AuthoredDraftScope>, limit: u16) -> AuthoredDraftQuery {
     AuthoredDraftQuery::new([7; 32], "fixture.composer.v1", scope, limit).unwrap()
 }
+
+#[tokio::test]
+async fn author_wide_sqlite_pages_preserve_scope_isolation_corruption_and_restart() {
+    let temp = TempDir::new().unwrap();
+    let store = open_store(&temp).await;
+    let scope = AuthoredDraftScope::new([9; 32]).unwrap();
+    for id in 1_u128..=1000 {
+        let value = AuthoredDraft::initial(
+            AuthoredDraftId::new(id.to_be_bytes()).unwrap(),
+            [7; 32],
+            "fixture.composer.v1",
+            vec![1],
+            AuthoredDraftStage::Draft,
+            None,
+            10,
+        )
+        .unwrap();
+        let value = if id % 2 == 0 {
+            value.with_scope(scope).unwrap()
+        } else {
+            value
+        };
+        store.append_authored_draft(value, None).await.unwrap();
+    }
+    corrupt(&store, 0, 7, "fixture.composer.v1", Some(scope)).await;
+    corrupt(&store, 2, 8, "fixture.composer.v1", Some(scope)).await;
+    corrupt(&store, 3, 7, "fixture.other.v1", Some(scope)).await;
+    let q = AuthoredDraftQuery::for_author([7; 32], "fixture.composer.v1", 37).unwrap();
+    let first = store.query_authored_drafts(q.clone()).await.unwrap();
+    assert_eq!(first.records().len(), 37);
+    assert!(matches!(
+        first.records()[0],
+        AuthoredDraftQueryRecord::Corrupt {
+            draft_key: [0, ..],
+            ..
+        }
+    ));
+    for (index, record) in first.records().iter().enumerate().skip(1) {
+        assert_eq!(record.draft_key(), (index as u128).to_be_bytes());
+    }
+    let mut cursor = first.next_cursor().cloned();
+    // Revisions of both a visited and an unvisited ID do not move position.
+    for id in [1_u128, 999] {
+        let original = store
+            .authored_draft_head(AuthoredDraftId::new(id.to_be_bytes()).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+        let next = original
+            .successor(vec![2], AuthoredDraftStage::Draft, None, 11)
+            .unwrap();
+        store
+            .append_authored_draft(next, Some(original.revision()))
+            .await
+            .unwrap();
+    }
+    store.close().await.unwrap();
+    let store = open_store(&temp).await;
+    let mut expected = 37_u128;
+    while let Some(current) = cursor {
+        let bytes = serde_json::to_vec(&current).unwrap();
+        let decoded = serde_json::from_slice(&bytes).unwrap();
+        let page = store
+            .query_authored_drafts(q.clone().with_cursor(&decoded).unwrap())
+            .await
+            .unwrap();
+        assert!(page.records().len() <= 37);
+        for record in page.records() {
+            assert_eq!(record.draft_key(), expected.to_be_bytes());
+            if expected == 999 {
+                assert_eq!(record.revision().get(), 2);
+            }
+            expected += 1;
+        }
+        cursor = page.next_cursor().cloned();
+    }
+    assert_eq!(expected, 1001);
+    let unscoped = store.query_authored_drafts(query(None, 256)).await.unwrap();
+    assert!(
+        unscoped
+            .records()
+            .iter()
+            .all(|record| u128::from_be_bytes(record.draft_key()) % 2 == 1)
+    );
+    let fresh = store.query_authored_drafts(q).await.unwrap();
+    assert_eq!(fresh.records()[1].revision().get(), 2);
+    store.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn author_wide_sqlite_pages_preserve_snapshot_and_payload_budgets() {
+    for byte in [0, 99] {
+        let temp = TempDir::new().unwrap();
+        let store = open_store(&temp).await;
+        let scope = AuthoredDraftScope::new([9; 32]).unwrap();
+        for (id, scope) in [(1, None), (2, Some(scope))] {
+            store
+                .append_authored_draft(
+                    draft(
+                        id,
+                        "fixture.composer.v1",
+                        scope,
+                        vec![byte; 3 * 1024 * 1024],
+                    ),
+                    None,
+                )
+                .await
+                .unwrap();
+        }
+        let q = AuthoredDraftQuery::for_author([7; 32], "fixture.composer.v1", 256).unwrap();
+        let first = store.query_authored_drafts(q.clone()).await.unwrap();
+        assert_eq!(first.records().len(), 1);
+        let next = store
+            .query_authored_drafts(q.with_cursor(first.next_cursor().unwrap()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(next.records().len(), 1);
+        assert_eq!(next.records()[0].draft_key(), [2; 16]);
+        assert!(matches!(
+            next.records()[0],
+            AuthoredDraftQueryRecord::Draft(_)
+        ));
+        assert!(next.next_cursor().is_none());
+        store.close().await.unwrap();
+    }
+}
 async fn corrupt(
     store: &SqliteStorage,
     id: u8,

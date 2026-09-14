@@ -12,6 +12,8 @@ pub const AUTHORED_DRAFT_PAGE_PAYLOAD_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// Maximum serialized snapshot bytes read by one native query page.
 pub const AUTHORED_DRAFT_PAGE_SNAPSHOT_MAX_BYTES: usize = 16 * 1024 * 1024;
 pub const AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION: u16 = 1;
+/// Explicit author/schema traversal has a distinct continuation authority.
+pub const AUTHORED_DRAFT_AUTHOR_CURSOR_SCHEMA_VERSION: u16 = 2;
 
 /// An opaque, stable application-selected scope digest; never a credential.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -48,6 +50,7 @@ pub struct AuthoredDraftQuery {
     author: [u8; 32],
     payload_schema: String,
     scope: Option<AuthoredDraftScope>,
+    author_wide: bool,
     limit: u16,
     after: Option<[u8; 16]>,
 }
@@ -73,12 +76,38 @@ impl AuthoredDraftQuery {
             author,
             payload_schema: schema.to_owned(),
             scope,
+            author_wide: false,
             limit,
             after: None,
         })
     }
+    /// Selects this author's exact payload schema across all application scopes.
+    /// This does not broaden `new(..., None, ...)`, which remains unscoped only.
+    pub fn for_author(
+        author: [u8; 32],
+        payload_schema: impl AsRef<str>,
+        limit: u16,
+    ) -> Result<Self, Error> {
+        let mut query = Self::new(author, payload_schema, None, limit)?;
+        query.author_wide = true;
+        Ok(query)
+    }
+
+    /// Whether scope filtering was explicitly omitted by `for_author`.
+    pub const fn is_author_wide(&self) -> bool {
+        self.author_wide
+    }
+
+    const fn cursor_version(&self) -> u16 {
+        if self.author_wide {
+            AUTHORED_DRAFT_AUTHOR_CURSOR_SCHEMA_VERSION
+        } else {
+            AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION
+        }
+    }
+
     pub fn with_cursor(mut self, cursor: &AuthoredDraftCursor) -> Result<Self, Error> {
-        if cursor.schema_version != AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION
+        if cursor.schema_version != self.cursor_version()
             || cursor.author != self.author
             || cursor.payload_schema != self.payload_schema
             || cursor.scope != self.scope
@@ -94,6 +123,8 @@ impl AuthoredDraftQuery {
     pub fn payload_schema(&self) -> &str {
         &self.payload_schema
     }
+    /// Exact optional scope for ordinary queries. Author-wide queries return
+    /// `None`; backends must also honor `is_author_wide` when selecting rows.
     pub const fn scope(&self) -> Option<AuthoredDraftScope> {
         self.scope
     }
@@ -106,11 +137,11 @@ impl AuthoredDraftQuery {
     pub fn matches(&self, draft: &AuthoredDraft) -> bool {
         draft.author() == &self.author
             && draft.payload_schema() == self.payload_schema
-            && draft.scope() == self.scope
+            && (self.author_wide || draft.scope() == self.scope)
     }
     pub fn cursor_after(&self, after_id: [u8; 16]) -> AuthoredDraftCursor {
         AuthoredDraftCursor {
-            schema_version: AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION,
+            schema_version: self.cursor_version(),
             author: self.author,
             payload_schema: self.payload_schema.clone(),
             scope: self.scope,
@@ -133,8 +164,16 @@ pub struct AuthoredDraftCursor {
 }
 #[cfg(feature = "serde")]
 #[derive(serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+enum CursorWire {
+    Exact(ExactCursorWire),
+    Author(AuthorCursorWire),
+}
+
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CursorWire {
+struct ExactCursorWire {
     schema_version: u16,
     author: [u8; 32],
     payload_schema: String,
@@ -142,28 +181,68 @@ struct CursorWire {
     after_id: [u8; 16],
 }
 #[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorCursorWire {
+    schema_version: u16,
+    author: [u8; 32],
+    payload_schema: String,
+    scope: (),
+    after_id: [u8; 16],
+    selection: CursorSelection,
+}
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+enum CursorSelection {
+    #[serde(rename = "author_schema")]
+    AuthorSchema,
+}
+#[cfg(feature = "serde")]
 impl TryFrom<CursorWire> for AuthoredDraftCursor {
     type Error = Error;
     fn try_from(value: CursorWire) -> Result<Self, Error> {
-        if value.schema_version != AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION {
-            return Err(Error::InvalidAuthoredDraft);
-        }
-        Ok(
-            AuthoredDraftQuery::new(value.author, value.payload_schema, value.scope, 1)?
-                .cursor_after(value.after_id),
-        )
+        let (query, after) = match value {
+            CursorWire::Exact(value)
+                if value.schema_version == AUTHORED_DRAFT_CURSOR_SCHEMA_VERSION =>
+            {
+                (
+                    AuthoredDraftQuery::new(value.author, value.payload_schema, value.scope, 1)?,
+                    value.after_id,
+                )
+            }
+            CursorWire::Author(value)
+                if value.schema_version == AUTHORED_DRAFT_AUTHOR_CURSOR_SCHEMA_VERSION =>
+            {
+                (
+                    AuthoredDraftQuery::for_author(value.author, value.payload_schema, 1)?,
+                    value.after_id,
+                )
+            }
+            _ => return Err(Error::InvalidAuthoredDraft),
+        };
+        Ok(query.cursor_after(after))
     }
 }
 #[cfg(feature = "serde")]
 impl From<AuthoredDraftCursor> for CursorWire {
     fn from(value: AuthoredDraftCursor) -> Self {
-        Self {
+        if value.schema_version == AUTHORED_DRAFT_AUTHOR_CURSOR_SCHEMA_VERSION {
+            return Self::Author(AuthorCursorWire {
+                schema_version: value.schema_version,
+                author: value.author,
+                payload_schema: value.payload_schema,
+                scope: (),
+                after_id: value.after_id,
+                selection: CursorSelection::AuthorSchema,
+            });
+        }
+        Self::Exact(ExactCursorWire {
             schema_version: value.schema_version,
             author: value.author,
             payload_schema: value.payload_schema,
             scope: value.scope,
             after_id: value.after_id,
-        }
+        })
     }
 }
 
