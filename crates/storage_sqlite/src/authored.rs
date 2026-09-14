@@ -1,6 +1,8 @@
 use crate::SqliteStorage;
 #[path = "authored_delivery_facts.rs"]
 mod delivery_facts;
+#[path = "authored_delivery_reconciliation.rs"]
+mod delivery_reconciliation;
 use radroots_storage::{
     Error,
     atomic::{AtomicCommitDigest, AtomicCommitDisposition, AtomicCommitId},
@@ -30,6 +32,26 @@ struct ReceiptSnapshot {
 }
 
 impl AuthoredAtomicStorage for SqliteStorage {
+    fn authored_delivery_history(
+        &self,
+        plan_id: AuthoredDeliveryPlanId,
+    ) -> BoxFuture<
+        '_,
+        Result<Option<radroots_storage::authored_delivery::AuthoredDeliveryHistory>, Error>,
+    > {
+        Box::pin(async move {
+            let mut transaction = self.pool().begin().await.map_err(map_backend)?;
+            let result = delivery_reconciliation::history(&mut transaction, plan_id).await;
+            let rollback = transaction.rollback().await.map_err(map_backend);
+            match result {
+                Ok(history) => {
+                    rollback?;
+                    Ok(history)
+                }
+                Err(error) => Err(error),
+            }
+        })
+    }
     fn execute_authored(
         &self,
         command: AuthoredAtomicCommand,
@@ -243,6 +265,7 @@ async fn commit_outcome(
     .execute(&mut **transaction)
     .await
     .map_err(map_backend)?;
+    delivery_reconciliation::record_claim(transaction, command).await?;
     Ok(receipt)
 }
 
@@ -428,6 +451,10 @@ async fn execute_command(
             let mut plan = load_plan_tx(transaction, value.plan_id()).await?;
             value.apply_to(&mut plan, &original)?;
             persist_plan(transaction, &plan).await?;
+            Ok(AuthoredAtomicOutcome::DeliveryPlan(plan))
+        }
+        AuthoredAtomicCommand::ReconcileDelivery(value) => {
+            let plan = delivery_reconciliation::reconcile(transaction, &value).await?;
             Ok(AuthoredAtomicOutcome::DeliveryPlan(plan))
         }
         AuthoredAtomicCommand::ApplyDelivery(value) => {
@@ -697,7 +724,8 @@ pub(crate) async fn persist_plan(
     plan: &AuthoredDeliveryPlan,
 ) -> Result<(), Error> {
     persist_plan_v11(transaction, plan).await?;
-    delivery_facts::persist(transaction, plan).await
+    delivery_facts::persist(transaction, plan).await?;
+    delivery_reconciliation::persist(transaction, plan).await
 }
 
 // Legacy conversion runs before the delivery-facts forward migration.
@@ -887,7 +915,8 @@ async fn validate_plan_children_tx(
         .fetch_all(&mut **transaction)
         .await
         .map_err(map_backend)?;
-    delivery_facts::validate(plan, &facts)
+    delivery_facts::validate(plan, &facts)?;
+    delivery_reconciliation::validate(transaction, plan).await
 }
 
 fn validate_plan_children(
@@ -1179,6 +1208,7 @@ fn command_target(command: &AuthoredAtomicCommand) -> [u8; 16] {
         AuthoredAtomicCommand::ApplySigned(value) => *value.artifact_id().as_bytes(),
         AuthoredAtomicCommand::RecordSigned(value) => *value.artifact_id().as_bytes(),
         AuthoredAtomicCommand::RecordDelivery(value) => *value.plan_id().as_bytes(),
+        AuthoredAtomicCommand::ReconcileDelivery(value) => *value.plan_id().as_bytes(),
         AuthoredAtomicCommand::ApplyAdmission(value) => *value.artifact_id().as_bytes(),
         AuthoredAtomicCommand::ApplyDelivery(value) => *value.plan_id().as_bytes(),
         AuthoredAtomicCommand::ApplyFailure(value) => match value.target() {
@@ -1199,9 +1229,9 @@ fn command_phase(command: &AuthoredAtomicCommand) -> &'static str {
         AuthoredAtomicCommand::Claim(_) => "claim",
         AuthoredAtomicCommand::ApplySigned(_) | AuthoredAtomicCommand::RecordSigned(_) => "signing",
         AuthoredAtomicCommand::ApplyAdmission(_) => "admission",
-        AuthoredAtomicCommand::ApplyDelivery(_) | AuthoredAtomicCommand::RecordDelivery(_) => {
-            "delivery"
-        }
+        AuthoredAtomicCommand::ApplyDelivery(_)
+        | AuthoredAtomicCommand::RecordDelivery(_)
+        | AuthoredAtomicCommand::ReconcileDelivery(_) => "delivery",
         AuthoredAtomicCommand::ApplyFailure(value) => match value.failure().phase() {
             WorkPhase::Signing => "signing_failure",
             WorkPhase::Admission => "admission_failure",
@@ -2642,6 +2672,11 @@ mod signed_fact_tests;
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "authored_delivery_fact_tests.rs"]
 mod delivery_fact_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_delivery_reconciliation_tests.rs"]
+mod delivery_reconciliation_tests;
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]

@@ -4,6 +4,8 @@ mod signing_evidence;
 pub use signing_evidence::RecordSignedArtifact;
 mod delivery_evidence;
 pub use delivery_evidence::RecordDeliveryFact;
+mod delivery_reconciliation;
+pub use delivery_reconciliation::ReconcileDeliveryFacts;
 
 use core::num::NonZeroU64;
 use radroots_event::SignedEvent;
@@ -428,6 +430,7 @@ pub enum AuthoredAtomicCommand {
     ApplyAdmission(ApplyAdmissionResult),
     ApplyDelivery(ApplyDeliveryAttempt),
     RecordDelivery(RecordDeliveryFact),
+    ReconcileDelivery(ReconcileDeliveryFacts),
     ApplyFailure(ApplyWorkFailure),
     Cancel(CancelAuthoredWork),
 }
@@ -498,6 +501,7 @@ impl AuthoredAtomicCommand {
                 hasher.update(claim.expires_at_unix_ms().to_be_bytes());
                 value.hash_outcome(&mut hasher);
             }
+            Self::ReconcileDelivery(value) => value.hash_into(&mut hasher),
             Self::ApplyFailure(value) => hash_failure(&mut hasher, Some(&value.failure)),
             Self::Cancel(value) => hasher.update(value.cancelled_at_unix_ms.to_be_bytes()),
         }
@@ -514,6 +518,7 @@ impl AuthoredAtomicCommand {
             Self::ApplyAdmission(value) => value.applied_at_unix_ms,
             Self::ApplyDelivery(value) => value.applied_at_unix_ms,
             Self::RecordDelivery(value) => value.observed_at_unix_ms(),
+            Self::ReconcileDelivery(value) => value.reconciled_at_unix_ms(),
             Self::ApplyFailure(value) => value.applied_at_unix_ms,
             Self::Cancel(value) => value.cancelled_at_unix_ms,
         }
@@ -529,6 +534,7 @@ impl AuthoredAtomicCommand {
             Self::ApplyAdmission(_) => b"admission",
             Self::ApplyDelivery(_) => b"delivery",
             Self::RecordDelivery(_) => b"delivery_fact_v1",
+            Self::ReconcileDelivery(_) => b"delivery_reconciliation_v1",
             Self::ApplyFailure(value) => match value.failure.phase() {
                 WorkPhase::Signing => b"signing_failure",
                 WorkPhase::Admission => b"admission_failure",
@@ -554,6 +560,7 @@ impl AuthoredAtomicCommand {
             Self::ApplyAdmission(value) => *value.artifact_id.as_bytes(),
             Self::ApplyDelivery(value) => *value.plan_id.as_bytes(),
             Self::RecordDelivery(value) => *value.plan_id().as_bytes(),
+            Self::ReconcileDelivery(value) => *value.plan_id().as_bytes(),
             Self::ApplyFailure(value) => match &value.target {
                 AuthoredWorkTarget::Artifact(id) => *id.as_bytes(),
                 AuthoredWorkTarget::DeliveryPlan(id) => *id.as_bytes(),
@@ -575,7 +582,10 @@ impl AuthoredAtomicCommand {
             Self::ApplyDelivery(value) => Some(value.fence.generation),
             Self::RecordDelivery(value) => Some(value.claim().generation()),
             Self::ApplyFailure(value) => Some(value.fence.generation),
-            Self::Prepare(_) | Self::PrepareFromDraft(_) | Self::Cancel(_) => None,
+            Self::Prepare(_)
+            | Self::PrepareFromDraft(_)
+            | Self::Cancel(_)
+            | Self::ReconcileDelivery(_) => None,
         }
     }
 }
@@ -610,6 +620,11 @@ impl AuthoredAtomicReceipt {
             return false;
         }
         match (command, &self.outcome) {
+            (
+                AuthoredAtomicCommand::ReconcileDelivery(value),
+                AuthoredAtomicOutcome::DeliveryPlan(plan),
+            ) => value.matches_plan(plan),
+            (AuthoredAtomicCommand::ReconcileDelivery(_), _) => false,
             (
                 AuthoredAtomicCommand::RecordDelivery(value),
                 AuthoredAtomicOutcome::DeliveryPlan(plan),
@@ -646,6 +661,15 @@ impl AuthoredAtomicReceipt {
             return Err(Error::AtomicWorkflowMismatch);
         }
         match (command, &outcome) {
+            (
+                AuthoredAtomicCommand::ReconcileDelivery(value),
+                AuthoredAtomicOutcome::DeliveryPlan(plan),
+            ) if value.matches_plan(plan) && committed_at_unix_ms >= plan.updated_at_unix_ms() => {
+                plan.validate()?
+            }
+            (AuthoredAtomicCommand::ReconcileDelivery(_), _) => {
+                return Err(Error::AtomicWorkflowMismatch);
+            }
             (
                 AuthoredAtomicCommand::RecordDelivery(value),
                 AuthoredAtomicOutcome::DeliveryPlan(plan),
@@ -763,6 +787,14 @@ impl AuthoredAtomicOutcome {
 }
 
 pub trait AuthoredAtomicStorage: Send + Sync {
+    /// Read exact issued-claim provenance; unsupported backends fail closed.
+    fn authored_delivery_history(
+        &self,
+        _plan_id: AuthoredDeliveryPlanId,
+    ) -> BoxFuture<'_, Result<Option<crate::authored_delivery::AuthoredDeliveryHistory>, Error>>
+    {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
     fn execute_authored(
         &self,
         command: AuthoredAtomicCommand,

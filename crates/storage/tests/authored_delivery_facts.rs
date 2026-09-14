@@ -27,6 +27,9 @@ use std::num::NonZeroU64;
 mod fixture;
 use fixture::*;
 
+#[path = "authored_delivery/reconciliation_tests.rs"]
+mod reconciliation;
+
 fn plan(storage: &MemoryStorage) -> AuthoredDeliveryPlan {
     block_on(storage.authored_delivery_plan(ids().2))
         .unwrap()

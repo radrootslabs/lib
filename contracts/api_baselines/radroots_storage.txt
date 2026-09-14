@@ -201,6 +201,7 @@ pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Cancel(radroots_st
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Claim(radroots_storage::authored_atomic::ClaimAuthoredWork)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::Prepare(radroots_storage::authored_atomic::PrepareAuthoredOperation)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::PrepareFromDraft(alloc::boxed::Box<radroots_storage::authored_draft_submission::PrepareFromDraft>)
+pub radroots_storage::authored_atomic::AuthoredAtomicCommand::ReconcileDelivery(radroots_storage::authored_atomic::ReconcileDeliveryFacts)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::RecordDelivery(radroots_storage::authored_atomic::RecordDeliveryFact)
 pub radroots_storage::authored_atomic::AuthoredAtomicCommand::RecordSigned(radroots_storage::authored_atomic::RecordSignedArtifact)
 impl radroots_storage::authored_atomic::AuthoredAtomicCommand
@@ -287,6 +288,13 @@ pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::input_
 pub fn radroots_storage::authored_atomic::PrepareAuthoredOperation::new(radroots_storage::authored::AuthoredOperation, alloc::vec::Vec<radroots_storage::authored::AuthoredArtifact>, alloc::vec::Vec<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::atomic::AtomicCommitDigest, u64) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::operation(&self) -> &radroots_storage::authored::AuthoredOperation
 pub const fn radroots_storage::authored_atomic::PrepareAuthoredOperation::requested_at_unix_ms(&self) -> u64
+pub struct radroots_storage::authored_atomic::ReconcileDeliveryFacts
+impl radroots_storage::authored_atomic::ReconcileDeliveryFacts
+pub fn radroots_storage::authored_atomic::ReconcileDeliveryFacts::apply_to(&self, &radroots_storage::authored_delivery::AuthoredDeliveryHistory) -> core::result::Result<radroots_storage::authored_delivery::AuthoredDeliveryPlan, radroots_storage::Error>
+pub fn radroots_storage::authored_atomic::ReconcileDeliveryFacts::new(&radroots_storage::authored_delivery::AuthoredDeliveryPlan, core::option::Option<radroots_storage::authored_atomic::WorkFence>, core::option::Option<radroots_storage::authored::RetrySchedule>, u64) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_atomic::ReconcileDeliveryFacts::plan_id(&self) -> radroots_storage::authored_delivery::AuthoredDeliveryPlanId
+pub const fn radroots_storage::authored_atomic::ReconcileDeliveryFacts::reconciled_at_unix_ms(&self) -> u64
+pub const fn radroots_storage::authored_atomic::ReconcileDeliveryFacts::revision(&self) -> core::num::nonzero::NonZeroU64
 pub struct radroots_storage::authored_atomic::RecordDeliveryFact
 impl radroots_storage::authored_atomic::RecordDeliveryFact
 pub fn radroots_storage::authored_atomic::RecordDeliveryFact::apply_to(&self, &mut radroots_storage::authored_delivery::AuthoredDeliveryPlan, &radroots_storage::authored_atomic::AuthoredAtomicReceipt) -> core::result::Result<(), radroots_storage::Error>
@@ -315,12 +323,14 @@ pub const fn radroots_storage::authored_atomic::WorkFence::row_revision(&self) -
 pub const fn radroots_storage::authored_atomic::WorkFence::token(&self) -> &[u8; 16]
 pub trait radroots_storage::authored_atomic::AuthoredAtomicStorage: core::marker::Send + core::marker::Sync
 pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_artifact(&self, radroots_storage::authored::AuthoredArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::Error>>
+pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_delivery_history(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryHistory>, radroots_storage::Error>>
 pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_delivery_plan(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::Error>>
 pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>>
 pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::Error>>
 pub fn radroots_storage::authored_atomic::AuthoredAtomicStorage::execute_authored(&self, radroots_storage::authored_atomic::AuthoredAtomicCommand) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::authored_atomic::AuthoredAtomicReceipt, radroots_storage::Error>>
 impl radroots_storage::authored_atomic::AuthoredAtomicStorage for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::authored_artifact(&self, radroots_storage::authored::AuthoredArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_delivery_history(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryHistory>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_delivery_plan(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::Error>>
@@ -341,15 +351,33 @@ pub radroots_storage::authored_delivery::DeliveryAttemptOutcome::SinkFailure(rad
 pub struct radroots_storage::authored_delivery::AuthoredDeliveryAttempt
 impl radroots_storage::authored_delivery::AuthoredDeliveryAttempt
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::attempt(&self) -> core::num::nonzero::NonZeroU32
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::claim_evidence(&self) -> core::option::Option<&radroots_storage::authored::WorkClaim>
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::outcome(&self) -> &radroots_storage::authored_delivery::DeliveryAttemptOutcome
 pub fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::reconstruct(core::num::nonzero::NonZeroU32, u64, radroots_storage::authored_delivery::DeliveryAttemptOutcome, radroots_transport::policy::SatisfactionState) -> core::result::Result<Self, radroots_storage::Error>
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::recorded_at_unix_ms(&self) -> u64
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryAttempt::satisfaction(&self) -> radroots_transport::policy::SatisfactionState
+pub struct radroots_storage::authored_delivery::AuthoredDeliveryClaim
+impl radroots_storage::authored_delivery::AuthoredDeliveryClaim
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryClaim::claim(&self) -> &radroots_storage::authored::WorkClaim
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryClaim::prior_attempt_count(&self) -> u32
 pub struct radroots_storage::authored_delivery::AuthoredDeliveryFact
 impl radroots_storage::authored_delivery::AuthoredDeliveryFact
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryFact::claim(&self) -> &radroots_storage::authored::WorkClaim
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryFact::observed_at_unix_ms(&self) -> u64
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryFact::outcome(&self) -> &radroots_storage::authored_delivery::DeliveryAttemptOutcome
+pub struct radroots_storage::authored_delivery::AuthoredDeliveryHistory
+impl radroots_storage::authored_delivery::AuthoredDeliveryHistory
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::claims(&self) -> &[radroots_storage::authored_delivery::AuthoredDeliveryClaim]
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::has_unresolved_claims(&self) -> bool
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::is_complete(&self) -> bool
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::is_truncated(&self) -> bool
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::mark_truncated(&mut self)
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::new(radroots_storage::authored_delivery::AuthoredDeliveryPlan, core::option::Option<&radroots_storage::authored_atomic::AuthoredAtomicReceipt>) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::plan(&self) -> &radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::proves_no_issued_attempt(&self) -> bool
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::push_claim(&mut self, &radroots_storage::authored_atomic::AuthoredAtomicReceipt) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::require_pending_fact_provenance(&self) -> core::result::Result<(), radroots_storage::Error>
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryHistory::validate(&self) -> core::result::Result<(), radroots_storage::Error>
 pub struct radroots_storage::authored_delivery::AuthoredDeliveryIntent
 impl radroots_storage::authored_delivery::AuthoredDeliveryIntent
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryIntent::deadline_unix_ms(&self) -> u64
@@ -390,6 +418,8 @@ impl radroots_storage::authored_delivery::AuthoredDeliveryPlan
 pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::delivery_facts(&self) -> &[radroots_storage::authored_delivery::AuthoredDeliveryFact]
 pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::delivery_satisfaction(&self) -> core::result::Result<radroots_transport::policy::SatisfactionState, radroots_storage::Error>
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::stop_requested_at_unix_ms(&self) -> core::option::Option<u64>
+impl radroots_storage::authored_delivery::AuthoredDeliveryPlan
+pub fn radroots_storage::authored_delivery::AuthoredDeliveryPlan::pending_delivery_facts(&self) -> impl core::iter::traits::iterator::Iterator<Item = &radroots_storage::authored_delivery::AuthoredDeliveryFact>
 pub struct radroots_storage::authored_delivery::AuthoredDeliveryPlanId(_)
 impl radroots_storage::authored_delivery::AuthoredDeliveryPlanId
 pub const fn radroots_storage::authored_delivery::AuthoredDeliveryPlanId::as_bytes(&self) -> &[u8; 16]
@@ -919,6 +949,7 @@ pub fn radroots_storage::memory::MemoryStorage::commit(&self, radroots_storage::
 pub fn radroots_storage::memory::MemoryStorage::receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::atomic::AtomicCommitReceipt>, radroots_storage::Error>>
 impl radroots_storage::authored_atomic::AuthoredAtomicStorage for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::authored_artifact(&self, radroots_storage::authored::AuthoredArtifactId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredArtifact>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::authored_delivery_history(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryHistory>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_delivery_plan(&self, radroots_storage::authored_delivery::AuthoredDeliveryPlanId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_delivery::AuthoredDeliveryPlan>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_operation(&self, radroots_storage::journal::OperationInstanceId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored::AuthoredOperation>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::authored_receipt(&self, radroots_storage::atomic::AtomicCommitId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::authored_atomic::AuthoredAtomicReceipt>, radroots_storage::Error>>

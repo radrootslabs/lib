@@ -371,7 +371,7 @@ async fn metadata(
 fn validate_plan(plan: &MigrationPlan) -> Result<(), Error> {
     let valid = plan.minimum_version > 0
         && plan.minimum_version <= plan.current_version
-        && plan.current_version <= 16
+        && plan.current_version <= 17
         && plan.steps.len() == usize::try_from(plan.current_version).unwrap_or(usize::MAX)
         && plan
             .steps
@@ -492,6 +492,7 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
         14 => Some("PRAGMA user_version = 14"),
         15 => Some("PRAGMA user_version = 15"),
         16 => Some("PRAGMA user_version = 16"),
+        17 => Some("PRAGMA user_version = 17"),
         _ => None,
     }
 }
@@ -718,9 +719,9 @@ mod tests {
             .execute(&mut newer)
             .await
             .expect("application id");
-        let newer_version = 17;
+        let newer_version = 18;
         assert_eq!(newer_version, runtime::CURRENT_VERSION + 1);
-        sqlx::raw_sql("PRAGMA user_version = 17")
+        sqlx::raw_sql("PRAGMA user_version = 18")
             .execute(&mut newer)
             .await
             .expect("newer version");
@@ -879,3 +880,8 @@ mod signed_facts_tests;
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "migration_delivery_facts_tests.rs"]
 mod delivery_facts_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "migration_delivery_reconciliation_tests.rs"]
+mod delivery_reconciliation_tests;

@@ -30,7 +30,7 @@ async fn prepared(temp: &TempDir) -> (SqliteStorage, WorkClaim, AuthoredAtomicRe
     (store, active, original)
 }
 
-fn fact(plan: &AuthoredDeliveryPlan, active: WorkClaim) -> AuthoredAtomicCommand {
+pub(super) fn fact(plan: &AuthoredDeliveryPlan, active: WorkClaim) -> AuthoredAtomicCommand {
     let request = plan.request().unwrap();
     let receipt = DeliveryReceipt::for_request(
         request,

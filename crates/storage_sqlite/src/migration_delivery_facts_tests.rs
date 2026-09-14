@@ -56,7 +56,7 @@ async fn delivery_fact_upgrade_preserves_legacy_snapshots_receipts_and_cancelled
     .await
     .unwrap();
     assert!(matches!(
-        migrate_runtime(&mut connection, OpenMode::ReadOnly).await,
+        migrate(&mut connection, OpenMode::ReadOnly, &plan(16, false)).await,
         Err(Error::SchemaMigrationRequired {
             actual: 15,
             current: 16,
@@ -64,10 +64,14 @@ async fn delivery_fact_upgrade_preserves_legacy_snapshots_receipts_and_cancelled
         })
     ));
     assert_eq!(
-        migrate_runtime(&mut connection, OpenMode::ReadWriteExisting)
-            .await
-            .unwrap()
-            .applied(),
+        migrate(
+            &mut connection,
+            OpenMode::ReadWriteExisting,
+            &plan(16, false)
+        )
+        .await
+        .unwrap()
+        .applied(),
         1
     );
     assert_eq!(pragma(&mut connection, "user_version").await, 16);

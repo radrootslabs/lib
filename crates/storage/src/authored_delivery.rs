@@ -2,6 +2,9 @@
 
 mod facts;
 pub use facts::AuthoredDeliveryFact;
+mod history;
+pub use history::{AuthoredDeliveryClaim, AuthoredDeliveryHistory};
+mod reconciliation;
 
 use core::num::{NonZeroU32, NonZeroU64};
 use radroots_transport::{
@@ -167,6 +170,11 @@ pub struct AuthoredDeliveryAttempt {
     recorded_at_unix_ms: u64,
     outcome: DeliveryAttemptOutcome,
     satisfaction: SatisfactionState,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    claim: Option<WorkClaim>,
 }
 
 impl AuthoredDeliveryAttempt {
@@ -184,6 +192,7 @@ impl AuthoredDeliveryAttempt {
             recorded_at_unix_ms,
             outcome,
             satisfaction,
+            claim: None,
         })
     }
 
@@ -198,6 +207,10 @@ impl AuthoredDeliveryAttempt {
     }
     pub const fn satisfaction(&self) -> SatisfactionState {
         self.satisfaction
+    }
+    /// Exact fact provenance for new reconciliation; absent on historical attempts.
+    pub const fn claim_evidence(&self) -> Option<&WorkClaim> {
+        self.claim.as_ref()
     }
 }
 

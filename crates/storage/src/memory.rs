@@ -1,5 +1,8 @@
 //! Deterministic in-memory reference storage backend.
 
+#[path = "memory_delivery_history.rs"]
+mod delivery_history;
+
 use radroots_event::EventId;
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_transport::{BoxFuture, source::EventProvenance};
@@ -86,6 +89,10 @@ struct State {
     authored_artifacts: Vec<crate::authored::AuthoredArtifact>,
     authored_delivery_plans: Vec<crate::authored_delivery::AuthoredDeliveryPlan>,
     authored_atomic_receipts: Vec<AuthoredAtomicReceipt>,
+    authored_delivery_history: std::collections::BTreeMap<
+        crate::authored_delivery::AuthoredDeliveryPlanId,
+        delivery_history::Entry,
+    >,
     authored_drafts: Vec<AuthoredDraft>,
     closed: bool,
 }
@@ -120,6 +127,7 @@ impl MemoryStorage {
                 authored_artifacts: Vec::new(),
                 authored_delivery_plans: Vec::new(),
                 authored_atomic_receipts: Vec::new(),
+                authored_delivery_history: std::collections::BTreeMap::new(),
                 authored_drafts: Vec::new(),
                 closed: false,
             }),
@@ -1457,6 +1465,16 @@ fn prepare_authored_memory(
 }
 
 impl AuthoredAtomicStorage for MemoryStorage {
+    fn authored_delivery_history(
+        &self,
+        plan_id: crate::authored_delivery::AuthoredDeliveryPlanId,
+    ) -> BoxFuture<'_, Result<Option<crate::authored_delivery::AuthoredDeliveryHistory>, Error>>
+    {
+        Box::pin(async move {
+            let state = self.state()?;
+            delivery_history::history(&state, plan_id)
+        })
+    }
     fn execute_authored(
         &self,
         command: AuthoredAtomicCommand,
@@ -1513,6 +1531,8 @@ impl AuthoredAtomicStorage for MemoryStorage {
                     let prepared =
                         prepare_authored_memory(&mut candidate, value.preparation().clone())?;
                     candidate.authored_drafts.push(value.intent().clone());
+                    let ordinary_index = candidate.authored_atomic_receipts.len();
+                    delivery_history::register(&mut candidate, &ordinary, ordinary_index)?;
                     candidate
                         .authored_atomic_receipts
                         .push(AuthoredAtomicReceipt::new(
@@ -1656,6 +1676,10 @@ impl AuthoredAtomicStorage for MemoryStorage {
                         .ok_or(Error::InvalidAuthoredDeliveryPlan)?;
                     value.apply_to(plan, original)?;
                     AuthoredAtomicOutcome::DeliveryPlan(plan.clone())
+                }
+                AuthoredAtomicCommand::ReconcileDelivery(value) => {
+                    let plan = delivery_history::reconcile(&mut candidate, &value)?;
+                    AuthoredAtomicOutcome::DeliveryPlan(plan)
                 }
                 AuthoredAtomicCommand::ApplyDelivery(value) => {
                     let plan = candidate
@@ -1841,6 +1865,8 @@ impl AuthoredAtomicStorage for MemoryStorage {
                 committed_at,
                 outcome,
             )?;
+            let receipt_index = candidate.authored_atomic_receipts.len();
+            delivery_history::register(&mut candidate, &command, receipt_index)?;
             candidate.authored_atomic_receipts.push(receipt.clone());
             *state = candidate;
             Ok(receipt)

@@ -78,6 +78,20 @@ impl AuthoredDeliveryPlan {
                 return Err(Error::InvalidAuthoredDeliveryPlan);
             }
         }
+        let mut reconciled = Vec::new();
+        for attempt in &self.attempts {
+            if let Some(claim) = attempt.claim_evidence() {
+                if reconciled.contains(&claim)
+                    || !self
+                        .delivery_facts
+                        .iter()
+                        .any(|fact| fact.claim() == claim && fact.outcome() == attempt.outcome())
+                {
+                    return Err(Error::InvalidAuthoredDeliveryPlan);
+                }
+                reconciled.push(claim);
+            }
+        }
         Ok(())
     }
 

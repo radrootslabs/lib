@@ -1,0 +1,21 @@
+{
+  "schema": "radroots.authored-delivery-reconciliation.v1",
+  "status": "approved",
+  "owners": [
+    "radroots_storage",
+    "radroots_storage_sqlite"
+  ],
+  "history": "AuthoredDeliveryHistory is a consistent bounded projection of the current plan and backend-owned immutable preparation/Claim receipts. A verified initial preparation without prior attempts or claims permits a scoped no-issued-attempt proof. Missing legacy provenance or truncated history remains explicitly uncertain. Validate exact original plan/artifact/intent/request/claim binding; malformed provenance fails closed.",
+  "history_bounds": "Retain all historical receipts. Return at most1024 issued claims and an explicit truncation flag; fetch bounded indexed IDs before decoding one bounded receipt at a time. New claims fail closed once the per-plan durable claim bound is reached. No history eviction or increased1024 attempt/fact or4194304-byte snapshot limit.",
+  "reconciliation": "A distinct ReconcileDeliveryFacts atomic command compares the current scheduling revision and complete retained fact-set digest. It requires the exact currently valid fence, or explicit current observation that no competing lease remains valid. A late worker with an expired/superseded fence cannot reconcile scheduling. Explicit stop and terminal scheduling states reject new reconciliation. RecordDeliveryFact remains independent of scheduling authority.",
+  "idempotence": "Each reconciled scheduling attempt carries the complete originating fact claim. Match it to the immutable raw fact and admit each claim once. Reconciliation appends only pending raw facts in stored order, preserving legacy prefix satisfaction and monotonic record time. New command identities bind all current-authority/fact/retry inputs. Every historical command hash and receipt remains unchanged. A matching legacy fenced application is identified by its original claim-receipt attempt ordinal and valid claim interval and receives an exact marker without increasing its attempt count or rewriting its raw result/time. Conflicting legacy results fail reconciliation without discarding retained facts.",
+  "policy_boundary": "Storage owns validated state transitions and atomicity. Sync supplies retry policy and current host time, records raw valid sink results before clock-dependent scheduling, and performs fresh reconciliation before any further effect. Reconciliation itself never invokes transport or a signer and never fabricates another external attempt.",
+  "compatibility": "Old attempt snapshots default to no exact claim marker and retain their bytes. A forward runtime migration adds an indexed immutable delivery-claim projection and immutable fact-to-attempt reconciliation rows. Backfill from original typed delivery Claim receipts; preserve historical SQL/checksums and legacy v10 conversion ordering. Missing original preparation remains explicit legacy uncertainty.",
+  "atomicity": "Memory publishes a validated candidate. SQLite commits plan, normalized attempt provenance, claim projection and immutable command receipt together, returning only after COMMIT. Consistent reads release their snapshot before returning. Stale revisions, changed fact sets, conflicting markers, bounds, migration faults and COMMIT faults cannot partially change durable state.",
+  "consumer": "Shared Sync adoption and application/native integration are separate checkpoints. No remote rollback, physical-device, release-publication or deployment claim is made.",
+  "migration": {
+    "version": 17,
+    "name": "authored_delivery_reconciliation",
+    "sha256": "01463e7effeb368dd0577bfed79f566f7bb2af76d03e8e76898cc53332e2e573"
+  }
+}
