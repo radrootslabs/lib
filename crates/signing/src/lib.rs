@@ -20,7 +20,7 @@ pub use actor::Actor;
 pub use authorization::{CurrentAuthoringAuthority, CurrentAuthoringDecision};
 pub use error::Error;
 pub use identity::{AuthoredArtifactId, SignerRequestId, SigningIntentId, SigningOperationId};
-pub use receipt::SignReceipt;
+pub use receipt::{AuthoredSignEvidence, SignReceipt};
 pub use request::{SignRequest, SigningPurpose};
 pub use signer::Signer;
 pub use status::SignerStatus;

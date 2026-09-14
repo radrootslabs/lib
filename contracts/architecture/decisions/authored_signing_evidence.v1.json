@@ -1,0 +1,25 @@
+{
+  "schema": "radroots.authored-signing-evidence.v1",
+  "status": "approved",
+  "owner": "radroots_signing",
+  "purpose": "Retain verified authored signature facts independently of caller deadline and cancellation. Evidence does not authorize new work.",
+  "public_api": {
+    "type": "receipt::AuthoredSignEvidence (also exported at crate root)",
+    "constructor": "from_signed_event(&SignRequest, SignedEvent, observed_at_unix_ms) verifies authored purpose, positive injected observation time, all exact plan fields, event ID and Schnorr signature",
+    "revalidation": "revalidate(&SignRequest, observed_at_unix_ms) additionally verifies operation kind, intent and signer request ID before constructing locally observed evidence",
+    "signer_hook": "Signer::sign_authored_evidence(SignRequest) defaults to the existing sign method, rejects non-authored and already-cancelled requests before invocation and verifies returned receipt identity before promotion"
+  },
+  "scheduling": "An adapter may retain the result of work already started before deadline/cancellation. It must not start new work after either signal. The composing host owns polling, request lifecycle and durable reconciliation.",
+  "compatibility": "SignReceipt and Signer::sign keep their strict active-request semantics. Existing adapters compile unchanged. The default cannot recover evidence discarded by an existing adapter; an adapter returning late facts must override the optional hook.",
+  "boundary": "Only AuthoredEvent requests can produce this type. BlossomUploadAuthorization still requires an active receipt and independent HTTP expiry verification. No evidence result is a credential or scheduling capability.",
+  "serialization": "Serialize only under the existing serde feature; no Deserialize and no unchecked constructor. Debug contains identifiers and time but no raw event, content or signature.",
+  "time": "The timestamp is an injected observation, not proof of actual signing time. Persistence callers revalidate with their own clock. The SPI reads no clock and adds no runtime or dependency.",
+  "persistence": "Shared storage and orchestration must bind evidence to their retained immutable operation and plan; this SPI checkpoint adds no storage mutation, retry or transport behavior.",
+  "verification": [
+    "active receipt and Blossom expiry/cancellation remain rejected",
+    "late authored evidence verifies exact raw event and signature",
+    "wrong operation/artifact/request binding rejected on revalidation",
+    "default hook preserves existing adapter behavior and rejects credential purpose without invoking sign",
+    "no_std, serde-only, std-only, default feature, object safety and public API baseline checks"
+  ]
+}

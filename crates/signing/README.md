@@ -122,10 +122,32 @@ The SPI defines those rules but performs no I/O itself. Commit points belong to
 the concrete adapter and must be visible in that adapter's documentation and
 status/progress behavior.
 
+## Retained authored evidence
+
+`AuthoredSignEvidence` records a cryptographically verified authored event even
+when an already-started signer finishes after the caller's deadline or
+cancellation. It binds exact event bytes, operation, artifact and signer request
+identity to a positive injected observation time. That time records observation,
+not proof of the instant of signing. `revalidate` checks the retained request
+identity and all cryptographic fields again with the caller's own clock.
+
+`Signer::sign_authored_evidence` is an optional hook. Its default delegates to
+`sign`, verifies receipt identity and promotes the receipt; already-cancelled
+requests are rejected before invoking the adapter. Existing adapters
+compile unchanged. Adapters that discard late output need an override to retain
+it. Overrides must still prevent new work after deadline or cancellation. The
+host owns polling, lifecycle and durable reconciliation; the SPI adds no worker.
+
+Evidence is a fact, not an active success receipt or authority to schedule new
+signing, admission or delivery. `SignReceipt` remains deadline/cancellation
+checked. The evidence constructor and default hook reject Blossom requests;
+expiring BUD-11 authorization continues to use the strict active receipt path.
+
 ## Serialization contract
 
 Native `Actor` and `SignRequest` values are runtime-local and are not
-serializable. `SignReceipt` can be serialized with `serde` but cannot be
+serializable. `SignReceipt` and `AuthoredSignEvidence` can be serialized with
+`serde` but cannot be
 deserialized without the originating request; this prevents callers from
 bypassing authorization and exact-draft verification.
 

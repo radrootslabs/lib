@@ -7,7 +7,10 @@ use alloc::{boxed::Box, sync::Arc};
 #[cfg(feature = "std")]
 use std::{boxed::Box, sync::Arc};
 
-use crate::{Error, SignReceipt, SignRequest, SignerStatus};
+use crate::{
+    AuthoredSignEvidence, Error, SignReceipt, SignRequest, SignerStatus, error::Kind,
+    receipt::verify_identity,
+};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -15,8 +18,8 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 ///
 /// Implementations must document their durable remote-effect point. Dropping
 /// a future after that point does not imply rollback. Replay behavior is
-/// advertised through signer status and every successful result must use the
-/// verified receipt constructor.
+/// advertised through signer status and every successful result must use a
+/// verified receipt or authored-evidence constructor.
 pub trait Signer: Send + Sync {
     fn status(&self) -> BoxFuture<'_, Result<SignerStatus, Error>>;
 
@@ -27,6 +30,42 @@ pub trait Signer: Send + Sync {
     /// signer request ID for remote replay, and create success only through
     /// [`SignReceipt::from_signed_event`].
     fn sign(&self, request: SignRequest) -> BoxFuture<'_, Result<SignReceipt, Error>>;
+
+    /// Signs an authored plan while retaining any verified result of started work.
+    ///
+    /// An override must honor deadline and cancellation before starting work,
+    /// but may return exact evidence received afterward. Such evidence is not
+    /// permission to resume stopped work. The composing host owns polling and
+    /// durable reconciliation; dropping this future does not undo a signature.
+    ///
+    /// The default delegates to [`Self::sign`] and preserves existing adapters.
+    /// It cannot recover evidence that the adapter discards. Blossom requests
+    /// and already-cancelled requests are rejected before invoking that adapter.
+    fn sign_authored_evidence(
+        &self,
+        request: SignRequest,
+    ) -> BoxFuture<'_, Result<AuthoredSignEvidence, Error>> {
+        Box::pin(async move {
+            if request.authored_plan().is_none() {
+                return Err(Error::new(Kind::InvalidArgument));
+            }
+            if request.cancellation_signal().is_cancelled() {
+                return Err(Error::new(Kind::SignerCancelled));
+            }
+            let receipt = self.sign(request.clone()).await?;
+            verify_identity(
+                receipt.operation_kind(),
+                receipt.intent_id(),
+                receipt.signer_request_id(),
+                &request,
+            )?;
+            AuthoredSignEvidence::from_signed_event(
+                &request,
+                receipt.signed_event().clone(),
+                receipt.completed_at_unix_ms(),
+            )
+        })
+    }
 }
 
 /// Shared signer handle used by composing hosts without selecting a runtime.
@@ -35,7 +74,6 @@ pub type DynSigner = Arc<dyn Signer>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::error::Kind;
 
     struct Stub;
 

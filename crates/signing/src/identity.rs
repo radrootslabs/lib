@@ -119,6 +119,8 @@ impl fmt::Debug for SignerRequestId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "std"))]
+    use alloc::format;
 
     #[test]
     fn stable_identities_reject_zero_and_expose_exact_bytes() {

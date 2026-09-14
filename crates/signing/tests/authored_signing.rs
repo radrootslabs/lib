@@ -477,12 +477,7 @@ fn receipt_requires_exact_fields_and_a_valid_schnorr_signature() {
         );
     }
 
-    let valid = signed_event();
-    let mut wire = valid.wire().clone();
-    wire.sig = "f".repeat(128);
-    let raw = serde_json::to_string(&wire).expect("raw event");
-    let invalid = radroots_event::SignedEvent::from_wire_verified_id(wire, raw)
-        .expect("ID-valid event with hostile signature");
+    let invalid = invalid_signature_event();
     assert_eq!(
         SignReceipt::from_signed_event(&request, invalid, DEADLINE_MS - 1)
             .expect_err("invalid signature")
@@ -515,4 +510,20 @@ fn uncertain_remote_effects_never_become_unsafe_automatic_retries() {
         recovery_disposition(ReplayCapability::LocalReplaySafe, RemoteEffect::None, true,),
         RecoveryDisposition::RetryLocal
     );
+}
+
+#[path = "authored_signing/evidence.rs"]
+mod evidence;
+
+fn invalid_signature_event() -> radroots_event::SignedEvent {
+    let valid = signed_event();
+    let mut wire = valid.wire().clone();
+    wire.sig = "f".repeat(128);
+    let mut raw: serde_json::Value = serde_json::from_str(valid.raw_json()).expect("raw event");
+    raw["sig"] = serde_json::Value::String(wire.sig.clone());
+    radroots_event::SignedEvent::from_wire_verified_id(
+        wire,
+        serde_json::to_string(&raw).expect("hostile raw event"),
+    )
+    .expect("ID-valid event with hostile signature")
 }
