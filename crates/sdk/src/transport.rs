@@ -420,6 +420,13 @@ impl BlossomConfig {
     pub(crate) const fn initial_retry_delay(&self) -> Duration {
         self.initial_retry_delay
     }
+
+    pub(crate) fn retry_delay(&self, attempt: u8) -> Duration {
+        let exponent = u32::from(attempt.saturating_sub(1)).min(16);
+        self.initial_retry_delay()
+            .saturating_mul(1_u32 << exponent)
+            .min(MAX_BLOSSOM_RETRY_DELAY)
+    }
 }
 
 /// Stable, non-secret identity of a completely validated Blossom configuration.
@@ -820,6 +827,18 @@ impl BlossomEndpointEvidence {
 
 #[cfg(feature = "blossom")]
 impl BlossomUploadTransaction {
+    /// Returns the frozen policy's minimum delay before another attempt.
+    /// Zero or exhausted completed-attempt counts admit no retry. This is a
+    /// pure policy query, not evidence of native inactivity, renewed signing
+    /// access, or absence of remote effects. The caller owns those prerequisites
+    /// and the durable attempt count; current slot configuration cannot change
+    /// this transaction's budget.
+    #[must_use]
+    pub fn retry_delay_after(&self, completed_attempts: u8) -> Option<Duration> {
+        (completed_attempts > 0 && completed_attempts < self.config.max_attempts())
+            .then(|| self.config.retry_delay(completed_attempts))
+    }
+
     #[must_use]
     pub const fn config_fingerprint(&self) -> BlossomConfigFingerprint {
         self.config_fingerprint
@@ -2528,6 +2547,57 @@ mod tests {
             origin,
             std::iter::empty::<&str>(),
         )
+    }
+
+    #[cfg(feature = "blossom")]
+    #[test]
+    fn upload_retry_policy_is_bounded_and_frozen_in_the_transaction() {
+        let profile = public_blossom_profile("https://media.example").unwrap();
+        for (maximum, initial_ms) in [(1, 250), (3, 250), (5, 20_000)] {
+            let config = BlossomConfig::from_profile(profile.clone())
+                .with_network_policy(
+                    Duration::from_secs(10),
+                    Duration::from_secs(60),
+                    maximum,
+                    Duration::from_millis(initial_ms),
+                )
+                .unwrap();
+            let slot = BlossomSlot::new();
+            slot.configure(config.clone()).unwrap();
+            let transaction = slot.prepare_upload(blossom_request("ignored")).unwrap();
+            for completed in 0..=u8::MAX {
+                let expected = if completed > 0 && completed < maximum {
+                    Some(Duration::from_millis(
+                        (initial_ms * (1 << (completed - 1))).min(30_000),
+                    ))
+                } else {
+                    None
+                };
+                assert_eq!(transaction.retry_delay_after(completed), expected);
+            }
+            slot.configure(
+                BlossomConfig::from_profile(profile.clone())
+                    .with_network_policy(
+                        Duration::from_secs(10),
+                        Duration::from_secs(60),
+                        2,
+                        Duration::from_millis(7),
+                    )
+                    .unwrap(),
+            )
+            .unwrap();
+            let later = slot.prepare_upload(blossom_request("ignored")).unwrap();
+            assert_ne!(transaction.config_fingerprint(), later.config_fingerprint());
+            assert_eq!(later.retry_delay_after(1), Some(Duration::from_millis(7)));
+            assert_eq!(later.retry_delay_after(2), None);
+            assert_eq!(transaction.config_fingerprint(), config.fingerprint());
+            assert_eq!(
+                transaction.retry_delay_after(1),
+                (maximum > 1).then_some(Duration::from_millis(initial_ms))
+            );
+            assert_eq!(config.retry_delay(0), Duration::from_millis(initial_ms));
+            assert_eq!(config.retry_delay(u8::MAX), Duration::from_secs(30));
+        }
     }
 
     #[cfg(feature = "blossom")]

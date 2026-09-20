@@ -493,6 +493,10 @@ mod tests {
     }
 
     fn push_request() -> PushRequest {
+        push_request_for_id(8)
+    }
+
+    fn push_request_for_id(id: u8) -> PushRequest {
         let actor = Actor::new(
             PublicKey::from_hex(PUBLIC_KEY).expect("public key"),
             ActorSource::ExplicitPublicKey,
@@ -512,8 +516,8 @@ mod tests {
         )
         .expect("authored plan");
         PushRequest::new(
-            SyncId::new([8; 16]).expect("operation id"),
-            IdempotencyKey::parse("sdk-sync-wrapper").expect("idempotency key"),
+            SyncId::new([id; 16]).expect("operation id"),
+            IdempotencyKey::parse(format!("sdk-sync-wrapper-{id}")).expect("idempotency key"),
             actor,
             plan,
             TargetSet::new(vec![target()]).expect("targets"),
@@ -600,7 +604,7 @@ mod tests {
         );
         assert_eq!(
             operations.deliver_push(operation_id).await,
-            Err(Error::MissingSink)
+            Err(Error::InvalidSignerOutput)
         );
 
         let status = operations
@@ -677,6 +681,10 @@ mod tests {
         let submitted = push_request();
         assert_eq!(
             operations.submit_push(submitted).await,
+            Err(Error::SigningCancelled)
+        );
+        assert_eq!(
+            operations.submit_push(push_request_for_id(9)).await,
             Err(Error::MissingSigner)
         );
     }

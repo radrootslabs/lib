@@ -660,6 +660,7 @@ impl radroots_sdk::transport::BlossomUploadTransaction
 pub const fn radroots_sdk::transport::BlossomUploadTransaction::config_fingerprint(&self) -> radroots_sdk::transport::BlossomConfigFingerprint
 pub const fn radroots_sdk::transport::BlossomUploadTransaction::expected_url(&self) -> &radroots_blossom::url::BlobUrl
 pub const fn radroots_sdk::transport::BlossomUploadTransaction::request(&self) -> &radroots_sdk::transport::BlossomUploadRequest
+pub fn radroots_sdk::transport::BlossomUploadTransaction::retry_delay_after(&self, u8) -> core::option::Option<core::time::Duration>
 impl core::fmt::Debug for radroots_sdk::transport::BlossomUploadTransaction
 pub fn radroots_sdk::transport::BlossomUploadTransaction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_sdk::transport::DaemonConfig

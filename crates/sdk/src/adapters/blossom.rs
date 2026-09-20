@@ -1112,12 +1112,7 @@ async fn retry_delay(
     phase: BlossomPhase,
     possible_orphan: bool,
 ) -> Result<(), BlossomError> {
-    let exponent = u32::from(attempt.saturating_sub(1)).min(16);
-    let factor = 1_u32 << exponent;
-    let delay = config
-        .initial_retry_delay()
-        .saturating_mul(factor)
-        .min(Duration::from_secs(30));
+    let delay = config.retry_delay(attempt);
     tokio::select! {
         biased;
         _ = cancellation.cancelled() => Err(failure(
