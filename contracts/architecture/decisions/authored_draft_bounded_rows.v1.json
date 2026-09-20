@@ -1,0 +1,13 @@
+{
+  "schema": "radroots.authored-draft-bounded-rows.v1",
+  "status": "implemented",
+  "owner": "radroots_storage_sqlite",
+  "authority": "Preserve authored_draft_inventory.v1/v2, existing exact historical reads, append replay and transactional source validation while bounding selected SQLite result columns before SQLx materializes them.",
+  "reads": ["authored_draft_head", "authored_draft_revision", "append replay and current head", "transactional source head", "selected paged inventory revision"],
+  "bounds": {"snapshot_bytes": 16777216, "payload_schema_bytes": 128, "draft_id_bytes": 16, "author_bytes": 32, "operation_id_bytes": 16, "payload_sha256_bytes": 32, "payload_scope_bytes": 32},
+  "projection": "Closed SQL CASE expressions validate SQLite storage type and octet_length before returning variable-width columns. Scalar metadata must be integer. Invalid mandatory columns project NULL and fail decoding; invalid nullable operation/scope values project a noncanonical one-byte sentinel so corruption cannot become valid absence. A selected malformed record never disappears through a validity WHERE filter. Paged locator keys and schema classification are bounded before loading selected revisions.",
+  "sqlite": "The bundled SQLite supports octet_length, whose column-byte-length optimization avoids materializing the complete TEXT/BLOB merely to inspect its byte count. This bounds result materialization; it is not an arbitrary corrupt-file engine memory guarantee or a full integrity check.",
+  "compatibility": "No public API, migration, stored bytes, dependency, feature, cursor, page limit, snapshot limit or payload budget changes. Exact revision and descending head lookup retain the compound primary key. Legacy bulk-head aggregate behavior is unchanged.",
+  "verification": ["actual projected oversized snapshot and redundant columns", "invalid nullable metadata remains corruption", "inclusive snapshot boundary", "malformed inventory key fails closed", "point read, replay, successor and transactional rejection", "historical identity and genuine absence", "compound-key query plans", "existing inventory, append and transaction tests"],
+  "non_goals": ["application ownership interpretation", "deletion policy", "cross-process mutation fencing", "author enumeration", "automatic integrity repair", "legacy bulk-head aggregate redesign"]
+}

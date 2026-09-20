@@ -1,4 +1,4 @@
-use super::{SqliteStorage, decode_row, map_backend};
+use super::{SqliteStorage, bounded_row, decode_row, map_backend};
 use radroots_storage::{
     Error,
     authored_draft::AuthoredDraftRevision,
@@ -32,8 +32,11 @@ async fn read_page(
 ) -> Result<AuthoredDraftPage, Error> {
     let after = query.after().map(|value| value.to_vec());
     let rows = sqlx::query(
-        "SELECT revisions.draft_id, revisions.revision, length(revisions.snapshot) AS snapshot_bytes,
-                revisions.payload_schema = '' AS unknown_schema
+        "SELECT CASE WHEN typeof(revisions.draft_id) = 'blob' AND octet_length(revisions.draft_id) = 16 THEN revisions.draft_id END AS draft_id,
+                CASE WHEN typeof(revisions.revision) = 'integer' THEN revisions.revision END AS revision,
+                octet_length(revisions.snapshot) AS snapshot_bytes,
+                CASE WHEN typeof(revisions.payload_schema) = 'text' AND octet_length(revisions.payload_schema) <= 128
+                     THEN revisions.payload_schema = '' ELSE 1 END AS unknown_schema
          FROM radroots_runtime_authored_draft_revisions AS revisions
          WHERE revisions.author = ?
            AND (? OR (revisions.payload_schema = ? AND (? OR revisions.payload_scope IS ?))
@@ -83,9 +86,9 @@ async fn read_page(
             break;
         }
         snapshot_bytes += size;
-        let row = sqlx::query("SELECT * FROM radroots_runtime_authored_draft_revisions WHERE draft_id = ? AND revision = ?")
-            .bind(key.as_slice()).bind(revision.get() as i64)
-            .fetch_one(&mut **transaction).await.map_err(map_backend)?;
+        let row = bounded_row::load(&mut **transaction, &key, Some(revision))
+            .await?
+            .ok_or(Error::CorruptAuthoredDraft)?;
         match decode_row(&row) {
             Ok(draft) if query.matches(&draft) => {
                 if payload_bytes + draft.payload().len() > AUTHORED_DRAFT_PAGE_PAYLOAD_MAX_BYTES {

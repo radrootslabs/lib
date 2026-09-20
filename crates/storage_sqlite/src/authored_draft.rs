@@ -14,6 +14,9 @@ const SNAPSHOT_MAX_BYTES: usize = 16 * 1024 * 1024;
 #[path = "authored_draft_query.rs"]
 mod query;
 
+#[path = "authored_draft_row.rs"]
+mod bounded_row;
+
 impl AuthoredDraftStore for SqliteStorage {
     fn query_authored_drafts(
         &self,
@@ -38,15 +41,12 @@ impl AuthoredDraftStore for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            if let Some(row) = sqlx::query(
-                "SELECT * FROM radroots_runtime_authored_draft_revisions
-                 WHERE draft_id = ? AND revision = ?",
+            if let Some(row) = bounded_row::load(
+                &mut *transaction,
+                draft.draft_id().as_bytes(),
+                Some(draft.revision()),
             )
-            .bind(draft.draft_id().as_bytes().as_slice())
-            .bind(i64_from_u64(draft.revision().get())?)
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
+            .await?
             {
                 let existing = decode_row(&row)?;
                 transaction.rollback().await.map_err(map_backend)?;
@@ -60,17 +60,11 @@ impl AuthoredDraftStore for SqliteStorage {
                 };
             }
 
-            let head = sqlx::query(
-                "SELECT * FROM radroots_runtime_authored_draft_revisions
-                 WHERE draft_id = ? ORDER BY revision DESC LIMIT 1",
-            )
-            .bind(draft.draft_id().as_bytes().as_slice())
-            .fetch_optional(&mut *transaction)
-            .await
-            .map_err(map_backend)?
-            .as_ref()
-            .map(decode_row)
-            .transpose()?;
+            let head = bounded_row::load(&mut *transaction, draft.draft_id().as_bytes(), None)
+                .await?
+                .as_ref()
+                .map(decode_row)
+                .transpose()?;
             match (head.as_ref(), expected_head) {
                 (None, None) if draft.revision() == AuthoredDraftRevision::INITIAL => {}
                 (Some(previous), Some(expected)) if previous.revision() == expected => {
@@ -96,17 +90,11 @@ impl AuthoredDraftStore for SqliteStorage {
         draft_id: AuthoredDraftId,
     ) -> BoxFuture<'_, Result<Option<AuthoredDraft>, Error>> {
         Box::pin(async move {
-            sqlx::query(
-                "SELECT * FROM radroots_runtime_authored_draft_revisions
-                 WHERE draft_id = ? ORDER BY revision DESC LIMIT 1",
-            )
-            .bind(draft_id.as_bytes().as_slice())
-            .fetch_optional(self.pool())
-            .await
-            .map_err(map_backend)?
-            .as_ref()
-            .map(decode_row)
-            .transpose()
+            bounded_row::load(self.pool(), draft_id.as_bytes(), None)
+                .await?
+                .as_ref()
+                .map(decode_row)
+                .transpose()
         })
     }
 
@@ -116,18 +104,11 @@ impl AuthoredDraftStore for SqliteStorage {
         revision: AuthoredDraftRevision,
     ) -> BoxFuture<'_, Result<Option<AuthoredDraft>, Error>> {
         Box::pin(async move {
-            sqlx::query(
-                "SELECT * FROM radroots_runtime_authored_draft_revisions
-                 WHERE draft_id = ? AND revision = ?",
-            )
-            .bind(draft_id.as_bytes().as_slice())
-            .bind(i64_from_u64(revision.get())?)
-            .fetch_optional(self.pool())
-            .await
-            .map_err(map_backend)?
-            .as_ref()
-            .map(decode_row)
-            .transpose()
+            bounded_row::load(self.pool(), draft_id.as_bytes(), Some(revision))
+                .await?
+                .as_ref()
+                .map(decode_row)
+                .transpose()
         })
     }
 
@@ -651,9 +632,11 @@ pub(crate) async fn load_head_tx(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     id: AuthoredDraftId,
 ) -> Result<Option<AuthoredDraft>, Error> {
-    sqlx::query("SELECT * FROM radroots_runtime_authored_draft_revisions WHERE draft_id = ? ORDER BY revision DESC LIMIT 1")
-        .bind(id.as_bytes().as_slice()).fetch_optional(&mut **transaction).await.map_err(map_backend)?
-        .as_ref().map(decode_row).transpose()
+    bounded_row::load(&mut **transaction, id.as_bytes(), None)
+        .await?
+        .as_ref()
+        .map(decode_row)
+        .transpose()
 }
 pub(crate) async fn insert_draft_tx(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
