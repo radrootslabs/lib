@@ -639,6 +639,11 @@ mod query_tests;
 
 #[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
+#[path = "authored_draft_all_schemas_tests.rs"]
+mod all_schema_query_tests;
+
+#[cfg(test)]
+#[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "authored_durability_tests.rs"]
 mod durability_tests;
 

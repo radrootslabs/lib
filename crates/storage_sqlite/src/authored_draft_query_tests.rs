@@ -6,7 +6,7 @@ use radroots_storage::{
 };
 use tempfile::TempDir;
 
-fn draft(
+pub(super) fn draft(
     id: u8,
     schema: &str,
     scope: Option<AuthoredDraftScope>,
@@ -156,7 +156,7 @@ async fn author_wide_sqlite_pages_preserve_snapshot_and_payload_budgets() {
         store.close().await.unwrap();
     }
 }
-async fn corrupt(
+pub(super) async fn corrupt(
     store: &SqliteStorage,
     id: u8,
     author: u8,

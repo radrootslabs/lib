@@ -57,7 +57,7 @@ fn author_wide_cursor_requires_explicit_selection_and_independent_authority() {
     for changed in [
         query(None, 1),
         query(Some(AuthoredDraftScope::new([7; 32]).unwrap()), 1),
-        AuthoredDraftQuery::for_author([8; 32], q.payload_schema(), 1).unwrap(),
+        AuthoredDraftQuery::for_author([8; 32], q.payload_schema().unwrap(), 1).unwrap(),
         AuthoredDraftQuery::for_author([9; 32], "fixture.other.v1", 1).unwrap(),
     ] {
         assert!(changed.with_cursor(&decoded).is_err());
@@ -262,7 +262,7 @@ fn query_and_cursor_reject_invalid_or_changed_authority() {
     let q = query(None, 256);
     let cursor = q.cursor_after([0; 16]);
     for changed in [
-        AuthoredDraftQuery::new([8; 32], q.payload_schema(), None, 1).unwrap(),
+        AuthoredDraftQuery::new([8; 32], q.payload_schema().unwrap(), None, 1).unwrap(),
         AuthoredDraftQuery::new([9; 32], "fixture.profile.v1", None, 1).unwrap(),
         query(Some(AuthoredDraftScope::new([7; 32]).unwrap()), 1),
     ] {

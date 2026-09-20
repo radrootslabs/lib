@@ -1,0 +1,13 @@
+{
+  "schema": "radroots.authored-draft-inventory.v2",
+  "status": "implemented",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "authority": "Extend authored_draft_inventory.v1 without changing its exact optional-scope selection, persisted records or version-1/2 continuation bytes.",
+  "selection": "AuthoredDraftQuery::for_author_all_schemas explicitly selects all current payload schemas for one independently supplied author across scoped and unscoped heads. payload_schema() returns an optional exact schema; None denotes only this explicit all-schema selection, never an empty-string wildcard. Existing new and for_author constructors still require an exact nonempty schema.",
+  "cursor": "All-schema continuations require version 3, explicit author_all_schemas selection, null payload_schema and null scope. Required fields, unknown fields, unsupported versions, selection mismatches and author mismatches fail closed. Every call supplies independent query authority; a cursor cannot broaden an exact query or switch authors.",
+  "bounds": {"page_records": 256, "metadata_lookahead": 1, "decoded_page_payload_bytes": 4194304, "serialized_page_snapshot_bytes": 16777216},
+  "backend": "Stable ascending draft IDs and latest revisions. Unknown nonempty application schemas remain opaque valid records; malformed snapshots and unknown empty schema yield bounded corruption locators. Metadata and byte budgets are checked before SQLite snapshot loading. Foreign authors remain outside selection. Existing exact-schema behavior is unchanged.",
+  "consistency": "One released SQLite read snapshot per page, bounded retained memory, and explicit continuation after record or byte exhaustion. This is live traversal, not a frozen multi-page snapshot or deletion authority. Callers fence their own mutations and retain resources on incomplete or unknown ownership.",
+  "compatibility": "No migrations, stored draft bytes, signed identities, dependencies or feature changes. The reviewed public schema accessor now represents explicit absence with Option. Owning SQLite selection and exact consumers must adopt that type directly; no alias or fallback API.",
+  "non_goals": ["application schema interpretation", "garbage collection policy", "author enumeration", "filesystem access", "new database", "raw SQL escape hatch", "mutation fencing", "release qualification"]
+}
