@@ -1012,6 +1012,7 @@ pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_projection_documents(&self, radroots_storage::projection::document_query::ProjectionDocumentQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::document_query::ProjectionDocumentPage, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -1373,6 +1374,37 @@ pub fn radroots_storage::memory::MemoryStorage::tombstone(&self, radroots_storag
 pub mod radroots_storage::projection
 pub use radroots_storage::projection::BoxFuture
 pub use radroots_storage::projection::EventId
+pub mod radroots_storage::projection::document_query
+pub enum radroots_storage::projection::document_query::ProjectionDocumentGenerations
+pub radroots_storage::projection::document_query::ProjectionDocumentGenerations::All
+pub radroots_storage::projection::document_query::ProjectionDocumentGenerations::Exact(radroots_storage::projection::ProjectionGeneration)
+pub struct radroots_storage::projection::document_query::ProjectionDocumentCursor
+pub struct radroots_storage::projection::document_query::ProjectionDocumentPage
+impl radroots_storage::projection::document_query::ProjectionDocumentPage
+pub fn radroots_storage::projection::document_query::ProjectionDocumentPage::into_records(self) -> alloc::vec::Vec<radroots_storage::projection::document_query::ProjectionDocumentRecord>
+pub fn radroots_storage::projection::document_query::ProjectionDocumentPage::new(&radroots_storage::projection::document_query::ProjectionDocumentQuery, alloc::vec::Vec<radroots_storage::projection::document_query::ProjectionDocumentRecord>, bool) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::projection::document_query::ProjectionDocumentPage::next_cursor(&self) -> core::option::Option<&radroots_storage::projection::document_query::ProjectionDocumentCursor>
+pub fn radroots_storage::projection::document_query::ProjectionDocumentPage::records(&self) -> &[radroots_storage::projection::document_query::ProjectionDocumentRecord]
+pub struct radroots_storage::projection::document_query::ProjectionDocumentQuery
+impl radroots_storage::projection::document_query::ProjectionDocumentQuery
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::after(&self) -> core::option::Option<(radroots_storage::projection::ProjectionGeneration, &str)>
+pub const fn radroots_storage::projection::document_query::ProjectionDocumentQuery::generations(&self) -> radroots_storage::projection::document_query::ProjectionDocumentGenerations
+pub const fn radroots_storage::projection::document_query::ProjectionDocumentQuery::limit(&self) -> u16
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::matches(&self, radroots_storage::projection::ProjectionGeneration, &str) -> bool
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::new(radroots_storage::projection::ProjectionId, radroots_storage::projection::document_query::ProjectionDocumentGenerations, u16) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::with_cursor(self, &radroots_storage::projection::document_query::ProjectionDocumentCursor) -> core::result::Result<Self, radroots_storage::Error>
+pub struct radroots_storage::projection::document_query::ProjectionDocumentRecord
+impl radroots_storage::projection::document_query::ProjectionDocumentRecord
+pub fn radroots_storage::projection::document_query::ProjectionDocumentRecord::corrupt(radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::projection::document_query::ProjectionDocumentRecord::document(&self) -> core::option::Option<&radroots_storage::projection::ProjectionDocument>
+pub const fn radroots_storage::projection::document_query::ProjectionDocumentRecord::generation(&self) -> radroots_storage::projection::ProjectionGeneration
+pub fn radroots_storage::projection::document_query::ProjectionDocumentRecord::key(&self) -> &str
+pub fn radroots_storage::projection::document_query::ProjectionDocumentRecord::new(radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> core::result::Result<Self, radroots_storage::Error>
+impl core::fmt::Debug for radroots_storage::projection::document_query::ProjectionDocumentRecord
+pub fn radroots_storage::projection::document_query::ProjectionDocumentRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_storage::projection::document_query::PROJECTION_DOCUMENT_PAGE_BYTES_MAX: usize
+pub const radroots_storage::projection::document_query::PROJECTION_DOCUMENT_QUERY_LIMIT_MAX: u16
 pub enum radroots_storage::projection::InvalidationReason
 pub radroots_storage::projection::InvalidationReason::EventIndexManifestChanged
 pub radroots_storage::projection::InvalidationReason::IntegrityFailure
@@ -1545,6 +1577,7 @@ pub fn radroots_storage::projection::ProjectionStore::put_event_index_checkpoint
 pub fn radroots_storage::projection::ProjectionStore::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::projection::ProjectionStore::query_projection_documents(&self, radroots_storage::projection::document_query::ProjectionDocumentQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::document_query::ProjectionDocumentPage, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::projection::ProjectionStore::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -1561,6 +1594,7 @@ pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_projection_documents(&self, radroots_storage::projection::document_query::ProjectionDocumentQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::document_query::ProjectionDocumentPage, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -1840,6 +1874,7 @@ pub fn radroots_storage::ProjectionStore::put_event_index_checkpoint(&self, radr
 pub fn radroots_storage::ProjectionStore::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::ProjectionStore::query_projection_documents(&self, radroots_storage::projection::document_query::ProjectionDocumentQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::document_query::ProjectionDocumentPage, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::ProjectionStore::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>
@@ -1856,6 +1891,7 @@ pub fn radroots_storage::memory::MemoryStorage::put_event_index_checkpoint(&self
 pub fn radroots_storage::memory::MemoryStorage::put_event_index_manifest(&self, radroots_storage::projection::EventIndexManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_projection_document(&self, radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, radroots_storage::projection::ProjectionDocument) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::put_projection_snapshot(&self, radroots_storage::projection::ProjectionSnapshot) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_projection_documents(&self, radroots_storage::projection::document_query::ProjectionDocumentQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::document_query::ProjectionDocumentPage, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild(&self, radroots_storage::projection::RebuildTicketId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::RebuildTicket>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::request_rebuild(&self, radroots_storage::projection::RebuildTicket) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::projection::RebuildTicket, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self, radroots_storage::projection::ProjectionId) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::projection::ProjectionStatus>, radroots_storage::Error>>

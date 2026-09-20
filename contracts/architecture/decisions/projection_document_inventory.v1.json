@@ -1,0 +1,11 @@
+{
+  "schema": "radroots.projection-document-inventory.v1",
+  "status": "implemented",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "selection": "An independently supplied projection identity and explicit exact-generation or all-generation selection bind every continuation. Ascending generation bytes and UTF-8 key bytes define traversal. Typed cursors cannot broaden selection.",
+  "bounds": {"page_records": 256, "metadata_lookahead": 1, "key_bytes": 512, "generation_bytes": 32, "digest_bytes": 32, "page_payload_bytes": 16777216},
+  "corruption": "Invalid key or generation prevents a safe continuation and fails the query. Invalid value length or digest produces a bounded corrupt-record locator. No malformed record is silently omitted or reported as an empty complete inventory. SQLite bounds metadata before decoding and checks the remaining byte budget before reading each payload.",
+  "consistency": "One released SQLite read snapshot per page; bounded memory selection under its existing mutex. This is a live scan, not an immutable cross-page snapshot. Updates retain ordering. Callers fence their own mutations or retain resources when reference completeness cannot be established.",
+  "compatibility": "Keep exact document lookup, persisted bytes, migrations, dependencies and features unchanged. A backend that has not implemented inventory fails explicitly with BackendUnavailable.",
+  "non_goals": ["application schema interpretation", "garbage collection policy", "author enumeration", "filesystem access", "new database", "raw SQL escape hatch", "release qualification"]
+}

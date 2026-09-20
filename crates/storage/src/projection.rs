@@ -3,6 +3,8 @@
 //! Storage owns durable coordination metadata. Domain reducers and projected
 //! row representations remain in their domain packages.
 
+pub mod document_query;
+
 pub use radroots_event::EventId;
 pub use radroots_transport::BoxFuture;
 use sha2::{Digest, Sha256};
@@ -1084,6 +1086,13 @@ pub trait ProjectionStore: Send + Sync {
         generation: ProjectionGeneration,
         key: String,
     ) -> BoxFuture<'_, Result<Option<ProjectionDocument>, Error>>;
+    /// Inventories are live bounded scans. Unsupported backends fail explicitly.
+    fn query_projection_documents(
+        &self,
+        _query: document_query::ProjectionDocumentQuery,
+    ) -> BoxFuture<'_, Result<document_query::ProjectionDocumentPage, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
     /// Persists one immutable frozen-query snapshot idempotently.
     fn put_projection_snapshot(
         &self,

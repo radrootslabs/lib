@@ -1038,6 +1038,42 @@ impl ProjectionStore for MemoryStorage {
         })
     }
 
+    fn query_projection_documents(
+        &self,
+        query: crate::projection::document_query::ProjectionDocumentQuery,
+    ) -> BoxFuture<'_, Result<crate::projection::document_query::ProjectionDocumentPage, Error>>
+    {
+        use crate::projection::document_query::{
+            PROJECTION_DOCUMENT_PAGE_BYTES_MAX, ProjectionDocumentPage, ProjectionDocumentRecord,
+        };
+        Box::pin(async move {
+            let state = self.state()?;
+            let mut selected = std::collections::BTreeMap::new();
+            let maximum = usize::from(query.limit()) + 1;
+            for (id, generation, document) in &state.projection_documents {
+                if id == query.projection_id() && query.matches(*generation, document.key()) {
+                    selected.insert((*generation, document.key()), document);
+                    if selected.len() > maximum {
+                        selected.pop_last();
+                    }
+                }
+            }
+            let mut has_more = selected.len() > usize::from(query.limit());
+            let mut records = Vec::new();
+            let mut bytes = 0;
+            for ((generation, _), document) in selected.into_iter().take(usize::from(query.limit()))
+            {
+                if bytes + document.value().len() > PROJECTION_DOCUMENT_PAGE_BYTES_MAX {
+                    has_more = true;
+                    break;
+                }
+                bytes += document.value().len();
+                records.push(ProjectionDocumentRecord::new(generation, document.clone())?);
+            }
+            ProjectionDocumentPage::new(&query, records, has_more)
+        })
+    }
+
     fn projection_document(
         &self,
         projection_id: ProjectionId,

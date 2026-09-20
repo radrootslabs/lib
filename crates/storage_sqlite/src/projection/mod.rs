@@ -13,6 +13,8 @@ use radroots_storage::{
 };
 use sqlx::{Row, Sqlite, SqliteConnection};
 
+mod document_query;
+
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl ProjectionStore for SqliteStorage {
     fn status(
@@ -503,6 +505,16 @@ impl ProjectionStore for SqliteStorage {
             })
             .transpose()
         })
+    }
+
+    fn query_projection_documents(
+        &self,
+        query: radroots_storage::projection::document_query::ProjectionDocumentQuery,
+    ) -> BoxFuture<
+        '_,
+        Result<radroots_storage::projection::document_query::ProjectionDocumentPage, Error>,
+    > {
+        Box::pin(document_query::page(self, query))
     }
 
     fn put_projection_snapshot(

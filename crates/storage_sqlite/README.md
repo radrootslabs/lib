@@ -2,6 +2,13 @@
 
 SQLite storage backend for Radroots.
 
+Projection document inventory uses the existing canonical projection table.
+Each page releases its read snapshot before returning a continuation. Metadata
+is bounded before decoding; the 16 MiB payload budget is charged before each
+value is loaded, including values that fail digest verification. Corrupt
+payloads retain an explicit locator, while unpageable corrupt keys or
+generations fail the query. Cross-page mutation fencing remains caller-owned.
+
 Runtime schema v15 permits late verified authored signatures to remain durable
 alongside a signing stop. The logical snapshot preserves cancelled or terminal
 state; a separate SQL stop column preserves the original signed/raw constraint.

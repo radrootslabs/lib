@@ -5,6 +5,13 @@ Radroots hosts. It owns canonical event persistence, durable operation journal
 state, outbox and delivery evidence, projection coordination, protected-record
 metadata, reliability operations, and high-level atomic workflow commits.
 
+Projection document inventory selects one projection and explicitly selects
+one generation or all generations. Pages contain at most 256 records and
+16 MiB of opaque values, with independently scoped continuations and explicit
+corrupt-record locators. This is a live scan, not a frozen snapshot. Callers
+must fence their own mutations before treating a traversal as complete.
+Storage neither interprets document payloads nor grants deletion authority.
+
 The package does not expose SQL, filesystem handles, database pools, raw
 transactions, encryption keys, transport clients, schedulers, or application
 state. Concrete backends implement these contracts; `radroots_storage_sqlite`
