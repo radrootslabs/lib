@@ -15,6 +15,7 @@ enum FailureClass {
     Duplicate,
     Rejected,
     AuthRequired,
+    Quota,
     RateLimited,
     Timeout,
     Connection,
@@ -28,6 +29,7 @@ impl FailureClass {
             Self::Duplicate => "duplicate",
             Self::Rejected => "rejected",
             Self::AuthRequired => "auth_required",
+            Self::Quota => "quota_exceeded",
             Self::RateLimited => "rate_limited",
             Self::Timeout => "timeout",
             Self::Connection => "connection_failed",
@@ -41,6 +43,7 @@ impl FailureClass {
             Self::Duplicate => "relay already has the event",
             Self::Rejected => "relay rejected the event",
             Self::AuthRequired => "relay authentication is required",
+            Self::Quota => "relay quota was exhausted",
             Self::RateLimited => "relay rate limit was reached",
             Self::Timeout => "relay operation timed out",
             Self::Connection => "relay connection failed",
@@ -580,7 +583,9 @@ pub(crate) fn delivery_failure(upstream: &str) -> DeliveryOutcome {
     let class = classify(upstream).class;
     let outcome = match class {
         FailureClass::Duplicate => DeliveryOutcome::accepted(),
-        FailureClass::Rejected | FailureClass::Malformed => DeliveryOutcome::rejected(),
+        FailureClass::Rejected | FailureClass::Malformed | FailureClass::Quota => {
+            DeliveryOutcome::rejected()
+        }
         FailureClass::AuthRequired => DeliveryOutcome::failed(Retryability::Retryable)
             .expect("retryable authentication outcome"),
         FailureClass::RateLimited
@@ -596,7 +601,9 @@ pub(crate) fn delivery_failure(upstream: &str) -> DeliveryOutcome {
 pub(crate) fn fetch_failure(upstream: &str) -> (FetchTargetState, &'static str) {
     let class = classify(upstream).class;
     let state = match class {
-        FailureClass::Rejected | FailureClass::Malformed => FetchTargetState::FailedTerminal,
+        FailureClass::Rejected | FailureClass::Malformed | FailureClass::Quota => {
+            FetchTargetState::FailedTerminal
+        }
         _ => FetchTargetState::FailedRetryable,
     };
     (state, class.message())
@@ -608,6 +615,8 @@ fn classify(upstream: &str) -> RedactedDiagnostic {
         FailureClass::Duplicate
     } else if message.contains("auth") {
         FailureClass::AuthRequired
+    } else if message.contains("quota") {
+        FailureClass::Quota
     } else if message.contains("blocked")
         || message.contains("restricted")
         || message.contains("invalid")
@@ -662,6 +671,8 @@ mod tests {
             ("duplicate: already have", "duplicate"),
             ("blocked by policy", "rejected"),
             ("auth required", "auth_required"),
+            ("quota exceeded", "quota_exceeded"),
+            ("blocked: account QUOTA exhausted", "quota_exceeded"),
             ("rate limited", "rate_limited"),
             ("connection timeout", "timeout"),
             ("connection offline", "connection_failed"),
@@ -674,6 +685,41 @@ mod tests {
             let diagnostic = classify(format!("{message} {secret}").as_str());
             assert!(!format!("{diagnostic:?}").contains(secret));
         }
+    }
+
+    #[test]
+    fn quota_refusal_requires_action_without_reclassifying_other_failures() {
+        for text in ["quota exceeded", "blocked: account QUOTA exhausted"] {
+            let outcome = delivery_failure(text);
+            assert_eq!(outcome.code(), Some("quota_exceeded"));
+            assert_eq!(outcome.kind(), DeliveryOutcomeKind::Rejected);
+            assert_eq!(outcome.retryability(), Retryability::Terminal);
+            assert_eq!(
+                fetch_failure(text),
+                (
+                    FetchTargetState::FailedTerminal,
+                    "relay quota was exhausted"
+                )
+            );
+        }
+        assert_eq!(
+            delivery_failure("rate limited").code(),
+            Some("rate_limited")
+        );
+        assert!(delivery_failure("rate limited").is_retryable());
+        assert_eq!(
+            delivery_failure("auth required").code(),
+            Some("auth_required")
+        );
+        assert_eq!(
+            delivery_failure("malformed event").code(),
+            Some("malformed_event")
+        );
+        assert_eq!(
+            delivery_failure("unknown failure").code(),
+            Some("relay_failure")
+        );
+        assert!(delivery_failure("unknown failure").is_retryable());
     }
 
     #[test]

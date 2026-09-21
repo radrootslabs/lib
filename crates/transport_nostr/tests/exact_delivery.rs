@@ -213,6 +213,54 @@ async fn rejection_lost_ack_and_disconnect_never_invent_acceptance() {
 }
 
 #[tokio::test]
+async fn quota_refusal_is_terminal_and_redacted_at_the_receipt_boundary() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 2_000);
+    let server = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(tcp).await.unwrap();
+        let event: Value = serde_json::from_str(&text(&mut socket).await).unwrap();
+        reply(
+            &mut socket,
+            json!([
+                "OK",
+                event[1]["id"],
+                false,
+                "quota exceeded: private-account-detail"
+            ]),
+        )
+        .await;
+    });
+    let transport = NostrTransport::new(config.clone());
+    let receipt = transport
+        .deliver(request(&config, &raw_event()))
+        .await
+        .unwrap();
+    let target = &receipt.target_receipts()[0];
+    assert!(target.was_attempted());
+    assert_eq!(target.outcome().code(), Some("quota_exceeded"));
+    assert_eq!(
+        target.outcome().retryability(),
+        radroots_transport::outcome::Retryability::Terminal
+    );
+    assert_eq!(
+        target.outcome().kind(),
+        radroots_transport::outcome::DeliveryOutcomeKind::Rejected
+    );
+    assert_eq!(
+        target.outcome().message(),
+        Some("relay quota was exhausted")
+    );
+    assert_eq!(
+        transport.relay_status().relays()[0]
+            .write()
+            .last_failure_retryable(),
+        Some(false)
+    );
+    server.await.unwrap();
+}
+
+#[tokio::test]
 async fn queued_delivery_targets_cannot_start_after_the_shared_deadline() {
     let first = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let second = TcpListener::bind("127.0.0.1:0").await.unwrap();

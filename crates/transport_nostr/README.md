@@ -193,9 +193,15 @@ stable repeated terminal results follow the generic subscription contract.
 Delivery validates an already signed Radroots event and sends its retained JSON,
 admits at most one attempt per configured writable target, and returns one
 normalized receipt entry per requested target. Relay rejection, authentication
-requirements, rate limits, timeouts, connection failures, missing results, and partial acceptance remain
+requirements, quota refusals, rate limits, timeouts, connection failures, missing results, and partial acceptance remain
 explicit; this crate never retries, falls back to another transport, or
 rewrites an unknown result as success.
+
+An explicit quota refusal has the stable `quota_exceeded` code, a redacted
+message and terminal rejection classification. It suppresses retries of the
+unchanged request. Resolving the quota and authorizing further work belong to
+the host; the adapter does not discard durable intent or recorded effects.
+Rate limiting remains distinct from quota exhaustion.
 
 Source and sink status are passive in-memory observations. A configured relay
 starts unobserved and never appears available before successful read or write
