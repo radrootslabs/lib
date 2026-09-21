@@ -250,6 +250,11 @@ async fn queued_delivery_targets_cannot_start_after_the_shared_deadline() {
             .all(|target| !target.outcome().satisfies(SatisfactionClass::Accepted))
     );
     assert!(second.accept().now_or_never().is_none());
+    assert!(receipt.target_receipts()[0].was_attempted());
+    assert!(
+        !receipt.target_receipts()[1].was_attempted(),
+        "a target expired while queued never entered remote publication"
+    );
     server.abort();
     assert!(server.await.unwrap_err().is_cancelled());
 }

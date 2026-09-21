@@ -190,10 +190,10 @@ exact relay provenance and that current checkpoint.
 Event limits, absolute deadlines, explicit cancellation, source closure, and
 stable repeated terminal results follow the generic subscription contract.
 
-Delivery validates an already signed Radroots event and sends its retained JSON, attempts
-each configured writable target once, and returns one normalized receipt entry per
-requested target. Relay rejection, authentication requirements, rate limits,
-timeouts, connection failures, missing results, and partial acceptance remain
+Delivery validates an already signed Radroots event and sends its retained JSON,
+admits at most one attempt per configured writable target, and returns one
+normalized receipt entry per requested target. Relay rejection, authentication
+requirements, rate limits, timeouts, connection failures, missing results, and partial acceptance remain
 explicit; this crate never retries, falls back to another transport, or
 rewrites an unknown result as success.
 
@@ -214,6 +214,10 @@ Queued relay batches consume that same frozen deadline; they never receive a
 new timeout after an earlier relay stalls. Bounded local normalization retains
 the events and distinct outcomes already collected when network work ends, so
 one timed-out relay cannot erase another relay's earlier successful evidence.
+An expired queued target remains unattempted. The attempted flag records entry
+into connection/publication work, not proof that bytes reached the wire or that
+a remote effect occurred. A skipped target cannot report acceptance; missing
+results cannot prove that an attempt was absent.
 
 Dropping an unpolled fetch, subscription-start, or delivery future performs no
 I/O. Once polled, cancellation is best effort at the socket boundary. For

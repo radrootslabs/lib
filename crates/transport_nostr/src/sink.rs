@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Debug)]
 pub(crate) struct RelayPublishResult {
     relay: RelayUrl,
+    attempted: bool,
     outcome: DeliveryOutcome,
 }
 
@@ -100,10 +101,12 @@ impl RelayClient for LiveRelayClient {
                 let event = event.clone();
                 async move {
                     let url = relay.as_str().to_owned();
+                    let mut attempted = false;
                     let attempt = async {
                         if tokio::time::Instant::now() >= deadline {
                             return Err("timeout".to_owned());
                         }
+                        attempted = true;
                         self.client
                             .add_relay(url.as_str())
                             .await
@@ -119,7 +122,11 @@ impl RelayClient for LiveRelayClient {
                         Ok(Err(error)) => status::delivery_failure(&error),
                         Ok(Ok(outcome)) => outcome,
                     };
-                    RelayPublishResult { relay, outcome }
+                    RelayPublishResult {
+                        relay,
+                        attempted,
+                        outcome,
+                    }
                 }
             }))
             .buffered(max_connections)
@@ -231,7 +238,10 @@ impl NostrTransport {
             let mut by_relay = BTreeMap::new();
             let observed_at_unix_ms = unix_time_ms().max(now_unix_ms);
             for result in results {
-                if !expected.contains(&result.relay) || by_relay.contains_key(&result.relay) {
+                if !expected.contains(&result.relay)
+                    || by_relay.contains_key(&result.relay)
+                    || (!result.attempted && status::delivery_succeeded(&result.outcome))
+                {
                     return Err(SinkFailure::invalid_contract(&request));
                 }
                 let succeeded = status::delivery_succeeded(&result.outcome);
@@ -241,19 +251,27 @@ impl NostrTransport {
                     result.outcome.is_retryable(),
                     observed_at_unix_ms,
                 );
-                by_relay.insert(result.relay, result.outcome);
+                by_relay.insert(result.relay, (result.outcome, result.attempted));
             }
 
             let mut receipts = skipped;
             for (relay, target) in requested {
-                let outcome = by_relay.remove(&relay).unwrap_or_else(|| {
+                let (outcome, attempted) = by_relay.remove(&relay).unwrap_or_else(|| {
                     self.status
                         .record_write(&relay, false, true, observed_at_unix_ms);
-                    DeliveryOutcome::unavailable()
-                        .with_detail("missing_result", "relay returned no result")
-                        .expect("static normalized outcome")
+                    (
+                        DeliveryOutcome::unavailable()
+                            .with_detail("missing_result", "relay returned no result")
+                            .expect("static normalized outcome"),
+                        true,
+                    )
                 });
-                receipts.push(DeliveryTargetReceipt::attempted(target, outcome));
+                receipts.push(if attempted {
+                    DeliveryTargetReceipt::attempted(target, outcome)
+                } else {
+                    DeliveryTargetReceipt::skipped(target, outcome)
+                        .map_err(|_| SinkFailure::invalid_contract(&request))?
+                });
             }
             DeliveryReceipt::for_request(&request, receipts)
                 .map_err(|_| SinkFailure::invalid_contract(&request))
@@ -318,6 +336,7 @@ mod tests {
                 relays
                     .into_iter()
                     .map(|relay| RelayPublishResult {
+                        attempted: true,
                         outcome: self
                             .outcomes
                             .get(&relay)
@@ -538,6 +557,7 @@ mod tests {
         let missing = futures::executor::block_on(
             scripted(vec![RelayPublishResult {
                 relay: one.clone(),
+                attempted: true,
                 outcome: DeliveryOutcome::accepted(),
             }])
             .deliver(request()),
@@ -548,10 +568,12 @@ mod tests {
         let duplicate = scripted(vec![
             RelayPublishResult {
                 relay: one.clone(),
+                attempted: true,
                 outcome: DeliveryOutcome::accepted(),
             },
             RelayPublishResult {
                 relay: one,
+                attempted: true,
                 outcome: DeliveryOutcome::accepted(),
             },
         ]);
@@ -565,6 +587,7 @@ mod tests {
         let other = RelayUrl::parse("wss://other.example", RelayUrlPolicy::Public).expect("other");
         let unexpected = scripted(vec![RelayPublishResult {
             relay: other,
+            attempted: true,
             outcome: DeliveryOutcome::accepted(),
         }]);
         assert_eq!(
@@ -589,6 +612,54 @@ mod tests {
             .expect("denied receipt");
         assert!(!denied.target_receipts()[0].was_attempted());
         assert!(futures::executor::block_on(scripted(vec![]).status()).is_ok());
+    }
+
+    #[test]
+    fn skipped_results_remain_skipped_and_cannot_claim_acceptance() {
+        let one = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).unwrap();
+        let two = RelayUrl::parse("wss://two.example", RelayUrlPolicy::Public).unwrap();
+        let receipt = futures::executor::block_on(
+            scripted(vec![
+                RelayPublishResult {
+                    relay: one.clone(),
+                    attempted: false,
+                    outcome: status::delivery_failure("timeout"),
+                },
+                RelayPublishResult {
+                    relay: two,
+                    attempted: true,
+                    outcome: DeliveryOutcome::accepted(),
+                },
+            ])
+            .deliver(request()),
+        )
+        .unwrap();
+        assert!(!receipt.target_receipts()[0].was_attempted());
+        assert_eq!(
+            receipt.target_receipts()[0].outcome().code(),
+            Some("timeout")
+        );
+        assert!(receipt.target_receipts()[1].was_attempted());
+        assert_eq!(
+            receipt.target_receipts()[1].outcome(),
+            &DeliveryOutcome::accepted()
+        );
+        for outcome in [DeliveryOutcome::accepted(), DeliveryOutcome::delivered()] {
+            let transport = scripted(vec![RelayPublishResult {
+                relay: one.clone(),
+                attempted: false,
+                outcome,
+            }]);
+            let failure = futures::executor::block_on(transport.deliver(request())).unwrap_err();
+            assert_eq!(failure.code(), "invalid_transport_contract");
+            assert!(
+                transport
+                    .relay_status()
+                    .relays()
+                    .iter()
+                    .all(|relay| relay.write().last_success_unix_ms().is_none())
+            );
+        }
     }
 
     #[test]
