@@ -1,0 +1,23 @@
+{
+  "schema": "radroots.authored-draft-pair.v1",
+  "status": "approved",
+  "owners": [
+    "radroots_storage",
+    "radroots_storage_sqlite"
+  ],
+  "authority": "Existing opaque authored revision and backend-neutral atomic storage ownership.",
+  "request": "Exactly two validated distinct authored draft identifiers with the same author. Each retains its existing expected-head CAS and payload/successor constraints. No application payload interpretation.",
+  "atomicity": "Memory validates both under its one state lock before insertion. SQLite uses one BEGIN IMMEDIATE transaction and the existing authored-revision tables. Failure or cancellation before commit must retain neither new revision. Lost acknowledgment after commit has an unknown immediate outcome recoverable by exact replay.",
+  "replay": "Only both exact historical snapshots replay together. Mixed replay/insertion or any mismatch is a conflict and rolls back. Complete historical replay does not establish current head ownership; consumers must check current authority separately before effects.",
+  "compatibility": "Additive unpublished alpha API with fail-closed default BackendUnavailable. No sequential fallback. Existing single append, stored schema, migration identities, dependencies and limits remain unchanged.",
+  "non_goals": [
+    "coordinate semantics",
+    "application reservation policy",
+    "signing",
+    "delivery",
+    "public SQL or transaction handles",
+    "arbitrary batch transactions",
+    "new database",
+    "release qualification"
+  ]
+}

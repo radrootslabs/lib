@@ -168,3 +168,10 @@ let storage = SqliteStorage::open(
 # Ok(())
 # }
 ```
+
+Atomic paired authored revisions use the existing runtime revision tables in one
+`BEGIN IMMEDIATE` transaction. Both insertions commit together; mismatched or
+partial replay rolls back. Complete replay returns immutable historical rows and
+does not establish current application authority. No migration or second storage
+owner is introduced. Callers may recover an unknown commit result by replaying
+the exact pair.

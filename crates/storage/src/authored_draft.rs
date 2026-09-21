@@ -462,6 +462,18 @@ impl DraftAppendReceipt {
 }
 
 pub trait AuthoredDraftStore: Send + Sync {
+    /// Atomically appends two opaque revisions or replays both exact snapshots.
+    ///
+    /// Unsupported backends fail closed; sequential single-row calls are not an
+    /// implementation. Caller cancellation after commit may lose the receipt
+    /// without rolling back either row. Replay is historical, not a head lease.
+    fn append_authored_draft_pair(
+        &self,
+        _pair: crate::authored_draft_pair::AuthoredDraftPair,
+    ) -> BoxFuture<'_, Result<[DraftAppendReceipt; 2], Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+
     fn query_authored_drafts(
         &self,
         query: AuthoredDraftQuery,

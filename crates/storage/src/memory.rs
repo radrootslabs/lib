@@ -1967,6 +1967,31 @@ impl AuthoredAtomicStorage for MemoryStorage {
 }
 
 impl AuthoredDraftStore for MemoryStorage {
+    fn append_authored_draft_pair(
+        &self,
+        pair: crate::authored_draft_pair::AuthoredDraftPair,
+    ) -> BoxFuture<'_, Result<[DraftAppendReceipt; 2], Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            let [first, second] = pair.drafts();
+            let [first_expected, second_expected] = *pair.expected_heads();
+            let a = draft_append_disposition(&state.authored_drafts, first, first_expected)?;
+            let b = draft_append_disposition(&state.authored_drafts, second, second_expected)?;
+            if a != b {
+                return Err(Error::DraftRevisionConflict);
+            }
+            if a == DraftAppendDisposition::Inserted {
+                state
+                    .authored_drafts
+                    .extend([first.clone(), second.clone()]);
+            }
+            Ok([
+                DraftAppendReceipt::new(first.clone(), a),
+                DraftAppendReceipt::new(second.clone(), b),
+            ])
+        })
+    }
+
     fn query_authored_drafts(
         &self,
         query: crate::authored_draft_query::AuthoredDraftQuery,
@@ -2031,29 +2056,10 @@ impl AuthoredDraftStore for MemoryStorage {
         Box::pin(async move {
             draft.validate()?;
             let mut state = self.state()?;
-            if let Some(existing) = state.authored_drafts.iter().find(|existing| {
-                existing.draft_id() == draft.draft_id() && existing.revision() == draft.revision()
-            }) {
-                return if existing == &draft {
-                    Ok(DraftAppendReceipt::new(
-                        existing.clone(),
-                        DraftAppendDisposition::Replay,
-                    ))
-                } else {
-                    Err(Error::DraftRevisionConflict)
-                };
-            }
-            let head = state
-                .authored_drafts
-                .iter()
-                .filter(|existing| existing.draft_id() == draft.draft_id())
-                .max_by_key(|existing| existing.revision());
-            match (head, expected_head) {
-                (None, None) if draft.revision() == AuthoredDraftRevision::INITIAL => {}
-                (Some(previous), Some(expected)) if previous.revision() == expected => {
-                    draft.validate_successor_of(previous)?;
-                }
-                _ => return Err(Error::DraftRevisionConflict),
+            let disposition =
+                draft_append_disposition(&state.authored_drafts, &draft, expected_head)?;
+            if disposition == DraftAppendDisposition::Replay {
+                return Ok(DraftAppendReceipt::new(draft, disposition));
             }
             state.authored_drafts.push(draft.clone());
             Ok(DraftAppendReceipt::new(
@@ -2149,4 +2155,32 @@ fn require_artifact_claim(
         return Err(Error::DeliveryPlanClaimConflict);
     }
     Ok(())
+}
+
+fn draft_append_disposition(
+    drafts: &[AuthoredDraft],
+    draft: &AuthoredDraft,
+    expected_head: Option<AuthoredDraftRevision>,
+) -> Result<DraftAppendDisposition, Error> {
+    if let Some(existing) = drafts.iter().find(|existing| {
+        existing.draft_id() == draft.draft_id() && existing.revision() == draft.revision()
+    }) {
+        return if existing == draft {
+            Ok(DraftAppendDisposition::Replay)
+        } else {
+            Err(Error::DraftRevisionConflict)
+        };
+    }
+    let head = drafts
+        .iter()
+        .filter(|existing| existing.draft_id() == draft.draft_id())
+        .max_by_key(|existing| existing.revision());
+    match (head, expected_head) {
+        (None, None) if draft.revision() == AuthoredDraftRevision::INITIAL => {}
+        (Some(previous), Some(expected)) if previous.revision() == expected => {
+            draft.validate_successor_of(previous)?;
+        }
+        _ => return Err(Error::DraftRevisionConflict),
+    }
+    Ok(DraftAppendDisposition::Inserted)
 }

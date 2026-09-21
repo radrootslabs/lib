@@ -210,6 +210,19 @@ Features are additive. `--no-default-features` exposes the backend-neutral SPI
 without an implementation. `memory` and `serde` are supported independently,
 and `--all-features` enables both.
 
+## Paired authored revisions
+
+`AuthoredDraftStore::append_authored_draft_pair` installs exactly two distinct
+opaque draft revisions for one author in one atomic commit. Both expected heads
+and existing per-draft bounds apply. A partial existing pair or either conflict
+leaves both heads unchanged. Unsupported backends return `BackendUnavailable`;
+there is no sequential-write fallback.
+
+Exact replay returns both historical snapshots even after their heads advance.
+It proves the requested snapshots exist, not current ownership or permission to
+sign or deliver. Callers retain application policy and must recheck current
+heads before effects. Losing the result after commit cannot establish rollback.
+
 ## Intended consumers
 
 - `radroots_storage_sqlite` implements the contracts for native durable state.

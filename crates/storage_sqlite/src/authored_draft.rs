@@ -18,6 +18,38 @@ mod query;
 mod bounded_row;
 
 impl AuthoredDraftStore for SqliteStorage {
+    fn append_authored_draft_pair(
+        &self,
+        pair: radroots_storage::authored_draft_pair::AuthoredDraftPair,
+    ) -> BoxFuture<'_, Result<[DraftAppendReceipt; 2], Error>> {
+        Box::pin(async move {
+            if self.event_mode() == radroots_storage::status::EventStoreMode::ReadOnly {
+                return Err(Error::BackendUnavailable);
+            }
+            let mut transaction = self
+                .pool()
+                .begin_with("BEGIN IMMEDIATE")
+                .await
+                .map_err(map_backend)?;
+            let [first, second] = pair.drafts();
+            let [first_expected, second_expected] = *pair.expected_heads();
+            let a = append_tx(&mut transaction, first, first_expected).await?;
+            let b = append_tx(&mut transaction, second, second_expected).await?;
+            if a != b {
+                return Err(Error::DraftRevisionConflict);
+            }
+            if a == DraftAppendDisposition::Replay {
+                transaction.rollback().await.map_err(map_backend)?;
+            } else {
+                transaction.commit().await.map_err(map_backend)?;
+            }
+            Ok([
+                DraftAppendReceipt::new(first.clone(), a),
+                DraftAppendReceipt::new(second.clone(), b),
+            ])
+        })
+    }
+
     fn query_authored_drafts(
         &self,
         query: radroots_storage::authored_draft_query::AuthoredDraftQuery,
@@ -41,47 +73,13 @@ impl AuthoredDraftStore for SqliteStorage {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(map_backend)?;
-            if let Some(row) = bounded_row::load(
-                &mut *transaction,
-                draft.draft_id().as_bytes(),
-                Some(draft.revision()),
-            )
-            .await?
-            {
-                let existing = decode_row(&row)?;
+            let disposition = append_tx(&mut transaction, &draft, expected_head).await?;
+            if disposition == DraftAppendDisposition::Replay {
                 transaction.rollback().await.map_err(map_backend)?;
-                return if existing == draft {
-                    Ok(DraftAppendReceipt::new(
-                        existing,
-                        DraftAppendDisposition::Replay,
-                    ))
-                } else {
-                    Err(Error::DraftRevisionConflict)
-                };
+            } else {
+                transaction.commit().await.map_err(map_backend)?;
             }
-
-            let head = bounded_row::load(&mut *transaction, draft.draft_id().as_bytes(), None)
-                .await?
-                .as_ref()
-                .map(decode_row)
-                .transpose()?;
-            match (head.as_ref(), expected_head) {
-                (None, None) if draft.revision() == AuthoredDraftRevision::INITIAL => {}
-                (Some(previous), Some(expected)) if previous.revision() == expected => {
-                    draft.validate_successor_of(previous)?;
-                }
-                _ => {
-                    let _ = transaction.rollback().await;
-                    return Err(Error::DraftRevisionConflict);
-                }
-            }
-
-            insert_draft_tx(&mut transaction, &draft).await?;
-            transaction.commit().await.map_err(map_backend)?;
-            Ok(DraftAppendReceipt::new(
-                draft,
-                DraftAppendDisposition::Inserted,
-            ))
+            Ok(DraftAppendReceipt::new(draft, disposition))
         })
     }
 
@@ -665,3 +663,46 @@ pub(crate) async fn insert_draft_tx(
     .map_err(map_backend)?;
     Ok(())
 }
+
+async fn append_tx(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    draft: &AuthoredDraft,
+    expected_head: Option<AuthoredDraftRevision>,
+) -> Result<DraftAppendDisposition, Error> {
+    if let Some(row) = bounded_row::load(
+        &mut **transaction,
+        draft.draft_id().as_bytes(),
+        Some(draft.revision()),
+    )
+    .await?
+    {
+        let existing = decode_row(&row)?;
+        return if existing == *draft {
+            Ok(DraftAppendDisposition::Replay)
+        } else {
+            Err(Error::DraftRevisionConflict)
+        };
+    }
+
+    let head = bounded_row::load(&mut **transaction, draft.draft_id().as_bytes(), None)
+        .await?
+        .as_ref()
+        .map(decode_row)
+        .transpose()?;
+    match (head.as_ref(), expected_head) {
+        (None, None) if draft.revision() == AuthoredDraftRevision::INITIAL => {}
+        (Some(previous), Some(expected)) if previous.revision() == expected => {
+            draft.validate_successor_of(previous)?;
+        }
+        _ => {
+            return Err(Error::DraftRevisionConflict);
+        }
+    }
+
+    insert_draft_tx(transaction, draft).await?;
+    Ok(DraftAppendDisposition::Inserted)
+}
+
+#[cfg(test)]
+#[path = "authored_draft_pair_tests.rs"]
+mod pair_tests;
