@@ -121,6 +121,7 @@ pub radroots_transport::error::Error::FetchSelectorTooLarge
 pub radroots_transport::error::Error::InvalidDeliveryDeadline
 pub radroots_transport::error::Error::InvalidDeliveryOutcome
 pub radroots_transport::error::Error::InvalidDeliveryRequestId
+pub radroots_transport::error::Error::InvalidDeliveryTargetSelection
 pub radroots_transport::error::Error::InvalidDeliveryTimestamp
 pub radroots_transport::error::Error::InvalidFetchCursor
 pub radroots_transport::error::Error::InvalidFetchDeadline
@@ -260,6 +261,7 @@ pub const fn radroots_transport::sink::DeliveryRequest::payload(&self) -> &radro
 pub const fn radroots_transport::sink::DeliveryRequest::request_id(&self) -> &radroots_transport::sink::DeliveryRequestId
 pub const fn radroots_transport::sink::DeliveryRequest::satisfaction(&self) -> &radroots_transport::policy::SatisfactionPolicy
 pub const fn radroots_transport::sink::DeliveryRequest::target_set(&self) -> &radroots_transport::target::TargetSet
+pub fn radroots_transport::sink::DeliveryRequest::validate_target_selection(&self, &radroots_transport::target::TargetSet) -> core::result::Result<(), radroots_transport::error::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::sink::DeliveryRequest
 pub fn radroots_transport::sink::DeliveryRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::sink::DeliveryRequestId(_)
@@ -304,6 +306,7 @@ pub const fn radroots_transport::SinkStatus::transport_id(&self) -> radroots_tra
 pub const radroots_transport::sink::DELIVERY_REQUEST_ID_MAX_BYTES: usize
 pub trait radroots_transport::sink::EventSink: core::marker::Send + core::marker::Sync
 pub fn radroots_transport::sink::EventSink::deliver(&self, radroots_transport::sink::DeliveryRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
+pub fn radroots_transport::sink::EventSink::deliver_selected(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_transport::sink::EventSink::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SinkStatus, radroots_transport::error::Error>>
 pub mod radroots_transport::source
 pub enum radroots_transport::source::NextPage
@@ -612,6 +615,7 @@ pub radroots_transport::Error::FetchSelectorTooLarge
 pub radroots_transport::Error::InvalidDeliveryDeadline
 pub radroots_transport::Error::InvalidDeliveryOutcome
 pub radroots_transport::Error::InvalidDeliveryRequestId
+pub radroots_transport::Error::InvalidDeliveryTargetSelection
 pub radroots_transport::Error::InvalidDeliveryTimestamp
 pub radroots_transport::Error::InvalidFetchCursor
 pub radroots_transport::Error::InvalidFetchDeadline
@@ -683,6 +687,7 @@ pub const fn radroots_transport::sink::DeliveryRequest::payload(&self) -> &radro
 pub const fn radroots_transport::sink::DeliveryRequest::request_id(&self) -> &radroots_transport::sink::DeliveryRequestId
 pub const fn radroots_transport::sink::DeliveryRequest::satisfaction(&self) -> &radroots_transport::policy::SatisfactionPolicy
 pub const fn radroots_transport::sink::DeliveryRequest::target_set(&self) -> &radroots_transport::target::TargetSet
+pub fn radroots_transport::sink::DeliveryRequest::validate_target_selection(&self, &radroots_transport::target::TargetSet) -> core::result::Result<(), radroots_transport::error::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::sink::DeliveryRequest
 pub fn radroots_transport::sink::DeliveryRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub struct radroots_transport::FetchPage
@@ -832,6 +837,7 @@ pub const radroots_transport::TARGET_SET_MAX_ITEMS: usize
 pub const radroots_transport::TRANSPORT_ID_MAX_BYTES: usize
 pub trait radroots_transport::EventSink: core::marker::Send + core::marker::Sync
 pub fn radroots_transport::EventSink::deliver(&self, radroots_transport::sink::DeliveryRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
+pub fn radroots_transport::EventSink::deliver_selected(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_transport::EventSink::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SinkStatus, radroots_transport::error::Error>>
 pub trait radroots_transport::EventSource: core::marker::Send + core::marker::Sync
 pub fn radroots_transport::EventSource::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>

@@ -5,7 +5,7 @@ use crate::{NostrTransport, RelayUrl, status};
 use core::{fmt, time::Duration};
 use futures::{StreamExt, stream};
 use radroots_transport::{
-    BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure, Target,
+    BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure, Target, TargetSet,
     outcome::DeliveryOutcome,
     sink::{DeliveryTargetReceipt, SinkStatus},
 };
@@ -142,9 +142,45 @@ impl NostrTransport {
         &self,
         request: DeliveryRequest,
     ) -> Result<PreparedDelivery, Box<SinkFailure>> {
+        self.prepare_delivery_inner(request, None)
+    }
+
+    /// Prepares only an exact subset, retaining the complete original request.
+    /// Unselected targets remain explicit unattempted, retryable receipt rows.
+    pub fn prepare_delivery_selected(
+        &self,
+        request: DeliveryRequest,
+        selected: &TargetSet,
+    ) -> Result<PreparedDelivery, Box<SinkFailure>> {
+        request
+            .validate_target_selection(selected)
+            .map_err(|_| Box::new(SinkFailure::invalid_contract(&request)))?;
+        self.prepare_delivery_inner(request, Some(selected))
+    }
+
+    fn prepare_delivery_inner(
+        &self,
+        request: DeliveryRequest,
+        selected: Option<&TargetSet>,
+    ) -> Result<PreparedDelivery, Box<SinkFailure>> {
         let mut authorized = Vec::new();
         let mut skipped = Vec::new();
         for target in request.target_set().targets() {
+            if selected.is_some_and(|targets| !targets.targets().contains(target)) {
+                skipped.push(
+                    DeliveryTargetReceipt::skipped(
+                        target.clone(),
+                        DeliveryOutcome::unavailable()
+                            .with_detail(
+                                "target_not_selected",
+                                "target is held for a later attempt",
+                            )
+                            .map_err(|_| Box::new(SinkFailure::invalid_contract(&request)))?,
+                    )
+                    .map_err(|_| Box::new(SinkFailure::invalid_contract(&request)))?,
+                );
+                continue;
+            }
             match self.config().endpoint_for_target(target) {
                 Some(endpoint) if endpoint.access().can_write() => {
                     authorized.push((endpoint.url().clone(), target.clone()));
@@ -293,6 +329,19 @@ impl EventSink for NostrTransport {
             self.execute_prepared_delivery(prepared).await
         })
     }
+
+    fn deliver_selected(
+        &self,
+        request: DeliveryRequest,
+        selected: TargetSet,
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
+        Box::pin(async move {
+            let prepared = self
+                .prepare_delivery_selected(request, &selected)
+                .map_err(|failure| *failure)?;
+            self.execute_prepared_delivery(prepared).await
+        })
+    }
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -419,6 +468,59 @@ mod tests {
             DeliveryOutcomeKind::Unavailable
         );
         assert!(!receipt.is_satisfied(&request).expect("satisfaction"));
+    }
+
+    #[test]
+    fn selected_preparation_retains_binding_and_only_authorizes_selected_relays() {
+        let config = Config::from_profile(
+            crate::profile::test_profile(
+                crate::RelayProfileKind::Public,
+                RelayUrlPolicy::Public,
+                ["wss://one.example", "wss://two.example"],
+            )
+            .unwrap(),
+        );
+        let transport = NostrTransport::with_client(
+            config,
+            Arc::new(MockRelayClient {
+                outcomes: BTreeMap::new(),
+            }),
+        );
+        let request = request();
+        let selected = TargetSet::new(vec![request.target_set().targets()[0].clone()]).unwrap();
+        let prepared = transport
+            .prepare_delivery_selected(request.clone(), &selected)
+            .unwrap();
+        assert_eq!(prepared.request(), &request);
+        assert_eq!(prepared.authorized.len(), 1);
+        assert_eq!(&prepared.authorized[0].1, &selected.targets()[0]);
+        let receipt =
+            futures::executor::block_on(transport.execute_prepared_delivery(prepared)).unwrap();
+        receipt.validate_for_request(&request).unwrap();
+        assert!(receipt.target_receipts()[0].was_attempted());
+        assert_eq!(
+            receipt.target_receipts()[0].outcome().kind(),
+            DeliveryOutcomeKind::Accepted
+        );
+        assert!(!receipt.target_receipts()[1].was_attempted());
+        assert_eq!(
+            receipt.target_receipts()[1].outcome().code(),
+            Some("target_not_selected")
+        );
+        assert!(receipt.target_receipts()[1].outcome().is_retryable());
+        assert!(!receipt.is_satisfied(&request).unwrap());
+        let foreign =
+            TargetSet::new(vec![Target::nostr_relay("wss://foreign.example").unwrap()]).unwrap();
+        let failure = transport
+            .prepare_delivery_selected(request.clone(), &foreign)
+            .unwrap_err();
+        failure.validate_for_request(&request).unwrap();
+        assert_eq!(failure.code(), "invalid_transport_contract");
+        let all = futures::executor::block_on(
+            transport.deliver_selected(request.clone(), request.target_set().clone()),
+        )
+        .unwrap();
+        assert!(all.is_satisfied(&request).unwrap());
     }
 
     #[test]

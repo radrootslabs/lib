@@ -61,3 +61,10 @@ After a post-delivery clock failure, Sync retains the raw non-expiring result
 with the known pre-effect time as a causal lower bound and returns
 `ClockUnavailable` without retry scheduling. This is not a measured response
 time and does not change strict signing or expiring authorization requirements.
+
+`Engine::deliver_push_selected` accepts an explicit nonempty subset of the
+frozen delivery targets. It validates the subset before a new claim and passes
+the original full request to the selected sink boundary. Attempted evidence
+outside that selection is an invalid adapter contract. Shared claim, stop,
+late-result persistence, reconciliation and retry semantics remain unchanged;
+the caller owns eligibility and holds an empty selection without delivery.

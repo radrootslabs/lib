@@ -304,6 +304,7 @@ pub fn radroots_sync::Engine::source(&self) -> core::option::Option<&dyn radroot
 pub fn radroots_sync::Engine::storage(&self) -> &dyn radroots_sync::policy::SyncStorage
 impl radroots_sync::Engine
 pub async fn radroots_sync::Engine::deliver_push(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::DeliveryExecutionReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sync::Engine::deliver_push_selected(&self, radroots_sync::policy::SyncId, radroots_transport::target::TargetSet) -> core::result::Result<radroots_sync::push::DeliveryExecutionReceipt, radroots_sync::policy::Error>
 impl radroots_sync::Engine
 pub async fn radroots_sync::Engine::ingest(&self, radroots_transport::source::ObservedEvent, &dyn radroots_sync::ingest::AdmissionPolicy) -> core::result::Result<radroots_sync::ingest::IngestReceipt, radroots_sync::policy::Error>
 pub async fn radroots_sync::Engine::ingest_batch(&self, alloc::vec::Vec<radroots_transport::source::ObservedEvent>, &dyn radroots_sync::ingest::AdmissionPolicy) -> radroots_sync::ingest::IngestBatchReceipt

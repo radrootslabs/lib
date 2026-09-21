@@ -56,6 +56,78 @@ fn mixed_receipt(request: &DeliveryRequest) -> DeliveryReceipt {
 }
 
 #[test]
+fn target_selection_is_exact_and_default_adapter_never_widens_it() {
+    use radroots_transport::{BoxFuture, EventSink, SinkStatus};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    struct Sink(AtomicUsize);
+    impl EventSink for Sink {
+        fn status(&self) -> BoxFuture<'_, Result<SinkStatus, Error>> {
+            Box::pin(async { panic!("no status probe") })
+        }
+        fn deliver(
+            &self,
+            request: DeliveryRequest,
+        ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
+            Box::pin(async move {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(mixed_receipt(&request))
+            })
+        }
+    }
+    let sink = Sink(AtomicUsize::new(0));
+    let request = request(SatisfactionPolicy::new(
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    ));
+    let original = request.clone();
+    let labelled = Target::new_with_metadata(
+        radroots_transport::TransportId::NOSTR,
+        "wss://one.example",
+        None,
+        Some(radroots_transport::target::TargetLabel::parse("changed label").unwrap()),
+    )
+    .unwrap();
+    assert_eq!(
+        labelled.fingerprint(),
+        request.target_set().targets()[0].fingerprint()
+    );
+    assert_eq!(
+        request.validate_target_selection(&TargetSet::new(vec![labelled]).unwrap()),
+        Err(Error::InvalidDeliveryTargetSelection)
+    );
+    let subset = TargetSet::new(vec![request.target_set().targets()[0].clone()]).unwrap();
+    request.validate_target_selection(&subset).unwrap();
+    let unsupported =
+        futures::executor::block_on(sink.deliver_selected(request.clone(), subset)).unwrap_err();
+    unsupported.validate_for_request(&request).unwrap();
+    assert_eq!(unsupported.code(), "target_selection_unsupported");
+    let foreign =
+        TargetSet::new(vec![Target::nostr_relay("wss://foreign.example").unwrap()]).unwrap();
+    assert_eq!(
+        request.validate_target_selection(&foreign),
+        Err(Error::InvalidDeliveryTargetSelection)
+    );
+    assert_eq!(
+        Error::InvalidDeliveryTargetSelection.to_string(),
+        "transport delivery target selection is not an exact subset"
+    );
+    let invalid =
+        futures::executor::block_on(sink.deliver_selected(request.clone(), foreign)).unwrap_err();
+    invalid.validate_for_request(&request).unwrap();
+    assert_eq!(invalid.code(), "invalid_transport_contract");
+    assert_eq!(sink.0.load(Ordering::SeqCst), 0);
+    let mut reversed = request.target_set().targets().to_vec();
+    reversed.reverse();
+    let receipt = futures::executor::block_on(
+        sink.deliver_selected(request.clone(), TargetSet::new(reversed).unwrap()),
+    )
+    .unwrap();
+    receipt.validate_for_request(&request).unwrap();
+    assert_eq!(sink.0.load(Ordering::SeqCst), 1);
+    assert_eq!(request, original);
+}
+
+#[test]
 fn any_all_quorum_and_required_targets_are_exact() {
     let any = request(SatisfactionPolicy::new(
         SatisfactionClass::Accepted,

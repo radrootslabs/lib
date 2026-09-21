@@ -59,6 +59,7 @@ pub enum Error {
     InvalidDeliveryRequestId,
     InvalidDeliveryTimestamp,
     InvalidDeliveryDeadline,
+    InvalidDeliveryTargetSelection,
     InvalidDeliveryOutcome,
     UnexpectedDeliveryTargetReceipt,
     DuplicateDeliveryTargetReceipt,
@@ -197,6 +198,9 @@ impl fmt::Display for Error {
                 f.write_str("transport delivery timestamp is invalid")
             }
             Self::InvalidDeliveryDeadline => f.write_str("transport delivery deadline is invalid"),
+            Self::InvalidDeliveryTargetSelection => {
+                f.write_str("transport delivery target selection is not an exact subset")
+            }
             Self::InvalidDeliveryOutcome => f.write_str("transport delivery outcome is invalid"),
             Self::UnexpectedDeliveryTargetReceipt => {
                 f.write_str("transport delivery receipt contains an unexpected target")

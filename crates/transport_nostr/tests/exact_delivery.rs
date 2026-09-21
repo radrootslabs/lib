@@ -90,6 +90,64 @@ async fn reply(socket: &mut WebSocketStream<TcpStream>, value: Value) {
 }
 
 #[tokio::test]
+async fn selected_delivery_never_connects_to_held_target_and_preserves_full_request() {
+    let a = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let b = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = Config::from_profile(
+        RelayProfile::explicit(
+            RelayProfileKind::Simulator,
+            [a.local_addr().unwrap(), b.local_addr().unwrap()].map(|address| {
+                RelayEndpoint::new(
+                    format!("ws://{address}"),
+                    RelayUrlPolicy::Local,
+                    RelayAccess::ReadWrite,
+                )
+                .unwrap()
+            }),
+        )
+        .unwrap(),
+    )
+    .with_timeouts(1_000, 2_000, 500)
+    .unwrap();
+    let raw = raw_event();
+    let expected = format!("[\"EVENT\",{raw}]");
+    let server = tokio::spawn(async move {
+        let (tcp, _) = a.accept().await.unwrap();
+        let mut socket = accept_async(tcp).await.unwrap();
+        let wire = text(&mut socket).await;
+        assert_eq!(wire, expected);
+        let event: Value = serde_json::from_str(&wire).unwrap();
+        reply(&mut socket, json!(["OK", event[1]["id"], true, ""])).await;
+    });
+    let transport = NostrTransport::new(config.clone());
+    let request = request(&config, &raw);
+    let selected = TargetSet::new(vec![request.target_set().targets()[0].clone()]).unwrap();
+    let result = transport
+        .deliver_selected(request.clone(), selected)
+        .await
+        .unwrap();
+    result.validate_for_request(&request).unwrap();
+    assert!(result.target_receipts()[0].was_attempted());
+    assert!(
+        result.target_receipts()[0]
+            .outcome()
+            .satisfies(SatisfactionClass::Accepted)
+    );
+    assert!(!result.target_receipts()[1].was_attempted());
+    assert_eq!(
+        result.target_receipts()[1].outcome().code(),
+        Some("target_not_selected")
+    );
+    assert!(!result.is_satisfied(&request).unwrap());
+    server.await.unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), b.accept())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
 async fn exact_signed_bytes_read_requests_and_auth_use_the_same_connection() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 2_000);

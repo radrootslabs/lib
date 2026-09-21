@@ -8,6 +8,7 @@ use crate::{
     target::{Target, TargetSet},
 };
 use alloc::{
+    boxed::Box,
     collections::{BTreeMap, BTreeSet},
     string::{String, ToString},
     vec::Vec,
@@ -134,6 +135,20 @@ impl DeliveryRequest {
     /// Returns the absolute Unix deadline in milliseconds.
     pub const fn deadline_unix_ms(&self) -> u64 {
         self.deadline_unix_ms
+    }
+
+    /// Validates a nonempty bounded subset of the exact original targets.
+    /// Selection never changes this request's payload, policy or identity.
+    pub fn validate_target_selection(&self, selected: &TargetSet) -> Result<(), Error> {
+        if selected
+            .targets()
+            .iter()
+            .all(|target| self.target_set.targets().contains(target))
+        {
+            Ok(())
+        } else {
+            Err(Error::InvalidDeliveryTargetSelection)
+        }
     }
 }
 
@@ -418,6 +433,36 @@ pub trait EventSink: Send + Sync {
         &self,
         request: DeliveryRequest,
     ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>>;
+
+    /// Attempts only selected targets while retaining the full request binding.
+    ///
+    /// Implementations must validate the exact subset before I/O, keep every
+    /// original target in successful receipts, and report unselected targets as
+    /// unattempted. The default supports only a selection of every target; a
+    /// proper subset fails closed without calling ordinary delivery.
+    fn deliver_selected(
+        &self,
+        request: DeliveryRequest,
+        selected: TargetSet,
+    ) -> BoxFuture<'_, Result<DeliveryReceipt, SinkFailure>> {
+        Box::pin(async move {
+            if request.validate_target_selection(&selected).is_err() {
+                return Err(SinkFailure::invalid_contract(&request));
+            }
+            if selected.len() == request.target_set().len() {
+                return self.deliver(request).await;
+            }
+            Err(SinkFailure::for_request(
+                &request,
+                "target_selection_unsupported",
+                Retryability::Terminal,
+                None,
+                None,
+                Vec::new(),
+            )
+            .expect("static unsupported selection failure is valid"))
+        })
+    }
 }
 
 #[cfg(feature = "serde")]

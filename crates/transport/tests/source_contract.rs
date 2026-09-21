@@ -47,21 +47,24 @@ fn fetch_selector_is_bounded_canonical_and_request_bound() {
     assert_eq!(exact_tags[0].0, 'd');
     assert_eq!(exact_tags[0].1, &[String::from("trade-1")]);
     assert!(selector.matches(&event));
-    let encoded = serde_json::to_string(&selector).expect("selector JSON");
-    assert_eq!(
-        serde_json::from_str::<FetchSelector>(encoded.as_str()).expect("selector round trip"),
-        selector
-    );
-    assert!(
-        serde_json::from_value::<FetchSelector>(serde_json::json!({
-            "kinds": [],
-            "authors": [],
-            "exact_tags": {"D": ["trade-1"]},
-            "since_unix_seconds": null,
-            "until_unix_seconds": null
-        }))
-        .is_err()
-    );
+    #[cfg(feature = "serde")]
+    {
+        let encoded = serde_json::to_string(&selector).expect("selector JSON");
+        assert_eq!(
+            serde_json::from_str::<FetchSelector>(encoded.as_str()).expect("selector round trip"),
+            selector
+        );
+        assert!(
+            serde_json::from_value::<FetchSelector>(serde_json::json!({
+                "kinds": [],
+                "authors": [],
+                "exact_tags": {"D": ["trade-1"]},
+                "since_unix_seconds": null,
+                "until_unix_seconds": null
+            }))
+            .is_err()
+        );
+    }
     assert_eq!(
         FetchSelector::all()
             .with_kinds(vec![1, 1])
@@ -147,6 +150,7 @@ fn fetch_selector_is_bounded_canonical_and_request_bound() {
             .count(),
         radroots_transport::source::FETCH_SELECTOR_MAX_TAG_KEYS
     );
+    #[cfg(feature = "serde")]
     assert!(
         serde_json::from_str::<FetchSelector>(
             r#"{"kinds":[],"authors":[],"exact_tags":{"d":["one"],"d":["two"]},"since_unix_seconds":null,"until_unix_seconds":null}"#,
@@ -183,7 +187,10 @@ fn tagged_event() -> SignedEvent {
     let mut wire = Nip01EventWire::parse_json(raw).expect("wire event");
     wire.tags = vec![vec![String::from("d"), String::from("trade-1")]];
     wire.id = wire.computed_event_id().expect("event id").into_string();
-    let raw = serde_json::to_string(&wire).expect("event JSON");
+    let mut value: serde_json::Value = serde_json::from_str(raw).expect("fixture JSON");
+    value["id"] = serde_json::json!(&wire.id);
+    value["tags"] = serde_json::json!(&wire.tags);
+    let raw = value.to_string();
     SignedEvent::from_wire_verified_id(wire, raw.as_str()).expect("signed event")
 }
 

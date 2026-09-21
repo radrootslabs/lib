@@ -89,6 +89,13 @@ let _forged = PreparedDelivery {
 };
 ```
 
+`prepare_delivery_selected` and `EventSink::deliver_selected` further constrain
+an attempt to an exact subset of the original targets. The retained request,
+signed bytes and full receipt binding do not change. Unselected targets receive
+unattempted, retryable `target_not_selected` rows before configuration or I/O
+admission. Selected targets still require writable configuration and backoff
+admission. This adapter does not choose application eligibility policy.
+
 ## Public surface
 
 - [`RelayProfile`] defines public, loopback-simulator, and physical-device

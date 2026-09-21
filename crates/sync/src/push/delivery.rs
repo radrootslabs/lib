@@ -13,6 +13,25 @@ impl Engine {
         &self,
         operation_id: SyncId,
     ) -> Result<DeliveryExecutionReceipt, Error> {
+        self.deliver_push_inner(operation_id, None).await
+    }
+
+    /// Attempts only an exact nonempty subset of the frozen delivery targets.
+    /// The full persisted request, claim and raw result bindings remain intact.
+    /// Callers own selection policy; no ineligible target may be attempted.
+    pub async fn deliver_push_selected(
+        &self,
+        operation_id: SyncId,
+        selected: radroots_transport::TargetSet,
+    ) -> Result<DeliveryExecutionReceipt, Error> {
+        self.deliver_push_inner(operation_id, Some(selected)).await
+    }
+
+    async fn deliver_push_inner(
+        &self,
+        operation_id: SyncId,
+        selected: Option<radroots_transport::TargetSet>,
+    ) -> Result<DeliveryExecutionReceipt, Error> {
         let status = self.push_status(operation_id).await?.ok_or_else(|| {
             if self.sink.is_none() {
                 Error::MissingSink
@@ -56,6 +75,11 @@ impl Engine {
         }
         let sink = self.sink.as_deref().ok_or(Error::MissingSink)?;
         let request = plan.request().cloned().ok_or(Error::InvalidSignerOutput)?;
+        if let Some(selected) = &selected {
+            request
+                .validate_target_selection(selected)
+                .map_err(|_| Error::InvalidDeliveryRequest)?;
+        }
         let claimed = self.claim_delivery_plan(plan, now).await?;
         let claim = claimed
             .claim_evidence()
@@ -99,11 +123,27 @@ impl Engine {
                 .map_err(|_| Error::InvalidDeliveryRequest)?,
             )
         } else {
-            match sink.deliver(request.clone()).await {
-                Ok(receipt) if receipt.validate_for_request(&request).is_ok() => {
+            let result = match selected.clone() {
+                Some(targets) => sink.deliver_selected(request.clone(), targets).await,
+                None => sink.deliver(request.clone()).await,
+            };
+            let allowed = |rows: &[radroots_transport::sink::DeliveryTargetReceipt]| {
+                selected.as_ref().is_none_or(|targets| {
+                    rows.iter()
+                        .all(|row| !row.was_attempted() || targets.targets().contains(row.target()))
+                })
+            };
+            match result {
+                Ok(receipt)
+                    if receipt.validate_for_request(&request).is_ok()
+                        && allowed(receipt.target_receipts()) =>
+                {
                     DeliveryAttemptOutcome::Receipt(receipt)
                 }
-                Err(failure) if failure.validate_for_request(&request).is_ok() => {
+                Err(failure)
+                    if failure.validate_for_request(&request).is_ok()
+                        && allowed(failure.partial_evidence()) =>
+                {
                     DeliveryAttemptOutcome::SinkFailure(failure)
                 }
                 Ok(_) | Err(_) => {

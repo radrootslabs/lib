@@ -58,7 +58,7 @@ fn setup(
     execute_to_admitted(&engine, &push);
     (engine, storage, clock, sink, push)
 }
-fn source_only(storage: Arc<dyn SyncStorage>, clock: Arc<dyn Clock>) -> Engine {
+pub(super) fn source_only(storage: Arc<dyn SyncStorage>, clock: Arc<dyn Clock>) -> Engine {
     Engine::builder(
         storage,
         clock,

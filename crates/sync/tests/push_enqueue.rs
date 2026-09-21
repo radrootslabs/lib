@@ -60,6 +60,9 @@ mod signing_evidence;
 #[path = "push_enqueue/delivery_evidence.rs"]
 mod delivery_evidence;
 
+#[path = "push_enqueue/delivery_selection.rs"]
+mod delivery_selection;
+
 struct MockSink;
 
 struct FaultStorage {

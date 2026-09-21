@@ -2052,6 +2052,38 @@ impl radroots_transport::EventSink for NostrSlot {
             radroots_transport::EventSink::deliver(state.transport.as_ref(), request).await
         })
     }
+
+    fn deliver_selected(
+        &self,
+        request: radroots_transport::DeliveryRequest,
+        selected: radroots_transport::TargetSet,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<radroots_transport::DeliveryReceipt, radroots_transport::SinkFailure>,
+    > {
+        Box::pin(async move {
+            if request.validate_target_selection(&selected).is_err() {
+                return Err(radroots_transport::SinkFailure::invalid_contract(&request));
+            }
+            let Some(state) = self.snapshot() else {
+                return Err(radroots_transport::SinkFailure::for_request(
+                    &request,
+                    "nostr_transport_not_configured",
+                    radroots_transport::outcome::Retryability::Terminal,
+                    None,
+                    None,
+                    Vec::new(),
+                )
+                .expect("static unconfigured sink failure is valid"));
+            };
+            radroots_transport::EventSink::deliver_selected(
+                state.transport.as_ref(),
+                request,
+                selected,
+            )
+            .await
+        })
+    }
 }
 
 #[cfg(feature = "nostr")]
@@ -3420,7 +3452,66 @@ mod tests {
             1,
         )
         .expect("delivery");
-        let failure = slot.deliver(deliver).await.expect_err("unconfigured sink");
+        let failure = slot
+            .deliver(deliver.clone())
+            .await
+            .expect_err("unconfigured sink");
         assert_eq!(failure.code(), "nostr_transport_not_configured");
+        let failure = slot
+            .deliver_selected(deliver.clone(), deliver.target_set().clone())
+            .await
+            .unwrap_err();
+        assert_eq!(failure.code(), "nostr_transport_not_configured");
+        failure.validate_for_request(&deliver).unwrap();
+        let foreign = TargetSet::new(vec![target(2)]).unwrap();
+        let failure = slot
+            .deliver_selected(deliver.clone(), foreign)
+            .await
+            .unwrap_err();
+        assert_eq!(failure.code(), "invalid_transport_contract");
+        let subset_request = DeliveryRequest::new(
+            "selected-delivery",
+            DeliveryPayload::new(signed_event()),
+            TargetSet::new(vec![target(1), target(2)]).unwrap(),
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+            1,
+        )
+        .unwrap();
+        slot.configure(
+            RelayProfile::explicit(
+                RelayProfileKind::Public,
+                [RelayEndpoint::new(
+                    "wss://one.example",
+                    RelayUrlPolicy::Public,
+                    RelayAccess::ReadWrite,
+                )
+                .unwrap()],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let receipt = slot
+            .deliver_selected(deliver.clone(), deliver.target_set().clone())
+            .await
+            .unwrap();
+        receipt.validate_for_request(&deliver).unwrap();
+        assert!(
+            receipt
+                .target_receipts()
+                .iter()
+                .all(|row| !row.was_attempted())
+        );
+        let subset =
+            TargetSet::new(vec![subset_request.target_set().targets()[0].clone()]).unwrap();
+        let receipt = slot
+            .deliver_selected(subset_request.clone(), subset)
+            .await
+            .unwrap();
+        receipt.validate_for_request(&subset_request).unwrap();
+        assert!(!receipt.target_receipts()[1].was_attempted());
+        assert_eq!(
+            receipt.target_receipts()[1].outcome().code(),
+            Some("target_not_selected")
+        );
     }
 }

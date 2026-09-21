@@ -206,6 +206,17 @@ impl<'a> Operations<'a> {
         self.engine.deliver_push(operation_id).await
     }
 
+    /// Attempts an exact subset while retaining the full durable request binding.
+    pub async fn deliver_push_selected(
+        &self,
+        operation_id: radroots_sync::policy::SyncId,
+        selected: radroots_transport::TargetSet,
+    ) -> Result<DeliveryExecutionReceipt, Error> {
+        self.engine
+            .deliver_push_selected(operation_id, selected)
+            .await
+    }
+
     /// Returns the native passive sync status without starting recovery work.
     pub async fn status(&self, projections: &[ProjectionId]) -> Result<SyncStatus, Error> {
         self.engine.status(projections).await
@@ -233,6 +244,8 @@ impl std::fmt::Debug for Operations<'_> {
 
 #[cfg(all(test, feature = "sync", feature = "memory"))]
 mod tests {
+    #[cfg(feature = "local-signing")]
+    mod selected;
     use std::sync::{
         Arc,
         atomic::{AtomicU8, Ordering},

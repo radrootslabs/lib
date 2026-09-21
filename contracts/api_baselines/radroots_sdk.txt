@@ -362,6 +362,7 @@ impl<'a> radroots_sdk::sync::Operations<'a>
 pub async fn radroots_sdk::sync::Operations<'a>::admit_signed(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::AdmissionRunReceipt, radroots_sync::policy::Error>
 pub async fn radroots_sdk::sync::Operations<'a>::cancel_push(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::PushCancellationReceipt, radroots_sync::policy::Error>
 pub async fn radroots_sdk::sync::Operations<'a>::deliver_push(&self, radroots_sync::policy::SyncId) -> core::result::Result<radroots_sync::push::DeliveryExecutionReceipt, radroots_sync::policy::Error>
+pub async fn radroots_sdk::sync::Operations<'a>::deliver_push_selected(&self, radroots_sync::policy::SyncId, radroots_transport::target::TargetSet) -> core::result::Result<radroots_sync::push::DeliveryExecutionReceipt, radroots_sync::policy::Error>
 pub async fn radroots_sdk::sync::Operations<'a>::ingest(&self, radroots_transport::source::ObservedEvent, &dyn radroots_sync::ingest::AdmissionPolicy) -> core::result::Result<radroots_sync::ingest::IngestReceipt, radroots_sync::policy::Error>
 pub async fn radroots_sdk::sync::Operations<'a>::ingest_batch(&self, alloc::vec::Vec<radroots_transport::source::ObservedEvent>, &dyn radroots_sync::ingest::AdmissionPolicy) -> radroots_sync::ingest::IngestBatchReceipt
 pub async fn radroots_sdk::sync::Operations<'a>::prepare_push(&self, radroots_sync::push::PushRequest) -> core::result::Result<radroots_sync::push::PushPreparation, radroots_sync::policy::Error>
@@ -695,6 +696,7 @@ impl core::fmt::Debug for radroots_sdk::transport::NostrSlot
 pub fn radroots_sdk::transport::NostrSlot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl radroots_transport::sink::EventSink for radroots_sdk::transport::NostrSlot
 pub fn radroots_sdk::transport::NostrSlot::deliver(&self, radroots_transport::sink::DeliveryRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
+pub fn radroots_sdk::transport::NostrSlot::deliver_selected(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_sdk::transport::NostrSlot::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::status::SinkStatus, radroots_transport::error::Error>>
 impl radroots_transport::source::EventSource for radroots_sdk::transport::NostrSlot
 pub fn radroots_sdk::transport::NostrSlot::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>

@@ -78,6 +78,12 @@ does not select an async runtime or require an async-trait macro.
   Native sources may be retained by adapters, but public outcome codes and
   messages must remain bounded and secret-safe.
 
+`EventSink::deliver_selected` accepts an exact nonempty subset while preserving
+the full original request and receipt target set. An adapter must not attempt
+unselected targets. The default accepts only all original targets; a proper
+subset returns `target_selection_unsupported` without delivery. Callers hold
+empty selections without invoking transport.
+
 ## Targets and extensible identity
 
 `TransportId` is a validated open identity, not a closed enum. The built-in

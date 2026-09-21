@@ -1,0 +1,14 @@
+{
+  "schema": "radroots.delivery-target-selection.v1",
+  "status": "approved",
+  "owners": [
+    "radroots_transport",
+    "radroots_transport_nostr",
+    "radroots_sync",
+    "radroots_sdk"
+  ],
+  "binding": "A constrained attempt passes the exact full frozen DeliveryRequest plus an explicit nonempty bounded TargetSet subset. Selection validates exact Target equality before new claims or transport I/O. It never changes signed event bytes, request identity, satisfaction policy, deadline or persisted request. No subset request or receipt rebinding is permitted.",
+  "adapter": "EventSink deliver_selected defaults to ordinary delivery only for all original targets; a proper subset is unsupported without I/O. Nostr preparation retains the full request and withholds all unselected endpoints before configuration admission with unattempted retryable target_not_selected rows. Existing configuration denial and backoff remain additional constraints. SDK NostrSlot forwards the selection to the retained adapter snapshot without fallback. SDK Sync Operations forwards selected delivery once to the canonical engine, retaining the caller subset and original durable request.",
+  "evidence": "Successful receipts remain complete and ordered against the original target set. Partial failures retain their original full request binding. An attempted row outside the selection is an invalid adapter contract, never fabricated success. Shared Sync claims, raw fact persistence, late-result reconciliation, stop and retry bounds remain unchanged. Selection is caller scheduling input, not a second durable request or journal.",
+  "scope": "Host product policy determines eligibility and holds empty selections without invoking delivery. Shared libraries do not know replacement or deletion policy. Ordinary unconstrained delivery, persistence schemas, dependencies, coverage thresholds and release authorization remain unchanged."
+}
