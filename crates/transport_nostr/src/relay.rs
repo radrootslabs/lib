@@ -19,7 +19,7 @@ use tokio::net::TcpStream;
 use url::Url;
 
 const MAX_RESOLVED_ADDRESSES: usize = 32;
-const MAX_WIRE_MESSAGE_BYTES: usize = 512 * 1024;
+pub(crate) const MAX_WIRE_MESSAGE_BYTES: usize = 512 * 1024;
 
 /// Validated canonical Nostr relay URL.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -97,11 +97,17 @@ impl fmt::Display for RelayUrl {
 #[derive(Clone, Debug)]
 pub(crate) struct HardenedWebsocketTransport {
     policies: Arc<BTreeMap<String, RelayUrlPolicy>>,
+    pub(crate) writers: crate::socket_write::WriterRegistry,
 }
 
 impl HardenedWebsocketTransport {
     pub(crate) fn new(endpoints: &[RelayEndpoint]) -> Self {
         Self {
+            writers: crate::socket_write::WriterRegistry::new(
+                endpoints
+                    .iter()
+                    .map(|endpoint| endpoint.url().as_str().to_owned()),
+            ),
             policies: Arc::new(
                 endpoints
                     .iter()
@@ -167,7 +173,11 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                 .map_err(TransportError::backend)?;
                 let socket = WebSocket::Tokio(stream);
                 let (tx, rx) = socket.split();
-                let sink: WebSocketSink = Box::new(HardenedTransportSink(tx));
+                let writer =
+                    crate::socket_write::SocketWriter::new(Box::new(HardenedTransportSink(tx)));
+                self.writers.install(relay.as_str(), &writer)?;
+                let sink: WebSocketSink =
+                    Box::new(crate::socket_write::SharedSocketSink::new(writer));
                 let stream: WebSocketStream =
                     Box::pin(rx.map_err(TransportError::backend)) as WebSocketStream;
                 Ok((sink, stream))
@@ -229,7 +239,7 @@ impl fmt::Display for NetworkPolicyError {
 
 impl std::error::Error for NetworkPolicyError {}
 
-fn policy_error(message: &'static str) -> TransportError {
+pub(crate) fn policy_error(message: &'static str) -> TransportError {
     TransportError::backend(NetworkPolicyError(message))
 }
 

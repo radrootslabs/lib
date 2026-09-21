@@ -228,16 +228,16 @@ pub struct NostrTransport {
 impl NostrTransport {
     /// Creates an inert transport from validated explicit configuration.
     pub fn new(config: Config) -> Self {
+        let connector = crate::relay::HardenedWebsocketTransport::new(config.endpoints());
+        let writers = connector.writers.clone();
         let client = nostr_sdk::Client::builder()
-            .websocket_transport(crate::relay::HardenedWebsocketTransport::new(
-                config.endpoints(),
-            ))
+            .websocket_transport(connector)
             .build();
         client.automatic_authentication(false);
         let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
-            client: Arc::new(crate::sink::LiveRelayClient::new(client.clone())),
+            client: Arc::new(crate::sink::LiveRelayClient::new(client.clone(), writers)),
             source_client: Arc::new(crate::source::LiveRelaySourceClient::new(client.clone())),
             subscription_client: Arc::new(crate::subscription::LiveRelaySubscriptionClient::new(
                 client.clone(),

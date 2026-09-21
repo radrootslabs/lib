@@ -1,9 +1,9 @@
 //! Nostr implementation of the transport event sink.
 
+use crate::exact_delivery::ExactEvent;
 use crate::{NostrTransport, RelayUrl, status};
 use core::{fmt, time::Duration};
 use futures::{StreamExt, stream};
-use radroots_nostr::event::Event;
 use radroots_transport::{
     BoxFuture, DeliveryReceipt, DeliveryRequest, EventSink, SinkFailure, Target,
     outcome::DeliveryOutcome,
@@ -19,7 +19,7 @@ pub(crate) struct RelayPublishResult {
 
 /// Sealed, no-I/O result of validating one delivery against this adapter.
 ///
-/// The value retains the exact request and converted signed event. It is
+/// The value retains the exact request and signed event bytes. It is
 /// constructed only by [`NostrTransport::prepare_delivery`] and is consumed by
 /// [`NostrTransport::execute_prepared_delivery`]. Ordinary `Debug` never
 /// exposes event bytes, request identities, or relay destinations.
@@ -27,7 +27,7 @@ pub(crate) struct RelayPublishResult {
 pub struct PreparedDelivery {
     request: DeliveryRequest,
     config: crate::Config,
-    event: Event,
+    event: ExactEvent,
     authorized: Vec<(RelayUrl, Target)>,
     skipped: Vec<DeliveryTargetReceipt>,
 }
@@ -50,7 +50,7 @@ pub(crate) trait RelayClient: Send + Sync {
     fn publish<'a>(
         &'a self,
         relays: Vec<RelayUrl>,
-        event: Event,
+        event: ExactEvent,
         max_connections: usize,
         connect_timeout: Duration,
         operation_timeout: Duration,
@@ -60,60 +60,64 @@ pub(crate) trait RelayClient: Send + Sync {
 #[derive(Clone, Debug)]
 pub(crate) struct LiveRelayClient {
     client: nostr_sdk::Client,
+    writers: crate::socket_write::WriterRegistry,
 }
 
 impl LiveRelayClient {
-    pub(crate) const fn new(client: nostr_sdk::Client) -> Self {
-        Self { client }
+    pub(crate) const fn new(
+        client: nostr_sdk::Client,
+        writers: crate::socket_write::WriterRegistry,
+    ) -> Self {
+        Self { client, writers }
     }
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
         let client = nostr_sdk::Client::default();
         client.automatic_authentication(false);
-        Self::new(client)
+        Self::new(
+            client,
+            crate::socket_write::WriterRegistry::new(std::iter::empty()),
+        )
     }
 }
 
 impl RelayClient for LiveRelayClient {
-    // The live SDK loop requires external relays. Its result normalization is
-    // covered through the injected RelayClient boundary below.
+    // Socket scheduling is exercised by the real loopback suite. Deterministic
+    // coverage owns framing, writer lifecycle and acknowledgement normalization.
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn publish<'a>(
         &'a self,
         relays: Vec<RelayUrl>,
-        event: Event,
+        event: ExactEvent,
         max_connections: usize,
         connect_timeout: Duration,
         operation_timeout: Duration,
     ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
         Box::pin(async move {
+            let deadline = tokio::time::Instant::now() + operation_timeout;
             stream::iter(relays.into_iter().map(|relay| {
                 let event = event.clone();
                 async move {
                     let url = relay.as_str().to_owned();
                     let attempt = async {
-                        self.client.add_relay(url.as_str()).await?;
+                        if tokio::time::Instant::now() >= deadline {
+                            return Err("timeout".to_owned());
+                        }
+                        self.client
+                            .add_relay(url.as_str())
+                            .await
+                            .map_err(|error| error.to_string())?;
                         self.client
                             .try_connect_relay(url.as_str(), connect_timeout)
-                            .await?;
-                        self.client.send_event_to([url.as_str()], &event).await
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        event.publish(&self.client, &self.writers, &url).await
                     };
-                    let outcome = match tokio::time::timeout(operation_timeout, attempt).await {
+                    let outcome = match tokio::time::timeout_at(deadline, attempt).await {
                         Err(_) => status::delivery_failure("timeout"),
-                        Ok(Err(error)) => status::delivery_failure(error.to_string().as_str()),
-                        Ok(Ok(output)) => output
-                            .success
-                            .iter()
-                            .any(|accepted| accepted.to_string().trim_end_matches('/') == url)
-                            .then(DeliveryOutcome::accepted)
-                            .or_else(|| {
-                                output.failed.iter().find_map(|(failed, message)| {
-                                    (failed.to_string().trim_end_matches('/') == url)
-                                        .then(|| status::delivery_failure(message.as_str()))
-                                })
-                            })
-                            .unwrap_or_else(|| status::delivery_failure("relay omitted result")),
+                        Ok(Err(error)) => status::delivery_failure(&error),
+                        Ok(Ok(outcome)) => outcome,
                     };
                     RelayPublishResult { relay, outcome }
                 }
@@ -149,8 +153,8 @@ impl NostrTransport {
                 ),
             }
         }
-        let event = radroots_nostr::event::to_nostr(request.payload().event().envelope())
-            .map_err(|_| Box::new(SinkFailure::invalid_contract(&request)))?;
+        let event = ExactEvent::from_request(&request)
+            .ok_or_else(|| Box::new(SinkFailure::invalid_contract(&request)))?;
         Ok(PreparedDelivery {
             request,
             config: self.config().clone(),
@@ -305,7 +309,7 @@ mod tests {
         fn publish<'a>(
             &'a self,
             relays: Vec<RelayUrl>,
-            _event: Event,
+            _event: ExactEvent,
             _max_connections: usize,
             _connect_timeout: Duration,
             _operation_timeout: Duration,
@@ -333,7 +337,7 @@ mod tests {
         fn publish<'a>(
             &'a self,
             _relays: Vec<RelayUrl>,
-            _event: Event,
+            _event: ExactEvent,
             _max_connections: usize,
             _connect_timeout: Duration,
             _operation_timeout: Duration,
@@ -507,7 +511,7 @@ mod tests {
         fn publish<'a>(
             &'a self,
             _relays: Vec<RelayUrl>,
-            _event: Event,
+            _event: ExactEvent,
             _max_connections: usize,
             _connect_timeout: Duration,
             _operation_timeout: Duration,
@@ -592,7 +596,7 @@ mod tests {
         let client = LiveRelayClient::isolated();
         let results = futures::executor::block_on(client.publish(
             vec![],
-            radroots_nostr::event::to_nostr(payload().event().envelope()).expect("nostr event"),
+            ExactEvent::from_request(&request()).expect("exact event"),
             1,
             Duration::from_millis(1),
             Duration::from_millis(1),

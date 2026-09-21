@@ -66,6 +66,15 @@ request to durable Submitted state and then pass the capability to
 only half of this boundary that may contact relays. Executing a capability
 through a differently configured transport fails closed.
 
+The prepared event retains its signed raw JSON. Delivery wraps those exact
+bytes in the Nostr `EVENT` frame without parsing and serializing them again;
+whitespace, field order, and admitted extension fields remain unchanged. The
+frame must fit the existing 512 KiB wire bound. Publication shares the existing
+hardened connection writer with SDK authentication and subscription messages.
+It requires a matching event-ID `OK` from that relay before recording acceptance.
+Closed or replaced connections do not grant fresh send authority to a retained
+writer. Missing acknowledgements remain unknown or unavailable evidence.
+
 Callers cannot forge or mutate prepared authority:
 
 ```compile_fail
@@ -181,7 +190,7 @@ exact relay provenance and that current checkpoint.
 Event limits, absolute deadlines, explicit cancellation, source closure, and
 stable repeated terminal results follow the generic subscription contract.
 
-Delivery converts an already validated signed Radroots event to Nostr, attempts
+Delivery validates an already signed Radroots event and sends its retained JSON, attempts
 each configured writable target once, and returns one normalized receipt entry per
 requested target. Relay rejection, authentication requirements, rate limits,
 timeouts, connection failures, missing results, and partial acceptance remain

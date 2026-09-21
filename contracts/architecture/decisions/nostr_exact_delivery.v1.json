@@ -1,0 +1,14 @@
+{
+  "schema": "radroots.nostr-exact-delivery.v1",
+  "owner": "radroots_transport_nostr",
+  "status": "implemented",
+  "scope": "Existing sealed PreparedDelivery and EventSink publication of a validated SignedEvent.",
+  "wire": "The EVENT frame contains the byte-identical SignedEvent.raw_json(), including whitespace, key order and admitted extensions. Validate the event conversion and complete frame bound before constructing prepared authority. Never replace retained JSON with an SDK serialization.",
+  "max_wire_message_bytes": 524288,
+  "connection": "SDK authentication, subscription requests and exact publication share one serialized writer on the existing DNS-pinned and TLS-verified connection. No second socket engine, executor, adapter task, event rewrite registry, signer or durable journal is introduced.",
+  "lifetime": "An instance-local registry contains only the configured relay keys and weak connection references. SDK sink destruction or write failure revokes raw send authority. Reconnection installs a distinct writer; an old handle cannot switch to the replacement connection.",
+  "receipt": "Subscribe to the same relay notification stream before sending. Only a matching event-ID OK may accept or reject this attempt. Other IDs cannot satisfy it. Timeout, disconnect, shutdown, notification loss and missing results cannot invent acceptance.",
+  "cancellation": "Futures are caller-polled. Cancelling a write releases its serialization guard but does not prove that no frame was buffered or published. Durable retry, settlement and late facts remain caller-owned.",
+  "bounds": "Preserve configured target access, bounded relay inventory, connection concurrency, frame bounds, timeouts and reconnect suppression. Queued relay attempts consume the same frozen operation deadline.",
+  "compatibility": "Public API, generic transport SPI, dependency versions, persisted event schemas, verification thresholds and release authority remain unchanged."
+}
