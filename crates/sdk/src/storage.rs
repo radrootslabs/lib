@@ -19,8 +19,8 @@ pub type SqliteOpenMode = radroots_storage_sqlite::OpenMode;
 pub type SqlitePaths = radroots_storage_sqlite::Paths;
 
 use radroots_storage::backup::{
-    BackupId, BackupOperation, BackupPlan, BackupTransition, ReliabilityRevision, RestoreOperation,
-    RestorePlan, RestoreTransition, StorageReliability,
+    BackupCapabilityError, BackupId, BackupManifest, BackupOperation, BackupPlan, BackupTransition,
+    ReliabilityRevision, RestoreOperation, RestorePlan, RestoreTransition, StorageReliability,
 };
 
 /// Borrowed reliability operations over the canonical backend-neutral SPI.
@@ -32,6 +32,34 @@ pub struct Operations<'a> {
 impl<'a> Operations<'a> {
     pub(crate) const fn new(storage: &'a dyn radroots_storage::Storage) -> Self {
         Self { storage }
+    }
+
+    /// Captures actual members through the canonical owner. Related application
+    /// state and media still require host coordination; no metadata transition
+    /// is accepted as evidence of a snapshot.
+    pub async fn capture_backup(
+        &self,
+        plan: BackupPlan,
+    ) -> Result<BackupManifest, BackupCapabilityError> {
+        StorageReliability::capture_backup(self.storage, plan).await
+    }
+
+    /// Verifies the owner's exact staged bundle without finalizing it.
+    pub async fn verify_backup(
+        &self,
+        plan: BackupPlan,
+        manifest: BackupManifest,
+    ) -> Result<(), BackupCapabilityError> {
+        StorageReliability::verify_backup(self.storage, plan, manifest).await
+    }
+
+    /// Verifies and finalizes the owner's bundle, retaining its opaque identity.
+    pub async fn finalize_backup(
+        &self,
+        plan: BackupPlan,
+        manifest: BackupManifest,
+    ) -> Result<(), BackupCapabilityError> {
+        StorageReliability::finalize_backup(self.storage, plan, manifest).await
     }
 
     /// Begins or resumes one idempotent backup plan.
@@ -105,6 +133,9 @@ impl std::fmt::Debug for Operations<'_> {
             .finish()
     }
 }
+
+#[cfg(all(test, any(feature = "memory", feature = "sqlite")))]
+mod backup_tests;
 
 #[cfg(all(test, feature = "memory"))]
 mod tests {

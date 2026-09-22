@@ -75,11 +75,23 @@ Their methods return boxed `Future + Send` values, allowing the host to choose
 the async executor. Implementations must not install an executor, spawn hidden
 workers, read a clock, generate identities, or perform implicit retries.
 
+`BackupSource::capture_backup`, `verify_backup`, and `finalize_backup` invoke
+actual owner operations. Their default implementation returns typed
+`BackupCapabilityError::Unsupported`; reliability metadata transitions cannot
+substitute for a snapshot. The boundary returns manifests and completion, never
+paths or database handles. Hosts coordinate application state and referenced
+files separately; per-member snapshots do not imply a global transaction.
+
+Actual backup capture can retain incomplete staging after interruption. It
+does not replace live data or report that staging as finalized. The host must
+retain the original plan and manifest and reconcile an ambiguous result before
+retrying; cancellation never authorizes deleting retained evidence.
+
 ## Cancellation and commit points
 
 Dropping a returned future requests cancellation. Read operations may stop
-without side effects. Mutating operations must document and preserve their
-local durable commit point:
+without side effects. Transactional record operations preserve their local
+durable commit point:
 
 - before the commit point, cancellation or failure leaves no partial state;
 - after a successful commit, cancellation cannot claim rollback;

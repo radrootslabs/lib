@@ -8,6 +8,9 @@ use crate::{
     status::{IntegrityStatus, StorageStatus},
 };
 
+mod capability;
+pub use capability::BackupCapabilityError;
+
 pub const BACKUP_MEMBER_PATH_MAX_BYTES: usize = 512;
 pub const BACKUP_MEMBER_MAX: usize = 1_024;
 
@@ -685,6 +688,35 @@ pub enum RestoreTransition {
 /// Backend-neutral reliability operations. Implementations own staging and
 /// atomic filesystem replacement; callers receive only typed state.
 pub trait StorageReliability: Send + Sync {
+    /// Captures actual owner-produced members. Metadata transitions alone do
+    /// not implement this capability. Hosts must separately coordinate related
+    /// application state and files; a member snapshot is not a global transaction.
+    fn capture_backup(
+        &self,
+        _plan: BackupPlan,
+    ) -> BoxFuture<'_, Result<BackupManifest, BackupCapabilityError>> {
+        Box::pin(async { Err(BackupCapabilityError::Unsupported) })
+    }
+
+    /// Verifies the exact staged members against the supplied plan and manifest.
+    fn verify_backup(
+        &self,
+        _plan: BackupPlan,
+        _manifest: BackupManifest,
+    ) -> BoxFuture<'_, Result<(), BackupCapabilityError>> {
+        Box::pin(async { Err(BackupCapabilityError::Unsupported) })
+    }
+
+    /// Verifies and finalizes the exact owner-managed bundle. No filesystem
+    /// pathname or database handle crosses this boundary.
+    fn finalize_backup(
+        &self,
+        _plan: BackupPlan,
+        _manifest: BackupManifest,
+    ) -> BoxFuture<'_, Result<(), BackupCapabilityError>> {
+        Box::pin(async { Err(BackupCapabilityError::Unsupported) })
+    }
+
     fn begin_backup(&self, plan: BackupPlan) -> BoxFuture<'_, Result<BackupOperation, Error>>;
     fn transition_backup(
         &self,

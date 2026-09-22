@@ -1,0 +1,12 @@
+{
+  "schema": "radroots.storage-backup-capability.v1",
+  "status": "approved",
+  "scope": "Existing canonical owner capture, verification and finalization through StorageReliability and SDK Operations",
+  "source_boundary": "Only the SQLite owner performs snapshots and filesystem publication. The SPI exposes no filesystem paths, SQL or backend handles.",
+  "unsupported_backends": "Actual operations fail closed. Reliability metadata transitions do not prove that any snapshot exists.",
+  "compatibility": "Existing backup manifests, formats, member names, schemas and concrete-owner operations remain unchanged. Default unsupported methods preserve other backend implementations.",
+  "error_boundary": "Typed bounded errors omit filesystem paths, raw database details and nested I/O sources.",
+  "consistency": "The capability preserves existing per-member snapshot semantics. Application and media coordination, identity binding and cross-member consistency require explicit host orchestration; no global transaction is implied.",
+  "lifecycle": "Unpolled operations have no effects. Owner close refuses later capture, verification and finalization. Failed or interrupted capture may retain staging for explicit reconciliation.",
+  "excluded": ["application backup formats", "automatic recovery", "restore orchestration", "secret export consent", "new filesystem owner", "coverage exclusions"]
+}

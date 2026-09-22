@@ -8,10 +8,10 @@ use std::{
 };
 
 use radroots_storage::backup::{
-    BackupFormatVersion, BackupId, BackupManifest, BackupMember, BackupMemberKind, BackupOperation,
-    BackupPlan, BackupSecretPolicy, BackupTransition, MemberDigest, MemberVerification,
-    ReliabilityRevision, RestoreMemberStatus, RestoreOperation, RestorePlan, RestoreTransition,
-    StorageReliability,
+    BackupCapabilityError, BackupFormatVersion, BackupId, BackupManifest, BackupMember,
+    BackupMemberKind, BackupOperation, BackupPlan, BackupSecretPolicy, BackupTransition,
+    MemberDigest, MemberVerification, ReliabilityRevision, RestoreMemberStatus, RestoreOperation,
+    RestorePlan, RestoreTransition, StorageReliability,
 };
 use radroots_storage::status::EventStoreMode;
 use radroots_storage::{Error as StorageError, outbox::BoxFuture};
@@ -27,6 +27,10 @@ const RUNTIME_MEMBER: &str = "runtime/runtime.sqlite";
 const PRIVATE_MEMBER: &str = "private/private.sqlite";
 const RESTORE_MARKER_MAGIC: &[u8; 8] = b"RDRSTR01";
 const RESTORE_MARKER_BYTES: usize = 105;
+
+mod capability;
+#[cfg(test)]
+mod capability_tests;
 
 #[derive(Default)]
 pub(crate) struct ReliabilityState {
@@ -46,6 +50,42 @@ impl SqliteStorage {
 }
 
 impl StorageReliability for SqliteStorage {
+    fn capture_backup(
+        &self,
+        plan: BackupPlan,
+    ) -> BoxFuture<'_, Result<BackupManifest, BackupCapabilityError>> {
+        Box::pin(async move {
+            SqliteStorage::capture_backup(self, &plan)
+                .await
+                .map_err(capability::map_error)
+        })
+    }
+
+    fn verify_backup(
+        &self,
+        plan: BackupPlan,
+        manifest: BackupManifest,
+    ) -> BoxFuture<'_, Result<(), BackupCapabilityError>> {
+        Box::pin(async move {
+            SqliteStorage::verify_backup(self, &plan, &manifest)
+                .await
+                .map_err(capability::map_error)
+        })
+    }
+
+    fn finalize_backup(
+        &self,
+        plan: BackupPlan,
+        manifest: BackupManifest,
+    ) -> BoxFuture<'_, Result<(), BackupCapabilityError>> {
+        Box::pin(async move {
+            SqliteStorage::finalize_backup(self, &plan, &manifest)
+                .await
+                .map(|_| ())
+                .map_err(capability::map_error)
+        })
+    }
+
     fn begin_backup(
         &self,
         plan: BackupPlan,
