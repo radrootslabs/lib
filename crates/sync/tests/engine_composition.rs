@@ -279,6 +279,7 @@ fn invalid_compositions_and_ambient_policy_inputs_fail_closed() {
         Error::VerificationFailed,
         Error::PolicyRejected,
         Error::StorageConflict,
+        Error::StorageSpaceInsufficient,
         Error::StorageFailed,
         Error::InvalidIngestReceipt,
         Error::InvalidPullRequest,

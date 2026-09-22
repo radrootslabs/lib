@@ -20,8 +20,13 @@ pub async fn preflight_authored_v10(paths: &crate::Paths) -> Result<AuthoredV10P
     sqlx::raw_sql("PRAGMA query_only = ON")
         .execute(&mut connection)
         .await
-        .map_err(|_| Error::SchemaMetadataUnavailable {
-            database: RUNTIME_DATABASE,
+        .map_err(|source| {
+            crate::backend::startup_error(
+                &source,
+                Error::SchemaMetadataUnavailable {
+                    database: RUNTIME_DATABASE,
+                },
+            )
         })?;
     let current = metadata(&mut connection, RUNTIME_DATABASE).await?;
     if current.application_id != RUNTIME_APPLICATION_ID {
@@ -53,12 +58,14 @@ pub async fn preflight_authored_v10(paths: &crate::Paths) -> Result<AuthoredV10P
     )
     .await?;
     let report = authored_v10::inspect(&mut connection).await?.report;
-    connection
-        .close()
-        .await
-        .map_err(|_| Error::DatabaseCloseFailed {
-            database: RUNTIME_DATABASE,
-        })?;
+    connection.close().await.map_err(|source| {
+        crate::backend::startup_error(
+            &source,
+            Error::DatabaseCloseFailed {
+                database: RUNTIME_DATABASE,
+            },
+        )
+    })?;
     Ok(report)
 }
 
@@ -220,12 +227,14 @@ pub(crate) async fn preflight_existing(options: &crate::OpenOptions) -> Result<(
             Ok::<(), Error>(())
         }
         .await;
-        let closed = connection
-            .close()
-            .await
-            .map_err(|_| Error::DatabaseCloseFailed {
-                database: plan.database,
-            });
+        let closed = connection.close().await.map_err(|source| {
+            crate::backend::startup_error(
+                &source,
+                Error::DatabaseCloseFailed {
+                    database: plan.database,
+                },
+            )
+        });
         inspected?;
         closed?;
     }
@@ -293,9 +302,14 @@ async fn migrate(
     let mut transaction = connection
         .begin_with("BEGIN IMMEDIATE")
         .await
-        .map_err(|_| Error::SchemaMigrationFailed {
-            database: plan.database,
-            target_version: initial.version.saturating_add(1),
+        .map_err(|source| {
+            crate::backend::startup_error(
+                &source,
+                Error::SchemaMigrationFailed {
+                    database: plan.database,
+                    target_version: initial.version.saturating_add(1),
+                },
+            )
         })?;
     let transactional = match metadata(&mut transaction, plan.database).await {
         Ok(metadata) => metadata,
@@ -312,15 +326,17 @@ async fn migrate(
     }
 
     if initial.version == 0
-        && sqlx::raw_sql(plan.set_application_id_sql)
+        && let Err(source) = sqlx::raw_sql(plan.set_application_id_sql)
             .execute(&mut *transaction)
             .await
-            .is_err()
     {
-        let error = Error::SchemaMigrationFailed {
-            database: plan.database,
-            target_version: 1,
-        };
+        let error = crate::backend::startup_error(
+            &source,
+            Error::SchemaMigrationFailed {
+                database: plan.database,
+                target_version: 1,
+            },
+        );
         let _rollback = transaction.rollback().await;
         return Err(error);
     }
@@ -352,15 +368,14 @@ async fn migrate(
                 database: plan.database,
                 target_version: step.version,
             })?;
-        if sqlx::raw_sql(step.sql)
-            .execute(&mut *transaction)
-            .await
-            .is_err()
-        {
-            let error = Error::SchemaMigrationFailed {
-                database: plan.database,
-                target_version: step.version,
-            };
+        if let Err(source) = sqlx::raw_sql(step.sql).execute(&mut *transaction).await {
+            let error = crate::backend::startup_error(
+                &source,
+                Error::SchemaMigrationFailed {
+                    database: plan.database,
+                    target_version: step.version,
+                },
+            );
             let _rollback = transaction.rollback().await;
             return Err(error);
         }
@@ -370,43 +385,46 @@ async fn migrate(
             let _rollback = transaction.rollback().await;
             return Err(error);
         }
-        if sqlx::raw_sql(version_sql)
-            .execute(&mut *transaction)
-            .await
-            .is_err()
-        {
-            let error = Error::SchemaMigrationFailed {
-                database: plan.database,
-                target_version: step.version,
-            };
+        if let Err(source) = sqlx::raw_sql(version_sql).execute(&mut *transaction).await {
+            let error = crate::backend::startup_error(
+                &source,
+                Error::SchemaMigrationFailed {
+                    database: plan.database,
+                    target_version: step.version,
+                },
+            );
             let _rollback = transaction.rollback().await;
             return Err(error);
         }
-        if validate_exact_catalog(
+        if let Err(source) = validate_exact_catalog(
             &mut transaction,
             plan.database,
             step.version,
             step.owned_objects,
         )
         .await
-        .is_err()
         {
-            let error = Error::SchemaMigrationFailed {
-                database: plan.database,
-                target_version: step.version,
+            let error = match source {
+                Error::SpaceInsufficient => Error::SpaceInsufficient,
+                _ => Error::SchemaMigrationFailed {
+                    database: plan.database,
+                    target_version: step.version,
+                },
             };
             let _rollback = transaction.rollback().await;
             return Err(error);
         }
         applied = applied.saturating_add(1);
     }
-    transaction
-        .commit()
-        .await
-        .map_err(|_| Error::SchemaMigrationFailed {
-            database: plan.database,
-            target_version: plan.current_version,
-        })?;
+    transaction.commit().await.map_err(|source| {
+        crate::backend::startup_error(
+            &source,
+            Error::SchemaMigrationFailed {
+                database: plan.database,
+                target_version: plan.current_version,
+            },
+        )
+    })?;
     Ok(MigrationReport {
         initial_version: initial.version,
         final_version: plan.current_version,
@@ -443,7 +461,7 @@ async fn metadata(
 
 fn schema_metadata_error(source: &sqlx::Error, database: &'static str) -> Error {
     match crate::open::map_database_open_error(source, database) {
-        error @ Error::DatabaseCorrupt { .. } => error,
+        error @ (Error::DatabaseCorrupt { .. } | Error::SpaceInsufficient) => error,
         _ => Error::SchemaMetadataUnavailable { database },
     }
 }
@@ -536,7 +554,9 @@ async fn validate_exact_catalog(
     )
     .fetch_all(&mut *connection)
     .await
-    .map_err(|_| Error::SchemaCatalogMismatch { database, version })?;
+    .map_err(|source| {
+        crate::backend::startup_error(&source, Error::SchemaCatalogMismatch { database, version })
+    })?;
     let actual = rows
         .iter()
         .map(|row| row.get::<String, _>("name"))
@@ -716,6 +736,63 @@ mod tests {
             .await
             .expect("preserved data"),
             1
+        );
+    }
+
+    #[tokio::test]
+    async fn capacity_migration_retains_original_generation_and_retries_exact_pending_suffix() {
+        let mut connection = connection().await;
+        establish_runtime_version(&mut connection, 1).await;
+        sqlx::query("INSERT INTO radroots_runtime_source_generations (generation, state, created_at_unix_ms) VALUES (?, 'active', 10)")
+            .bind([7_u8; 32].as_slice()).execute(&mut connection).await.unwrap();
+        let page_count: i64 = sqlx::query_scalar("PRAGMA page_count")
+            .fetch_one(&mut connection)
+            .await
+            .unwrap();
+        let previous_limit: i64 = sqlx::query_scalar("PRAGMA max_page_count")
+            .fetch_one(&mut connection)
+            .await
+            .unwrap();
+        // PRAGMA assignments cannot bind; the interpolated value is an i64 from SQLite.
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA max_page_count = {page_count}"
+        )))
+        .execute(&mut connection)
+        .await
+        .unwrap();
+        assert!(matches!(
+            migrate_runtime(&mut connection, OpenMode::ReadWriteExisting).await,
+            Err(Error::SpaceInsufficient)
+        ));
+        assert_eq!(pragma(&mut connection, "user_version").await, 1);
+        let generation: Vec<u8> = sqlx::query_scalar(
+            "SELECT generation FROM radroots_runtime_source_generations WHERE state = 'active'",
+        )
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+        assert_eq!(generation, [7_u8; 32]);
+        // The restored limit is likewise an i64, never untrusted SQL text.
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
+            "PRAGMA max_page_count = {previous_limit}"
+        )))
+        .execute(&mut connection)
+        .await
+        .unwrap();
+        let report = migrate_runtime(&mut connection, OpenMode::ReadWriteExisting)
+            .await
+            .unwrap();
+        assert_eq!(report.initial_version(), 1);
+        assert_eq!(report.final_version(), runtime::CURRENT_VERSION);
+        assert_eq!(report.applied(), runtime::CURRENT_VERSION - 1);
+        assert_eq!(
+            sqlx::query_scalar::<_, Vec<u8>>(
+                "SELECT generation FROM radroots_runtime_source_generations WHERE state = 'active'"
+            )
+            .fetch_one(&mut connection)
+            .await
+            .unwrap(),
+            generation
         );
     }
 

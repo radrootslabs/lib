@@ -850,7 +850,10 @@ impl Engine {
                     applied_at,
                 )
                 .await?;
-                return Err(Error::AdmissionFailed);
+                return Err(match error {
+                    radroots_storage::Error::SpaceInsufficient => Error::StorageSpaceInsufficient,
+                    _ => Error::AdmissionFailed,
+                });
             }
         };
         let state = match admission_receipt.disposition() {
@@ -1238,6 +1241,7 @@ fn delivery_request_id(id: SyncId) -> String {
 
 fn map_storage_error(error: radroots_storage::Error) -> Error {
     match error {
+        radroots_storage::Error::SpaceInsufficient => Error::StorageSpaceInsufficient,
         radroots_storage::Error::IdempotencyConflict
         | radroots_storage::Error::OperationIdentityMismatch
         | radroots_storage::Error::JournalRevisionConflict
@@ -1618,6 +1622,14 @@ mod tests {
 
     #[test]
     fn storage_error_maps_are_explicit_and_fail_closed() {
+        assert_eq!(
+            map_storage_error(radroots_storage::Error::SpaceInsufficient),
+            Error::StorageSpaceInsufficient
+        );
+        assert_eq!(
+            map_claim_error(radroots_storage::Error::SpaceInsufficient),
+            Error::StorageSpaceInsufficient
+        );
         assert_eq!(
             map_storage_error(radroots_storage::Error::AtomicCommitConflict),
             Error::StorageConflict

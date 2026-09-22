@@ -156,6 +156,8 @@ fn validate_parent(path: &Path) -> Result<(), Error> {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
+    /// Local capacity failure; inspect existing state before retrying startup.
+    SpaceInsufficient,
     InvalidPath(PathBuf),
     UnexpectedFileName {
         path: PathBuf,
@@ -316,6 +318,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::SpaceInsufficient => formatter.write_str("storage space is insufficient"),
             Self::InvalidPath(path) => {
                 write!(formatter, "invalid owned SQLite path: {}", path.display())
             }
@@ -681,18 +684,22 @@ impl SqliteStorage {
             options.busy_timeout(),
         )
         .await?;
-        runtime_connection
-            .close()
-            .await
-            .map_err(|_| Error::DatabaseCloseFailed {
-                database: RUNTIME_DATABASE_NAME,
-            })?;
-        private_connection
-            .close()
-            .await
-            .map_err(|_| Error::DatabaseCloseFailed {
-                database: PRIVATE_DATABASE_NAME,
-            })?;
+        runtime_connection.close().await.map_err(|source| {
+            crate::backend::startup_error(
+                &source,
+                Error::DatabaseCloseFailed {
+                    database: RUNTIME_DATABASE_NAME,
+                },
+            )
+        })?;
+        private_connection.close().await.map_err(|source| {
+            crate::backend::startup_error(
+                &source,
+                Error::DatabaseCloseFailed {
+                    database: PRIVATE_DATABASE_NAME,
+                },
+            )
+        })?;
 
         let runtime_pool = pool(runtime_options, RUNTIME_DATABASE_NAME).await?;
         let private_pool = pool(private_options, PRIVATE_DATABASE_NAME).await?;
@@ -751,7 +758,9 @@ pub(crate) fn map_database_open_error(source: &sqlx::Error, database: &'static s
         .and_then(|error| error.code())
         .and_then(|code| code.parse::<i32>().ok())
         .is_some_and(|code| matches!(code & 0xff, 11 | 26));
-    if is_corrupt {
+    if crate::backend::is_capacity(source) {
+        Error::SpaceInsufficient
+    } else if is_corrupt {
         Error::DatabaseCorrupt { database }
     } else {
         Error::DatabaseOpenFailed { database }
@@ -787,7 +796,9 @@ async fn active_source_generation(
     let mut transaction = connection
         .begin_with("BEGIN IMMEDIATE")
         .await
-        .map_err(|_| Error::SourceGenerationUnavailable)?;
+        .map_err(|source| {
+            crate::backend::startup_error(&source, Error::SourceGenerationUnavailable)
+        })?;
     let rows = active_generation_rows(&mut transaction).await?;
     let generation = match rows.as_slice() {
         [] => {
@@ -801,16 +812,17 @@ async fn active_source_generation(
             .bind(i64::try_from(created_at).map_err(|_| Error::CorruptSourceGeneration)?)
             .execute(&mut *transaction)
             .await
-            .map_err(|_| Error::SourceGenerationUnavailable)?;
+            .map_err(|source| {
+                crate::backend::startup_error(&source, Error::SourceGenerationUnavailable)
+            })?;
             generation
         }
         [_] => existing_source_generation(rows.as_slice(), expected)?,
         _ => return Err(Error::CorruptSourceGeneration),
     };
-    transaction
-        .commit()
-        .await
-        .map_err(|_| Error::SourceGenerationUnavailable)?;
+    transaction.commit().await.map_err(|source| {
+        crate::backend::startup_error(&source, Error::SourceGenerationUnavailable)
+    })?;
     Ok(generation)
 }
 
@@ -825,7 +837,7 @@ async fn active_generation_rows(
     )
     .fetch_all(connection)
     .await
-    .map_err(|_| Error::SourceGenerationUnavailable)
+    .map_err(|source| crate::backend::startup_error(&source, Error::SourceGenerationUnavailable))
 }
 
 fn existing_source_generation(
@@ -884,25 +896,35 @@ async fn verify_connection(
     let foreign_keys = sqlx::query_scalar::<_, i64>("PRAGMA foreign_keys")
         .fetch_one(&mut *connection)
         .await
-        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+        .map_err(|source| {
+            crate::backend::startup_error(&source, Error::ConnectionPolicyMismatch { database })
+        })?;
     let journal_mode = sqlx::query_scalar::<_, String>("PRAGMA journal_mode")
         .fetch_one(&mut *connection)
         .await
-        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+        .map_err(|source| {
+            crate::backend::startup_error(&source, Error::ConnectionPolicyMismatch { database })
+        })?;
     let configured_busy_timeout = sqlx::query_scalar::<_, i64>("PRAGMA busy_timeout")
         .fetch_one(&mut *connection)
         .await
-        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+        .map_err(|source| {
+            crate::backend::startup_error(&source, Error::ConnectionPolicyMismatch { database })
+        })?;
     let synchronous = sqlx::query_scalar::<_, i64>("PRAGMA synchronous")
         .fetch_one(&mut *connection)
         .await
-        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+        .map_err(|source| {
+            crate::backend::startup_error(&source, Error::ConnectionPolicyMismatch { database })
+        })?;
     let expected_busy_timeout = i64::try_from(busy_timeout.as_millis())
         .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
     let fullfsync = sqlx::query_scalar::<_, i64>("PRAGMA fullfsync")
         .fetch_one(&mut *connection)
         .await
-        .map_err(|_| Error::ConnectionPolicyMismatch { database })?;
+        .map_err(|source| {
+            crate::backend::startup_error(&source, Error::ConnectionPolicyMismatch { database })
+        })?;
     if foreign_keys == 1
         && journal_mode.eq_ignore_ascii_case("wal")
         && configured_busy_timeout == expected_busy_timeout
@@ -933,6 +955,38 @@ impl StdError for Error {
 #[cfg(test)]
 mod error_mapping_tests {
     use super::*;
+
+    #[test]
+    fn startup_capacity_is_typed_redacted_and_preserves_generic_fallbacks() {
+        for source in [
+            coded_error(Some("13")),
+            coded_error(Some("269")),
+            sqlx::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::StorageFull,
+                "private path",
+            )),
+            sqlx::Error::Io(std::io::Error::new(
+                std::io::ErrorKind::QuotaExceeded,
+                "private path",
+            )),
+        ] {
+            let mapped = map_database_open_error(&source, RUNTIME_DATABASE_NAME);
+            assert!(matches!(mapped, Error::SpaceInsufficient));
+            assert_eq!(mapped.to_string(), "storage space is insufficient");
+            assert_eq!(format!("{mapped:?}"), "SpaceInsufficient");
+            assert!(matches!(
+                crate::backend::startup_error(&source, Error::SourceGenerationUnavailable),
+                Error::SpaceInsufficient
+            ));
+        }
+        assert!(matches!(
+            crate::backend::startup_error(
+                &sqlx::Error::PoolClosed,
+                Error::SourceGenerationUnavailable
+            ),
+            Error::SourceGenerationUnavailable
+        ));
+    }
     use sqlx::error::{DatabaseError, ErrorKind};
     use std::borrow::Cow;
 

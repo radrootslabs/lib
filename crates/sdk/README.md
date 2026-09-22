@@ -17,6 +17,12 @@ applications that need to compose storage, signing, transport, or sync
 capabilities directly. Ordinary Rust applications should use the curated
 `radroots` facade.
 
+Persistent startup capacity failures use `ErrorKind::StorageSpaceInsufficient`
+and the existing `storage_space_insufficient` protocol report. Native sources
+remain available through the error chain; display, debug and protocol reports
+exclude their paths and diagnostic text. Hosts retain existing stores and
+reconcile prior effects before retrying.
+
 ## Getting started
 
 The default `memory` feature provides an inert, in-process backend. The caller

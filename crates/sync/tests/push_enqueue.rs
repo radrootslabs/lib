@@ -63,9 +63,13 @@ mod delivery_evidence;
 #[path = "push_enqueue/delivery_selection.rs"]
 mod delivery_selection;
 
+#[path = "push_enqueue/capacity.rs"]
+mod capacity;
+
 struct MockSink;
 
 struct FaultStorage {
+    capacity: Mutex<Option<capacity::Fault>>,
     inner: Arc<MemoryStorage>,
     delivery_injection: Mutex<Option<delivery_evidence::Injection>>,
     receipt_mutation: Mutex<Option<delivery_evidence::ReceiptMutation>>,
@@ -79,6 +83,7 @@ struct FaultStorage {
 impl FaultStorage {
     fn new(generation: u8) -> Self {
         Self {
+            capacity: Mutex::new(None),
             delivery_injection: Mutex::new(None),
             receipt_mutation: Mutex::new(None),
             history_mutation: Mutex::new(None),
@@ -136,6 +141,7 @@ impl EventStore for FaultStorage {
         match self.admit_error.load(Ordering::Relaxed) {
             1 => Box::pin(async { Err(radroots_storage::Error::EventConflict) }),
             2 => Box::pin(async { Err(radroots_storage::Error::BackendUnavailable) }),
+            3 => Box::pin(async { Err(radroots_storage::Error::SpaceInsufficient) }),
             _ => EventStore::admit(self.inner.as_ref(), value),
         }
     }
@@ -489,9 +495,11 @@ impl AuthoredAtomicStorage for FaultStorage {
     > {
         Box::pin(async move {
             delivery_evidence::inject(self, &command, true).await;
+            capacity::inject(self, &command, false)?;
             let receipt =
                 AuthoredAtomicStorage::execute_authored(self.inner.as_ref(), command.clone())
                     .await?;
+            capacity::inject(self, &command, true)?;
             delivery_evidence::inject(self, &command, false).await;
             if matches!(
                 receipt.outcome(),

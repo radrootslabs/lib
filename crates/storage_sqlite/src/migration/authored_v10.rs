@@ -118,7 +118,7 @@ pub(crate) async fn inspect(connection: &mut SqliteConnection) -> Result<Inspect
         sqlx::query("SELECT event_id, signed_event FROM radroots_runtime_events ORDER BY event_id")
             .fetch_all(&mut *connection)
             .await
-            .map_err(|_| metadata_error())?;
+            .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     let mut event_metadata = Vec::with_capacity(event_rows.len());
     let mut invalid_event_ids = BTreeSet::new();
     for row in event_rows {
@@ -162,7 +162,7 @@ pub(crate) async fn inspect(connection: &mut SqliteConnection) -> Result<Inspect
     )
     .fetch_all(&mut *connection)
     .await
-    .map_err(|_| metadata_error())?;
+    .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     for bytes in outbox_ids {
         source_hasher.update((bytes.len() as u64).to_be_bytes());
         source_hasher.update(bytes.as_slice());
@@ -175,6 +175,9 @@ pub(crate) async fn inspect(connection: &mut SqliteConnection) -> Result<Inspect
         };
         match outbox::load_record(connection, item_id).await {
             Ok(Some(record)) => outboxes.push(record),
+            Err(radroots_storage::Error::SpaceInsufficient) => {
+                return Err(Error::SpaceInsufficient);
+            }
             Ok(None) | Err(_) => {
                 invalid_or_unsupported = invalid_or_unsupported.saturating_add(1);
             }
@@ -185,7 +188,7 @@ pub(crate) async fn inspect(connection: &mut SqliteConnection) -> Result<Inspect
         sqlx::query("SELECT * FROM radroots_runtime_journal_operations ORDER BY instance_id")
             .fetch_all(&mut *connection)
             .await
-            .map_err(|_| metadata_error())?;
+            .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     let mut candidates = Vec::new();
     let mut matched_outboxes = BTreeSet::new();
     let mut prepared_or_recoverable = 0_u64;
@@ -226,10 +229,10 @@ pub(crate) async fn inspect(connection: &mut SqliteConnection) -> Result<Inspect
                     continue;
                 };
                 matched_outboxes.insert(*record_outbox.item_id().as_bytes());
-                if validate_candidate(connection, &record_outbox, event_id)
-                    .await
-                    .is_err()
-                {
+                if let Err(error) = validate_candidate(connection, &record_outbox, event_id).await {
+                    if matches!(error, Error::SpaceInsufficient) {
+                        return Err(error);
+                    }
                     invalid_or_unsupported = invalid_or_unsupported.saturating_add(1);
                     push_blocked(&mut blocked_operation_ids, &operation_id);
                     continue;
@@ -301,7 +304,7 @@ pub(crate) async fn apply(
         .bind(metadata.event_id.as_slice())
         .execute(&mut **transaction)
         .await
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
         if result.rows_affected() != 1 {
             return Err(metadata_error());
         }
@@ -310,11 +313,17 @@ pub(crate) async fn apply(
         let (operation, artifact, plan) = convert_candidate(candidate)?;
         authored::persist_operation(transaction, &operation)
             .await
-            .map_err(|_| metadata_error())?;
+            .map_err(|source| match source {
+                radroots_storage::Error::SpaceInsufficient => Error::SpaceInsufficient,
+                _ => metadata_error(),
+            })?;
         persist_imported_artifact(transaction, &artifact).await?;
         authored::persist_plan_v11(transaction, &plan)
             .await
-            .map_err(|_| metadata_error())?;
+            .map_err(|source| match source {
+                radroots_storage::Error::SpaceInsufficient => Error::SpaceInsufficient,
+                _ => metadata_error(),
+            })?;
     }
     let operation_count = count_transaction(
         transaction,
@@ -340,14 +349,14 @@ pub(crate) async fn apply(
     let foreign_keys = sqlx::query("PRAGMA foreign_key_check")
         .fetch_all(&mut **transaction)
         .await
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     if !foreign_keys.is_empty() {
         return Err(metadata_error());
     }
     let integrity = sqlx::query_scalar::<_, String>("PRAGMA integrity_check")
         .fetch_all(&mut **transaction)
         .await
-        .map_err(|_| metadata_error())?;
+        .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     if integrity.as_slice() != ["ok"] {
         return Err(metadata_error());
     }
@@ -368,7 +377,7 @@ pub(crate) async fn apply(
     .bind(migration_timestamp(inspected))
     .execute(&mut **transaction)
     .await
-    .map_err(|_| metadata_error())?;
+    .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     Ok(())
 }
 
@@ -460,7 +469,7 @@ async fn persist_imported_artifact(
     .bind(authored::encode_snapshot(artifact).map_err(|_| metadata_error())?)
     .execute(&mut **transaction)
     .await
-    .map_err(|_| metadata_error())?;
+    .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     Ok(())
 }
 
@@ -600,7 +609,7 @@ async fn validate_candidate(
         .bind(event_id.as_bytes().as_slice())
         .fetch_optional(&mut *connection)
         .await
-        .map_err(|_| metadata_error())?
+        .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?
         .ok_or_else(metadata_error)?;
     if stored
         .try_get::<Vec<u8>, _>("signed_event")
@@ -633,7 +642,7 @@ async fn event_admitted_at(
     .bind(event_id.as_slice())
     .fetch_one(&mut *connection)
     .await
-    .map_err(|_| metadata_error())?;
+    .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     u64_from_i64(value)
 }
 
@@ -652,7 +661,7 @@ async fn orphan_count(connection: &mut SqliteConnection) -> Result<u64, Error> {
     )
     .fetch_one(&mut *connection)
     .await
-    .map_err(|_| metadata_error())?;
+    .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?;
     u64_from_i64(value)
 }
 
@@ -673,7 +682,7 @@ async fn count(connection: &mut SqliteConnection, table: &'static str) -> Result
         sqlx::query_scalar::<_, i64>(query)
             .fetch_one(&mut *connection)
             .await
-            .map_err(|_| metadata_error())?,
+            .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?,
     )
 }
 
@@ -685,7 +694,7 @@ async fn count_transaction(
         sqlx::query_scalar::<_, i64>(query)
             .fetch_one(&mut **transaction)
             .await
-            .map_err(|_| metadata_error())?,
+            .map_err(|source| crate::backend::startup_error(&source, metadata_error()))?,
     )
 }
 

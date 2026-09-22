@@ -1,0 +1,15 @@
+{
+  "schema": "radroots.storage-capacity-propagation.v1",
+  "status": "approved",
+  "scope": "Preserve the canonical capacity distinction through Sync orchestration and SQLite startup into SDK reporting",
+  "sync": "StorageSpaceInsufficient preserves Storage::SpaceInsufficient. Context-specific conflicts and all other fallback errors keep their existing classification.",
+  "startup": "SQLite SpaceInsufficient classifies numeric primary or extended SQLITE_FULL and typed I/O StorageFull or QuotaExceeded. SDK StorageSpaceInsufficient reports the existing protocol storage_space_insufficient code without exposing raw diagnostics.",
+  "uncertainty": "Capacity does not establish rollback, absence of signer or remote effects, or safe automatic retry. Preserve original identities, signed bytes, claims and unresolved receipts.",
+  "boundaries": "No schema, SQL policy, transaction order, durability setting, dependency, resource limit, retry engine or cleanup policy changes. Backup and restore algorithms and their independent capability contracts remain separate.",
+  "verification": [
+    "real orchestration with capacity faults before and after durable effects",
+    "bounded actual SQLite migration exhaustion and original data retention",
+    "primary and extended codes, typed I/O, redaction and unchanged fallbacks",
+    "additive API, unchanged coverage thresholds, portable and full workspace qualification"
+  ]
+}

@@ -68,6 +68,7 @@ pub radroots_sync::policy::Error::SigningCancelled
 pub radroots_sync::policy::Error::SigningIndeterminate
 pub radroots_sync::policy::Error::StorageConflict
 pub radroots_sync::policy::Error::StorageFailed
+pub radroots_sync::policy::Error::StorageSpaceInsufficient
 pub radroots_sync::policy::Error::VerificationFailed
 pub radroots_sync::policy::Error::WorkClaimConflict
 impl core::error::Error for radroots_sync::policy::Error
@@ -273,6 +274,7 @@ pub radroots_sync::Error::SigningCancelled
 pub radroots_sync::Error::SigningIndeterminate
 pub radroots_sync::Error::StorageConflict
 pub radroots_sync::Error::StorageFailed
+pub radroots_sync::Error::StorageSpaceInsufficient
 pub radroots_sync::Error::VerificationFailed
 pub radroots_sync::Error::WorkClaimConflict
 impl core::error::Error for radroots_sync::policy::Error

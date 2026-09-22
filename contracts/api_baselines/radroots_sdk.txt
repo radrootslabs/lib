@@ -106,6 +106,7 @@ pub radroots_sdk::error::ErrorKind::StorageCloseFailed
 pub radroots_sdk::error::ErrorKind::StorageInspectionFailed
 pub radroots_sdk::error::ErrorKind::StorageOpenFailed
 pub radroots_sdk::error::ErrorKind::StorageSchemaTooNew
+pub radroots_sdk::error::ErrorKind::StorageSpaceInsufficient
 pub radroots_sdk::error::ErrorKind::StorageUnsupportedSchema
 impl radroots_sdk::error::ErrorKind
 pub const radroots_sdk::error::ErrorKind::ALL: &'static [Self]

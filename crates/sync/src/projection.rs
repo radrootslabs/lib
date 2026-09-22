@@ -550,6 +550,7 @@ const fn admission_stage_byte(stage: AdmissionStage) -> u8 {
 
 fn map_storage_error(error: StorageError) -> Error {
     match error {
+        StorageError::SpaceInsufficient => Error::StorageSpaceInsufficient,
         StorageError::ProjectionCheckpointMismatch
         | StorageError::ProjectionCheckpointRegression
         | StorageError::ProjectionRevisionConflict
@@ -565,6 +566,10 @@ mod tests {
 
     #[test]
     fn raw_source_identity_stage_encoding_and_error_mapping_are_exact() {
+        assert_eq!(
+            map_storage_error(StorageError::SpaceInsufficient),
+            Error::StorageSpaceInsufficient
+        );
         let invalidation = ProjectionInvalidation::new(
             ProjectionId::parse("projection-helper").unwrap(),
             ProjectionGeneration::new([1; 32]).unwrap(),

@@ -2,6 +2,11 @@
 
 SQLite storage backend for Radroots.
 
+Startup and migration preserve typed `SpaceInsufficient` for numeric SQLite
+capacity failures and typed capacity I/O failures. Existing corruption and
+validation errors remain distinct. Capacity does not prove rollback: inspect
+the original store before retrying, and retain pending or ambiguous work.
+
 Projection document inventory uses the existing canonical projection table.
 Each page releases its read snapshot before returning a continuation. Metadata
 is bounded before decoding; the 16 MiB payload budget is charged before each

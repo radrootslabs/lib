@@ -3,21 +3,36 @@
 use radroots_storage::Error;
 
 pub(crate) fn map_backend(source: sqlx::Error) -> Error {
-    let full = match &source {
+    if is_capacity(&source) {
+        Error::SpaceInsufficient
+    } else {
+        Error::BackendUnavailable
+    }
+}
+
+pub(crate) fn is_capacity(source: &sqlx::Error) -> bool {
+    match source {
         sqlx::Error::Database(error) => error
             .code()
             .and_then(|code| code.parse::<u32>().ok())
             .is_some_and(|code| code & 0xff == 13),
-        sqlx::Error::Io(error) => matches!(
-            error.kind(),
-            std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
-        ),
+        sqlx::Error::Io(error) => is_io_capacity(error),
         _ => false,
-    };
-    if full {
-        Error::SpaceInsufficient
+    }
+}
+
+pub(crate) fn is_io_capacity(source: &std::io::Error) -> bool {
+    matches!(
+        source.kind(),
+        std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+    )
+}
+
+pub(crate) fn startup_error(source: &sqlx::Error, fallback: crate::Error) -> crate::Error {
+    if is_capacity(source) {
+        crate::Error::SpaceInsufficient
     } else {
-        Error::BackendUnavailable
+        fallback
     }
 }
 

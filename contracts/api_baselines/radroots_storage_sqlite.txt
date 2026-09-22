@@ -318,6 +318,7 @@ pub radroots_storage_sqlite::open::Error::SchemaTooOld::minimum: u32
 pub radroots_storage_sqlite::open::Error::SourceGenerationMismatch
 pub radroots_storage_sqlite::open::Error::SourceGenerationRequired
 pub radroots_storage_sqlite::open::Error::SourceGenerationUnavailable
+pub radroots_storage_sqlite::open::Error::SpaceInsufficient
 pub radroots_storage_sqlite::open::Error::SymlinkPath(std::path::PathBuf)
 pub radroots_storage_sqlite::open::Error::UnexpectedFileName
 pub radroots_storage_sqlite::open::Error::UnexpectedFileName::expected: &'static str
@@ -459,6 +460,7 @@ pub radroots_storage_sqlite::Error::SchemaTooOld::minimum: u32
 pub radroots_storage_sqlite::Error::SourceGenerationMismatch
 pub radroots_storage_sqlite::Error::SourceGenerationRequired
 pub radroots_storage_sqlite::Error::SourceGenerationUnavailable
+pub radroots_storage_sqlite::Error::SpaceInsufficient
 pub radroots_storage_sqlite::Error::SymlinkPath(std::path::PathBuf)
 pub radroots_storage_sqlite::Error::UnexpectedFileName
 pub radroots_storage_sqlite::Error::UnexpectedFileName::expected: &'static str

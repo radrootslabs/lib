@@ -2,6 +2,26 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-023"
+date = "2026-09-22"
+status = "closed"
+approval = "Explicit user authorization covers necessary owning-repository repairs, verified checkpoints and non-force publication."
+affected_steps = ["163", "173", "178"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sync", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk"]
+source_evidence = ["Sync adapters collapse the canonical typed capacity error before the host can classify signing or delivery persistence failures.", "SQLite startup and migration adapters similarly discard SQL capacity before SDK report conversion."]
+replacement_action = "Preserve capacity through existing Sync and startup adapters under storage_capacity_propagation.v1.json, without changing ownership or effect semantics."
+verification = ["Exercise actual orchestration before and after durable effects with capacity faults and preserved original requests and receipts.", "Verify startup SQL and I/O classification, actual bounded migration failure, unchanged fallback errors and redacted SDK reports.", "Qualify additive API, unchanged coverage gates, portable profiles, full workspace and release preflight."]
+unresolved_risk = "Typed capacity classification, actual owner regressions, additive API, unchanged coverage gates and complete workspace qualification passed. Consumers still reconcile prior effects; classification grants no eviction or automatic retry authority."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Sync preserves typed capacity without changing original operation, claim, signer or delivery evidence. Actual before/after faults prove no false success or extra signer/network calls.",
+  "Startup and migration preserve SQL capacity and typed I/O distinctions through the redacted SDK report. Actual bounded SQLite migration failure retains original version and data and retries the pending suffix.",
+  "Three additive variants in non-exhaustive public enums, no removals or umbrella API changes. No schema, SQL policy, transaction, durability, dependency or limit changes.",
+  "All45 coverage gates pass unchanged thresholds. Three affected packages have fresh coverage;42 unchanged package-source reports retain provenance. Complete workspace, minimal profiles, portable, preflight and explicit native/WASM generators pass.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-022"
 date = "2026-09-22"
 status = "closed"

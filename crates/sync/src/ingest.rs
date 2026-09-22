@@ -316,6 +316,7 @@ fn hash_field(hasher: &mut Sha256, value: &[u8]) {
 
 fn map_storage_error(error: StorageError) -> Error {
     match error {
+        StorageError::SpaceInsufficient => Error::StorageSpaceInsufficient,
         StorageError::EventConflict | StorageError::AtomicCommitConflict => Error::StorageConflict,
         _ => Error::StorageFailed,
     }

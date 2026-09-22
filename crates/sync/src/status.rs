@@ -23,6 +23,13 @@ use crate::{Engine, policy::Error};
 
 const STATUS_PROJECTION_LIMIT: usize = 256;
 
+fn map_storage_error(error: radroots_storage::Error) -> Error {
+    match error {
+        radroots_storage::Error::SpaceInsufficient => Error::StorageSpaceInsufficient,
+        _ => Error::StorageFailed,
+    }
+}
+
 /// Typed report for one optional injected host capability.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -177,13 +184,13 @@ impl Engine {
         }
         let storage = StorageStatusProvider::storage_status(self.storage.as_ref())
             .await
-            .map_err(|_| Error::StorageFailed)?;
+            .map_err(map_storage_error)?;
         let events = EventStore::status(self.storage.as_ref())
             .await
-            .map_err(|_| Error::StorageFailed)?;
+            .map_err(map_storage_error)?;
         let outbox = Outbox::status(self.storage.as_ref())
             .await
-            .map_err(|_| Error::StorageFailed)?;
+            .map_err(map_storage_error)?;
         if outbox.total().is_none() {
             return Err(Error::StorageFailed);
         }
@@ -194,7 +201,7 @@ impl Engine {
         for projection_id in projection_ids {
             let status = ProjectionStore::status(self.storage.as_ref(), projection_id.clone())
                 .await
-                .map_err(|_| Error::StorageFailed)?;
+                .map_err(map_storage_error)?;
             projections.push(ProjectionReport {
                 projection_id: projection_id.clone(),
                 status,
@@ -223,9 +230,7 @@ impl Engine {
             return Err(Error::ClockUnavailable);
         }
         if plan.request().is_some()
-            && plan
-                .delivery_satisfaction()
-                .map_err(|_| Error::StorageFailed)?
+            && plan.delivery_satisfaction().map_err(map_storage_error)?
                 == radroots_transport::policy::SatisfactionState::Satisfied
         {
             return Ok(SyncRetryDecision::Satisfied);
@@ -426,6 +431,14 @@ mod tests {
 
     #[test]
     fn health_and_protocol_classification_cover_every_state() {
+        assert_eq!(
+            map_storage_error(radroots_storage::Error::SpaceInsufficient),
+            Error::StorageSpaceInsufficient
+        );
+        assert_eq!(
+            map_storage_error(radroots_storage::Error::BackendUnavailable),
+            Error::StorageFailed
+        );
         assert_eq!(
             availability_state(Availability::Available),
             SyncCapabilityState::Available

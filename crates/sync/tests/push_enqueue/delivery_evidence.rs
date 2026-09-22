@@ -80,6 +80,74 @@ fn accept((request, sender): Pending) -> DeliveryReceipt {
 }
 
 #[test]
+fn capacity_delivery_receipt_failure_retains_claim_and_known_or_unknown_effects() {
+    for after in [false, true] {
+        let storage = Arc::new(FaultStorage::new(185));
+        let sink = Arc::new(HeldSink::default());
+        let signer = Arc::new(MockSigner::new(SignBehavior::Success {
+            completed_at_unix_ms: 1_800_000_200_500,
+        }));
+        let engine = fault_engine(storage.clone(), signer.clone(), sink.clone());
+        let push = request(185, "wss://capacity.example");
+        execute_to_admitted(&engine, &push);
+        let before = block_on(engine.push_status(push.operation_id()))
+            .unwrap()
+            .unwrap();
+        let mut future = Box::pin(engine.deliver_push(push.operation_id()));
+        assert!(
+            future
+                .poll_unpin(&mut std::task::Context::from_waker(noop_waker_ref()))
+                .is_pending()
+        );
+        let pending = sink.take();
+        assert_eq!(&pending.0, before.delivery_plan().request().unwrap());
+        *storage.capacity.lock().unwrap() = Some(capacity::Fault {
+            phase: capacity::Phase::DeliveryFact,
+            after,
+        });
+        let expected = accept(pending);
+        assert_eq!(block_on(future), Err(Error::StorageSpaceInsufficient));
+        let failed = block_on(engine.push_status(push.operation_id()))
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed.artifact().signed(), before.artifact().signed());
+        assert_eq!(
+            failed.delivery_plan().request(),
+            before.delivery_plan().request()
+        );
+        assert!(!failed.delivery_history().proves_no_issued_attempt());
+        assert_eq!(failed.delivery_history().has_unresolved_claims(), !after);
+        assert_eq!(
+            failed.delivery_plan().delivery_facts().len(),
+            usize::from(after)
+        );
+        if after {
+            assert_eq!(
+                failed.delivery_plan().delivery_facts()[0].outcome(),
+                &DeliveryAttemptOutcome::Receipt(expected)
+            );
+            assert_eq!(
+                block_on(engine.deliver_push(push.operation_id())),
+                Err(Error::WorkClaimConflict)
+            );
+            let expires_at = failed
+                .delivery_plan()
+                .claim_evidence()
+                .unwrap()
+                .expires_at_unix_ms();
+            let recovery = source_only(
+                storage.clone(),
+                Arc::new(TestClock(AtomicU64::new(expires_at))),
+            );
+            let reconciled = block_on(recovery.deliver_push(push.operation_id())).unwrap();
+            assert_eq!(reconciled.plan().state(), AuthoredDeliveryState::Satisfied);
+        }
+        assert_eq!(sink.calls.load(Ordering::Relaxed), 1);
+        assert_eq!(signer.calls.load(Ordering::Relaxed), 1);
+    }
+}
+
+#[test]
 fn late_accepted_result_survives_stop_and_terminal_replay_without_sink() {
     let (engine, storage, clock, sink, push) = setup(121);
     let status = block_on(engine.push_status(push.operation_id()))

@@ -220,6 +220,8 @@ pub enum Error {
     VerificationFailed,
     PolicyRejected,
     StorageConflict,
+    /// Capacity failure; original effects may already be durable and require reconciliation.
+    StorageSpaceInsufficient,
     StorageFailed,
     InvalidIngestReceipt,
     InvalidPullRequest,
@@ -256,6 +258,7 @@ impl core::fmt::Display for Error {
             Self::VerificationFailed => "sync event verification failed",
             Self::PolicyRejected => "sync admission policy rejected the event",
             Self::StorageConflict => "sync input conflicts with durable storage state",
+            Self::StorageSpaceInsufficient => "sync storage space is insufficient",
             Self::StorageFailed => "sync storage operation failed",
             Self::InvalidIngestReceipt => "sync storage returned an invalid ingest receipt",
             Self::InvalidPullRequest => "sync pull request is outside its bounds",

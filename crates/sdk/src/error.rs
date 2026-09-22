@@ -106,6 +106,13 @@ error_catalog! {
         message: "SDK persistent storage open failed",
         safe_detail_keys: []
     },
+    StorageSpaceInsufficient => {
+        code: StorageSpaceInsufficient,
+        operation: None,
+        capability: Some(CapabilityId::PERSISTENT_STORAGE),
+        message: "SDK persistent storage space is insufficient",
+        safe_detail_keys: []
+    },
     StorageBusy => {
         code: DatabaseBusy,
         operation: None,
@@ -252,6 +259,17 @@ impl Error {
         use radroots_storage_sqlite::Error as SqliteError;
 
         let kind = match &source {
+            SqliteError::SpaceInsufficient => ErrorKind::StorageSpaceInsufficient,
+            SqliteError::Inspect { source, .. }
+            | SqliteError::WriterLockOpen { source, .. }
+            | SqliteError::WriterLockFailed { source, .. }
+                if matches!(
+                    source.kind(),
+                    std::io::ErrorKind::StorageFull | std::io::ErrorKind::QuotaExceeded
+                ) =>
+            {
+                ErrorKind::StorageSpaceInsufficient
+            }
             SqliteError::WriterAlreadyActive { .. } => ErrorKind::StorageBusy,
             SqliteError::SchemaTooNew { .. } => ErrorKind::StorageSchemaTooNew,
             SqliteError::SchemaTooOld { .. } | SqliteError::SchemaMigrationRequired { .. } => {
@@ -375,6 +393,58 @@ mod tests {
     use std::{collections::BTreeSet, error::Error as _};
 
     use super::*;
+
+    #[cfg(feature = "sqlite")]
+    #[test]
+    fn startup_capacity_report_preserves_source_but_never_exposes_path() {
+        use radroots_storage_sqlite::Error as Sqlite;
+        let mut sources = vec![Sqlite::SpaceInsufficient];
+        for kind in [
+            std::io::ErrorKind::StorageFull,
+            std::io::ErrorKind::QuotaExceeded,
+        ] {
+            sources.extend([
+                Sqlite::Inspect {
+                    path: "/private/secret".into(),
+                    source: std::io::Error::new(kind, "private detail"),
+                },
+                Sqlite::WriterLockOpen {
+                    path: "/private/secret".into(),
+                    source: std::io::Error::new(kind, "private detail"),
+                },
+                Sqlite::WriterLockFailed {
+                    path: "/private/secret".into(),
+                    source: std::io::Error::new(kind, "private detail"),
+                },
+            ]);
+        }
+        for source in sources {
+            let error = Error::storage_open_failed(source);
+            assert!(error.source().is_some());
+            assert_eq!(error.kind(), ErrorKind::StorageSpaceInsufficient);
+            let report = error.to_report();
+            report.validate().unwrap();
+            assert_eq!(report.code().as_str(), "storage_space_insufficient");
+            assert_eq!(
+                report.message().as_str(),
+                "SDK persistent storage space is insufficient"
+            );
+            assert!(!format!("{error:?}").contains("private"));
+        }
+        for kind in [
+            std::io::ErrorKind::PermissionDenied,
+            std::io::ErrorKind::Other,
+        ] {
+            assert_eq!(
+                Error::storage_open_failed(Sqlite::WriterLockOpen {
+                    path: "/private/secret".into(),
+                    source: kind.into(),
+                })
+                .kind(),
+                ErrorKind::StorageOpenFailed
+            );
+        }
+    }
 
     #[test]
     fn catalog_is_exhaustive_unique_and_protocol_valid() {

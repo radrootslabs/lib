@@ -6,6 +6,11 @@ The package owns the shared ingest, pull, projection, push, policy, and status
 boundaries. It does not create an executor, spawn workers, install timers, own
 process lifecycle, store UI state, or branch on concrete transport adapters.
 
+`StorageSpaceInsufficient` preserves the storage owner's typed capacity failure.
+It does not establish rollback or absence of signer or remote effects. Retain
+the original requests, signed bytes and unresolved receipts, then reconcile
+existing state before retrying. Sync never frees storage or retries implicitly.
+
 Ingest performs real event-ID and signature verification before host policy.
 Contract failure defaults to rejection. A host can explicitly retain such a
 signed observation through `AdmissionPolicy::contract_failure` for canonical
