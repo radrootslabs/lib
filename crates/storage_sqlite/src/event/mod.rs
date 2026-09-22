@@ -1,3 +1,4 @@
+use crate::backend::map_backend;
 use radroots_event::SignedEvent;
 use radroots_event_codec::Codec;
 use radroots_storage::{
@@ -595,10 +596,6 @@ fn i64_from_u64(value: u64) -> Result<i64, Error> {
 
 fn u64_from_i64(value: i64) -> Result<u64, Error> {
     u64::try_from(value).map_err(|_| Error::CorruptStoredEvent)
-}
-
-fn map_backend(_: sqlx::Error) -> Error {
-    Error::BackendUnavailable
 }
 
 fn map_corrupt(_: sqlx::Error) -> Error {

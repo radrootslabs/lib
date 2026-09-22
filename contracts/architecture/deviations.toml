@@ -2,6 +2,26 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-022"
+date = "2026-09-22"
+status = "closed"
+approval = "Explicit user authorization covers necessary owning-repository repairs, verified checkpoints and non-force publication."
+affected_steps = ["158", "163"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite"]
+source_evidence = ["The actual bounded SQLite capacity regression retains the acknowledged draft but collapses SQLITE_FULL into BackendUnavailable.", "Separate SQL adapters erase the same classification at authored, atomic, event, journal, outbox, projection and private-artifact boundaries."]
+replacement_action = "Preserve bounded capacity classification through the existing storage SPI as governed by storage_capacity_errors.v1.json; keep transactional uncertainty and all original ownership and retention rules."
+verification = ["Actual SQLITE_FULL preserves acknowledged drafts and unresolved submission source without a success receipt.", "Primary and extended numeric database codes and typed I/O capacity failures are classified without raw diagnostic leakage; unrelated failures retain existing fallbacks.", "Review additive API and preserve coverage thresholds, full workspace, portable and release checks."]
+unresolved_risk = "Typed capacity classification, actual owner regressions, additive API, unchanged coverage gates and complete workspace qualification passed. Consumers still reconcile prior effects; classification grants no eviction or automatic retry authority."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Actual bounded SQLITE_FULL retains the acknowledged draft, reports no successful save, and permits exact later retry. Atomic submission failure retains the original source without successful association.",
+  "Primary and extended database capacity codes and typed I/O capacity/quota failures become one redacted error. Unrelated failures remain generic. No operation ID, transaction, receipt, durability policy, schema or limit changes.",
+  "The storage non-exhaustive error enum gains one variant; SQLite, SDK and umbrella public API snapshots are unchanged.",
+  "Both changed packages have fresh coverage and all 45 gates retain their existing thresholds. Unchanged package-source reports retain provenance. Full workspace, portable, contracts, preflight and explicit native/WASM generators pass.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-021"
 date = "2026-09-22"
 status = "closed"

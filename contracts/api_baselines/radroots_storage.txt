@@ -1841,6 +1841,7 @@ pub radroots_storage::Error::ReliabilityOperationTerminal
 pub radroots_storage::Error::ReliabilityRevisionConflict
 pub radroots_storage::Error::RestoreMemberVerificationFailed
 pub radroots_storage::Error::SourceGenerationChanged
+pub radroots_storage::Error::SpaceInsufficient
 pub radroots_storage::Error::TooManyEventQueryIds
 impl core::error::Error for radroots_storage::Error
 impl core::fmt::Display for radroots_storage::Error

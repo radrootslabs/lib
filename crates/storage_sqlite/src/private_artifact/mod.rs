@@ -1,4 +1,5 @@
 use crate::SqliteStorage;
+use crate::backend::map_backend;
 use radroots_secrets::{
     EncryptedEnvelope,
     context::{EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId},
@@ -778,10 +779,6 @@ fn i64_from_u64(value: u64) -> Result<i64, Error> {
 
 fn u64_from_i64(value: i64) -> Result<u64, Error> {
     u64::try_from(value).map_err(|_| Error::CorruptPrivateArtifactMetadata)
-}
-
-fn map_backend(_: sqlx::Error) -> Error {
-    Error::BackendUnavailable
 }
 
 fn map_reseal(_: sqlx::Error) -> Error {

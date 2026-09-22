@@ -1,0 +1,16 @@
+{
+  "schema": "radroots.storage-capacity-errors.v1",
+  "status": "approved",
+  "scope": "Backend-neutral capacity diagnosis for canonical SQLite SPI operations",
+  "error": "SpaceInsufficient",
+  "classification": "Numeric primary or extended SQLITE_FULL, or SQLx I/O StorageFull/QuotaExceeded; other SQL errors retain BackendUnavailable. Raw database and I/O sources are never exposed.",
+  "uncertainty": "A capacity error can arise at commit or after earlier effects. It is not a rollback or no-effect receipt. Retain original requests, IDs, drafts and ambiguous receipts; reconcile existing state before retry.",
+  "ownership": "Only the existing storage owner performs SQL and transactions. No raw handle, SQL escape hatch, global fault control, second owner or application cleanup policy is introduced.",
+  "compatibility": "The non-exhaustive error enum gains one variant. Schema, persisted bytes, transaction order, durability policy, limits and successful receipts are unchanged. Open, migration, backup and restore capability errors remain their separate contracts.",
+  "verification": [
+    "real bounded SQLITE_FULL draft retention and exact retry",
+    "real atomic submission capacity retention",
+    "numeric/extended and typed I/O classification, redaction and generic fallback",
+    "unchanged coverage and package/release gates"
+  ]
+}

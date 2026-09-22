@@ -1,4 +1,5 @@
 use crate::SqliteStorage;
+use crate::backend::map_backend;
 use radroots_storage::{
     Error, ProjectionStore,
     event::{EventPosition, SourceGeneration},
@@ -1389,10 +1390,6 @@ fn i64_from_u64(value: u64) -> Result<i64, Error> {
 
 fn u64_from_i64(value: i64) -> Result<u64, Error> {
     u64::try_from(value).map_err(|_| Error::CorruptProjectionRecord)
-}
-
-fn map_backend(_: sqlx::Error) -> Error {
-    Error::BackendUnavailable
 }
 
 fn map_corrupt(_: sqlx::Error) -> Error {

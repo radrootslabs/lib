@@ -341,10 +341,9 @@ async fn abandoned_and_full(stage: AuthoredDraftStage) {
     large["intent"]["payload"] = serde_json::json!(payload);
     large["intent"]["payload_sha256"] = serde_json::json!(Sha256::digest(&payload).to_vec());
     let large: PrepareFromDraft = serde_json::from_value(large).unwrap();
-    assert!(
-        execute_transaction(&mut transaction, &command(&large))
-            .await
-            .is_err()
+    assert_eq!(
+        execute_transaction(&mut transaction, &command(&large)).await,
+        Err(Error::SpaceInsufficient)
     );
     // SQLITE_FULL may already roll back the transaction at the engine boundary.
     let _ = transaction.rollback().await;

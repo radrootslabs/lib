@@ -252,6 +252,15 @@ It proves the requested snapshots exist, not current ownership or permission to
 sign or deliver. Callers retain application policy and must recheck current
 heads before effects. Losing the result after commit cannot establish rollback.
 
+## Capacity failures
+
+`Error::SpaceInsufficient` reports exhausted storage capacity without exposing
+backend details. It does not prove rollback or absence of earlier effects.
+Retain pending requests, original operation identities and ambiguous receipts;
+reconcile existing state before retrying. Capacity diagnosis grants no eviction
+or automatic retry authority. Backend implementations that cannot distinguish
+capacity failures may continue returning `BackendUnavailable`.
+
 ## Intended consumers
 
 - `radroots_storage_sqlite` implements the contracts for native durable state.

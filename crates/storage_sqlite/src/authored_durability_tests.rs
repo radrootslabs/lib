@@ -165,7 +165,7 @@ async fn authored_durability_sqlite_capacity_failure_preserves_the_acknowledged_
         store
             .append_authored_draft(pending.clone(), Some(baseline.revision()))
             .await,
-        Err(Error::BackendUnavailable)
+        Err(Error::SpaceInsufficient)
     );
     assert_head(&store, &baseline).await;
 
