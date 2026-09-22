@@ -644,6 +644,8 @@ impl SqliteStorage {
         }
         options.validate_filesystem()?;
 
+        migration::preflight_existing(&options).await?;
+
         let runtime_options = connect_options(
             options.paths().runtime(),
             options.mode(),
@@ -753,6 +755,22 @@ pub(crate) fn map_database_open_error(source: &sqlx::Error, database: &'static s
         Error::DatabaseCorrupt { database }
     } else {
         Error::DatabaseOpenFailed { database }
+    }
+}
+
+// Inspect the existing generation before migrations without bootstrapping it.
+// The actual writer transaction still validates or installs it after migration.
+pub(crate) async fn preflight_source_generation(
+    connection: &mut SqliteConnection,
+    mode: OpenMode,
+    expected: Option<(SourceGeneration, u64)>,
+) -> Result<(), Error> {
+    let rows = active_generation_rows(connection).await?;
+    if rows.is_empty() && mode.is_writable() {
+        expected.ok_or(Error::SourceGenerationRequired)?;
+        Ok(())
+    } else {
+        existing_source_generation(rows.as_slice(), expected).map(|_| ())
     }
 }
 

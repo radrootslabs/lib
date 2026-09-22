@@ -175,3 +175,11 @@ partial replay rolls back. Complete replay returns immutable historical rows and
 does not establish current application authority. No migration or second storage
 owner is introduced. Callers may recover an unknown commit result by replaying
 the exact pair.
+
+Open inspects both existing database schemas through read-only connections before
+configuring writable connections or applying either pending migration. A future
+version, foreign namespace, invalid catalog, ineligible authored migration or
+incompatible source generation therefore leaves both original files intact. Each accepted migration still
+rechecks metadata and applies its pending suffix atomically in its own database;
+this does not claim a cross-database atomic commit. An interrupted compatible
+upgrade resumes from its committed version on the next open.

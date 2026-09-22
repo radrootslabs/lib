@@ -115,12 +115,23 @@ impl MigrationReport {
     }
 }
 
-#[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
 #[cfg_attr(coverage_nightly, coverage(off))]
 pub(crate) async fn migrate_runtime(
     connection: &mut SqliteConnection,
     mode: OpenMode,
 ) -> Result<MigrationReport, Error> {
+    migrate(connection, mode, &runtime_plan()?).await
+}
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+pub(crate) async fn migrate_private(
+    connection: &mut SqliteConnection,
+    mode: OpenMode,
+) -> Result<MigrationReport, Error> {
+    migrate(connection, mode, &private_plan()?).await
+}
+
+fn runtime_plan() -> Result<MigrationPlan, Error> {
     let steps = runtime::MIGRATIONS
         .iter()
         .map(|migration| {
@@ -135,27 +146,17 @@ pub(crate) async fn migrate_runtime(
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
-    migrate(
-        connection,
-        mode,
-        &MigrationPlan {
-            database: RUNTIME_DATABASE,
-            application_id: RUNTIME_APPLICATION_ID,
-            set_application_id_sql: SET_RUNTIME_APPLICATION_ID,
-            minimum_version: runtime::MINIMUM_VERSION,
-            current_version: runtime::CURRENT_VERSION,
-            steps,
-        },
-    )
-    .await
+    Ok(MigrationPlan {
+        database: RUNTIME_DATABASE,
+        application_id: RUNTIME_APPLICATION_ID,
+        set_application_id_sql: SET_RUNTIME_APPLICATION_ID,
+        minimum_version: runtime::MINIMUM_VERSION,
+        current_version: runtime::CURRENT_VERSION,
+        steps,
+    })
 }
 
-#[allow(dead_code)] // Wired into the public open lifecycle in its ordered RCL checkpoint.
-#[cfg_attr(coverage_nightly, coverage(off))]
-pub(crate) async fn migrate_private(
-    connection: &mut SqliteConnection,
-    mode: OpenMode,
-) -> Result<MigrationReport, Error> {
+fn private_plan() -> Result<MigrationPlan, Error> {
     let steps = private::MIGRATIONS
         .iter()
         .map(|migration| {
@@ -170,19 +171,108 @@ pub(crate) async fn migrate_private(
             })
         })
         .collect::<Result<Vec<_>, Error>>()?;
-    migrate(
-        connection,
-        mode,
-        &MigrationPlan {
-            database: PRIVATE_DATABASE,
-            application_id: PRIVATE_APPLICATION_ID,
-            set_application_id_sql: SET_PRIVATE_APPLICATION_ID,
-            minimum_version: private::MINIMUM_VERSION,
-            current_version: private::CURRENT_VERSION,
-            steps,
-        },
-    )
-    .await
+    Ok(MigrationPlan {
+        database: PRIVATE_DATABASE,
+        application_id: PRIVATE_APPLICATION_ID,
+        set_application_id_sql: SET_PRIVATE_APPLICATION_ID,
+        minimum_version: private::MINIMUM_VERSION,
+        current_version: private::CURRENT_VERSION,
+        steps,
+    })
+}
+
+// Validate both existing members before WAL setup or any forward migration.
+// The caller retains the canonical writer lock; migration still rechecks under
+// its own transaction. This is compatibility preflight, not a cross-file commit.
+pub(crate) async fn preflight_existing(options: &crate::OpenOptions) -> Result<(), Error> {
+    for (path, plan) in [
+        (options.paths().runtime(), runtime_plan()?),
+        (options.paths().private(), private_plan()?),
+    ] {
+        if !path.try_exists().map_err(|source| Error::Inspect {
+            path: path.to_path_buf(),
+            source,
+        })? {
+            if options.mode().may_create() {
+                continue;
+            }
+            return Err(Error::MissingFile(path.to_path_buf()));
+        }
+        let mut connection = SqliteConnection::connect_with(
+            &SqliteConnectOptions::new()
+                .filename(path)
+                .read_only(true)
+                .busy_timeout(options.busy_timeout())
+                .pragma("query_only", "ON"),
+        )
+        .await
+        .map_err(|source| crate::open::map_database_open_error(&source, plan.database))?;
+        let inspected = async {
+            let metadata = inspect(&mut connection, options.mode(), &plan).await?;
+            if plan.database == RUNTIME_DATABASE && metadata.version > 0 {
+                crate::open::preflight_source_generation(
+                    &mut connection,
+                    options.mode(),
+                    options.source_generation_bootstrap(),
+                )
+                .await?;
+            }
+            Ok::<(), Error>(())
+        }
+        .await;
+        let closed = connection
+            .close()
+            .await
+            .map_err(|_| Error::DatabaseCloseFailed {
+                database: plan.database,
+            });
+        inspected?;
+        closed?;
+    }
+    Ok(())
+}
+
+async fn inspect(
+    connection: &mut SqliteConnection,
+    mode: OpenMode,
+    plan: &MigrationPlan,
+) -> Result<SchemaMetadata, Error> {
+    validate_plan(plan)?;
+    let initial = metadata(connection, plan.database).await?;
+    validate_metadata(plan, initial)?;
+    validate_catalog(connection, plan, initial.version).await?;
+    if plan.database == RUNTIME_DATABASE && initial.version == 10 {
+        let inspected = authored_v10::inspect(connection).await?;
+        if !inspected.report.is_eligible() {
+            return Err(inspected.report.blocked_error());
+        }
+    }
+    // Private v4's pinned SQL refuses old v2 envelopes without a context
+    // fingerprint. Check the same eligibility before either file is migrated;
+    // keep the SQL guard as the transactional authority.
+    if mode.is_writable() && plan.database == PRIVATE_DATABASE && (1..4).contains(&initial.version)
+    {
+        let unsupported = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS(SELECT 1 FROM radroots_private_artifacts WHERE envelope_version = 2)",
+        )
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|source| schema_metadata_error(&source, PRIVATE_DATABASE))?;
+        if unsupported {
+            return Err(Error::SchemaMigrationFailed {
+                database: PRIVATE_DATABASE,
+                target_version: 4,
+            });
+        }
+    }
+    if initial.version != plan.current_version && !mode.is_writable() {
+        return Err(Error::SchemaMigrationRequired {
+            database: plan.database,
+            current: plan.current_version,
+            actual: initial.version,
+        });
+    }
+    Ok(initial)
 }
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -191,29 +281,12 @@ async fn migrate(
     mode: OpenMode,
     plan: &MigrationPlan,
 ) -> Result<MigrationReport, Error> {
-    validate_plan(plan)?;
-    let initial = metadata(connection, plan.database).await?;
-    validate_metadata(plan, initial)?;
-    validate_catalog(connection, plan, initial.version).await?;
-
+    let initial = inspect(connection, mode, plan).await?;
     if initial.version == plan.current_version {
         return Ok(MigrationReport {
             initial_version: initial.version,
             final_version: initial.version,
             applied: 0,
-        });
-    }
-    if !mode.is_writable() {
-        if plan.database == RUNTIME_DATABASE && initial.version == 10 {
-            let inspected = authored_v10::inspect(connection).await?;
-            if !inspected.report.is_eligible() {
-                return Err(inspected.report.blocked_error());
-            }
-        }
-        return Err(Error::SchemaMigrationRequired {
-            database: plan.database,
-            current: plan.current_version,
-            actual: initial.version,
         });
     }
 
@@ -355,17 +428,24 @@ async fn metadata(
     let application_id = sqlx::query_scalar::<_, i64>("PRAGMA application_id")
         .fetch_one(&mut *connection)
         .await
-        .map_err(|_| Error::SchemaMetadataUnavailable { database })?;
+        .map_err(|source| schema_metadata_error(&source, database))?;
     let version = sqlx::query_scalar::<_, i64>("PRAGMA user_version")
         .fetch_one(&mut *connection)
         .await
-        .map_err(|_| Error::SchemaMetadataUnavailable { database })?;
+        .map_err(|source| schema_metadata_error(&source, database))?;
     Ok(SchemaMetadata {
         application_id: u32::try_from(application_id)
             .map_err(|_| Error::SchemaMetadataUnavailable { database })?,
         version: u32::try_from(version)
             .map_err(|_| Error::SchemaMetadataUnavailable { database })?,
     })
+}
+
+fn schema_metadata_error(source: &sqlx::Error, database: &'static str) -> Error {
+    match crate::open::map_database_open_error(source, database) {
+        error @ Error::DatabaseCorrupt { .. } => error,
+        _ => Error::SchemaMetadataUnavailable { database },
+    }
 }
 
 fn validate_plan(plan: &MigrationPlan) -> Result<(), Error> {
@@ -544,7 +624,7 @@ mod tests {
             .expect("runtime user version");
     }
 
-    async fn establish_private_version(connection: &mut SqliteConnection, version: u32) {
+    pub(super) async fn establish_private_version(connection: &mut SqliteConnection, version: u32) {
         for migration_version in 1..=version {
             sqlx::raw_sql(
                 private::migration_sql(migration_version).expect("registered private SQL"),
@@ -885,3 +965,7 @@ mod delivery_facts_tests;
 #[cfg_attr(coverage_nightly, coverage(off))]
 #[path = "migration_delivery_reconciliation_tests.rs"]
 mod delivery_reconciliation_tests;
+
+#[cfg(test)]
+#[path = "migration_preflight_tests.rs"]
+mod preflight_tests;
