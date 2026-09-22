@@ -10,8 +10,8 @@ use std::{
 use radroots_storage::backup::{
     BackupCapabilityError, BackupFormatVersion, BackupId, BackupManifest, BackupMember,
     BackupMemberKind, BackupOperation, BackupPlan, BackupSecretPolicy, BackupTransition,
-    MemberDigest, MemberVerification, ReliabilityRevision, RestoreMemberStatus, RestoreOperation,
-    RestorePlan, RestoreTransition, StorageReliability,
+    MemberDigest, MemberVerification, ReliabilityRevision, RestoreCapabilityError,
+    RestoreMemberStatus, RestoreOperation, RestorePlan, RestoreTransition, StorageReliability,
 };
 use radroots_storage::status::EventStoreMode;
 use radroots_storage::{Error as StorageError, outbox::BoxFuture};
@@ -31,6 +31,8 @@ const RESTORE_MARKER_BYTES: usize = 105;
 mod capability;
 #[cfg(test)]
 mod capability_tests;
+#[cfg(test)]
+mod restore_capability_tests;
 mod settling;
 
 #[derive(Default)]
@@ -88,6 +90,28 @@ impl StorageReliability for SqliteStorage {
                 .await
                 .map(|_| ())
                 .map_err(capability::map_error)
+        })
+    }
+
+    fn stage_restore(
+        &self,
+        plan: RestorePlan,
+    ) -> BoxFuture<'_, Result<Vec<RestoreMemberStatus>, RestoreCapabilityError>> {
+        Box::pin(async move {
+            SqliteStorage::stage_restore(self, &plan)
+                .await
+                .map_err(capability::map_restore_error)
+        })
+    }
+
+    fn finalize_restore(
+        &self,
+        plan: RestorePlan,
+    ) -> BoxFuture<'_, Result<(), RestoreCapabilityError>> {
+        Box::pin(async move {
+            SqliteStorage::finalize_restore(self, &plan)
+                .await
+                .map_err(capability::map_restore_error)
         })
     }
 
@@ -421,7 +445,8 @@ impl SqliteStorage {
         verify_staged_restore(&layout, &marker).await?;
         layout.require_previous_absent(marker.secret_policy())?;
 
-        self.lifecycle
+        let restoration = self
+            .lifecycle
             .begin_restore_close()
             .map_err(|_| Error::BackupBackendUnavailable)?;
         self.pool.close().await;
@@ -432,7 +457,7 @@ impl SqliteStorage {
             recover_interrupted_restore(paths, OpenMode::ReadWriteExisting).await
         }
         .await;
-        let close = self.lifecycle.finish_restore_close();
+        let close = restoration.finish();
         installation?;
         close.map_err(|_| Error::BackupBackendUnavailable)
     }

@@ -20,7 +20,8 @@ pub type SqlitePaths = radroots_storage_sqlite::Paths;
 
 use radroots_storage::backup::{
     BackupCapabilityError, BackupId, BackupManifest, BackupOperation, BackupPlan, BackupTransition,
-    ReliabilityRevision, RestoreOperation, RestorePlan, RestoreTransition, StorageReliability,
+    ReliabilityRevision, RestoreCapabilityError, RestoreMemberStatus, RestoreOperation,
+    RestorePlan, RestoreTransition, StorageReliability,
 };
 
 /// Borrowed reliability operations over the canonical backend-neutral SPI.
@@ -67,6 +68,22 @@ impl<'a> Operations<'a> {
         manifest: BackupManifest,
     ) -> Result<(), BackupCapabilityError> {
         StorageReliability::finalize_backup(self.storage, plan, manifest).await
+    }
+
+    /// Stages actual verified members through the canonical owner without
+    /// changing live state. The host owns identity, media and command exclusion.
+    pub async fn stage_restore(
+        &self,
+        plan: RestorePlan,
+    ) -> Result<Vec<RestoreMemberStatus>, RestoreCapabilityError> {
+        StorageReliability::stage_restore(self.storage, plan).await
+    }
+
+    /// Verifies staging, closes the canonical owner and installs its retained
+    /// snapshot. Reopen explicitly after an installation attempt, then reconcile
+    /// historical operations before allowing delivery. No path is returned.
+    pub async fn finalize_restore(&self, plan: RestorePlan) -> Result<(), RestoreCapabilityError> {
+        StorageReliability::finalize_restore(self.storage, plan).await
     }
 
     /// Begins or resumes one idempotent backup plan.
@@ -143,6 +160,9 @@ impl std::fmt::Debug for Operations<'_> {
 
 #[cfg(all(test, any(feature = "memory", feature = "sqlite")))]
 mod backup_tests;
+
+#[cfg(all(test, any(feature = "memory", feature = "sqlite")))]
+mod restore_tests;
 
 #[cfg(all(test, feature = "memory"))]
 mod tests {

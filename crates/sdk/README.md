@@ -105,6 +105,16 @@ Before inventory and capture, hosts exclude new writes and await
 caller was cancelled. Keep that host exclusion until capture completes; the
 settling call does not grant a continuing reservation or stop new commands.
 
+`storage_operations().stage_restore(plan)` verifies and stages a retained
+snapshot without replacing live state. `finalize_restore(plan)` delegates
+verification, close and installation to the same owner. These operations
+return bounded `RestoreCapabilityError` values, never paths or handles.
+Unsupported backends fail closed. After an installation attempt, explicitly
+close and reopen before inspecting restored state. Canceling finalization does
+not release the writer early: explicit close must still drain both pools.
+The host must preserve a durable delivery guard and reconcile historical IDs
+and remote outcomes; a restored snapshot never authorizes automatic resend.
+
 Native mobile hosts can retain one client while changing host-owned identity
 and relay selection. The host injects one opaque implementation of the
 canonical `radroots_signing::Signer` SPI; the SDK has no mutable secret slot and

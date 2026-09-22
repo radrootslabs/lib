@@ -2,6 +2,27 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-021"
+date = "2026-09-22"
+status = "closed"
+approval = "Explicit user authorization covers required shared-owner repairs, verified checkpoints and non-force integration publication."
+affected_steps = ["158", "163", "178"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk"]
+source_evidence = ["Actual cancellation regression reproduces a stranded RESTORING state after dropping finalization; later close drains pools but cannot release writer authority.", "The SQLite owner already implements verified staging and close-before-replacement restore with durable marker recovery.", "StorageReliability and SDK Operations expose restore metadata transitions but cannot invoke these actual owner operations."]
+replacement_action = "Expose existing owner staging and finalization through the bounded capability governed by storage_restore_capability.v1.json; repair abandoned restore-close ownership through a private attempt guard, and retain application restore and historical-delivery policy with the host."
+verification = ["Cancellation retains the active writer until explicit close drains both pools; close then releases authority and unchanged live state reopens.", "Qualify real SPI and SDK restore round trips, unchanged live state during staging, exact restored data and close/reopen behavior.", "Refuse unsupported, closed, read-only, conflicting, malformed and unconfigured operations with bounded path-free errors; preserve existing evidence.", "Review generated additive API and pass affected/minimal checks, unchanged coverage gates, full workspace, portable and release preflight."]
+unresolved_risk = "Owner and SDK restore, cancellation recovery, additive API, unchanged coverage, full workspace, portability and preflight passed. The host still owns identity, media and durable historical-delivery fencing. No automatic delivery or release qualification is implied."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Actual SPI and SDK staging preserve live changes; finalization closes the owner and explicit reopen restores exact historical draft IDs and bytes. Unsupported metadata-only backends, closed and read-only owners, malformed members, missing configuration and future formats refuse without leaking paths.",
+  "The initial cancellation regression reproduced a stranded restoring state. A private attempt guard now retains writer authority and closed admission after cancellation while allowing explicit close to drain both pools. Held runtime and protected connections prevent early writer release; the final close and reopen preserve live state.",
+  "Public API additions contain only the bounded restore error and staging/finalization methods. Concrete owner signatures, backup errors, manifests, schema, dependencies and filesystem replacement algorithms remain unchanged.",
+  "All 45 required coverage gates pass unchanged 90 percent thresholds. Three affected packages are freshly measured; 42 unchanged package-source reports retain provenance. No coverage exclusion was added.",
+  "Affected/minimal profiles, full workspace check/tests/Clippy, Rustdoc, catalog, contracts, architecture, API boundaries, graph, portability, preflight and explicit native/WASM generators passed. Final metadata checks revalidate this closure before publication.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-020"
 date = "2026-09-22"
 status = "closed"

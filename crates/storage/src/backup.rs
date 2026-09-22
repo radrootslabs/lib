@@ -10,6 +10,8 @@ use crate::{
 
 mod capability;
 pub use capability::BackupCapabilityError;
+mod restore_capability;
+pub use restore_capability::RestoreCapabilityError;
 
 pub const BACKUP_MEMBER_PATH_MAX_BYTES: usize = 512;
 pub const BACKUP_MEMBER_MAX: usize = 1_024;
@@ -723,6 +725,26 @@ pub trait StorageReliability: Send + Sync {
         _manifest: BackupManifest,
     ) -> BoxFuture<'_, Result<(), BackupCapabilityError>> {
         Box::pin(async { Err(BackupCapabilityError::Unsupported) })
+    }
+
+    /// Stages verified retained members without replacing live state. The host
+    /// owns application identity, related media and command exclusion. Existing
+    /// staging is recovery evidence, not permission to overwrite it.
+    fn stage_restore(
+        &self,
+        _plan: RestorePlan,
+    ) -> BoxFuture<'_, Result<Vec<RestoreMemberStatus>, RestoreCapabilityError>> {
+        Box::pin(async { Err(RestoreCapabilityError::Unsupported) })
+    }
+
+    /// Verifies staging, closes the owner and installs through its recovery
+    /// protocol. After installation begins, callers must reopen the owner even
+    /// if they lose the result. Restore never authorizes historical delivery.
+    fn finalize_restore(
+        &self,
+        _plan: RestorePlan,
+    ) -> BoxFuture<'_, Result<(), RestoreCapabilityError>> {
+        Box::pin(async { Err(RestoreCapabilityError::Unsupported) })
     }
 
     fn begin_backup(&self, plan: BackupPlan) -> BoxFuture<'_, Result<BackupOperation, Error>>;

@@ -117,10 +117,10 @@ impl StorageLifecycle {
             .compare_exchange(OPEN, CLOSING, Ordering::AcqRel, Ordering::Acquire);
     }
 
-    pub(crate) fn begin_restore_close(&self) -> Result<(), Error> {
+    pub(crate) fn begin_restore_close(&self) -> Result<RestoreCloseAttempt<'_>, Error> {
         self.shutdown
             .compare_exchange(OPEN, RESTORING, Ordering::AcqRel, Ordering::Acquire)
-            .map(|_| ())
+            .map(|_| RestoreCloseAttempt(self))
             .map_err(|_| Error::BackendUnavailable)
     }
 
@@ -164,6 +164,28 @@ impl StorageLifecycle {
             u32::try_from(self.busy_timeout.as_millis())
                 .map_err(|_| Error::InvalidStorageStatus)?,
         )
+    }
+}
+
+/// Keeps writer authority reserved while finalization owns the close. A lost
+/// caller only hands draining back to ordinary close; it never releases a lock
+/// while either pool can still have active work.
+pub(crate) struct RestoreCloseAttempt<'a>(&'a StorageLifecycle);
+
+impl RestoreCloseAttempt<'_> {
+    pub(crate) fn finish(self) -> Result<(), Error> {
+        self.0.finish_restore_close()
+    }
+}
+
+impl Drop for RestoreCloseAttempt<'_> {
+    fn drop(&mut self) {
+        let _ = self.0.shutdown.compare_exchange(
+            RESTORING,
+            CLOSING,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
     }
 }
 
@@ -278,13 +300,13 @@ mod tests {
             Err(Error::InvalidIntegrityStatus)
         );
 
-        assert_eq!(reader.lifecycle.begin_restore_close(), Ok(()));
-        assert_eq!(
+        let restoring = reader.lifecycle.begin_restore_close().unwrap();
+        assert!(matches!(
             reader.lifecycle.begin_restore_close(),
             Err(Error::BackendUnavailable)
-        );
+        ));
         assert_eq!(reader.lifecycle.finish_close(), Ok(()));
-        assert_eq!(reader.lifecycle.finish_restore_close(), Ok(()));
+        assert_eq!(restoring.finish(), Ok(()));
         assert_eq!(
             reader.lifecycle.finish_restore_close(),
             Err(Error::BackendUnavailable)

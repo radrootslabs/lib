@@ -173,6 +173,7 @@ fn package_contains_only_reachable_sources_and_registered_targets() {
             "signing.rs".to_owned(),
             "storage.rs".to_owned(),
             "storage/backup_tests.rs".to_owned(),
+            "storage/restore_tests.rs".to_owned(),
             "sync.rs".to_owned(),
             "sync/tests/selected.rs".to_owned(),
             "trade.rs".to_owned(),

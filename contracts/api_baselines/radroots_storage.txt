@@ -618,6 +618,17 @@ pub radroots_storage::backup::MemberVerification::Missing
 pub radroots_storage::backup::MemberVerification::Unexpected
 pub radroots_storage::backup::MemberVerification::UnsafePath
 pub radroots_storage::backup::MemberVerification::Verified
+#[non_exhaustive] pub enum radroots_storage::backup::RestoreCapabilityError
+pub radroots_storage::backup::RestoreCapabilityError::Conflict
+pub radroots_storage::backup::RestoreCapabilityError::Failed
+pub radroots_storage::backup::RestoreCapabilityError::InvalidConfiguration
+pub radroots_storage::backup::RestoreCapabilityError::Unavailable
+pub radroots_storage::backup::RestoreCapabilityError::Unsupported
+pub radroots_storage::backup::RestoreCapabilityError::UnsupportedVersion
+pub radroots_storage::backup::RestoreCapabilityError::VerificationFailed
+impl core::error::Error for radroots_storage::backup::RestoreCapabilityError
+impl core::fmt::Display for radroots_storage::backup::RestoreCapabilityError
+pub fn radroots_storage::backup::RestoreCapabilityError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_storage::backup::RestoreStage
 pub radroots_storage::backup::RestoreStage::Failed
 pub radroots_storage::backup::RestoreStage::Finalized
@@ -723,8 +734,10 @@ pub fn radroots_storage::backup::StorageReliability::begin_restore(&self, radroo
 pub fn radroots_storage::backup::StorageReliability::capture_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupManifest, radroots_storage::backup::BackupCapabilityError>>
 pub fn radroots_storage::backup::StorageReliability::close(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::backup::StorageReliability::finalize_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::backup::StorageReliability::finalize_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::backup::StorageReliability::integrity(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::Error>>
 pub fn radroots_storage::backup::StorageReliability::settle_backup_writes(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::backup::StorageReliability::stage_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::backup::RestoreMemberStatus>, radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::backup::StorageReliability::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::backup::StorageReliability::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::backup::StorageReliability::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
@@ -735,8 +748,10 @@ pub fn radroots_storage::memory::MemoryStorage::begin_restore(&self, radroots_st
 pub fn radroots_storage::memory::MemoryStorage::capture_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupManifest, radroots_storage::backup::BackupCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::close(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::finalize_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::memory::MemoryStorage::finalize_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::integrity(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::settle_backup_writes(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::memory::MemoryStorage::stage_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::backup::RestoreMemberStatus>, radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
@@ -999,8 +1014,10 @@ pub fn radroots_storage::memory::MemoryStorage::begin_restore(&self, radroots_st
 pub fn radroots_storage::memory::MemoryStorage::capture_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupManifest, radroots_storage::backup::BackupCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::close(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::finalize_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::memory::MemoryStorage::finalize_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::integrity(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::settle_backup_writes(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::memory::MemoryStorage::stage_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::backup::RestoreMemberStatus>, radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
@@ -1844,8 +1861,10 @@ pub fn radroots_storage::BackupSource::begin_restore(&self, radroots_storage::ba
 pub fn radroots_storage::BackupSource::capture_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupManifest, radroots_storage::backup::BackupCapabilityError>>
 pub fn radroots_storage::BackupSource::close(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::BackupSource::finalize_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::BackupSource::finalize_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::BackupSource::integrity(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::Error>>
 pub fn radroots_storage::BackupSource::settle_backup_writes(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::BackupSource::stage_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::backup::RestoreMemberStatus>, radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::BackupSource::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::BackupSource::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::BackupSource::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
@@ -1856,8 +1875,10 @@ pub fn radroots_storage::memory::MemoryStorage::begin_restore(&self, radroots_st
 pub fn radroots_storage::memory::MemoryStorage::capture_backup(&self, radroots_storage::backup::BackupPlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupManifest, radroots_storage::backup::BackupCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::close(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::finalize_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::memory::MemoryStorage::finalize_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::integrity(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::IntegrityStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::settle_backup_writes(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub fn radroots_storage::memory::MemoryStorage::stage_restore(&self, radroots_storage::backup::RestorePlan) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::backup::RestoreMemberStatus>, radroots_storage::backup::RestoreCapabilityError>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>

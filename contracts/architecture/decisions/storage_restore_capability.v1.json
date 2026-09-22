@@ -1,0 +1,20 @@
+{
+  "schema": "radroots.storage-restore-capability.v1",
+  "status": "approved",
+  "scope": "Existing canonical owner restore staging and finalization through StorageReliability and SDK Operations",
+  "source_boundary": "Only the SQLite owner verifies, stages, closes and replaces database members. The SPI returns member verification or completion, never paths, SQL or backend handles.",
+  "unsupported_backends": "Actual restore operations fail closed. Reliability metadata transitions do not prove that storage was staged or restored.",
+  "compatibility": "Existing restore plans, manifests, member names, schema checks, filesystem algorithms and concrete-owner operations remain unchanged. Default unsupported methods preserve other backend implementations. Backup errors are unchanged.",
+  "error_boundary": "Distinct bounded RestoreCapabilityError values omit filesystem paths, member details and nested database or I/O sources.",
+  "staging": "The existing owner verifies finalized backup members, creates adjacent staging without changing live state and rejects existing staging. Partial or conflicting evidence is retained.",
+  "finalization": "The owner reverifies staging before closing both pools, then uses its existing durable marker and replacement protocol. Installation attempts require a fresh open. Caller cancellation can retain closed-owner or recovery state and never proves success.",
+  "host_obligations": "The host excludes concurrent application commands, validates identity and related media, retains a durable guard against automatic historical delivery, and explicitly closes/reopens and reconciles restored operations. Storage restore is not authority to republish.",
+  "excluded": [
+    "application restore policy",
+    "automatic delivery",
+    "secret export consent",
+    "new filesystem owner",
+    "coverage exclusions"
+  ],
+  "cancellation": "A private attempt guard changes an abandoned restoring state to closing without releasing writer authority. Explicit close still drains both pools before releasing the writer. No automatic reopen or delivery follows."
+}

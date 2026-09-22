@@ -191,6 +191,18 @@ all expected members are present. Restore uses isolated staging and cannot
 replace live state before complete verification. Relative member paths reject
 absolute paths, traversal, duplicates, and unsafe separators.
 
+`BackupSource::stage_restore` and `finalize_restore` invoke actual owner
+operations. Unsupported backends return `RestoreCapabilityError::Unsupported`;
+reliability metadata cannot substitute for restored storage. Staging retains
+live state and refuses existing staging. Finalization verifies, closes the
+owner and installs through its recovery protocol. Hosts must reopen explicitly
+and reconcile historical operations before delivery. Identity, related media
+and durable application delivery guards remain host responsibilities.
+
+Canceling SQLite finalization retains writer authority. A subsequent explicit
+close drains both pools before releasing that authority, permitting guarded
+reopen. Cancellation is not evidence of either successful restore or rollback.
+
 Status and integrity inspection are passive. `close` is explicit and
 idempotent; once closed, an implementation rejects ordinary operations.
 Backend-specific durability fields are discriminated by `StorageBackend`:
