@@ -17,6 +17,10 @@ async fn reliability_metadata_never_substitutes_for_actual_backup_capability() {
     use radroots_storage::backup::{BackupMember, BackupMemberKind, MemberDigest};
     let client = crate::ClientBuilder::memory_default().build().unwrap();
     let operations = client.storage_operations().unwrap();
+    assert_eq!(
+        operations.settle_backup_writes().await,
+        Err(BackupCapabilityError::Unsupported)
+    );
     let plan = plan();
     operations.begin_backup(plan.clone()).await.unwrap();
     let manifest = BackupManifest::new(
@@ -93,6 +97,7 @@ async fn sdk_delegates_real_backup_and_close_to_one_canonical_owner() {
     let operations = client.storage_operations().unwrap();
     let plan = plan();
     drop(operations.capture_backup(plan.clone()));
+    operations.settle_backup_writes().await.unwrap();
     assert_eq!(std::fs::read_dir(backup.path()).unwrap().count(), 0);
     let manifest = operations.capture_backup(plan.clone()).await.unwrap();
     assert_eq!(manifest.backup_id(), plan.backup_id());

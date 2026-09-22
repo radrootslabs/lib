@@ -34,6 +34,13 @@ impl<'a> Operations<'a> {
         Self { storage }
     }
 
+    /// Waits for earlier owner writes, including cancelled caller work. Hold
+    /// application write exclusion before this call until inventory/capture
+    /// completes; this method does not itself stop new application commands.
+    pub async fn settle_backup_writes(&self) -> Result<(), BackupCapabilityError> {
+        StorageReliability::settle_backup_writes(self.storage).await
+    }
+
     /// Captures actual members through the canonical owner. Related application
     /// state and media still require host coordination; no metadata transition
     /// is accepted as evidence of a snapshot.

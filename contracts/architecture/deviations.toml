@@ -2,6 +2,26 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-020"
+date = "2026-09-22"
+status = "closed"
+approval = "Explicit user authorization covers required shared-owner repairs, verified checkpoints and non-force integration publication."
+affected_steps = ["158", "163", "178"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk"]
+source_evidence = ["SQLx 0.9 returns dropped pooled connections asynchronously, pinging the worker before returning its permit.", "The canonical SQLite owner has four connections per member, so a different connection can inspect or snapshot before earlier cancelled work settles.", "The existing backup SPI cannot establish that all earlier owner work has settled before related host inventory."]
+replacement_action = "Add the bounded owner-settling capability governed by storage_backup_capability.v1.json; retain all runtime and protected pool permits before returning, while the host separately excludes new commands."
+verification = ["Held connections prevent early success across both members; cancelled settling releases permits and can retry.", "Abandoned transactions settle their owner rollback before later inventory; committed state remains observable.", "Qualify SDK delegation, unsupported and closed owners, API compatibility, unchanged coverage thresholds and complete workspace/preflight."]
+unresolved_risk = "Owner, SDK, additive API, unchanged coverage, full workspace, portability and preflight qualification passed. The host must retain its own write exclusion; settling is not a snapshot or an ongoing reservation."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Canonical SQLite settles all runtime and protected connections before related host inventory. Cancellation releases acquired permits, and a remaining busy protected connection prevents success. Abandoned transactions finish rollback and committed state remains observable.",
+  "SDK delegation, unsupported memory and closed owners pass affected all-feature and minimal checks. The public API review contains only additive settling methods and no removals; backup schemas, manifests, dependencies and pool configuration are unchanged.",
+  "All 45 required package coverage gates pass unchanged 90 percent thresholds. The three affected packages were freshly measured; 42 unchanged package-source measurements retain prior provenance.",
+  "Full workspace check, tests and all-feature Clippy, documentation, catalog, contracts, architecture, DTO/API boundaries, dependency graph, portability, release preflight and both explicitly selected SDK generators pass. Final contract checks revalidate this closure metadata before publication.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-019"
 date = "2026-09-12"
 status = "closed"

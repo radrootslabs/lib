@@ -31,6 +31,7 @@ const RESTORE_MARKER_BYTES: usize = 105;
 mod capability;
 #[cfg(test)]
 mod capability_tests;
+mod settling;
 
 #[derive(Default)]
 pub(crate) struct ReliabilityState {
@@ -50,6 +51,10 @@ impl SqliteStorage {
 }
 
 impl StorageReliability for SqliteStorage {
+    fn settle_backup_writes(&self) -> BoxFuture<'_, Result<(), BackupCapabilityError>> {
+        Box::pin(settling::settle(self))
+    }
+
     fn capture_backup(
         &self,
         plan: BackupPlan,

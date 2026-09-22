@@ -7,6 +7,7 @@
   "compatibility": "Existing backup manifests, formats, member names, schemas and concrete-owner operations remain unchanged. Default unsupported methods preserve other backend implementations.",
   "error_boundary": "Typed bounded errors omit filesystem paths, raw database details and nested I/O sources.",
   "consistency": "The capability preserves existing per-member snapshot semantics. Application and media coordination, identity binding and cross-member consistency require explicit host orchestration; no global transaction is implied.",
+  "settling": "Before related inventory/capture, the host excludes new writes and requests settle_backup_writes. SQLite retains every runtime/protected pool permit and drains their worker handshakes, including asynchronous return after caller cancellation. The host retains its write exclusion after settling returns. Unsupported backends refuse. This is not an ongoing reservation or global transaction.",
   "lifecycle": "Unpolled operations have no effects. Owner close refuses later capture, verification and finalization. Failed or interrupted capture may retain staging for explicit reconciliation.",
   "excluded": ["application backup formats", "automatic recovery", "restore orchestration", "secret export consent", "new filesystem owner", "coverage exclusions"]
 }

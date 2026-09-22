@@ -688,6 +688,14 @@ pub enum RestoreTransition {
 /// Backend-neutral reliability operations. Implementations own staging and
 /// atomic filesystem replacement; callers receive only typed state.
 pub trait StorageReliability: Send + Sync {
+    /// Settles writes already admitted by this owner, including work whose
+    /// caller was cancelled. The host must exclude new writes before calling
+    /// this and retain that exclusion through related inventory and capture.
+    /// This is neither a snapshot nor an ongoing maintenance reservation.
+    fn settle_backup_writes(&self) -> BoxFuture<'_, Result<(), BackupCapabilityError>> {
+        Box::pin(async { Err(BackupCapabilityError::Unsupported) })
+    }
+
     /// Captures actual owner-produced members. Metadata transitions alone do
     /// not implement this capability. Hosts must separately coordinate related
     /// application state and files; a member snapshot is not a global transaction.

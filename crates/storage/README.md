@@ -75,6 +75,11 @@ Their methods return boxed `Future + Send` values, allowing the host to choose
 the async executor. Implementations must not install an executor, spawn hidden
 workers, read a clock, generate identities, or perform implicit retries.
 
+`BackupSource::settle_backup_writes` waits for earlier owner writes, including
+work whose caller was cancelled. The host excludes new writes before settling
+and retains that exclusion through related inventory and capture. Settling does
+not create a snapshot or an ongoing reservation.
+
 `BackupSource::capture_backup`, `verify_backup`, and `finalize_backup` invoke
 actual owner operations. Their default implementation returns typed
 `BackupCapabilityError::Unsupported`; reliability metadata transitions cannot

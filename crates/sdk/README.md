@@ -100,6 +100,11 @@ state, identity binding, media leases, and export consent remain host concerns;
 these operations expose no paths and do not create an application-wide snapshot
 transaction. Failed capture may retain staging for explicit reconciliation.
 
+Before inventory and capture, hosts exclude new writes and await
+`settle_backup_writes()` to drain earlier owner work, including operations whose
+caller was cancelled. Keep that host exclusion until capture completes; the
+settling call does not grant a continuing reservation or stop new commands.
+
 Native mobile hosts can retain one client while changing host-owned identity
 and relay selection. The host injects one opaque implementation of the
 canonical `radroots_signing::Signer` SPI; the SDK has no mutable secret slot and
