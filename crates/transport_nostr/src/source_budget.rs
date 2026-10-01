@@ -1,28 +1,69 @@
 use std::sync::Mutex;
 
-pub(super) const MAX_EVENT_BYTES: usize = radroots_event_codec::decode::MAX_EVENT_JSON_BYTES;
-pub(super) const MAX_FETCH_BYTES: usize = 8 * 1024 * 1024;
-pub(super) const MAX_FETCH_EVENTS: usize = 4096;
-pub(super) const MAX_FETCH_NOTIFICATIONS: usize = 8192;
+pub(crate) const MAX_EVENT_BYTES: usize = radroots_event_codec::decode::MAX_EVENT_JSON_BYTES;
+pub(crate) const MAX_FETCH_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const MAX_FETCH_EVENTS: usize = 4096;
+pub(crate) const MAX_FETCH_NOTIFICATIONS: usize = 8192;
 
 #[derive(Debug, Default)]
 struct Usage {
     bytes: usize,
     events: usize,
     notifications: usize,
+    wire_bytes: usize,
+    wire_messages: usize,
+    wire_data: usize,
+    exhausted: bool,
 }
 
 /// One monotonic inventory shared by all relay batches. Reservations are not
 /// refunded when a duplicate, malformed event or completed batch is discarded.
 #[derive(Debug, Default)]
-pub(super) struct FetchBudget(Mutex<Usage>);
+pub(crate) struct FetchBudget(Mutex<Usage>, tokio::sync::Notify);
 
 impl FetchBudget {
+    pub(crate) fn wire(&self, bytes: usize, frames: usize, data: usize) -> bool {
+        let Ok(mut usage) = self.0.lock() else {
+            return false;
+        };
+        if usage.exhausted
+            || bytes > MAX_FETCH_BYTES - usage.wire_bytes
+            || frames > MAX_FETCH_NOTIFICATIONS - usage.wire_messages
+            || data > MAX_FETCH_EVENTS - usage.wire_data
+        {
+            usage.exhausted = true;
+            self.1.notify_waiters();
+            return false;
+        }
+        usage.wire_bytes += bytes;
+        usage.wire_messages += frames;
+        usage.wire_data += data;
+        true
+    }
+
+    pub(crate) fn exhausted(&self) -> bool {
+        self.0.lock().map_or(true, |usage| usage.exhausted)
+    }
+
+    pub(super) async fn wait_exhausted(&self) {
+        loop {
+            let notified = self.1.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.exhausted() {
+                return;
+            }
+            notified.await;
+        }
+    }
+
     pub(super) fn notification(&self) -> bool {
         let Ok(mut usage) = self.0.lock() else {
             return false;
         };
-        if usage.notifications == MAX_FETCH_NOTIFICATIONS {
+        if usage.exhausted || usage.notifications == MAX_FETCH_NOTIFICATIONS {
+            usage.exhausted = true;
+            self.1.notify_waiters();
             return false;
         }
         usage.notifications += 1;
@@ -30,13 +71,16 @@ impl FetchBudget {
     }
 
     pub(super) fn event(&self, bytes: usize) -> bool {
-        if bytes > MAX_EVENT_BYTES {
-            return false;
-        }
         let Ok(mut usage) = self.0.lock() else {
             return false;
         };
-        if usage.events == MAX_FETCH_EVENTS || bytes > MAX_FETCH_BYTES - usage.bytes {
+        if usage.exhausted
+            || bytes > MAX_EVENT_BYTES
+            || usage.events == MAX_FETCH_EVENTS
+            || bytes > MAX_FETCH_BYTES - usage.bytes
+        {
+            usage.exhausted = true;
+            self.1.notify_waiters();
             return false;
         }
         usage.events += 1;
@@ -52,7 +96,7 @@ mod tests {
     #[test]
     fn each_maximum_is_accepted_and_the_next_unit_is_rejected() {
         let bytes = FetchBudget::default();
-        assert!(!bytes.event(MAX_EVENT_BYTES + 1));
+        assert!(!FetchBudget::default().event(MAX_EVENT_BYTES + 1));
         for _ in 0..MAX_FETCH_BYTES / MAX_EVENT_BYTES {
             assert!(bytes.event(MAX_EVENT_BYTES));
         }
@@ -83,5 +127,43 @@ mod tests {
         });
         assert_eq!(accepted * MAX_EVENT_BYTES, MAX_FETCH_BYTES);
         assert!(!budget.event(1));
+    }
+
+    #[tokio::test]
+    async fn raw_bytes_frames_and_data_attempts_have_sticky_independent_limits() {
+        for (bytes, frames, data) in [
+            (MAX_FETCH_BYTES, 0, 0),
+            (0, MAX_FETCH_NOTIFICATIONS, 0),
+            (0, 0, MAX_FETCH_EVENTS),
+        ] {
+            let budget = FetchBudget::default();
+            assert!(budget.wire(bytes, frames, data));
+            assert!(!budget.exhausted());
+            assert!(!budget.wire(
+                usize::from(bytes > 0),
+                usize::from(frames > 0),
+                usize::from(data > 0)
+            ));
+            assert!(budget.exhausted());
+            assert!(!budget.wire(0, 0, 0));
+            assert!(!budget.event(0));
+            assert!(!budget.notification());
+            tokio::time::timeout(std::time::Duration::from_secs(1), budget.wait_exhausted())
+                .await
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn exhaustion_wakes_every_waiter_without_lost_notifications() {
+        let budget = FetchBudget::default();
+        let first = budget.wait_exhausted();
+        let second = budget.wait_exhausted();
+        tokio::pin!(first, second);
+        assert!(futures::poll!(&mut first).is_pending());
+        assert!(futures::poll!(&mut second).is_pending());
+        assert!(!budget.wire(MAX_FETCH_BYTES + 1, 0, 0));
+        assert!(futures::poll!(&mut first).is_ready());
+        assert!(futures::poll!(&mut second).is_ready());
     }
 }

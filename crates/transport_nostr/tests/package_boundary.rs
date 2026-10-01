@@ -49,6 +49,8 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
             "sink",
             "socket_write",
             "source",
+            "source_ingress",
+            "source_wire",
             "status",
             "subscription"
         ])
@@ -326,8 +328,11 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
             "socket_write_tests.rs".to_owned(),
             "source.rs".to_owned(),
             "source_budget.rs".to_owned(),
+            "source_ingress.rs".to_owned(),
             "source_paging_tests.rs".to_owned(),
             "source_window.rs".to_owned(),
+            "source_wire.rs".to_owned(),
+            "source_wire_tests.rs".to_owned(),
             "status.rs".to_owned(),
             "subscription.rs".to_owned(),
         ])

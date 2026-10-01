@@ -3557,11 +3557,14 @@ dependencies = [
  "radroots_nostr",
  "radroots_protocol",
  "radroots_transport",
+ "rustls",
  "serde_json",
  "sha2",
  "tokio",
+ "tokio-rustls",
  "tokio-tungstenite",
  "url",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]

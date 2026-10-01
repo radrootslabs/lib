@@ -1,9 +1,9 @@
 //! Nostr relay identifiers and network policy.
 
 use crate::{Error, RelayEndpoint};
+use async_wsocket::Message;
 use async_wsocket::futures_util::stream::SplitSink;
-use async_wsocket::futures_util::{Sink, SinkExt, StreamExt, TryStreamExt};
-use async_wsocket::{Message, WebSocket};
+use async_wsocket::futures_util::{Sink, SinkExt, StreamExt};
 use core::fmt;
 use core::pin::Pin;
 use nostr_relay_pool::ConnectionMode;
@@ -16,6 +16,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::Message as WireMessage;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream as TokioWebSocketStream};
 use url::Url;
 
 const MAX_RESOLVED_ADDRESSES: usize = 32;
@@ -98,11 +100,17 @@ impl fmt::Display for RelayUrl {
 pub(crate) struct HardenedWebsocketTransport {
     policies: Arc<BTreeMap<String, RelayUrlPolicy>>,
     pub(crate) writers: crate::socket_write::WriterRegistry,
+    pub(crate) ingress: crate::source_ingress::IngressRegistry,
 }
 
 impl HardenedWebsocketTransport {
     pub(crate) fn new(endpoints: &[RelayEndpoint]) -> Self {
         Self {
+            ingress: crate::source_ingress::IngressRegistry::new(
+                endpoints
+                    .iter()
+                    .map(|endpoint| endpoint.url().as_str().to_owned()),
+            ),
             writers: crate::socket_write::WriterRegistry::new(
                 endpoints
                     .iter()
@@ -155,31 +163,53 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                 .ok_or_else(|| policy_error("relay URL port is missing"))?;
 
             let connect = async {
+                let ingress = self
+                    .ingress
+                    .connection(relay.as_str())
+                    .ok_or_else(|| policy_error("relay ingress unavailable"))?;
                 let addresses = resolve_bounded(host, port).await?;
                 relay
                     .validate_resolved_addresses(policy, addresses.iter().map(SocketAddr::ip))
                     .map_err(|_| policy_error("relay DNS result is denied by network policy"))?;
                 let tcp = connect_pinned(addresses.as_slice()).await?;
+                let plaintext = if parsed.scheme() == "wss" {
+                    let mut roots = rustls::RootCertStore::empty();
+                    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+                    let tls_config = rustls::ClientConfig::builder()
+                        .with_root_certificates(roots)
+                        .with_no_client_auth();
+                    let server_name = rustls::pki_types::ServerName::try_from(
+                        host.trim_matches(['[', ']']).to_owned(),
+                    )
+                    .map_err(|_| policy_error("relay TLS server name is invalid"))?;
+                    let tls = tokio_rustls::TlsConnector::from(Arc::new(tls_config))
+                        .connect(server_name, tcp)
+                        .await
+                        .map_err(TransportError::backend)?;
+                    MaybeTlsStream::Rustls(tls)
+                } else {
+                    MaybeTlsStream::Plain(tcp)
+                };
+                let metered = crate::source_wire::MeteredIo::new(plaintext, ingress);
                 let config = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
                     .max_message_size(Some(MAX_WIRE_MESSAGE_BYTES))
                     .max_frame_size(Some(MAX_WIRE_MESSAGE_BYTES));
-                let (stream, _) = tokio_tungstenite::client_async_tls_with_config(
+                let (stream, _) = tokio_tungstenite::client_async_with_config(
                     relay.as_str(),
-                    tcp,
+                    metered,
                     Some(config),
-                    None,
                 )
                 .await
                 .map_err(TransportError::backend)?;
-                let socket = WebSocket::Tokio(stream);
-                let (tx, rx) = socket.split();
+                let (tx, rx) = stream.split();
                 let writer =
                     crate::socket_write::SocketWriter::new(Box::new(HardenedTransportSink(tx)));
                 self.writers.install(relay.as_str(), &writer)?;
                 let sink: WebSocketSink =
                     Box::new(crate::socket_write::SharedSocketSink::new(writer));
-                let stream: WebSocketStream =
-                    Box::pin(rx.map_err(TransportError::backend)) as WebSocketStream;
+                let stream: WebSocketStream = Box::pin(
+                    rx.map(|result| result.map_err(TransportError::backend).and_then(from_wire)),
+                );
                 Ok((sink, stream))
             };
 
@@ -243,7 +273,20 @@ pub(crate) fn policy_error(message: &'static str) -> TransportError {
     TransportError::backend(NetworkPolicyError(message))
 }
 
-struct HardenedTransportSink(SplitSink<WebSocket, Message>);
+type MeteredSocket = TokioWebSocketStream<crate::source_wire::MeteredIo<MaybeTlsStream<TcpStream>>>;
+
+struct HardenedTransportSink(SplitSink<MeteredSocket, WireMessage>);
+
+fn from_wire(message: WireMessage) -> Result<Message, TransportError> {
+    Ok(match message {
+        WireMessage::Text(text) => Message::Text(text.to_string()),
+        WireMessage::Binary(bytes) => Message::Binary(bytes.to_vec()),
+        WireMessage::Ping(bytes) => Message::Ping(bytes.to_vec()),
+        WireMessage::Pong(bytes) => Message::Pong(bytes.to_vec()),
+        WireMessage::Close(frame) => Message::Close(frame.map(Into::into)),
+        WireMessage::Frame(_) => return Err(policy_error("unexpected raw WebSocket frame")),
+    })
+}
 
 impl Sink<Message> for HardenedTransportSink {
     type Error = TransportError;
@@ -261,7 +304,7 @@ impl Sink<Message> for HardenedTransportSink {
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn start_send(mut self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
         Pin::new(&mut self.0)
-            .start_send_unpin(item)
+            .start_send_unpin(item.into())
             .map_err(TransportError::backend)
     }
 
@@ -391,6 +434,70 @@ fn public_ipv6(address: Ipv6Addr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metered_socket_conversion_preserves_data_control_and_close_messages() {
+        for message in [
+            WireMessage::Text("text".into()),
+            WireMessage::Binary(vec![0, 255].into()),
+            WireMessage::Ping(vec![1, 2].into()),
+            WireMessage::Pong(vec![3].into()),
+            WireMessage::Close(None),
+            WireMessage::Close(Some(tokio_tungstenite::tungstenite::protocol::CloseFrame {
+                code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
+                reason: "finished".into(),
+            })),
+        ] {
+            let restored: WireMessage = from_wire(message.clone()).expect("conversion").into();
+            assert_eq!(restored, message);
+        }
+    }
+
+    #[tokio::test]
+    async fn secure_relay_requires_tls_before_any_http_upgrade() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("listener");
+        let endpoint = format!("wss://{}", listener.local_addr().expect("address"));
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.expect("accept");
+            let mut prefix = [0; 5];
+            socket
+                .read_exact(&mut prefix)
+                .await
+                .expect("TLS record prefix");
+            socket
+                .write_all(b"HTTP/1.1 101 Switching Protocols\r\n\r\n")
+                .await
+                .expect("plaintext response");
+            prefix
+        });
+        let profile = crate::profile::test_profile(
+            crate::RelayProfileKind::Simulator,
+            RelayUrlPolicy::Local,
+            [endpoint.as_str()],
+        )
+        .expect("local TLS profile");
+        let transport = HardenedWebsocketTransport::new(profile.endpoints());
+        let url = Url::parse(&endpoint).expect("URL");
+        let result = transport
+            .connect(&url, &ConnectionMode::Direct, Duration::from_secs(5))
+            .await;
+        assert!(
+            result.is_err(),
+            "plaintext peer must not complete a secure relay connection"
+        );
+        let prefix = tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .expect("server deadline")
+            .expect("server task");
+        assert_eq!(
+            prefix[0], 0x16,
+            "client must send a TLS handshake, never an HTTP request"
+        );
+        assert_eq!(prefix[1], 0x03, "TLS record version family");
+    }
 
     #[test]
     fn policies_classify_literal_and_named_destinations() {

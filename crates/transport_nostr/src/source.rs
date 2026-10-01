@@ -19,7 +19,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "source_budget.rs"]
-mod budget;
+pub(crate) mod budget;
 use budget::FetchBudget;
 
 #[path = "source_window.rs"]
@@ -64,24 +64,28 @@ pub(crate) trait RelaySourceClient: Send + Sync {
 #[derive(Clone, Debug)]
 pub(crate) struct LiveRelaySourceClient {
     client: nostr_sdk::Client,
+    ingress: crate::source_ingress::IngressRegistry,
 }
 
 impl LiveRelaySourceClient {
-    pub(crate) const fn new(client: nostr_sdk::Client) -> Self {
-        Self { client }
+    pub(crate) const fn new(
+        client: nostr_sdk::Client,
+        ingress: crate::source_ingress::IngressRegistry,
+    ) -> Self {
+        Self { client, ingress }
     }
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
         let client = nostr_sdk::Client::default();
         client.automatic_authentication(false);
-        Self::new(client)
+        Self::new(client, crate::source_ingress::IngressRegistry::default())
     }
 }
 
 impl RelaySourceClient for LiveRelaySourceClient {
-    // The live SDK loop requires external relays. Selection and normalized
-    // result handling are covered through the injected source boundary.
+    // The live SDK loop is exercised by bounded loopback regressions; injected
+    // source tests independently cover selection and normalized results.
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn fetch<'a>(&'a self, query: SourceQuery) -> BoxFuture<'a, Vec<RelayFetchBatch>> {
         Box::pin(async move {
@@ -94,12 +98,58 @@ impl RelaySourceClient for LiveRelaySourceClient {
                 max_connections,
             } = query;
             let budget = Arc::new(FetchBudget::default());
-            stream::iter(relays.into_iter().map(|relay| {
+            // An unencodable selector has no network work or ingress to admit.
+            if !selector.kinds().is_empty()
+                && selector
+                    .kinds()
+                    .iter()
+                    .all(|kind| u16::try_from(*kind).is_err())
+            {
+                return relays
+                    .into_iter()
+                    .map(|relay| RelayFetchBatch {
+                        relay,
+                        result: RelayFetchResult::Complete(Vec::new()),
+                    })
+                    .collect();
+            }
+            let connections = match admit_fetch_connections(&self.client, &relays, deadline).await {
+                Ok(connections) => connections,
+                Err(result) => {
+                    return relays
+                        .into_iter()
+                        .map(|relay| RelayFetchBatch {
+                            relay,
+                            result: result.clone(),
+                        })
+                        .collect();
+                }
+            };
+            let registration = self.ingress.register(
+                relays.iter().map(|relay| relay.as_str().to_owned()),
+                Arc::clone(&budget),
+            );
+            let Some(registration) = registration else {
+                // No ingress or query I/O was admitted, so existing shared
+                // connections retain their previous operation ownership.
+                connections.finish();
+                return relays
+                    .into_iter()
+                    .map(|relay| RelayFetchBatch {
+                        relay,
+                        result: RelayFetchResult::ResourceLimit(Vec::new()),
+                    })
+                    .collect();
+            };
+            let mut batches: Vec<RelayFetchBatch> = stream::iter(relays.into_iter().map(|relay| {
                 let selector = selector.clone();
                 let budget = Arc::clone(&budget);
                 async move {
                     let url = relay.as_str().to_owned();
                     let result = async {
+                        if budget.exhausted() {
+                            return Ok(RelayFetchResult::ResourceLimit(Vec::new()));
+                        }
                         if tokio::time::Instant::now() >= deadline {
                             return Ok(RelayFetchResult::Timeout(Vec::new()));
                         }
@@ -109,9 +159,6 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             .filter_map(|kind| u16::try_from(*kind).ok())
                             .map(Kind::from)
                             .collect::<Vec<_>>();
-                        if !selector.kinds().is_empty() && kinds.is_empty() {
-                            return Ok(RelayFetchResult::Complete(Vec::new()));
-                        }
                         let authors = selector
                             .authors()
                             .iter()
@@ -139,10 +186,6 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             filter = filter.until(Timestamp::from_secs(until));
                         }
                         let connected = tokio::time::timeout_at(deadline, async {
-                            self.client
-                                .add_relay(url.as_str())
-                                .await
-                                .map_err(|error| error.to_string())?;
                             self.client
                                 .try_connect_relay(
                                     url.as_str(),
@@ -187,25 +230,135 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             }
                             Err(_) => return Ok(RelayFetchResult::Timeout(Vec::new())),
                         }
-                        Ok(collect_until_eose(
+                        let result = collect_until_eose(
                             &mut notifications,
                             &subscription_id,
                             deadline,
                             &budget,
                         )
-                        .await)
+                        .await;
+                        Ok(result)
                     }
                     .await;
                     RelayFetchBatch {
                         relay,
-                        result: result.unwrap_or_else(RelayFetchResult::Failed),
+                        result: match result {
+                            Err(_) if budget.exhausted() => {
+                                RelayFetchResult::ResourceLimit(Vec::new())
+                            }
+                            Ok(RelayFetchResult::Timeout(events)) if budget.exhausted() => {
+                                RelayFetchResult::ResourceLimit(events)
+                            }
+                            result => result.unwrap_or_else(RelayFetchResult::Failed),
+                        },
                     }
                 }
             }))
             .buffered(max_connections)
             .collect()
-            .await
+            .await;
+            if finish_fetch(&mut batches, registration) {
+                connections.finish();
+            }
+            batches
         })
+    }
+}
+
+async fn admit_fetch_connections(
+    client: &nostr_sdk::Client,
+    relays: &[RelayUrl],
+    deadline: tokio::time::Instant,
+) -> Result<FetchConnections, RelayFetchResult> {
+    let connections = FetchConnections::default();
+    let admitted = tokio::time::timeout_at(deadline, async {
+        for relay in relays {
+            if tokio::time::Instant::now() >= deadline {
+                return Err(RelayFetchResult::Timeout(Vec::new()));
+            }
+            // Adding a relay is inert SDK metadata admission, not connection
+            // work. Own even preexisting queued sockets before ingress can be
+            // revoked by this fetch's registration.
+            client
+                .add_relay(relay.as_str())
+                .await
+                .map_err(|error| RelayFetchResult::Failed(error.to_string()))?;
+            connections
+                .retain(
+                    client
+                        .relay(relay.as_str())
+                        .await
+                        .map_err(|error| RelayFetchResult::Failed(error.to_string()))?,
+                )
+                .map_err(RelayFetchResult::Failed)?;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            Err(RelayFetchResult::Timeout(Vec::new()))
+        } else {
+            Ok(())
+        }
+    })
+    .await;
+    match admitted {
+        Ok(Ok(())) => Ok(connections),
+        Ok(Err(result)) => Err(result),
+        Err(_) => Err(RelayFetchResult::Timeout(Vec::new())),
+    }
+}
+
+fn finish_fetch(
+    batches: &mut [RelayFetchBatch],
+    registration: crate::source_ingress::FetchRegistration,
+) -> bool {
+    if !batches
+        .iter()
+        .all(|batch| matches!(batch.result, RelayFetchResult::Complete(_)))
+    {
+        return false;
+    }
+    if registration.finish() {
+        return true;
+    }
+    // Earlier EOSE evidence remains useful, but finalization cannot declare
+    // an entirely complete fetch after ingress exhausted its shared budget.
+    if let Some(last) = batches.last_mut()
+        && let RelayFetchResult::Complete(events) = &mut last.result
+    {
+        last.result = RelayFetchResult::ResourceLimit(std::mem::take(events));
+    }
+    false
+}
+
+// The SDK owns its socket tasks. Its synchronous disconnect signal disables
+// reconnect and tears down those tasks, including when the fetch future drops.
+#[derive(Default)]
+struct FetchConnections(std::sync::Mutex<Vec<nostr_sdk::Relay>>);
+
+impl FetchConnections {
+    fn retain(&self, relay: nostr_sdk::Relay) -> Result<(), String> {
+        self.0
+            .lock()
+            .map_err(|_| String::from("fetch connection state unavailable"))?
+            .push(relay);
+        Ok(())
+    }
+
+    fn finish(&self) {
+        if let Ok(mut relays) = self.0.lock() {
+            relays.clear();
+        }
+    }
+}
+
+impl Drop for FetchConnections {
+    fn drop(&mut self) {
+        let relays = self
+            .0
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for relay in relays {
+            relay.disconnect();
+        }
     }
 }
 
@@ -217,10 +370,18 @@ async fn collect_until_eose(
 ) -> RelayFetchResult {
     let mut events = Vec::new();
     loop {
+        if budget.exhausted() {
+            return RelayFetchResult::ResourceLimit(events);
+        }
         if tokio::time::Instant::now() >= deadline {
             return RelayFetchResult::Timeout(events);
         }
-        let notification = match tokio::time::timeout_at(deadline, notifications.recv()).await {
+        let received = tokio::select! {
+            biased;
+            _ = budget.wait_exhausted() => return RelayFetchResult::ResourceLimit(events),
+            received = tokio::time::timeout_at(deadline, notifications.recv()) => received,
+        };
+        let notification = match received {
             Ok(Ok(notification)) => notification,
             Ok(Err(error)) => return RelayFetchResult::Failed(error.to_string()),
             Err(_) => return RelayFetchResult::Timeout(events),
@@ -248,7 +409,9 @@ async fn collect_until_eose(
             RelayNotification::Message {
                 message: RelayMessage::EndOfStoredEvents(observed_subscription),
             } if observed_subscription.as_ref() == subscription_id => {
-                return if tokio::time::Instant::now() < deadline {
+                return if budget.exhausted() {
+                    RelayFetchResult::ResourceLimit(events)
+                } else if tokio::time::Instant::now() < deadline {
                     RelayFetchResult::Complete(events)
                 } else {
                     RelayFetchResult::Timeout(events)
@@ -976,6 +1139,400 @@ mod tests {
             .await,
             RelayFetchResult::Timeout(Vec::new())
         );
+    }
+
+    #[tokio::test]
+    async fn exhausted_ingress_wins_over_queued_eose() {
+        let subscription_id = SubscriptionId::generate();
+        let (sender, mut receiver) = tokio::sync::broadcast::channel(1);
+        sender
+            .send(RelayNotification::Message {
+                message: RelayMessage::EndOfStoredEvents(Cow::Owned(subscription_id.clone())),
+            })
+            .unwrap();
+        let budget = FetchBudget::default();
+        assert!(!budget.wire(budget::MAX_FETCH_BYTES + 1, 0, 0));
+        assert_eq!(
+            collect_until_eose(
+                &mut receiver,
+                &subscription_id,
+                tokio::time::Instant::now() + Duration::from_secs(1),
+                &budget
+            )
+            .await,
+            RelayFetchResult::ResourceLimit(Vec::new())
+        );
+    }
+
+    #[tokio::test]
+    async fn exhaustion_after_eose_before_finalization_retains_events_and_earlier_evidence() {
+        let relays = ["wss://one.example", "wss://two.example"];
+        let registry =
+            crate::source_ingress::IngressRegistry::new(relays.into_iter().map(str::to_owned));
+        let budget = Arc::new(FetchBudget::default());
+        let registration = registry
+            .register(relays.into_iter().map(str::to_owned), Arc::clone(&budget))
+            .unwrap();
+        let connection = registry.connection(relays[1]).unwrap();
+        let mut batches = Vec::new();
+        for url in relays {
+            let id = SubscriptionId::generate();
+            let (sender, mut receiver) = tokio::sync::broadcast::channel(2);
+            sender
+                .send(RelayNotification::Message {
+                    message: RelayMessage::Event {
+                        subscription_id: Cow::Owned(id.clone()),
+                        event: Cow::Owned(nostr_sdk::prelude::Event::from_json(FIRST).unwrap()),
+                    },
+                })
+                .unwrap();
+            sender
+                .send(RelayNotification::Message {
+                    message: RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone())),
+                })
+                .unwrap();
+            batches.push(RelayFetchBatch {
+                relay: RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap(),
+                result: collect_until_eose(
+                    &mut receiver,
+                    &id,
+                    tokio::time::Instant::now() + Duration::from_secs(1),
+                    &budget,
+                )
+                .await,
+            });
+        }
+        let before = batches.clone();
+        assert!(before.iter().all(
+            |batch| matches!(&batch.result, RelayFetchResult::Complete(events) if events.len() == 1)
+        ));
+        assert!(!connection.charge(budget::MAX_FETCH_BYTES + 1, 0, 0));
+        assert!(!finish_fetch(&mut batches, registration));
+        assert_eq!(batches[0].result, before[0].result);
+        let RelayFetchResult::Complete(expected) = &before[1].result else {
+            panic!("completed collection");
+        };
+        assert_eq!(
+            batches[1].result,
+            RelayFetchResult::ResourceLimit(expected.clone())
+        );
+    }
+
+    #[test]
+    fn finalization_preserves_success_partial_and_empty_results() {
+        for (result, exhausted, expected_complete) in [
+            (
+                Some(RelayFetchResult::Complete(vec![FIRST.to_owned()])),
+                false,
+                true,
+            ),
+            (
+                Some(RelayFetchResult::Timeout(vec![FIRST.to_owned()])),
+                false,
+                false,
+            ),
+            (None, false, true),
+            (None, true, false),
+        ] {
+            let registry = crate::source_ingress::IngressRegistry::new(
+                ["wss://one.example".to_owned()].into_iter(),
+            );
+            let budget = Arc::new(FetchBudget::default());
+            let registration = registry
+                .register(
+                    ["wss://one.example".to_owned()].into_iter(),
+                    Arc::clone(&budget),
+                )
+                .unwrap();
+            let connection = registry.connection("wss://one.example").unwrap();
+            let mut batches = result
+                .map(|result| RelayFetchBatch {
+                    relay: RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).unwrap(),
+                    result,
+                })
+                .into_iter()
+                .collect::<Vec<_>>();
+            let before = batches
+                .iter()
+                .map(|batch| batch.result.clone())
+                .collect::<Vec<_>>();
+            if exhausted {
+                assert!(!connection.charge(budget::MAX_FETCH_BYTES + 1, 0, 0));
+            }
+            assert_eq!(finish_fetch(&mut batches, registration), expected_complete);
+            assert_eq!(
+                batches
+                    .iter()
+                    .map(|batch| batch.result.clone())
+                    .collect::<Vec<_>>(),
+                before
+            );
+            assert_eq!(
+                connection.admitted(&std::task::Context::from_waker(
+                    futures::task::noop_waker_ref()
+                )),
+                expected_complete
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn completed_connection_ownership_is_retained_until_the_whole_query_finishes() {
+        let client = nostr_sdk::Client::default();
+        client.add_relay("wss://one.example").await.unwrap();
+        let relay = client.relay("wss://one.example").await.unwrap();
+        let connections = FetchConnections::default();
+        connections.retain(relay.clone()).unwrap();
+        assert_eq!(connections.0.lock().unwrap().len(), 1);
+        connections.finish();
+        assert!(connections.0.lock().unwrap().is_empty());
+        connections.retain(relay).unwrap();
+        drop(connections);
+    }
+
+    #[tokio::test]
+    async fn complete_connection_inventory_is_inert_and_preserves_shared_sockets_on_success() {
+        let client = nostr_sdk::Client::default();
+        let relays = ["wss://one.example", "wss://two.example"]
+            .map(|url| RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap());
+        let connections = admit_fetch_connections(
+            &client,
+            &relays,
+            tokio::time::Instant::now() + Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(connections.0.lock().unwrap().len(), 2);
+        for relay in &relays {
+            assert_eq!(
+                client.relay(relay.as_str()).await.unwrap().status(),
+                nostr_sdk::prelude::RelayStatus::Initialized
+            );
+        }
+        connections.finish();
+        drop(connections);
+        for relay in &relays {
+            assert_eq!(
+                client.relay(relay.as_str()).await.unwrap().status(),
+                nostr_sdk::prelude::RelayStatus::Initialized
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn expired_inventory_performs_no_sdk_admission() {
+        let client = nostr_sdk::Client::default();
+        let relay = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).unwrap();
+        for relays in [vec![relay], Vec::new()] {
+            assert!(matches!(
+                admit_fetch_connections(&client, &relays, tokio::time::Instant::now()).await,
+                Err(RelayFetchResult::Timeout(_))
+            ));
+            assert!(client.relays().await.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_inventory_releases_every_handle_already_admitted() {
+        let client = nostr_sdk::Client::builder()
+            .opts(
+                nostr_sdk::ClientOptions::default()
+                    .pool(nostr_sdk::prelude::RelayPoolOptions::default().max_relays(Some(1))),
+            )
+            .build();
+        let relays = ["wss://one.example", "wss://two.example"]
+            .map(|url| RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap());
+        assert!(matches!(
+            admit_fetch_connections(
+                &client,
+                &relays,
+                tokio::time::Instant::now() + Duration::from_secs(1)
+            )
+            .await,
+            Err(RelayFetchResult::Failed(_))
+        ));
+        assert_eq!(client.relays().await.len(), 1);
+        assert_eq!(
+            client.relay(relays[0].as_str()).await.unwrap().status(),
+            nostr_sdk::prelude::RelayStatus::Terminated
+        );
+    }
+
+    #[derive(Clone, Copy)]
+    enum QueuedCleanup {
+        Cancel,
+        Deadline,
+        Resource,
+    }
+
+    async fn queued_connection_cleanup(mode: QueuedCleanup) {
+        use futures::SinkExt;
+        use tokio_tungstenite::{accept_async, tungstenite::Message};
+        let first = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let second = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let urls = [
+            format!("ws://{}", first.local_addr().unwrap()),
+            format!("ws://{}", second.local_addr().unwrap()),
+        ];
+        let endpoints = urls
+            .iter()
+            .map(|url| {
+                crate::RelayEndpoint::new(url, RelayUrlPolicy::Local, crate::RelayAccess::ReadOnly)
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let connector = crate::relay::HardenedWebsocketTransport::new(&endpoints);
+        let ingress = connector.ingress.clone();
+        let client = nostr_sdk::Client::builder()
+            .websocket_transport(connector)
+            .build();
+        client.automatic_authentication(false);
+        let (started, observed) = tokio::sync::oneshot::channel();
+        let first_server = tokio::spawn(async move {
+            let (tcp, _) = first.accept().await.unwrap();
+            let mut socket = accept_async(tcp).await.unwrap();
+            let mut started = Some(started);
+            while let Some(message) = socket.next().await {
+                match message {
+                    Ok(Message::Text(text)) => {
+                        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+                        if value[0] == "REQ" {
+                            if let Some(started) = started.take() {
+                                let _ = started.send(());
+                            }
+                            if matches!(mode, QueuedCleanup::Resource) {
+                                let malformed = serde_json::to_string(&(
+                                    "EVENT",
+                                    &value[1],
+                                    serde_json::json!({"invalid": "x".repeat(384 * 1024)}),
+                                ))
+                                .unwrap();
+                                for _ in 0..24 {
+                                    if socket
+                                        .send(Message::Text(malformed.clone().into()))
+                                        .await
+                                        .is_err()
+                                    {
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Ok(Message::Close(_)) | Err(_) => return,
+                    _ => {
+                        if socket.flush().await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        let queued_requests = Arc::new(AtomicUsize::new(0));
+        let requests = Arc::clone(&queued_requests);
+        let (closed, closure) = tokio::sync::oneshot::channel();
+        let second_server = tokio::spawn(async move {
+            let (tcp, _) = second.accept().await.unwrap();
+            let mut socket = accept_async(tcp).await.unwrap();
+            while let Some(message) = socket.next().await {
+                match message {
+                    Ok(Message::Text(text)) => {
+                        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+                        if value[0] == "REQ" {
+                            requests.fetch_add(1, AtomicOrdering::SeqCst);
+                        }
+                    }
+                    Ok(Message::Close(_)) | Err(_) => break,
+                    _ => {
+                        if socket.flush().await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+            let _ = closed.send(());
+        });
+        client.add_relay(urls[1].as_str()).await.unwrap();
+        client
+            .try_connect_relay(urls[1].as_str(), Duration::from_secs(1))
+            .await
+            .unwrap();
+        let queued = client.relay(urls[1].as_str()).await.unwrap();
+        let source = LiveRelaySourceClient::new(client, ingress);
+        let query = SourceQuery {
+            relays: urls
+                .iter()
+                .map(|url| RelayUrl::parse(url, RelayUrlPolicy::Local).unwrap())
+                .collect(),
+            selector: radroots_transport::source::FetchSelector::all(),
+            until_unix_seconds: None,
+            connect_timeout: Duration::from_secs(1),
+            deadline: tokio::time::Instant::now()
+                + if matches!(mode, QueuedCleanup::Deadline) {
+                    Duration::from_millis(500)
+                } else {
+                    Duration::from_secs(5)
+                },
+            max_connections: 1,
+        };
+        let mut fetch = source.fetch(query);
+        let started = tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::select! {
+                biased;
+                result = observed => result.is_ok(),
+                _ = &mut fetch => false,
+            }
+        })
+        .await;
+        let batches = if matches!(mode, QueuedCleanup::Cancel) {
+            None
+        } else {
+            Some(tokio::time::timeout(Duration::from_secs(10), &mut fetch).await)
+        };
+        drop(fetch);
+        let status = queued.status();
+        let closed = tokio::time::timeout(Duration::from_secs(2), closure).await;
+        for server in [first_server, second_server] {
+            server.abort();
+            let result = server.await;
+            assert!(result.is_ok() || result.unwrap_err().is_cancelled());
+        }
+        assert!(
+            started.unwrap(),
+            "first relay must own the only scheduled batch"
+        );
+        assert_eq!(queued_requests.load(AtomicOrdering::SeqCst), 0);
+        assert_eq!(
+            status,
+            nostr_sdk::prelude::RelayStatus::Terminated,
+            "queued preexisting socket must lose automatic reconnect authority"
+        );
+        closed.unwrap().unwrap();
+        if let Some(batches) = batches {
+            let batches = batches.unwrap();
+            assert_eq!(batches.len(), 2);
+            assert!(batches.iter().all(|batch| match mode {
+                QueuedCleanup::Deadline => matches!(batch.result, RelayFetchResult::Timeout(_)),
+                QueuedCleanup::Resource =>
+                    matches!(batch.result, RelayFetchResult::ResourceLimit(_)),
+                QueuedCleanup::Cancel => false,
+            }));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cancellation_terminates_preexisting_queued_relay_reconnect_authority() {
+        queued_connection_cleanup(QueuedCleanup::Cancel).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn deadline_terminates_preexisting_queued_relay_reconnect_authority() {
+        queued_connection_cleanup(QueuedCleanup::Deadline).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn exhaustion_terminates_preexisting_queued_relay_reconnect_authority() {
+        queued_connection_cleanup(QueuedCleanup::Resource).await;
     }
 
     #[test]

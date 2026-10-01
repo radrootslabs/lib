@@ -161,11 +161,24 @@ strictly before its absolute deadline. Deadline expiry is `Cancelled`, and a
 relay result that exceeds the bounded inventory is `Partial`; neither state is
 rewritten as completion even when it carries admissible events.
 
-One fetch shares an 8 MiB raw event-JSON budget, a 4,096-event inventory and an
-8,192-notification work limit across all relay batches. Each relay retains at
-most 1,000 events; duplicate and malformed observations still consume the
-budget. An event is at most 256 KiB, and the WebSocket connector explicitly
-limits both frames and complete messages to 512 KiB before upstream decoding.
+One fetch shares an 8 MiB incoming-byte budget, a 4,096-data-message attempt
+limit and an 8,192-frame work limit across all selected relays and connection
+generations. Accounting precedes WebSocket message assembly and Nostr decoding:
+it includes decrypted HTTP upgrade bytes, frame headers and payloads, malformed
+and discarded messages, duplicate events, unsolicited traffic, control frames,
+and empty continuation frames. Text and binary message starts conservatively
+consume data attempts without inspecting their JSON. The HTTP upgrade response
+is also limited to 16 KiB. Each relay retains at most 1,000 events. An event is
+at most 256 KiB, and the WebSocket connector explicitly limits both frames and
+complete messages to 512 KiB. SDK notification and canonical event collection
+retain independent limits of 8,192 notifications, 4,096 events and 8 MiB.
+Exhaustion is sticky and wakes all affected fetch collectors; later EOSE cannot
+turn it into completion. At most 64 fetch calls may hold ingress registrations
+on one transport; additional calls fail closed as partial evidence.
+The meter reads into a fixed 4 KiB plaintext scratch buffer before admission;
+at most that scratch capacity can be read beyond the remaining allowance and
+discarded without reaching WebSocket assembly or Nostr parsing. This bound
+does not claim control over kernel or TLS implementation buffers.
 Shared canonical decoding rechecks the event, aggregate-byte and inventory
 bounds before candidate collection. A fetch returns at most the caller's
 validated 1,000-event page limit. EOSE describes only the requested relay
@@ -239,6 +252,17 @@ accepts the event, dropping the future cannot retract it. A missing final
 response is therefore reported as unavailable or unknown evidence, never as
 proof that no publication occurred. Fetch and live observation have no local
 durable commit point.
+
+A cancelled, timed-out or resource-limited fetch invalidates its selected
+connection generations and signals SDK disconnection with reconnect disabled.
+This includes connections whose earlier relay batch already completed; their
+collected evidence remains intact. Receive admission stops at the generation
+boundary, while ordinary SDK task teardown is asynchronous. These authenticated
+sockets are shared with subscriptions, delivery and authentication, so those
+overlapping operations can also observe disconnection. A successful fetch
+removes its registration and preserves the shared connections. A later explicit
+operation may establish a fresh connection and receives a fresh fetch budget;
+closed generations never regain receive authority.
 
 Dropping a pending subscription `next` or `cancel` future records a
 cancellation request in the retained capability; its next operation awaits

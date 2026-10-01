@@ -46,11 +46,14 @@ async-wsocket = { workspace = true }
 futures = { workspace = true }
 nostr-sdk = { workspace = true }
 nostr-relay-pool = { workspace = true }
+rustls = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 sha2 = { workspace = true, default-features = false }
 tokio = { workspace = true, features = ["net", "time"] }
+tokio-rustls = { workspace = true }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
+webpki-roots = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = [

@@ -230,6 +230,7 @@ impl NostrTransport {
     pub fn new(config: Config) -> Self {
         let connector = crate::relay::HardenedWebsocketTransport::new(config.endpoints());
         let writers = connector.writers.clone();
+        let ingress = connector.ingress.clone();
         let client = nostr_sdk::Client::builder()
             .websocket_transport(connector)
             .build();
@@ -238,7 +239,10 @@ impl NostrTransport {
         Self {
             config,
             client: Arc::new(crate::sink::LiveRelayClient::new(client.clone(), writers)),
-            source_client: Arc::new(crate::source::LiveRelaySourceClient::new(client.clone())),
+            source_client: Arc::new(crate::source::LiveRelaySourceClient::new(
+                client.clone(),
+                ingress,
+            )),
             subscription_client: Arc::new(crate::subscription::LiveRelaySubscriptionClient::new(
                 client.clone(),
             )),

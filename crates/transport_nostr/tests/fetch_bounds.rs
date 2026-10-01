@@ -218,7 +218,7 @@ async fn oversized_wire_messages_never_become_completed_fetch_evidence() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn dropping_a_polled_fetch_retains_the_original_remote_auto_close_bound() {
+async fn dropping_a_polled_fetch_closes_the_subscription_or_connection() {
     let (listener, url) = listener().await;
     let (started, observed) = oneshot::channel();
     let server = tokio::spawn(async move {
@@ -226,8 +226,10 @@ async fn dropping_a_polled_fetch_retains_the_original_remote_auto_close_bound() 
         let mut socket = accept_async(stream).await.unwrap();
         let mut started = Some(started);
         while let Some(message) = socket.next().await {
-            let Ok(Message::Text(message)) = message else {
-                continue;
+            let message = match message {
+                Ok(Message::Text(message)) => message,
+                Ok(Message::Close(_)) | Err(_) => return,
+                _ => continue,
             };
             let values: Value = serde_json::from_str(&message).unwrap();
             if values[0] == "REQ" {
@@ -236,7 +238,6 @@ async fn dropping_a_polled_fetch_retains_the_original_remote_auto_close_bound() 
                 return;
             }
         }
-        panic!("the published subscription must receive CLOSE");
     });
     let (transport, request) = transport(&[url], 1);
     let mut fetch = Box::pin(transport.fetch(request));

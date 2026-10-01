@@ -11,7 +11,13 @@ const CLIENT_SOURCE: &str = include_str!("../src/client.rs");
 fn tls_verification_and_pinned_dns_are_non_configurable_live_defaults() {
     assert!(WORKSPACE_MANIFEST.contains("rustls-tls-webpki-roots"));
     for required in [
-        "client_async_tls_with_config(",
+        "client_async_with_config(",
+        "tokio_rustls::TlsConnector::from(Arc::new(tls_config))",
+        "roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned())",
+        ".with_no_client_auth()",
+        "rustls::pki_types::ServerName::try_from(",
+        "host.trim_matches(['[', ']']).to_owned()",
+        "crate::source_wire::MeteredIo::new(plaintext, ingress)",
         ".max_message_size(Some(MAX_WIRE_MESSAGE_BYTES))",
         ".max_frame_size(Some(MAX_WIRE_MESSAGE_BYTES))",
         "validate_resolved_addresses(",

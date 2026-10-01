@@ -12,6 +12,8 @@ mod relay;
 mod sink;
 mod socket_write;
 mod source;
+mod source_ingress;
+mod source_wire;
 mod status;
 mod subscription;
 
