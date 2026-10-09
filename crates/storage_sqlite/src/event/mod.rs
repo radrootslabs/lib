@@ -31,6 +31,8 @@ pub struct SqliteStorage {
     pub(crate) backup_root: Option<Arc<PathBuf>>,
     pub(crate) paths: Option<Arc<crate::Paths>>,
     pub(crate) reliability: Arc<Mutex<crate::backup::ReliabilityState>>,
+    #[cfg(test)]
+    work: Arc<work::Observer>,
 }
 
 struct StoredEventRow {
@@ -56,6 +58,8 @@ impl SqliteStorage {
             backup_root: None,
             paths: None,
             reliability: Arc::new(Mutex::new(crate::backup::ReliabilityState::default())),
+            #[cfg(test)]
+            work: Arc::default(),
         }
     }
 
@@ -75,6 +79,8 @@ impl SqliteStorage {
             backup_root: None,
             paths: None,
             reliability: Arc::new(Mutex::new(crate::backup::ReliabilityState::default())),
+            #[cfg(test)]
+            work: Arc::default(),
         }
     }
 
@@ -105,6 +111,8 @@ impl SqliteStorage {
                 .map(|path| Arc::new(path.to_path_buf())),
             paths: Some(Arc::new(options.paths().clone())),
             reliability: Arc::new(Mutex::new(crate::backup::ReliabilityState::default())),
+            #[cfg(test)]
+            work: Arc::default(),
         }
     }
 
@@ -155,11 +163,16 @@ impl SqliteStorage {
         builder.push(" ORDER BY source_sequence LIMIT ");
         builder.push_bind(i64_from_u64(fetch_limit)?);
 
+        #[cfg(test)]
+        self.work
+            .request(work::Read::Bounded, builder.sql().as_str());
         let rows = builder
             .build()
             .fetch_all(&self.pool)
             .await
             .map_err(map_backend)?;
+        #[cfg(test)]
+        self.work.returned(&rows);
         let mut decoded = rows
             .iter()
             .map(|row| self.decode_event_row(row))
@@ -174,21 +187,26 @@ impl SqliteStorage {
     }
 
     async fn current_event_rows(&self) -> Result<Vec<StoredEventRow>, Error> {
-        let rows = sqlx::query(
-            "SELECT source_generation, source_sequence, signed_event, admission_stage,
+        let sql = "SELECT source_generation, source_sequence, signed_event, admission_stage,
                     admitted_contract_id, admitted_registry_version
              FROM radroots_runtime_events
              WHERE source_generation = ?
-             ORDER BY source_sequence",
-        )
-        .bind(self.generation.as_bytes().as_slice())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(map_backend)?;
+             ORDER BY source_sequence";
+        #[cfg(test)]
+        self.work.request(work::Read::Materialize, sql);
+        let rows = sqlx::query(sql)
+            .bind(self.generation.as_bytes().as_slice())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_backend)?;
+        #[cfg(test)]
+        self.work.returned(&rows);
         rows.iter().map(|row| self.decode_event_row(row)).collect()
     }
 
     fn visibility_for_rows(&self, rows: &[StoredEventRow]) -> Result<VisibilityEvaluation, Error> {
+        #[cfg(test)]
+        self.work.visibility(rows.len());
         evaluate_visibility(
             self.generation,
             rows.iter()
@@ -215,8 +233,12 @@ impl SqliteStorage {
         let sequence = event_sequence(row.try_get("source_sequence").map_err(map_corrupt)?)?;
         let raw_json = String::from_utf8(row.try_get("signed_event").map_err(map_corrupt)?)
             .map_err(|_| Error::CorruptStoredEvent)?;
+        #[cfg(test)]
+        self.work.decode(raw_json.len());
         let event =
             Codec::decode_signed_event(raw_json.as_str()).map_err(|_| Error::CorruptStoredEvent)?;
+        #[cfg(test)]
+        self.work.decoded();
         let stage = admission_stage(row.try_get("admission_stage").map_err(map_corrupt)?)?;
         let contract_id = row
             .try_get::<Option<String>, _>("admitted_contract_id")
@@ -377,17 +399,20 @@ fn admission_contract_metadata(admission: &EventAdmission) -> Option<(&'static s
 impl EventStore for SqliteStorage {
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>> {
         Box::pin(async move {
-            let row = sqlx::query(
-                "SELECT
+            let sql = "SELECT
                    COUNT(*) AS raw_events,
                    COALESCE(SUM(CASE WHEN admission_stage IN ('verified', 'visible') THEN 1 ELSE 0 END), 0)
                      AS verified_events
-                 FROM radroots_runtime_events WHERE source_generation = ?",
-            )
-            .bind(self.generation.as_bytes().as_slice())
-            .fetch_one(&self.pool)
-            .await
-            .map_err(map_backend)?;
+                 FROM radroots_runtime_events WHERE source_generation = ?";
+            #[cfg(test)]
+            self.work.request(work::Read::Aggregate, sql);
+            let row = sqlx::query(sql)
+                .bind(self.generation.as_bytes().as_slice())
+                .fetch_one(&self.pool)
+                .await
+                .map_err(map_backend)?;
+            #[cfg(test)]
+            self.work.aggregate_returned();
             let visibility_rows = self.current_event_rows().await?;
             let visible_events = u64::try_from(
                 self.visibility_for_rows(&visibility_rows)?
@@ -603,6 +628,11 @@ fn map_corrupt(_: sqlx::Error) -> Error {
 }
 
 #[cfg(test)]
+mod work;
+#[cfg(test)]
+mod work_tests;
+
+#[cfg(test)]
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod tests {
     use super::*;
@@ -660,7 +690,7 @@ mod tests {
         }
     }
 
-    async fn store(generation: SourceGeneration) -> SqliteStorage {
+    pub(super) async fn store(generation: SourceGeneration) -> SqliteStorage {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -692,7 +722,7 @@ mod tests {
         signed_event_with(content, pretty, 1_800_000_100, 0, vec![])
     }
 
-    fn signed_event_with(
+    pub(super) fn signed_event_with(
         content: &str,
         pretty: bool,
         created_at: u64,
@@ -730,7 +760,7 @@ mod tests {
         SignedEvent::from_wire_verified_id(wire, raw_json).expect("signed event")
     }
 
-    fn observed(event: SignedEvent, at: u64, cursor: Option<&str>) -> ObservedEvent {
+    pub(super) fn observed(event: SignedEvent, at: u64, cursor: Option<&str>) -> ObservedEvent {
         let target = Target::new(TransportId::NOSTR, "wss://relay.example").expect("target");
         let mut provenance =
             EventProvenance::new(TransportId::NOSTR, target.fingerprint().clone(), at)
@@ -741,7 +771,7 @@ mod tests {
         ObservedEvent::new(event, provenance)
     }
 
-    fn verified(event: &SignedEvent) -> radroots_event::VerifiedEvent {
+    pub(super) fn verified(event: &SignedEvent) -> radroots_event::VerifiedEvent {
         RawEvent::new(event.envelope().clone())
             .verify_id()
             .expect("event id")
@@ -749,7 +779,7 @@ mod tests {
             .expect("signature")
     }
 
-    fn visible(event: &SignedEvent) -> VisibleEvent {
+    pub(super) fn visible(event: &SignedEvent) -> VisibleEvent {
         let verified = verified(event);
         let validated = if event.envelope().kind_u32() == 5 {
             verified
