@@ -34,6 +34,10 @@ pub enum Error {
     EventPageLimitExceeded,
     CursorGenerationMismatch,
     SourceGenerationChanged,
+    /// The requested semantic fence no longer matches canonical truth.
+    SourceEpochChanged,
+    /// Canonical visibility requires explicit bounded maintenance.
+    VisibilityRebuilding,
     EventNotFound,
     CorruptStoredEvent,
     BackendUnavailable,
@@ -169,6 +173,8 @@ impl fmt::Display for Error {
             Self::EventPageLimitExceeded => "storage event page exceeds its requested limit",
             Self::CursorGenerationMismatch => "storage cursor belongs to another source generation",
             Self::SourceGenerationChanged => "storage source generation changed",
+            Self::SourceEpochChanged => "storage source epoch changed",
+            Self::VisibilityRebuilding => "storage visibility is rebuilding",
             Self::EventNotFound => "storage event was not found",
             Self::CorruptStoredEvent => "storage event data is corrupt",
             Self::BackendUnavailable => "storage backend is unavailable",
@@ -331,6 +337,8 @@ mod tests {
             EventPageLimitExceeded,
             CursorGenerationMismatch,
             SourceGenerationChanged,
+            SourceEpochChanged,
+            VisibilityRebuilding,
             EventNotFound,
             CorruptStoredEvent,
             BackendUnavailable,

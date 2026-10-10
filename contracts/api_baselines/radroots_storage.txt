@@ -856,6 +856,7 @@ pub struct radroots_storage::event::VisibilityIndexProgress
 impl radroots_storage::event::VisibilityIndexProgress
 pub const fn radroots_storage::event::VisibilityIndexProgress::charged_bytes(self) -> u64
 pub const fn radroots_storage::event::VisibilityIndexProgress::is_complete(self) -> bool
+pub const fn radroots_storage::event::VisibilityIndexProgress::processed_keys(self) -> u16
 pub const fn radroots_storage::event::VisibilityIndexProgress::processed_rows(self) -> u16
 pub const fn radroots_storage::event::VisibilityIndexProgress::replay_epoch(self) -> u64
 pub const fn radroots_storage::event::VisibilityIndexProgress::source_sequence(self) -> u64
@@ -878,6 +879,7 @@ pub fn radroots_storage::event::EventStore::query_provenance(&self, radroots_eve
 pub fn radroots_storage::event::EventStore::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::event::EventStore::query_visible_at(&self, radroots_storage::event::EventQuery, radroots_storage::event::EventSourceToken) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::source_token(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventSourceToken, radroots_storage::Error>>
 pub fn radroots_storage::event::EventStore::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
@@ -888,6 +890,7 @@ pub fn radroots_storage::memory::MemoryStorage::query_provenance(&self, radroots
 pub fn radroots_storage::memory::MemoryStorage::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_visible_at(&self, radroots_storage::event::EventQuery, radroots_storage::event::EventSourceToken) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::source_token(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventSourceToken, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
@@ -1051,6 +1054,7 @@ pub fn radroots_storage::memory::MemoryStorage::query_provenance(&self, radroots
 pub fn radroots_storage::memory::MemoryStorage::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_visible_at(&self, radroots_storage::event::EventQuery, radroots_storage::event::EventSourceToken) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::source_token(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventSourceToken, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
@@ -1866,9 +1870,11 @@ pub radroots_storage::Error::RebuildTicketTerminal
 pub radroots_storage::Error::ReliabilityOperationTerminal
 pub radroots_storage::Error::ReliabilityRevisionConflict
 pub radroots_storage::Error::RestoreMemberVerificationFailed
+pub radroots_storage::Error::SourceEpochChanged
 pub radroots_storage::Error::SourceGenerationChanged
 pub radroots_storage::Error::SpaceInsufficient
 pub radroots_storage::Error::TooManyEventQueryIds
+pub radroots_storage::Error::VisibilityRebuilding
 impl core::error::Error for radroots_storage::Error
 impl core::fmt::Display for radroots_storage::Error
 pub fn radroots_storage::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1917,6 +1923,7 @@ pub fn radroots_storage::EventStore::query_provenance(&self, radroots_event::id:
 pub fn radroots_storage::EventStore::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::EventStore::query_visible_at(&self, radroots_storage::event::EventQuery, radroots_storage::event::EventSourceToken) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::source_token(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventSourceToken, radroots_storage::Error>>
 pub fn radroots_storage::EventStore::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
@@ -1927,6 +1934,7 @@ pub fn radroots_storage::memory::MemoryStorage::query_provenance(&self, radroots
 pub fn radroots_storage::memory::MemoryStorage::query_raw(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredRawEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_verified(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVerifiedEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::query_visible(&self, radroots_storage::event::EventQuery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
+pub fn radroots_storage::memory::MemoryStorage::query_visible_at(&self, radroots_storage::event::EventQuery, radroots_storage::event::EventSourceToken) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventPage<radroots_storage::event::StoredVisibleEvent>, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::rebuild_visibility(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::VisibilitySnapshot, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::source_token(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::event::EventSourceToken, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>

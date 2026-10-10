@@ -201,6 +201,87 @@ impl MemoryStorage {
         Ok((selected, next))
     }
 
+    fn visible_page_locked(
+        &self,
+        state: &State,
+        query: EventQuery,
+        expected: Option<EventSourceToken>,
+    ) -> Result<EventPage<StoredVisibleEvent>, Error> {
+        if query
+            .bounds()
+            .cursor()
+            .is_some_and(|cursor| cursor.generation() != self.generation)
+        {
+            return Err(Error::SourceGenerationChanged);
+        }
+        if expected.is_some_and(|token| {
+            token != EventSourceToken::new(self.generation, state.event_mutation_epoch)
+        }) {
+            return Err(Error::SourceEpochChanged);
+        }
+        if !state.visibility_index.ready {
+            return Err(Error::VisibilityRebuilding);
+        }
+        let after = query
+            .bounds()
+            .cursor()
+            .map_or(0, |cursor| cursor.sequence().get());
+        let maximum = usize::from(query.bounds().limit());
+        let positions = if query.event_ids().is_empty() {
+            state
+                .visibility_index
+                .visible
+                .range((std::ops::Bound::Excluded(after), std::ops::Bound::Unbounded))
+                .take(maximum + 1)
+                .copied()
+                .collect::<Vec<_>>()
+        } else {
+            let positions = query
+                .event_ids()
+                .iter()
+                .filter_map(|id| state.visibility_index.ids.get(id).copied())
+                .filter(|position| {
+                    *position > after && state.visibility_index.visible.contains(position)
+                })
+                .collect::<std::collections::BTreeSet<_>>();
+            positions.into_iter().take(maximum + 1).collect()
+        };
+        let mut charged = 4096 + (u64::from(query.bounds().limit()) + 1) * 128;
+        let mut items = Vec::new();
+        let mut more = false;
+        for position in positions {
+            if items.len() == maximum {
+                more = true;
+                break;
+            }
+            let entry = state
+                .events
+                .get(usize::try_from(position - 1).map_err(|_| Error::CorruptStoredEvent)?)
+                .ok_or(Error::CorruptStoredEvent)?;
+            let charge = charged
+                .checked_add(crate::event::VisibilityIndexBounds::charge(
+                    entry.admission.event().raw_json().len() as u64,
+                )?)
+                .ok_or(Error::SpaceInsufficient)?;
+            if charge > 16 * 1024 * 1024 {
+                if items.is_empty() {
+                    return Err(Error::SpaceInsufficient);
+                }
+                more = true;
+                break;
+            }
+            items.push(StoredVisibleEvent::new(
+                entry.position,
+                entry.admission.event().clone(),
+            ));
+            charged = charge;
+        }
+        let next = more
+            .then(|| items.last().map(StoredVisibleEvent::position))
+            .flatten();
+        EventPage::new(self.generation, items, next, query.bounds())
+    }
+
     fn visibility_locked(&self, state: &State) -> Result<VisibilityEvaluation, Error> {
         evaluate_visibility(
             self.generation,
@@ -215,6 +296,28 @@ impl MemoryStorage {
     }
 
     fn admit_locked(
+        &self,
+        state: &mut State,
+        admission: EventAdmission,
+    ) -> Result<AdmissionReceipt, Error> {
+        let was_ready = state.visibility_index.ready;
+        crate::event::VisibilityEventMetadata::from_event(admission.event(), admission.stage())?;
+        let bytes = u64::try_from(admission.event().raw_json().len())
+            .map_err(|_| Error::SpaceInsufficient)?;
+        let fits = crate::event::VisibilityIndexBounds::charge(bytes)?
+            <= 16 * 1024 * 1024 - 4096 - 64 * 128;
+        let receipt = self.admit_source_locked(state, admission)?;
+        if was_ready && receipt.disposition() != AdmissionDisposition::Duplicate && fits {
+            visibility_index::prepare(
+                self.generation,
+                state,
+                crate::event::VisibilityIndexBounds::new(64, 16 * 1024 * 1024)?,
+            )?;
+        }
+        Ok(receipt)
+    }
+
+    fn admit_source_locked(
         &self,
         state: &mut State,
         admission: EventAdmission,
@@ -463,29 +566,17 @@ impl EventStore for MemoryStorage {
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>> {
         Box::pin(async move {
             let state = self.state()?;
-            let raw = u64::try_from(state.events.len()).map_err(|_| Error::CorruptStoredEvent)?;
-            let verified = u64::try_from(
-                state
-                    .events
-                    .iter()
-                    .filter(|entry| entry.admission.stage() >= AdmissionStage::Verified)
-                    .count(),
-            )
-            .map_err(|_| Error::CorruptStoredEvent)?;
-            let visible = u64::try_from(
-                self.visibility_locked(&state)?
-                    .snapshot()
-                    .visible_event_ids()
-                    .len(),
-            )
-            .map_err(|_| Error::CorruptStoredEvent)?;
+            if !state.visibility_index.ready {
+                return Err(Error::VisibilityRebuilding);
+            }
             EventStoreStatus::new(
                 self.generation,
                 EventStoreMode::ReadWrite,
                 EventStoreHealth::Available,
-                raw,
-                verified,
-                visible,
+                u64::try_from(state.events.len()).map_err(|_| Error::CorruptStoredEvent)?,
+                state.visibility_index.verified,
+                u64::try_from(state.visibility_index.visible.len())
+                    .map_err(|_| Error::CorruptStoredEvent)?,
             )
         })
     }
@@ -543,17 +634,18 @@ impl EventStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>> {
         Box::pin(async move {
             let state = self.state()?;
-            let visibility = self.visibility_locked(&state)?;
-            let (entries, next) = self.selected(&state, &query, |entry| {
-                visibility.is_visible(entry.admission.event_id())
-            })?;
-            let items = entries
-                .into_iter()
-                .map(|entry| {
-                    StoredVisibleEvent::new(entry.position, entry.admission.event().clone())
-                })
-                .collect();
-            EventPage::new(self.generation, items, next, query.bounds())
+            self.visible_page_locked(&state, query, None)
+        })
+    }
+
+    fn query_visible_at(
+        &self,
+        query: EventQuery,
+        expected: EventSourceToken,
+    ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>> {
+        Box::pin(async move {
+            let state = self.state()?;
+            self.visible_page_locked(&state, query, Some(expected))
         })
     }
 

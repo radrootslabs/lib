@@ -5,6 +5,8 @@ use std::sync::Mutex;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
 pub(super) struct Counts {
     pub bounded_requests: u64,
+    pub key_requests: u64,
+    pub key_rows_returned: u64,
     pub materialization_requests: u64,
     pub aggregate_requests: u64,
     pub successful_fetches: u64,
@@ -22,13 +24,14 @@ pub(super) enum Read {
     Bounded,
     Materialize,
     Aggregate,
+    Keys,
 }
 
 #[derive(Default)]
 pub(super) struct Observer {
     counts: Mutex<Counts>,
-    // Three placeholder-only shapes; bind values and payloads are never retained.
-    templates: Mutex<[Option<String>; 3]>,
+    // Placeholder-only shapes; bind values and payloads are never retained.
+    templates: Mutex<[Option<String>; 4]>,
 }
 
 impl Observer {
@@ -38,8 +41,15 @@ impl Observer {
             Read::Bounded => counts.bounded_requests += 1,
             Read::Materialize => counts.materialization_requests += 1,
             Read::Aggregate => counts.aggregate_requests += 1,
+            Read::Keys => counts.key_requests += 1,
         }
         self.templates.lock().expect("test query templates")[kind as usize] = Some(sql.to_owned());
+    }
+
+    pub(super) fn keys_returned(&self, rows: usize) {
+        let mut counts = self.counts.lock().expect("test observer");
+        counts.successful_fetches += 1;
+        counts.key_rows_returned += rows as u64;
     }
 
     pub(super) fn returned(&self, rows: &[SqliteRow]) {

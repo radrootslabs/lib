@@ -1,4 +1,4 @@
-use super::tests::{observed, signed_event_with, store, verified, visible};
+use super::tests::{observed, signed_event_with, unprepared_store as store, verified, visible};
 use super::*;
 use radroots_storage::event::VisibilityIndexBounds;
 
@@ -52,10 +52,21 @@ async fn indexed_visible(storage: &SqliteStorage) -> Vec<EventId> {
              AND deletion.author = candidate.author AND deletion.created_at >= candidate.created_at)))
          ORDER BY candidate.event_id",
     ).bind(storage.generation.as_bytes().as_slice()).fetch_all(&storage.pool).await.unwrap();
-    values
+    let ids = values
         .into_iter()
         .map(|value| EventId::from_bytes(value.try_into().unwrap()))
-        .collect()
+        .collect::<Vec<_>>();
+    let mut public_ids = storage
+        .query_visible(EventQuery::all(EventQueryBounds::first(1000).unwrap()))
+        .await
+        .unwrap()
+        .items()
+        .iter()
+        .map(|item| *item.event().id())
+        .collect::<Vec<_>>();
+    public_ids.sort();
+    assert_eq!(public_ids, ids);
+    ids
 }
 
 #[tokio::test]
@@ -133,7 +144,7 @@ async fn visibility_index_matches_reference_winners_deletion_before_target_and_u
         .await
         .unwrap();
     assert!(
-        !sqlx::query_scalar::<_, bool>("SELECT ready FROM radroots_runtime_visibility_progress")
+        sqlx::query_scalar::<_, bool>("SELECT ready FROM radroots_runtime_visibility_progress")
             .fetch_one(&storage.pool)
             .await
             .unwrap()
@@ -397,6 +408,13 @@ async fn visibility_index_real_database_close_and_reopen_preserves_bounded_progr
     )
     .await
     .unwrap();
+    // Retain a real file-backed unprepared-source fixture; fresh empty sources
+    // otherwise initialize a ready index under forward20.
+    sqlx::query("DELETE FROM radroots_runtime_visibility_progress WHERE source_generation = ?")
+        .bind(generation().as_bytes().as_slice())
+        .execute(&storage.pool)
+        .await
+        .unwrap();
     for event in [profile("first", 10), profile("second", 20)] {
         storage.admit(admitted(event)).await.unwrap();
     }
@@ -450,7 +468,19 @@ async fn visibility_index_forward_migration_retains_legacy_truth_and_refuses_cor
         let storage = SqliteStorage::new(pool.clone(), generation(), EventStoreMode::ReadWrite);
         let event = profile("legacy", 10);
         if state != 0 {
-            storage.admit(raw(event.clone())).await.unwrap();
+            sqlx::query("UPDATE radroots_runtime_source_generations SET sequence_head = 1 WHERE generation = ?")
+                .bind(generation().as_bytes().as_slice()).execute(&pool).await.unwrap();
+            sqlx::query(
+                "INSERT INTO radroots_runtime_events (source_generation, source_sequence, event_id,
+                admission_stage, signed_event, admitted_at_unix_ms, updated_at_unix_ms)
+                VALUES (?, 1, ?, 'raw', ?, 100, 100)",
+            )
+            .bind(generation().as_bytes().as_slice())
+            .bind(event.id().as_bytes().as_slice())
+            .bind(event.raw_json().as_bytes())
+            .execute(&pool)
+            .await
+            .unwrap();
             if state == 2 {
                 sqlx::query("DROP TRIGGER radroots_runtime_events_raw_update_guard")
                     .execute(&pool)
@@ -469,6 +499,10 @@ async fn visibility_index_forward_migration_retains_legacy_truth_and_refuses_cor
         );
         storage.work.take();
         sqlx::raw_sql(migration_sql(19).unwrap())
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::raw_sql(migration_sql(20).unwrap())
             .execute(&pool)
             .await
             .unwrap();
@@ -548,6 +582,21 @@ async fn visibility_index_malformed_progress_or_missing_source_tail_cannot_claim
         .execute(&storage.pool)
         .await
         .unwrap();
+    // Clear only derived membership before deliberately restarting this fixture.
+    for table in [
+        "radroots_runtime_visibility_heads",
+        "radroots_runtime_visibility_members",
+        "radroots_runtime_visibility_pending",
+    ] {
+        let sql = match table {
+            "radroots_runtime_visibility_heads" => "DELETE FROM radroots_runtime_visibility_heads",
+            "radroots_runtime_visibility_members" => {
+                "DELETE FROM radroots_runtime_visibility_members"
+            }
+            _ => "DELETE FROM radroots_runtime_visibility_pending",
+        };
+        sqlx::query(sql).execute(&storage.pool).await.unwrap();
+    }
     sqlx::query("DELETE FROM radroots_runtime_visibility_progress")
         .execute(&storage.pool)
         .await
@@ -571,7 +620,7 @@ async fn visibility_index_malformed_progress_or_missing_source_tail_cannot_claim
 
 #[tokio::test]
 async fn visibility_index_memory_and_sqlite_progress_agree_across_same_count_promotion() {
-    let storage = store(generation()).await;
+    let storage = super::tests::store(generation()).await;
     let memory = radroots_storage::memory::MemoryStorage::new(generation());
     let first = profile("first", 10);
     let initial = [raw(first.clone()), raw(profile("large", 20))];

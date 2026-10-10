@@ -673,9 +673,21 @@ pub trait EventStore: Send + Sync {
         query: EventQuery,
     ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>>;
 
+    /// Queries indexed visibility at exactly the expected canonical source fence.
+    ///
+    /// Compare the fence and hydrate the page in one consistent read. A mismatch
+    /// returns [`Error::SourceEpochChanged`]; unsupported providers fail closed.
+    fn query_visible_at(
+        &self,
+        _query: EventQuery,
+        _expected: EventSourceToken,
+    ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+
     /// Rebuilds current visibility from immutable retained event truth.
     ///
-    /// Implementations must use the same reducer as [`Self::query_visible`].
+    /// This explicit full diagnostic is the semantic oracle for indexed reads.
     fn rebuild_visibility(&self) -> BoxFuture<'_, Result<VisibilitySnapshot, Error>>;
 
     /// Queries bounded provenance for one event.

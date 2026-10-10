@@ -71,6 +71,16 @@ fn unsupported_adapter_cannot_invent_a_source_fence() {
         Err(Error::BackendUnavailable)
     );
     assert_eq!(
+        block_on(MemoryEventStore::new().query_visible_at(
+            EventQuery::all(EventQueryBounds::first(5).unwrap()),
+            radroots_storage::event::EventSourceToken::new(
+                SourceGeneration::new([1; 32]).unwrap(),
+                0
+            ),
+        )),
+        Err(Error::BackendUnavailable)
+    );
+    assert_eq!(
         block_on(MemoryEventStore::new().maintain_visibility(
             radroots_storage::event::VisibilityIndexBounds::new(64, 16 * 1024 * 1024).unwrap()
         )),
@@ -339,13 +349,208 @@ fn verified(event: &SignedEvent) -> VerifiedEvent {
 }
 
 fn visible(event: &SignedEvent) -> VisibleEvent {
-    verified(event)
-        .validate_contract()
-        .expect("contract")
+    let verified = verified(event);
+    let validated = if event.envelope().kind_u32() == 5 {
+        verified
+            .validate_contract_for_admission("radroots.social.deletion_request.v1")
+            .expect("deletion contract")
+    } else {
+        verified.validate_contract().expect("contract")
+    };
+    validated
         .admit_with(&Allow)
         .expect("admission")
         .make_visible_with(&Allow)
         .expect("visibility")
+}
+
+fn indexed_event(
+    author: &str,
+    time: u64,
+    kind: u32,
+    tags: Vec<Vec<String>>,
+    content: &str,
+) -> SignedEvent {
+    let mut wire = Nip01EventWire {
+        id: "0".repeat(64),
+        pubkey: author.to_owned(),
+        created_at: time,
+        kind,
+        tags,
+        content: content.to_owned(),
+        sig: "42".repeat(64),
+        extra: Default::default(),
+    };
+    wire.id = wire.computed_event_id().unwrap().to_hex();
+    let raw = serde_json::to_string(&wire).unwrap();
+    SignedEvent::from_wire_verified_id(wire, raw).unwrap()
+}
+
+#[test]
+fn memory_indexed_address_deletion_head_ties_and_unsupported_authority_match_reference() {
+    use radroots_storage::memory::MemoryStorage;
+    const AUTHOR: &str = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+    const OTHER: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+    let storage = MemoryStorage::new(SourceGeneration::new([101; 32]).unwrap());
+    let address = format!("0:{AUTHOR}:");
+    let addressable = format!("30023:{AUTHOR}:");
+    let cases = [
+        (
+            indexed_event(AUTHOR, 10, 0, vec![], r#"{"name":"old"}"#),
+            true,
+        ),
+        (
+            indexed_event(AUTHOR, 20, 0, vec![], r#"{"name":"first tie"}"#),
+            true,
+        ),
+        (
+            indexed_event(AUTHOR, 20, 0, vec![], r#"{"name":"second tie"}"#),
+            true,
+        ),
+        (
+            indexed_event(
+                OTHER,
+                25,
+                5,
+                vec![vec!["a".into(), address.clone()]],
+                "wrong author",
+            ),
+            true,
+        ),
+        (
+            indexed_event(AUTHOR, 25, 5, vec![vec!["a".into(), address]], "cutoff"),
+            true,
+        ),
+        (
+            indexed_event(AUTHOR, 30, 0, vec![], r#"{"name":"later"}"#),
+            true,
+        ),
+        (
+            indexed_event(AUTHOR, 5, 0, vec![], r#"{"name":"older arrives late"}"#),
+            true,
+        ),
+        (
+            indexed_event(AUTHOR, 40, 0, vec![], "unsupported profile content"),
+            false,
+        ),
+        (
+            indexed_event(AUTHOR, 50, 30023, vec![], "missing identifier"),
+            false,
+        ),
+        (
+            indexed_event(
+                AUTHOR,
+                51,
+                30023,
+                vec![vec!["d".into(), "".into()]],
+                "explicit empty",
+            ),
+            false,
+        ),
+        (
+            indexed_event(AUTHOR, 52, 30023, vec![], "missing again"),
+            false,
+        ),
+        (
+            indexed_event(
+                AUTHOR,
+                60,
+                5,
+                vec![vec!["a".into(), addressable]],
+                "address cutoff",
+            ),
+            true,
+        ),
+    ];
+    for (event, make_visible) in cases {
+        let admission = if make_visible {
+            EventAdmission::visible(observed(event.clone(), 100), visible(&event)).unwrap()
+        } else {
+            EventAdmission::verified(observed(event.clone(), 100), verified(&event)).unwrap()
+        };
+        block_on(storage.admit(admission.clone())).unwrap();
+        block_on(storage.admit(admission)).unwrap();
+        let oracle = block_on(storage.rebuild_visibility()).unwrap();
+        let mut actual =
+            block_on(storage.query_visible(EventQuery::all(EventQueryBounds::first(100).unwrap())))
+                .unwrap()
+                .items()
+                .iter()
+                .map(|item| *item.event().id())
+                .collect::<Vec<_>>();
+        actual.sort();
+        assert_eq!(actual, oracle.visible_event_ids());
+        assert_eq!(
+            block_on(storage.status()).unwrap().visible_events(),
+            actual.len() as u64
+        );
+    }
+}
+
+#[test]
+fn memory_indexed_scoped_byte_pages_and_fences_preserve_continuation() {
+    use radroots_storage::{event::EventSourceToken, memory::MemoryStorage};
+    let generation = SourceGeneration::new([102; 32]).unwrap();
+    let storage = MemoryStorage::new(generation);
+    let author = "585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df";
+    let mut ids = Vec::new();
+    for time in 0..12 {
+        let event = indexed_event(author, time, 1, vec![], &"x".repeat(120_000));
+        ids.push(*event.id());
+        block_on(storage.admit(
+            EventAdmission::visible(observed(event.clone(), 100), visible(&event)).unwrap(),
+        ))
+        .unwrap();
+    }
+    let token = block_on(storage.source_token()).unwrap();
+    let first = block_on(
+        storage.query_visible_at(EventQuery::all(EventQueryBounds::first(12).unwrap()), token),
+    )
+    .unwrap();
+    assert!(first.items().len() < 12);
+    let next = block_on(
+        storage.query_visible_at(
+            EventQuery::all(
+                EventQueryBounds::first(12)
+                    .unwrap()
+                    .after(first.next_cursor().unwrap()),
+            ),
+            token,
+        ),
+    )
+    .unwrap();
+    assert_eq!(first.items().len() + next.items().len(), 12);
+    assert!(next.next_cursor().is_none());
+    let selected = EventQuery::for_ids(
+        EventQueryBounds::first(5).unwrap(),
+        vec![ids[11], EventId::from_bytes([255; 32]), ids[0]],
+    )
+    .unwrap();
+    let page = block_on(storage.query_visible_at(selected, token)).unwrap();
+    assert_eq!(
+        page.items()
+            .iter()
+            .map(|item| *item.event().id())
+            .collect::<Vec<_>>(),
+        vec![ids[0], ids[11]]
+    );
+    assert_eq!(
+        block_on(storage.query_visible_at(
+            EventQuery::all(EventQueryBounds::first(5).unwrap()),
+            EventSourceToken::new(generation, token.epoch() - 1)
+        )),
+        Err(Error::SourceEpochChanged)
+    );
+    let cursor = EventPosition::new(
+        SourceGeneration::new([103; 32]).unwrap(),
+        EventSequence::new(1).unwrap(),
+    );
+    assert_eq!(
+        block_on(storage.query_visible(EventQuery::all(
+            EventQueryBounds::first(5).unwrap().after(cursor)
+        ))),
+        Err(Error::SourceGenerationChanged)
+    );
 }
 
 #[test]

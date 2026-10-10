@@ -2,6 +2,9 @@ use crate::backend::map_backend;
 mod visibility_index;
 #[cfg(test)]
 mod visibility_index_tests;
+mod visibility_reads;
+#[cfg(test)]
+mod visibility_reads_tests;
 use radroots_event::SignedEvent;
 use radroots_event_codec::Codec;
 use radroots_storage::{
@@ -300,6 +303,14 @@ impl SqliteStorage {
         transaction: &mut sqlx::Transaction<'_, Sqlite>,
         admission: EventAdmission,
     ) -> Result<AdmissionReceipt, Error> {
+        let index_was_ready = sqlx::query_scalar::<_, bool>(
+            "SELECT ready FROM radroots_runtime_visibility_progress WHERE source_generation = ?",
+        )
+        .bind(self.generation.as_bytes().as_slice())
+        .fetch_optional(&mut **transaction)
+        .await
+        .map_err(map_backend)?
+        .unwrap_or(false);
         let existing = sqlx::query(
             "SELECT source_generation, source_sequence, signed_event, admission_stage,
                     admitted_contract_id, admitted_registry_version
@@ -380,6 +391,15 @@ impl SqliteStorage {
             )
         };
         Self::store_provenance(transaction, &admission).await?;
+        let bounds = radroots_storage::event::VisibilityIndexBounds::new(64, 16 * 1024 * 1024)?;
+        let bytes = u64::try_from(admission.event().raw_json().len())
+            .map_err(|_| Error::SpaceInsufficient)?;
+        let fits = radroots_storage::event::VisibilityIndexBounds::charge(bytes)?
+            <= bounds.bytes() - 4096 - u64::from(bounds.rows()) * 128;
+        if index_was_ready && disposition != AdmissionDisposition::Duplicate && fits {
+            self.prepare_visibility_transaction(transaction, bounds)
+                .await?;
+        }
         Ok(AdmissionReceipt::new(
             *admission.event_id(),
             position,
@@ -427,36 +447,10 @@ impl EventStore for SqliteStorage {
 
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>> {
         Box::pin(async move {
-            let sql = "SELECT
-                   COUNT(*) AS raw_events,
-                   COALESCE(SUM(CASE WHEN admission_stage IN ('verified', 'visible') THEN 1 ELSE 0 END), 0)
-                     AS verified_events
-                 FROM radroots_runtime_events WHERE source_generation = ?";
-            #[cfg(test)]
-            self.work.request(work::Read::Aggregate, sql);
-            let row = sqlx::query(sql)
-                .bind(self.generation.as_bytes().as_slice())
-                .fetch_one(&self.pool)
-                .await
-                .map_err(map_backend)?;
-            #[cfg(test)]
-            self.work.aggregate_returned();
-            let visibility_rows = self.current_event_rows().await?;
-            let visible_events = u64::try_from(
-                self.visibility_for_rows(&visibility_rows)?
-                    .snapshot()
-                    .visible_event_ids()
-                    .len(),
-            )
-            .map_err(|_| Error::CorruptStoredEvent)?;
-            EventStoreStatus::new(
-                self.generation,
-                self.mode,
-                EventStoreHealth::Available,
-                u64_from_i64(row.try_get("raw_events").map_err(map_corrupt)?)?,
-                u64_from_i64(row.try_get("verified_events").map_err(map_corrupt)?)?,
-                visible_events,
-            )
+            let mut transaction = self.pool.begin().await.map_err(map_backend)?;
+            let status = self.visibility_header(&mut transaction, None).await?;
+            transaction.commit().await.map_err(map_backend)?;
+            Ok(status)
         })
     }
 
@@ -508,35 +502,15 @@ impl EventStore for SqliteStorage {
         &self,
         query: EventQuery,
     ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>> {
-        Box::pin(async move {
-            self.validate_cursor(&query)?;
-            let after = query
-                .bounds()
-                .cursor()
-                .map_or(0, |cursor| cursor.sequence().get());
-            let rows = self.current_event_rows().await?;
-            let visibility = self.visibility_for_rows(&rows)?;
-            let mut selected = rows
-                .into_iter()
-                .filter(|row| {
-                    row.position.sequence().get() > after
-                        && query.selects(row.event.id())
-                        && visibility.is_visible(row.event.id())
-                })
-                .take(usize::from(query.bounds().limit()) + 1)
-                .collect::<Vec<_>>();
-            let next = if selected.len() > usize::from(query.bounds().limit()) {
-                selected.truncate(usize::from(query.bounds().limit()));
-                selected.last().map(|row| row.position)
-            } else {
-                None
-            };
-            let items = selected
-                .into_iter()
-                .map(|row| StoredVisibleEvent::new(row.position, row.event))
-                .collect();
-            EventPage::new(self.generation, items, next, query.bounds())
-        })
+        Box::pin(async move { self.indexed_visible_page(query, None).await })
+    }
+
+    fn query_visible_at(
+        &self,
+        query: EventQuery,
+        expected: EventSourceToken,
+    ) -> BoxFuture<'_, Result<EventPage<StoredVisibleEvent>, Error>> {
+        Box::pin(async move { self.indexed_visible_page(query, Some(expected)).await })
     }
 
     fn rebuild_visibility(&self) -> BoxFuture<'_, Result<VisibilitySnapshot, Error>> {
@@ -745,7 +719,24 @@ mod tests {
         .execute(&pool)
         .await
         .expect("source generation");
-        SqliteStorage::new(pool, generation, EventStoreMode::ReadWrite)
+        let storage = SqliteStorage::new(pool, generation, EventStoreMode::ReadWrite);
+        storage
+            .maintain_visibility(
+                radroots_storage::event::VisibilityIndexBounds::new(64, 16 * 1024 * 1024).unwrap(),
+            )
+            .await
+            .unwrap();
+        storage
+    }
+
+    pub(super) async fn unprepared_store(generation: SourceGeneration) -> SqliteStorage {
+        let storage = store(generation).await;
+        sqlx::query("DELETE FROM radroots_runtime_visibility_progress WHERE source_generation = ?")
+            .bind(generation.as_bytes().as_slice())
+            .execute(&storage.pool)
+            .await
+            .unwrap();
+        storage
     }
 
     fn signed_event(content: &str, pretty: bool) -> SignedEvent {

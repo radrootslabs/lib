@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "decision_id": "radroots.storage.indexed_visibility_reads.v1",
+  "status": "implemented_not_published",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "runtime_version": 20,
+  "immutable_runtime_prefix": "versions 1 through 19",
+  "authority": "immutable canonical signed events and the existing visibility reducer",
+  "current_state": {
+    "head_membership": "highest unsigned created_at, then lowest event_id; verified unsupported heads retain authority",
+    "head_update": "refresh the previous and new selected member only",
+    "deletion": "retain authorized immutable targets and refresh affected event or selected address keys through a durable bounded queue",
+    "status": "one cached header read; never evaluate or decode source history",
+    "ordinary_admission": "a ready index advances inside the canonical source transaction; unfinished derived work remains dirty",
+    "empty_source": "atomic empty ready header on fresh source-generation insertion",
+    "legacy": "forward20 resets derived preparation once, then uses existing bounded source backfill and changed-epoch replay",
+    "readiness": "source backfill, changed replay and affected deletion keys all complete at one source fence",
+    "incomplete": "VisibilityRebuilding; no stale state advertised current"
+  },
+  "bounded_reads": {
+    "maximum_generic_page_rows": 1000,
+    "selected_keys": "limit plus one length-only indexed keys",
+    "all_events": "forced source-generation/visible/sequence index",
+    "event_ids": "forced source-generation/event-id index; existing maximum 256 ids",
+    "maximum_logical_bytes": 16777216,
+    "charge": "4096 + (limit + 1) * 128 + sum(signed_bytes * 16 + 4096)",
+    "hydration": "only charged returned rows; byte exhaustion returns an honest continuation or SpaceInsufficient",
+    "consistency": "header, lengths and hydrated events share one read transaction or memory lock",
+    "fenced_api": "EventStore::query_visible_at checks expected EventSourceToken in that same read",
+    "stale": "SourceEpochChanged",
+    "unsupported_fenced_adapter": "BackendUnavailable"
+  },
+  "maintenance": {
+    "maximum_total_source_and_affected_key_units": 64,
+    "maximum_logical_bytes": 16777216,
+    "affected_key_charge": "4096 + target_key_bytes * 16; inspect lengths before payload allocation",
+    "priority": "retained affected targets drain before new source work",
+    "progress": "processed_rows reports materialized source rows; processed_keys reports refreshed deletion keys",
+    "worker": "explicit caller-owned bounded calls; no hidden task"
+  },
+  "diagnostics": "rebuild_visibility remains the explicit full semantic oracle",
+  "forbidden": ["private application policy", "second database", "full-source read fallback", "hidden worker", "protocol registry changes", "new host configuration"]
+}

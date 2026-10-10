@@ -54,7 +54,7 @@ async fn plan(storage: &SqliteStorage, kind: Read) -> Vec<String> {
     let mut query = builder
         .build()
         .bind(storage.generation.as_bytes().as_slice());
-    if matches!(kind, Read::Bounded) {
+    if matches!(kind, Read::Bounded | Read::Keys) {
         query = query.bind(0_i64).bind(6_i64);
     }
     query
@@ -86,10 +86,20 @@ async fn actual_returned_and_decoded_work_distinguishes_bounded_and_full_reads()
         let page = storage.query_visible(first()).await.unwrap();
         assert_eq!(page.items().len(), 5);
         let full = storage.work.take();
-        assert_materialized(full, retained, bytes);
-        assert_eq!(full.successful_fetches, 1);
-        let full_plan = plan(&storage, Read::Materialize).await;
+        assert_eq!(full.materialization_requests, 0);
+        assert_eq!(full.visibility_inputs, 0);
+        assert_eq!(full.key_requests, 1);
+        assert_eq!(full.key_rows_returned, 6);
+        assert_eq!(full.codec_inputs, 5);
+        assert_eq!(full.event_rows_returned, 5);
+        assert_eq!(full.aggregate_requests, 1);
+        let full_plan = plan(&storage, Read::Keys).await;
         assert!(!bounded_plan.is_empty() && !full_plan.is_empty());
+        assert!(
+            full_plan
+                .iter()
+                .any(|line| line.contains("visibility_members_page_idx"))
+        );
         println!(
             "{}",
             serde_json::json!({"scenario":"bounded_vs_materialized", "retained_events":retained,
@@ -109,10 +119,13 @@ async fn status_and_rebuild_measure_actual_full_source_materialization() {
     assert_eq!(status.raw_events(), 32);
     assert_eq!(status.verified_events(), 24);
     let counts = storage.work.take();
-    assert_materialized(counts, 32, bytes);
+    assert_eq!(counts.materialization_requests, 0);
+    assert_eq!(counts.visibility_inputs, 0);
+    assert_eq!(counts.codec_inputs, 0);
+    assert_eq!(counts.event_rows_returned, 0);
     assert_eq!(counts.aggregate_requests, 1);
     assert_eq!(counts.aggregate_rows_returned, 1);
-    assert_eq!(counts.successful_fetches, 2);
+    assert_eq!(counts.successful_fetches, 1);
     let aggregate_plan = plan(&storage, Read::Aggregate).await;
     let visibility = storage.rebuild_visibility().await.unwrap();
     let rebuilt = storage.work.take();

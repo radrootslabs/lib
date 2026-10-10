@@ -152,6 +152,21 @@ async fn compatible_pending_pair_migrates_and_reopens_with_same_generation() {
             SqliteStorage::open(OpenOptions::new(paths.clone(), OpenMode::ReadWriteExisting))
                 .await
                 .expect("supported pair");
+        if matches!(
+            store.status().await,
+            Err(radroots_storage::Error::VisibilityRebuilding)
+        ) {
+            assert!(
+                store
+                    .maintain_visibility(
+                        radroots_storage::event::VisibilityIndexBounds::new(64, 16 * 1024 * 1024)
+                            .unwrap()
+                    )
+                    .await
+                    .expect("explicit empty-index initialization")
+                    .is_complete()
+            );
+        }
         assert_eq!(
             store
                 .status()

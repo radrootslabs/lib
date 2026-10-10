@@ -48,6 +48,7 @@ pub struct VisibilityIndexProgress {
     source_sequence: u64,
     replay_epoch: u64,
     processed_rows: u16,
+    processed_keys: u16,
     charged_bytes: u64,
     complete: bool,
 }
@@ -67,6 +68,7 @@ impl VisibilityIndexProgress {
             source_sequence,
             replay_epoch,
             processed_rows,
+            processed_keys: 0,
             charged_bytes,
             complete,
         }
@@ -87,6 +89,16 @@ impl VisibilityIndexProgress {
     /// Actual source rows materialized, including repeated changed rows.
     pub const fn processed_rows(self) -> u16 {
         self.processed_rows
+    }
+    /// Affected deletion keys refreshed within the same total row-unit budget.
+    pub const fn processed_keys(self) -> u16 {
+        self.processed_keys
+    }
+
+    #[doc(hidden)]
+    pub const fn with_processed_keys(mut self, keys: u16) -> Self {
+        self.processed_keys = keys;
+        self
     }
     /// Conservative logical allocation charge of this call.
     pub const fn charged_bytes(self) -> u64 {

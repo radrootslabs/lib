@@ -11,21 +11,33 @@ impl SqliteStorage {
         if self.mode == EventStoreMode::ReadOnly {
             return Err(Error::BackendUnavailable);
         }
-        let mut charged = 4096 + u64::from(bounds.rows()) * 128;
-        if charged > bounds.bytes() {
-            return Err(Error::SpaceInsufficient);
-        }
         let mut transaction = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(map_backend)?;
+        let progress = self
+            .prepare_visibility_transaction(&mut transaction, bounds)
+            .await?;
+        transaction.commit().await.map_err(map_backend)?;
+        Ok(progress)
+    }
+
+    pub(super) async fn prepare_visibility_transaction(
+        &self,
+        transaction: &mut sqlx::Transaction<'_, Sqlite>,
+        bounds: VisibilityIndexBounds,
+    ) -> Result<VisibilityIndexProgress, Error> {
+        let mut charged = 4096 + u64::from(bounds.rows()) * 128;
+        if charged > bounds.bytes() {
+            return Err(Error::SpaceInsufficient);
+        }
         let source = sqlx::query(
             "SELECT mutation_epoch, sequence_head FROM radroots_runtime_source_generations
              WHERE generation = ? AND state = 'active'",
         )
         .bind(self.generation.as_bytes().as_slice())
-        .fetch_optional(&mut *transaction)
+        .fetch_optional(&mut **transaction)
         .await
         .map_err(map_backend)?
         .ok_or(Error::SourceGenerationChanged)?;
@@ -39,7 +51,7 @@ impl SqliteStorage {
         .bind(self.generation.as_bytes().as_slice())
         .bind(sequence)
         .bind(epoch)
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await
         .map_err(map_backend)?;
         let progress = sqlx::query(
@@ -47,7 +59,7 @@ impl SqliteStorage {
              FROM radroots_runtime_visibility_progress WHERE source_generation = ?",
         )
         .bind(self.generation.as_bytes().as_slice())
-        .fetch_one(&mut *transaction).await.map_err(map_backend)?;
+        .fetch_one(&mut **transaction).await.map_err(map_backend)?;
         let version: i64 = progress.try_get("schema_version").map_err(map_corrupt)?;
         let target: i64 = progress.try_get("backfill_target").map_err(map_corrupt)?;
         let mut backfill: i64 = progress.try_get("backfill_sequence").map_err(map_corrupt)?;
@@ -56,6 +68,16 @@ impl SqliteStorage {
         if version != 1 || target > sequence || backfill > target || replay_epoch > epoch {
             return Err(Error::CorruptStoredEvent);
         }
+        let had_pending: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM radroots_runtime_visibility_pending WHERE source_generation = ?)")
+            .bind(self.generation.as_bytes().as_slice()).fetch_one(&mut **transaction).await.map_err(map_backend)?;
+        let mut processed_keys = self
+            .drain_visibility_keys(transaction, bounds.rows(), &mut charged, bounds.bytes())
+            .await?;
+        let remaining = if had_pending {
+            0
+        } else {
+            bounds.rows() - processed_keys
+        };
         let building = backfill < target;
         let mut query = QueryBuilder::<Sqlite>::new(
             "SELECT source_sequence, last_mutation_epoch, length(signed_event) AS signed_bytes
@@ -67,7 +89,7 @@ impl SqliteStorage {
             query.push(" AND source_sequence <= ").push_bind(target);
             query
                 .push(" ORDER BY source_sequence LIMIT ")
-                .push_bind(i64::from(bounds.rows()));
+                .push_bind(i64::from(remaining));
         } else {
             query.push(" AND (last_mutation_epoch, source_sequence) > (");
             query
@@ -77,14 +99,14 @@ impl SqliteStorage {
                 .push(")");
             query
                 .push(" ORDER BY last_mutation_epoch, source_sequence LIMIT ")
-                .push_bind(i64::from(bounds.rows()));
+                .push_bind(i64::from(remaining));
         }
         let lengths = query
             .build()
-            .fetch_all(&mut *transaction)
+            .fetch_all(&mut **transaction)
             .await
             .map_err(map_backend)?;
-        if building && lengths.is_empty() {
+        if building && remaining > 0 && lengths.is_empty() {
             return Err(Error::CorruptStoredEvent);
         }
         let mut processed = 0u16;
@@ -109,7 +131,7 @@ impl SqliteStorage {
             )
             .bind(self.generation.as_bytes().as_slice())
             .bind(position)
-            .fetch_one(&mut *transaction)
+            .fetch_one(&mut **transaction)
             .await
             .map_err(map_backend)?;
             let decoded = self.decode_event_row(&row)?;
@@ -117,7 +139,7 @@ impl SqliteStorage {
                 return Err(Error::CorruptStoredEvent);
             }
             let metadata = VisibilityEventMetadata::from_event(&decoded.event, decoded.stage)?;
-            self.put_visibility_metadata(&mut transaction, position, changed, metadata)
+            self.put_visibility_metadata(transaction, position, changed, metadata)
                 .await?;
             charged = next_charge;
             processed += 1;
@@ -135,11 +157,30 @@ impl SqliteStorage {
         .bind(self.generation.as_bytes().as_slice())
         .bind(replay_epoch)
         .bind(replay_sequence)
-        .fetch_one(&mut *transaction)
+        .fetch_one(&mut **transaction)
         .await
         .map_err(map_backend)?;
-        let complete = backfill == target && !pending;
+        processed_keys += self
+            .drain_visibility_keys(
+                transaction,
+                bounds.rows() - processed - processed_keys,
+                &mut charged,
+                bounds.bytes(),
+            )
+            .await?;
+        let pending_keys: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM radroots_runtime_visibility_pending WHERE source_generation = ?)")
+            .bind(self.generation.as_bytes().as_slice()).fetch_one(&mut **transaction).await.map_err(map_backend)?;
+        if processed == 0 && processed_keys == 0 && pending_keys {
+            return Err(Error::SpaceInsufficient);
+        }
+        let complete = backfill == target && !pending && !pending_keys;
         if complete {
+            let retained: i64 = sqlx::query_scalar(
+                "SELECT raw_events FROM radroots_runtime_visibility_progress WHERE source_generation = ?")
+                .bind(self.generation.as_bytes().as_slice()).fetch_one(&mut **transaction).await.map_err(map_backend)?;
+            if retained != sequence {
+                return Err(Error::CorruptStoredEvent);
+            }
             replay_epoch = epoch;
             replay_sequence = i64::MAX;
         }
@@ -152,10 +193,9 @@ impl SqliteStorage {
         .bind(replay_sequence)
         .bind(complete)
         .bind(self.generation.as_bytes().as_slice())
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await
         .map_err(map_backend)?;
-        transaction.commit().await.map_err(map_backend)?;
         Ok(VisibilityIndexProgress::new(
             EventSourceToken::new(self.generation, u64_from_i64(epoch)?),
             u64_from_i64(backfill)?,
@@ -163,7 +203,8 @@ impl SqliteStorage {
             processed,
             charged,
             complete,
-        ))
+        )
+        .with_processed_keys(processed_keys))
     }
 
     async fn put_visibility_metadata(
@@ -220,6 +261,8 @@ impl SqliteStorage {
             .await
             .map_err(map_backend)?;
         }
+        self.update_visibility_membership(transaction, position)
+            .await?;
         Ok(())
     }
 }
