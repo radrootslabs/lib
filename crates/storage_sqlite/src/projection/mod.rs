@@ -15,10 +15,33 @@ use radroots_storage::{
 use sqlx::{Row, Sqlite, SqliteConnection};
 
 mod batch;
+mod cache;
 mod document_query;
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl ProjectionStore for SqliteStorage {
+    fn configure_projection_cache(
+        &self,
+        id: ProjectionId,
+        limits: radroots_storage::projection::cache::ProjectionCacheLimits,
+    ) -> BoxFuture<'_, Result<radroots_storage::projection::cache::ProjectionCacheUsage, Error>>
+    {
+        Box::pin(cache::configure(self, id, limits))
+    }
+    fn retire_projection_generation(
+        &self,
+        scope: radroots_storage::projection::cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<radroots_storage::projection::cache::ProjectionCacheUsage, Error>>
+    {
+        Box::pin(cache::retire(self, scope))
+    }
+    fn collect_projection_cache(
+        &self,
+        scope: radroots_storage::projection::cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<radroots_storage::projection::cache::ProjectionCacheCollection, Error>>
+    {
+        Box::pin(cache::collect(self, scope))
+    }
     fn status(
         &self,
         projection_id: ProjectionId,
@@ -30,7 +53,7 @@ impl ProjectionStore for SqliteStorage {
             .bind(projection_id.as_str())
             .fetch_optional(self.pool())
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             .as_ref()
             .map(decode_status)
             .transpose()
@@ -47,9 +70,9 @@ impl ProjectionStore for SqliteStorage {
                 .pool()
                 .begin_with("BEGIN IMMEDIATE")
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             let status = checkpoint_transaction(&mut transaction, checkpoint).await?;
-            transaction.commit().await.map_err(map_backend)?;
+            transaction.commit().await.map_err(cache::map)?;
             Ok(status)
         })
     }
@@ -64,14 +87,14 @@ impl ProjectionStore for SqliteStorage {
                 .pool()
                 .begin_with("BEGIN IMMEDIATE")
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             let row = sqlx::query(
                 "SELECT * FROM radroots_runtime_projection_checkpoints WHERE projection_id = ?",
             )
             .bind(invalidation.projection_id().as_str())
             .fetch_optional(&mut *transaction)
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             .ok_or(Error::ProjectionCheckpointMismatch)?;
             let current = decode_status(&row)?;
             if current.generation() != invalidation.invalid_generation() {
@@ -101,7 +124,7 @@ impl ProjectionStore for SqliteStorage {
                 .bind(i64_from_u64(invalidation.invalidated_at_unix_ms())?)
                 .execute(&mut *transaction)
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             }
             let next = ProjectionStatus::new(
                 invalidation.projection_id().clone(),
@@ -111,7 +134,7 @@ impl ProjectionStore for SqliteStorage {
                 None,
             )?;
             put_status_transaction(&mut transaction, &next).await?;
-            transaction.commit().await.map_err(map_backend)?;
+            transaction.commit().await.map_err(cache::map)?;
             Ok(next)
         })
     }
@@ -126,18 +149,18 @@ impl ProjectionStore for SqliteStorage {
                 .pool()
                 .begin_with("BEGIN IMMEDIATE")
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             if let Some(row) = sqlx::query(
                 "SELECT * FROM radroots_runtime_projection_rebuilds WHERE ticket_id = ?",
             )
             .bind(ticket.ticket_id().as_bytes().as_slice())
             .fetch_optional(&mut *transaction)
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             {
                 let existing = decode_ticket(&mut transaction, &row).await?;
                 return if existing == ticket {
-                    transaction.commit().await.map_err(map_backend)?;
+                    transaction.commit().await.map_err(cache::map)?;
                     Ok(existing)
                 } else {
                     Err(Error::ProjectionRevisionConflict)
@@ -149,7 +172,7 @@ impl ProjectionStore for SqliteStorage {
             .bind(ticket.invalidation().projection_id().as_str())
             .fetch_optional(&mut *transaction)
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             .ok_or(Error::ProjectionCheckpointMismatch)?;
             let status = decode_status(&status_row)?;
             if status.generation() != ticket.invalidation().invalid_generation()
@@ -174,7 +197,7 @@ impl ProjectionStore for SqliteStorage {
                 Some(ticket.ticket_id()),
             )?;
             put_status_transaction(&mut transaction, &next).await?;
-            transaction.commit().await.map_err(map_backend)?;
+            transaction.commit().await.map_err(cache::map)?;
             Ok(ticket)
         })
     }
@@ -194,7 +217,7 @@ impl ProjectionStore for SqliteStorage {
             .bind(replacement_generation.as_bytes().as_slice())
             .fetch_optional(self.pool())
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             .as_ref()
             .map(decode_invalidation)
             .transpose()
@@ -206,14 +229,14 @@ impl ProjectionStore for SqliteStorage {
         ticket_id: RebuildTicketId,
     ) -> BoxFuture<'_, Result<Option<RebuildTicket>, Error>> {
         Box::pin(async move {
-            let mut connection = self.pool().acquire().await.map_err(map_backend)?;
+            let mut connection = self.pool().acquire().await.map_err(cache::map)?;
             let row = sqlx::query(
                 "SELECT * FROM radroots_runtime_projection_rebuilds WHERE ticket_id = ?",
             )
             .bind(ticket_id.as_bytes().as_slice())
             .fetch_optional(&mut *connection)
             .await
-            .map_err(map_backend)?;
+            .map_err(cache::map)?;
             match row {
                 Some(row) => decode_ticket(&mut connection, &row).await.map(Some),
                 None => Ok(None),
@@ -231,14 +254,14 @@ impl ProjectionStore for SqliteStorage {
                 .pool()
                 .begin_with("BEGIN IMMEDIATE")
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             let row = sqlx::query(
                 "SELECT * FROM radroots_runtime_projection_rebuilds WHERE ticket_id = ?",
             )
             .bind(transition.ticket_id().as_bytes().as_slice())
             .fetch_optional(&mut *transaction)
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             .ok_or(Error::ProjectionRevisionConflict)?;
             let current = decode_ticket(&mut transaction, &row).await?;
             let status_row = sqlx::query(
@@ -247,7 +270,7 @@ impl ProjectionStore for SqliteStorage {
             .bind(current.invalidation().projection_id().as_str())
             .fetch_optional(&mut *transaction)
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             .ok_or(Error::CorruptProjectionRecord)?;
             let current_status = decode_status(&status_row)?;
             if current_status.generation() != current.invalidation().invalid_generation()
@@ -270,7 +293,7 @@ impl ProjectionStore for SqliteStorage {
                 )
                 .fetch_one(&mut *transaction)
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
                 let generation = SourceGeneration::new(array(
                     source
                         .try_get::<Vec<u8>, _>("generation")
@@ -320,7 +343,7 @@ impl ProjectionStore for SqliteStorage {
                 active_rebuild,
             )?;
             put_status_transaction(&mut transaction, &status).await?;
-            transaction.commit().await.map_err(map_backend)?;
+            transaction.commit().await.map_err(cache::map)?;
             Ok(next)
         })
     }
@@ -330,7 +353,7 @@ impl ProjectionStore for SqliteStorage {
         generation: ProjectionGeneration,
     ) -> BoxFuture<'_, Result<Option<EventIndexManifest>, Error>> {
         Box::pin(async move {
-            let mut connection = self.pool().acquire().await.map_err(map_backend)?;
+            let mut connection = self.pool().acquire().await.map_err(cache::map)?;
             load_manifest(&mut connection, generation).await
         })
     }
@@ -345,10 +368,10 @@ impl ProjectionStore for SqliteStorage {
                 .pool()
                 .begin_with("BEGIN IMMEDIATE")
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             if let Some(existing) = load_manifest(&mut transaction, manifest.generation()).await? {
                 return if existing == manifest {
-                    transaction.commit().await.map_err(map_backend)?;
+                    transaction.commit().await.map_err(cache::map)?;
                     Ok(())
                 } else {
                     Err(Error::CorruptProjectionRecord)
@@ -367,7 +390,7 @@ impl ProjectionStore for SqliteStorage {
             .bind(i64_from_u64(manifest.last_published_at_unix_s())?)
             .execute(&mut *transaction)
             .await
-            .map_err(map_backend)?;
+            .map_err(cache::map)?;
             for (ordinal, shard) in manifest.shards().iter().enumerate() {
                 sqlx::query(
                     "INSERT INTO radroots_runtime_event_index_shards (
@@ -388,9 +411,9 @@ impl ProjectionStore for SqliteStorage {
                 .bind(shard.sha256().as_bytes().as_slice())
                 .execute(&mut *transaction)
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             }
-            transaction.commit().await.map_err(map_backend)
+            transaction.commit().await.map_err(cache::map)
         })
     }
 
@@ -407,7 +430,7 @@ impl ProjectionStore for SqliteStorage {
             .bind(generation.as_bytes().as_slice())
             .fetch_optional(self.pool())
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
             .as_ref()
             .map(|row| decode_index_checkpoint(row, generation))
             .transpose()
@@ -424,7 +447,7 @@ impl ProjectionStore for SqliteStorage {
                 .pool()
                 .begin_with("BEGIN IMMEDIATE")
                 .await
-                .map_err(map_backend)?;
+                .map_err(cache::map)?;
             if let Some(row) = sqlx::query(
                 "SELECT generated_at_unix_ms, checkpoint
                  FROM radroots_runtime_event_index_checkpoints
@@ -433,7 +456,7 @@ impl ProjectionStore for SqliteStorage {
             .bind(checkpoint.generation().as_bytes().as_slice())
             .fetch_optional(&mut *transaction)
             .await
-            .map_err(map_backend)?
+            .map_err(cache::map)?
                 && checkpoint.generated_at_unix_ms()
                     < decode_index_checkpoint(&row, checkpoint.generation())?.generated_at_unix_ms()
             {
@@ -452,8 +475,8 @@ impl ProjectionStore for SqliteStorage {
             .bind(encode_index_checkpoint(&checkpoint)?)
             .execute(&mut *transaction)
             .await
-            .map_err(map_backend)?;
-            transaction.commit().await.map_err(map_backend)?;
+            .map_err(cache::map)?;
+            transaction.commit().await.map_err(cache::map)?;
             Ok(())
         })
     }
@@ -518,74 +541,14 @@ impl ProjectionStore for SqliteStorage {
         &self,
         snapshot: ProjectionSnapshot,
     ) -> BoxFuture<'_, Result<(), Error>> {
-        Box::pin(async move {
-            self.require_projection_writer()?;
-            let result = sqlx::query(
-                "INSERT INTO radroots_runtime_projection_snapshots (
-                   projection_id, snapshot_id, generation, created_at_unix_ms,
-                   value, value_sha256
-                 ) VALUES (?, ?, ?, ?, ?, ?)
-                 ON CONFLICT(projection_id, snapshot_id) DO NOTHING",
-            )
-            .bind(snapshot.projection_id().as_str())
-            .bind(snapshot.snapshot_id().as_slice())
-            .bind(snapshot.generation().as_bytes().as_slice())
-            .bind(i64_from_u64(snapshot.created_at_unix_ms())?)
-            .bind(snapshot.value())
-            .bind(snapshot.value_sha256().as_slice())
-            .execute(self.pool())
-            .await
-            .map_err(map_backend)?;
-            if result.rows_affected() == 1 {
-                return Ok(());
-            }
-            match self
-                .projection_snapshot(snapshot.projection_id().clone(), *snapshot.snapshot_id())
-                .await?
-            {
-                Some(existing) if existing == snapshot => Ok(()),
-                Some(_) => Err(Error::CorruptProjectionDocument),
-                None => Err(Error::CorruptProjectionDocument),
-            }
-        })
+        Box::pin(cache::put_snapshot(self, snapshot))
     }
-
     fn projection_snapshot(
         &self,
-        projection_id: ProjectionId,
-        snapshot_id: [u8; 32],
+        id: ProjectionId,
+        snapshot: [u8; 32],
     ) -> BoxFuture<'_, Result<Option<ProjectionSnapshot>, Error>> {
-        Box::pin(async move {
-            sqlx::query(
-                "SELECT projection_id, snapshot_id, generation, created_at_unix_ms,
-                        value, value_sha256
-                 FROM radroots_runtime_projection_snapshots
-                 WHERE projection_id = ? AND snapshot_id = ?",
-            )
-            .bind(projection_id.as_str())
-            .bind(snapshot_id.as_slice())
-            .fetch_optional(self.pool())
-            .await
-            .map_err(map_backend)?
-            .map(|row| {
-                ProjectionSnapshot::from_stored_parts(
-                    ProjectionId::parse(
-                        row.try_get::<String, _>("projection_id")
-                            .map_err(map_corrupt)?,
-                    )
-                    .map_err(|_| Error::CorruptProjectionDocument)?,
-                    array(row.try_get("snapshot_id").map_err(map_corrupt)?)?,
-                    ProjectionGeneration::new(array(
-                        row.try_get("generation").map_err(map_corrupt)?,
-                    )?)
-                    .map_err(|_| Error::CorruptProjectionDocument)?,
-                    u64_from_i64(row.try_get("created_at_unix_ms").map_err(map_corrupt)?)?,
-                    row.try_get("value").map_err(map_corrupt)?,
-                    array(row.try_get("value_sha256").map_err(map_corrupt)?)?,
-                )
-            })
-            .transpose()
-        })
+        Box::pin(cache::snapshot(self, id, snapshot))
     }
 }
 
@@ -606,7 +569,7 @@ pub(crate) async fn checkpoint_transaction(
     .bind(checkpoint.projection_id().as_str())
     .fetch_optional(&mut **transaction)
     .await
-    .map_err(map_backend)?
+    .map_err(cache::map)?
     .as_ref()
     .map(decode_status)
     .transpose()?;
@@ -662,7 +625,7 @@ async fn put_status_transaction(
         )
         .execute(&mut **transaction)
         .await
-        .map_err(map_backend)?;
+        .map_err(cache::map)?;
     Ok(())
 }
 
@@ -789,7 +752,7 @@ async fn load_invalidation(
     .bind(generation.as_bytes().as_slice())
     .fetch_optional(&mut *connection)
     .await
-    .map_err(map_backend)?
+    .map_err(cache::map)?
     .as_ref()
     .map(decode_invalidation)
     .transpose()
@@ -863,7 +826,7 @@ async fn insert_ticket(
     .bind(i64_from_u64(ticket.updated_at_unix_ms())?)
     .execute(&mut **transaction)
     .await
-    .map_err(map_backend)?;
+    .map_err(cache::map)?;
     Ok(())
 }
 
@@ -893,7 +856,7 @@ async fn update_ticket(
     .bind(i64_from_u64(prior.get())?)
     .execute(&mut **transaction)
     .await
-    .map_err(map_backend)?;
+    .map_err(cache::map)?;
     if result.rows_affected() != 1 {
         return Err(Error::ProjectionRevisionConflict);
     }
@@ -985,7 +948,7 @@ async fn load_manifest(
     .bind(generation.as_bytes().as_slice())
     .fetch_optional(&mut *connection)
     .await
-    .map_err(map_backend)?
+    .map_err(cache::map)?
     else {
         return Ok(None);
     };
@@ -996,7 +959,7 @@ async fn load_manifest(
     .bind(generation.as_bytes().as_slice())
     .fetch_all(&mut *connection)
     .await
-    .map_err(map_backend)?
+    .map_err(cache::map)?
     .iter()
     .enumerate()
     .map(|(ordinal, row)| {

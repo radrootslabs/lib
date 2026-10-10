@@ -70,6 +70,8 @@ use crate::{
 
 #[path = "memory_projection_batch.rs"]
 mod projection_batch;
+#[path = "memory_projection_cache.rs"]
+mod projection_cache;
 
 #[derive(Clone)]
 struct EventEntry {
@@ -97,7 +99,8 @@ struct State {
         (ProjectionId, ProjectionGeneration),
         projection_batch::Generation,
     >,
-    projection_snapshots: Vec<ProjectionSnapshot>,
+    projection_snapshots: projection_cache::Snapshots,
+    projection_cache: projection_cache::Cache,
     private_artifacts: Vec<PrivateArtifactMetadata>,
     private_artifact_reseals: Vec<PrivateArtifactResealReceipt>,
     backups: Vec<BackupOperation>,
@@ -139,7 +142,8 @@ impl MemoryStorage {
                 event_index_checkpoints: Vec::new(),
                 projection_documents: std::collections::BTreeMap::new(),
                 projection_generations: std::collections::BTreeMap::new(),
-                projection_snapshots: Vec::new(),
+                projection_snapshots: projection_cache::Snapshots::new(),
+                projection_cache: projection_cache::Cache::new(),
                 private_artifacts: Vec::new(),
                 private_artifact_reseals: Vec::new(),
                 backups: Vec::new(),
@@ -481,6 +485,8 @@ impl MemoryStorage {
         {
             return Err(Error::ProjectionRevisionConflict);
         }
+        let identity = (checkpoint.projection_id().clone(), checkpoint.generation());
+        state.projection_cache.check_protected(&identity)?;
         if let Some(status) = state
             .projections
             .iter_mut()
@@ -512,6 +518,7 @@ impl MemoryStorage {
             Some(checkpoint),
             None,
         )?;
+        state.projection_cache.protected.insert(identity);
         state.projections.push(status.clone());
         Ok(status)
     }
@@ -891,6 +898,36 @@ impl Outbox for MemoryStorage {
 }
 
 impl ProjectionStore for MemoryStorage {
+    fn configure_projection_cache(
+        &self,
+        id: ProjectionId,
+        limits: crate::projection::cache::ProjectionCacheLimits,
+    ) -> BoxFuture<'_, Result<crate::projection::cache::ProjectionCacheUsage, Error>> {
+        Box::pin(async move {
+            projection_cache::configure(&mut *self.state()?, id, limits, projection_cache::now()?)
+        })
+    }
+    fn retire_projection_generation(
+        &self,
+        scope: crate::projection::cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<crate::projection::cache::ProjectionCacheUsage, Error>> {
+        Box::pin(
+            async move { projection_cache::retire(&mut *self.state()?, self.generation, scope) },
+        )
+    }
+    fn collect_projection_cache(
+        &self,
+        scope: crate::projection::cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<crate::projection::cache::ProjectionCacheCollection, Error>> {
+        Box::pin(async move {
+            projection_cache::collect(
+                &mut *self.state()?,
+                self.generation,
+                scope,
+                projection_cache::now()?,
+            )
+        })
+    }
     fn status(
         &self,
         projection_id: ProjectionId,
@@ -1064,6 +1101,22 @@ impl ProjectionStore for MemoryStorage {
                 return Err(Error::SourceGenerationChanged);
             }
             let projection_id = next.invalidation().projection_id();
+            let old_identity = (
+                projection_id.clone(),
+                next.invalidation().invalid_generation(),
+            );
+            let new_identity = (
+                projection_id.clone(),
+                next.invalidation().replacement_generation(),
+            );
+            let old_registered = state.projection_generations.contains_key(&old_identity);
+            if next.stage() == RebuildStage::Completed
+                && (old_registered || !state.projection_cache.protected.contains(&old_identity))
+            {
+                // A live registration retains its reservation until explicit retirement.
+                // Only an unregistered legacy checkpoint transfers its existing slot.
+                state.projection_cache.check_protected(&new_identity)?;
+            }
             let status = state
                 .projections
                 .iter_mut()
@@ -1102,6 +1155,12 @@ impl ProjectionStore for MemoryStorage {
                 checkpoint,
                 active_rebuild,
             )?;
+            if next.stage() == RebuildStage::Completed {
+                if !old_registered {
+                    state.projection_cache.protected.remove(&old_identity);
+                }
+                state.projection_cache.protected.insert(new_identity);
+            }
             state.rebuilds[index] = next.clone();
             Ok(next)
         })
@@ -1232,16 +1291,25 @@ impl ProjectionStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let mut state = self.state()?;
+            if state.projection_cache.owners.contains(&projection_id) {
+                return Err(Error::ProjectionRevisionConflict);
+            }
             if state
                 .projection_generations
                 .contains_key(&(projection_id.clone(), generation))
             {
                 return Err(Error::ProjectionRevisionConflict);
             }
-            state.projection_documents.insert(
-                (projection_id, generation, document.key().to_owned()),
-                document,
-            );
+            let key = (projection_id, generation, document.key().to_owned());
+            let bytes = state.projection_cache.check_bytes(
+                state
+                    .projection_documents
+                    .get(&key)
+                    .map_or(0, |value| value.value().len() as u64),
+                document.value().len() as u64,
+            )?;
+            state.projection_cache.value_bytes = bytes;
+            state.projection_documents.insert(key, document);
             Ok(())
         })
     }
@@ -1277,36 +1345,62 @@ impl ProjectionStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let mut state = self.state()?;
-            if let Some(existing) = state.projection_snapshots.iter().find(|existing| {
-                existing.projection_id() == snapshot.projection_id()
-                    && existing.snapshot_id() == snapshot.snapshot_id()
-            }) {
+            let key = (snapshot.projection_id().clone(), *snapshot.snapshot_id());
+            if let Some(existing) = state.projection_snapshots.get(&key) {
                 return if existing == &snapshot {
                     Ok(())
                 } else {
                     Err(Error::CorruptProjectionDocument)
                 };
             }
-            state.projection_snapshots.push(snapshot);
+            if state
+                .projection_cache
+                .owners
+                .contains(snapshot.projection_id())
+            {
+                return Err(Error::ProjectionRevisionConflict);
+            }
+            if state.projection_cache.limits.is_some_and(|limit| {
+                state.projection_snapshots.len() as u64 >= limit.legacy_snapshots()
+            }) {
+                return Err(Error::SpaceInsufficient);
+            }
+            let bytes = state
+                .projection_cache
+                .check_bytes(0, snapshot.value().len() as u64)?;
+            state.projection_cache.value_bytes = bytes;
+            state.projection_cache.snapshot_order.insert((
+                key.0.clone(),
+                snapshot.generation(),
+                snapshot.created_at_unix_ms(),
+                key.1,
+            ));
+            state.projection_snapshots.insert(key, snapshot);
             Ok(())
         })
     }
-
     fn projection_snapshot(
         &self,
-        projection_id: ProjectionId,
-        snapshot_id: [u8; 32],
+        id: ProjectionId,
+        snapshot: [u8; 32],
     ) -> BoxFuture<'_, Result<Option<ProjectionSnapshot>, Error>> {
         Box::pin(async move {
-            Ok(self
-                .state()?
-                .projection_snapshots
-                .iter()
-                .find(|snapshot| {
-                    snapshot.projection_id() == &projection_id
-                        && snapshot.snapshot_id() == &snapshot_id
-                })
-                .cloned())
+            let mut state = self.state()?;
+            if state.projection_cache.owners.contains(&id) {
+                let now = state.projection_cache.time(projection_cache::now()?);
+                if state
+                    .projection_snapshots
+                    .get(&(id.clone(), snapshot))
+                    .is_some_and(|value| {
+                        state
+                            .projection_cache
+                            .expired(value.created_at_unix_ms(), now)
+                    })
+                {
+                    return Ok(None);
+                }
+            }
+            Ok(state.projection_snapshots.get(&(id, snapshot)).cloned())
         })
     }
 }

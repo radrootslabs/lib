@@ -14,7 +14,7 @@ use crate::{
 use std::ops::Bound::{Excluded, Included, Unbounded};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum Phase {
+pub(super) enum Phase {
     Staging,
     Promoted,
     Retired,
@@ -22,10 +22,10 @@ enum Phase {
 
 #[derive(Clone)]
 pub(super) struct Generation {
-    scope: ProjectionWriteScope,
-    phase: Phase,
-    rows: u64,
-    bytes: u64,
+    pub(super) scope: ProjectionWriteScope,
+    pub(super) phase: Phase,
+    pub(super) rows: u64,
+    pub(super) bytes: u64,
 }
 
 pub(super) fn fence(
@@ -143,6 +143,10 @@ pub(super) fn write(
             )
         })
         .transpose()?;
+    let cache_bytes = state
+        .projection_cache
+        .check_bytes(prior.map_or(0, |value| value.bytes), next.bytes)?;
+    state.projection_cache.check_protected(&identity)?;
     // Every fallible condition is checked before publishing any in-memory changes.
     let documents: Vec<_> = batch
         .documents()
@@ -154,11 +158,19 @@ pub(super) fn write(
             )
         })
         .collect();
+    state.projection_cache.value_bytes = cache_bytes;
+    state.projection_cache.protected.insert(identity.clone());
     for (key, document) in documents {
         state.projection_documents.insert(key, document);
     }
     if let Some(status) = promoted.as_ref() {
         next.phase = Phase::Promoted;
+        if let Some(active) = scope.expected_active() {
+            state
+                .projection_cache
+                .protected
+                .remove(&(identity.0.clone(), active));
+        }
         if let Some(active) = scope.expected_active()
             && let Some(previous) = state
                 .projection_generations

@@ -1,0 +1,25 @@
+{
+  "schema": "radroots.projection-cache-retirement.v1",
+  "status": "implemented_candidate",
+  "owners": [
+    "radroots_storage",
+    "radroots_storage_sqlite"
+  ],
+  "authority": "Explicit cache identity registration and immutable positive caller-owned limits. Application policy remains outside Lib. Unsupported providers refuse the new methods.",
+  "accounting": "One store-wide logical value-byte, protected-generation and legacy-snapshot budget includes legacy, active and staging projection rows. Scalar migration initialization is explicit; subsequent declared writers update cached counters under their owner lock or transaction. Growing admission refuses capacity without partial rows or status. Collection may reduce pre-existing excess.",
+  "retirement": "Exact registered cache owner, canonical source token and expected active generation are compared before effects. A current Ready active generation is protected. Obsolete, staged or explicitly invalidated generations can be retired. Stale active retirement clears its derived status atomically; canonical events, authored work, intents, receipts and media custody are untouched.",
+  "collection": "At most64 total exact-generation document, legacy snapshot and registration rows per pass. Active/staging documents are protected. Unrelated projection identities cannot be collected unless explicitly registered as derived cache by their owner. Continuation reflects remaining eligible work. Metadata selection and deletion occur in one transaction or lock, without payload hydration.",
+  "legacy_snapshots": "Configured cache identities create no new whole-view snapshot sessions. Existing exact duplicate replay cannot extend fixed expiry. Owner wall time and a durable high-water govern legacy expiry; caller as-of is never a clock input. Configured legacy snapshot reads on a read-only provider refuse continuation. Exact unconfigured lookups validate scalar lengths and fixed digests before hydration.",
+  "compatibility": "Historical migrations1-21 are immutable. Forward22 owns only derived-cache accounting, registration and indexes. Unconfigured inventory semantics remain supported. Physical database/WAL pages are separate from logical live value-byte quota and are not promised to shrink after collection.",
+  "non_goals": [
+    "leases",
+    "new per-read snapshots",
+    "application policy",
+    "canonical data deletion",
+    "new database",
+    "worker",
+    "vacuum",
+    "physical-device qualification"
+  ],
+  "batch_admission": "One final aggregate policy independent of input order. Up to64 scalar old lengths are preflighted in BEGIN IMMEDIATE. True aggregate growth beyond immutable configured limits refuses before payload effects; non-growing replacement can reduce pre-existing excess. A private final-byte reservation exists only inside that transaction, shrinking rows precede growth, and exact counters/reservation are checked and cleared before commit. Failure, cancellation and crash roll back the transaction. Direct writers retain ordinary per-write guards. Historical migrations1-21 remain unchanged."
+}

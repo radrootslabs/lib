@@ -4,6 +4,7 @@
 //! row representations remain in their domain packages.
 
 pub mod batch;
+pub mod cache;
 pub mod document_query;
 
 pub use radroots_event::EventId;
@@ -1028,6 +1029,29 @@ impl ProjectionStatus {
 
 /// Backend-neutral projection coordination SPI.
 pub trait ProjectionStore: Send + Sync {
+    /// Registers one exact derived-cache identity under an immutable store budget.
+    /// Configured identities cannot create new legacy whole-view snapshots.
+    fn configure_projection_cache(
+        &self,
+        _id: ProjectionId,
+        _limits: cache::ProjectionCacheLimits,
+    ) -> BoxFuture<'_, Result<cache::ProjectionCacheUsage, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+    /// Retires an exact obsolete generation without touching canonical or authored data.
+    fn retire_projection_generation(
+        &self,
+        _scope: cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<cache::ProjectionCacheUsage, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+    /// Collects at most64 exact-generation derived rows under a source/active fence.
+    fn collect_projection_cache(
+        &self,
+        _scope: cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<cache::ProjectionCacheCollection, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
     /// Atomically stages a bounded batch under a durable source and generation fence.
     fn put_projection_batch(
         &self,
