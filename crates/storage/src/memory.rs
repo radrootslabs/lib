@@ -2,6 +2,8 @@
 
 #[path = "memory_delivery_history.rs"]
 mod delivery_history;
+#[path = "memory_visibility_index.rs"]
+mod visibility_index;
 
 #[cfg(test)]
 #[path = "memory_mutation_tests.rs"]
@@ -71,12 +73,15 @@ struct EventEntry {
     position: EventPosition,
     admission: EventAdmission,
     provenance: Vec<EventProvenance>,
+    last_mutation_epoch: u64,
 }
 
 #[derive(Clone, Default)]
 struct State {
     events: Vec<EventEntry>,
     event_mutation_epoch: u64,
+    event_changes: std::collections::BTreeMap<u64, u64>,
+    visibility_index: visibility_index::Index,
     journal: Vec<OperationRecord>,
     outbox: Vec<OutboxRecord>,
     projections: Vec<ProjectionStatus>,
@@ -116,6 +121,8 @@ impl MemoryStorage {
             state: Mutex::new(State {
                 events: Vec::new(),
                 event_mutation_epoch: 0,
+                event_changes: std::collections::BTreeMap::new(),
+                visibility_index: visibility_index::Index::new(),
                 journal: Vec::new(),
                 outbox: Vec::new(),
                 projections: Vec::new(),
@@ -230,6 +237,12 @@ impl MemoryStorage {
                     .event_mutation_epoch
                     .checked_add(1)
                     .ok_or(Error::EventMutationOverflow)?;
+                state.event_changes.remove(&entry.last_mutation_epoch);
+                entry.last_mutation_epoch = state.event_mutation_epoch;
+                state
+                    .event_changes
+                    .insert(entry.last_mutation_epoch, entry.position.sequence().get());
+                state.visibility_index.ready = false;
                 AdmissionDisposition::Advanced
             };
             if !entry.provenance.contains(admission.provenance()) {
@@ -263,8 +276,11 @@ impl MemoryStorage {
             position,
             admission,
             provenance,
+            last_mutation_epoch: epoch,
         });
         state.event_mutation_epoch = epoch;
+        state.event_changes.insert(epoch, next);
+        state.visibility_index.ready = false;
         Ok(receipt)
     }
 
@@ -424,6 +440,16 @@ impl Default for MemoryStorage {
 }
 
 impl EventStore for MemoryStorage {
+    fn maintain_visibility(
+        &self,
+        bounds: crate::event::VisibilityIndexBounds,
+    ) -> BoxFuture<'_, Result<crate::event::VisibilityIndexProgress, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            visibility_index::prepare(self.generation, &mut state, bounds)
+        })
+    }
+
     fn source_token(&self) -> BoxFuture<'_, Result<EventSourceToken, Error>> {
         Box::pin(async move {
             let state = self.state()?;

@@ -70,6 +70,12 @@ fn unsupported_adapter_cannot_invent_a_source_fence() {
         block_on(MemoryEventStore::new().source_token()),
         Err(Error::BackendUnavailable)
     );
+    assert_eq!(
+        block_on(MemoryEventStore::new().maintain_visibility(
+            radroots_storage::event::VisibilityIndexBounds::new(64, 16 * 1024 * 1024).unwrap()
+        )),
+        Err(Error::BackendUnavailable)
+    );
 }
 
 impl EventStore for MemoryEventStore {

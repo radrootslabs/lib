@@ -13,8 +13,12 @@ use std::collections::BTreeSet;
 use crate::{Error, status::EventStoreStatus};
 
 mod visibility;
+mod visibility_index;
+#[doc(hidden)]
+pub use visibility::VisibilityEventMetadata;
 #[doc(hidden)]
 pub use visibility::{VisibilityEvaluation, VisibilityInput, evaluate_visibility};
+pub use visibility_index::{VisibilityIndexBounds, VisibilityIndexProgress};
 
 /// Maximum events returned by one storage query.
 pub const EVENT_QUERY_LIMIT_MAX: u16 = 1_000;
@@ -626,6 +630,17 @@ impl StoredEventProvenance {
 /// idempotent for an identical event and provenance observation; a stage may
 /// advance but never regress. Query cursors are bound to one source generation.
 pub trait EventStore: Send + Sync {
+    /// Prepares one bounded, transactionally resumable canonical index chunk.
+    ///
+    /// Completion refers to canonical metadata at the returned source token,
+    /// not to any application projection. It never initiates a hidden task.
+    fn maintain_visibility(
+        &self,
+        _bounds: VisibilityIndexBounds,
+    ) -> BoxFuture<'_, Result<VisibilityIndexProgress, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+
     /// Reads the current source token without decoding retained event history.
     ///
     /// Providers that cannot supply this fence fail closed. SQLite epochs have

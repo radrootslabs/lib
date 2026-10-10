@@ -1,4 +1,7 @@
 use crate::backend::map_backend;
+mod visibility_index;
+#[cfg(test)]
+mod visibility_index_tests;
 use radroots_event::SignedEvent;
 use radroots_event_codec::Codec;
 use radroots_storage::{
@@ -397,6 +400,13 @@ fn admission_contract_metadata(admission: &EventAdmission) -> Option<(&'static s
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl EventStore for SqliteStorage {
+    fn maintain_visibility(
+        &self,
+        bounds: radroots_storage::event::VisibilityIndexBounds,
+    ) -> BoxFuture<'_, Result<radroots_storage::event::VisibilityIndexProgress, Error>> {
+        Box::pin(async move { self.prepare_visibility_index(bounds).await })
+    }
+
     fn source_token(&self) -> BoxFuture<'_, Result<EventSourceToken, Error>> {
         Box::pin(async move {
             let epoch = sqlx::query_scalar::<_, i64>(

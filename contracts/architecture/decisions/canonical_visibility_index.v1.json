@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "decision_id": "radroots.storage.canonical_visibility_index.v1",
+  "status": "implemented_not_published",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "public_boundary": {
+    "maintenance": "EventStore::maintain_visibility",
+    "bounds": "VisibilityIndexBounds",
+    "progress": "VisibilityIndexProgress",
+    "unsupported_provider": "BackendUnavailable",
+    "invalid_bounds": "InvalidVisibilityIndexBounds",
+    "capacity": "SpaceInsufficient",
+    "maximum_source_rows": 64,
+    "maximum_logical_bytes": 16777216,
+    "charge": "4096 + maximum_source_rows * 128 + sum(signed_bytes * 16 + 4096)",
+    "hidden_metadata": "VisibilityEventMetadata reuses existing head and deletion parsing; it carries no application policy"
+  },
+  "durability": {
+    "forward_runtime_version": 19,
+    "immutable_prefix": "versions 1 through 18",
+    "canonical_truth": "signed event rows remain authoritative and immutable",
+    "mutation": "combined SQL triggers atomically advance generation epoch, event last-change epoch and dirty visibility obligation",
+    "backfill": "fixed initial sequence target with durable sequence cursor",
+    "legacy_change_epoch": "zero marks source rows predating this index; the fixed initial backfill prepares them without a whole-source UPDATE or payload decode in migration",
+    "replay": "ordered last-change epoch and source-sequence cursor; updates to previously scanned rows are replayed without resetting the initial cursor",
+    "completion": "all initial rows and subsequent changed rows prepared at the transaction's active source token",
+    "transaction": "one bounded immediate transaction; cancellation or failure before commit rolls back metadata and progress",
+    "retired_source": "SourceGenerationChanged",
+    "restore": "verified whole-file replacement preserves metadata and source together, closes old handles, and requires consumer runtime invalidation separately"
+  },
+  "semantics": [
+    "verified unsupported heads retain suppression authority",
+    "raw events have no head or deletion authority",
+    "only visible authorized deletion requests contribute targets",
+    "same-author event and address deletion semantics reuse the reference parser",
+    "created_at is stored as ordered unsigned 8-byte big-endian metadata",
+    "missing address identifier behavior matches the reference evaluator",
+    "no partially prepared index is advertised complete"
+  ],
+  "separate_followup": "Indexed visible/status providers and bounded repeated-read qualification remain a separate checkpoint",
+  "forbidden": ["raw SQL public API", "application ranking", "second database", "hidden worker", "unbounded fallback", "protocol registry revision"]
+}

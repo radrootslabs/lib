@@ -79,6 +79,86 @@ struct DeletionRequest {
     address_targets: BTreeSet<Nip01Coordinate>,
 }
 
+/// Canonical provider metadata extracted with the reference reducer's parsing.
+#[doc(hidden)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VisibilityEventMetadata {
+    pub event_id: EventId,
+    pub author: [u8; 32],
+    pub created_at: u64,
+    pub stage: AdmissionStage,
+    pub head_coordinate: Option<Vec<u8>>,
+    pub deletion_coordinate: Option<String>,
+    pub ephemeral: bool,
+    pub deletion_request: bool,
+    pub event_targets: BTreeSet<EventId>,
+    pub address_targets: BTreeSet<String>,
+}
+
+impl VisibilityEventMetadata {
+    #[doc(hidden)]
+    pub fn from_event(event: &SignedEvent, stage: AdmissionStage) -> Result<Self, Error> {
+        let envelope = event.envelope();
+        let (head_coordinate, ephemeral) = if stage == AdmissionStage::Raw {
+            (None, false)
+        } else {
+            match event_head_candidate_for_nip01_event(envelope) {
+                EventHeadCandidateResult::Candidate(candidate) => {
+                    let mut key = Vec::new();
+                    match candidate.coordinate {
+                        EventHeadCoordinate::Replaceable { kind, pubkey } => {
+                            key.push(0);
+                            key.extend_from_slice(&kind.to_be_bytes());
+                            key.extend_from_slice(pubkey.as_bytes());
+                        }
+                        EventHeadCoordinate::Addressable {
+                            kind,
+                            pubkey,
+                            d_tag,
+                        } => {
+                            key.push(1);
+                            key.extend_from_slice(&kind.to_be_bytes());
+                            key.extend_from_slice(pubkey.as_bytes());
+                            key.extend_from_slice(d_tag.as_bytes());
+                        }
+                    }
+                    (Some(key), false)
+                }
+                EventHeadCandidateResult::NotHeadSelected => (None, false),
+                EventHeadCandidateResult::NotPersisted => (None, true),
+                EventHeadCandidateResult::Malformed(_) => return Err(Error::CorruptStoredEvent),
+            }
+        };
+        let deletion_request =
+            stage == AdmissionStage::Visible && envelope.kind_u32() == KIND_DELETION_REQUEST;
+        let (event_targets, address_targets) = if deletion_request {
+            let request = parse_deletion_request(event)?;
+            (
+                request.event_targets,
+                request
+                    .address_targets
+                    .into_iter()
+                    .map(|coordinate| coordinate.as_str().to_owned())
+                    .collect(),
+            )
+        } else {
+            (BTreeSet::new(), BTreeSet::new())
+        };
+        Ok(Self {
+            event_id: *event.id(),
+            author: *envelope.author().as_bytes(),
+            created_at: envelope.created_at_u64(),
+            stage,
+            head_coordinate,
+            deletion_coordinate: event_coordinate(envelope).map(|value| value.as_str().to_owned()),
+            ephemeral,
+            deletion_request,
+            event_targets,
+            address_targets,
+        })
+    }
+}
+
 #[doc(hidden)]
 pub fn evaluate_visibility<'a>(
     generation: SourceGeneration,
