@@ -61,6 +61,7 @@ serde = { workspace = true, default-features = false, features = [
 ], optional = true }
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
+  "raw_value",
 ], optional = true }
 secp256k1 = { workspace = true }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }

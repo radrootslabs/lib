@@ -1,5 +1,7 @@
 //! Profile and account event models.
 
+pub mod edit;
+
 #[cfg(not(feature = "std"))]
 use alloc::string::String;
 use core::{fmt, str::FromStr};

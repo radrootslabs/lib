@@ -4,7 +4,6 @@ use core::{
     fmt,
     sync::atomic::{AtomicBool, Ordering},
 };
-use radroots_event::contract::event_contract;
 use radroots_event_codec::authoring::{AuthoredEventPlan, BlossomAuthorizationPlan, PlanDigest};
 use radroots_identity::PublicKey;
 use radroots_protocol::runtime::v1::OperationId;
@@ -18,7 +17,7 @@ use crate::{
     Actor, Error, SignerRequestId, SigningIntentId,
     authorization::{
         CurrentAuthoringAuthority, CurrentAuthoringDecision, CurrentRegistryAuthority,
-        DeprecatedPlanPolicy, ManagedSigningPolicy,
+        DeprecatedPlanPolicy, ManagedSigningPolicy, current_authoring_contract,
     },
     error::Kind,
     status::SignProgress,
@@ -450,8 +449,8 @@ fn authorize(
             return Err(Error::new(Kind::AuthorizationDenied));
         }
     }
-    let contract = event_contract(plan.body().contract().contract_id().as_str())
-        .ok_or_else(|| Error::new(Kind::AuthorizationDenied))?;
+    let contract =
+        current_authoring_contract(plan).ok_or_else(|| Error::new(Kind::AuthorizationDenied))?;
     if !actor.satisfies(contract.required_author_role())
         || actor.public_key() != *plan.author()
         || !policy.managed_signing().permits(actor)

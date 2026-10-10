@@ -441,6 +441,10 @@ pub fn radroots_event::calendar::canonical_calendar_geohash_is_valid(&str) -> bo
 pub fn radroots_event::calendar::canonical_calendar_tag_text_is_valid(&str) -> bool
 pub fn radroots_event::calendar::covered_utc_days(u64, core::option::Option<u64>) -> core::result::Result<core::ops::range::RangeInclusive<u64>, radroots_event::calendar::CalendarEventError>
 pub mod radroots_event::contract
+pub mod radroots_event::contract::registry_v8
+pub const radroots_event::contract::registry_v8::PROFILE_METADATA_EDIT_CONTRACT_ID: &str
+pub const fn radroots_event::contract::registry_v8::all_event_contracts_registry_v8() -> &'static [super::EventContract]
+pub fn radroots_event::contract::registry_v8::event_contract_registry_v8(&str) -> core::option::Option<&'static super::EventContract>
 pub enum radroots_event::contract::ContractIdentityError
 pub radroots_event::contract::ContractIdentityError::ContractIdMissing
 pub radroots_event::contract::ContractIdentityError::ContractIdNamespace
@@ -484,6 +488,7 @@ pub struct radroots_event::contract::RegistryVersion(_)
 impl radroots_event::contract::RegistryVersion
 pub const radroots_event::contract::RegistryVersion::CURRENT: Self
 pub const radroots_event::contract::RegistryVersion::V7: Self
+pub const radroots_event::contract::RegistryVersion::V8: Self
 pub const fn radroots_event::contract::RegistryVersion::get(self) -> u32
 pub const fn radroots_event::contract::RegistryVersion::new(u32) -> core::result::Result<Self, radroots_event::contract::ContractIdentityError>
 impl core::fmt::Display for radroots_event::contract::RegistryVersion
@@ -2459,6 +2464,24 @@ pub radroots_event::profile::account::AccountClaim::nip05: core::option::Option<
 pub radroots_event::profile::account::AccountClaim::pubkey: alloc::string::String
 pub radroots_event::profile::account::AccountClaim::username: alloc::string::String
 pub const radroots_event::profile::account::KIND_ACCOUNT_CLAIM: u32
+pub mod radroots_event::profile::edit
+pub enum radroots_event::profile::edit::ProfileFieldChange<T>
+pub radroots_event::profile::edit::ProfileFieldChange::Clear
+pub radroots_event::profile::edit::ProfileFieldChange::Keep
+pub radroots_event::profile::edit::ProfileFieldChange::Set(T)
+pub enum radroots_event::profile::edit::ProfileMediaChange
+pub radroots_event::profile::edit::ProfileMediaChange::Clear
+pub radroots_event::profile::edit::ProfileMediaChange::Keep
+pub radroots_event::profile::edit::ProfileMediaChange::KeepVerified(radroots_event::media::AuthoredImage)
+pub radroots_event::profile::edit::ProfileMediaChange::Set(radroots_event::media::AuthoredImage)
+pub struct radroots_event::profile::edit::ProfileEdit
+pub radroots_event::profile::edit::ProfileEdit::about: radroots_event::profile::edit::ProfileFieldChange<alloc::string::String>
+pub radroots_event::profile::edit::ProfileEdit::banner: radroots_event::profile::edit::ProfileMediaChange
+pub radroots_event::profile::edit::ProfileEdit::bot: radroots_event::profile::edit::ProfileFieldChange<bool>
+pub radroots_event::profile::edit::ProfileEdit::display_name: radroots_event::profile::edit::ProfileFieldChange<alloc::string::String>
+pub radroots_event::profile::edit::ProfileEdit::name: radroots_event::profile::edit::ProfileFieldChange<alloc::string::String>
+pub radroots_event::profile::edit::ProfileEdit::nip05: radroots_event::profile::edit::ProfileFieldChange<radroots_event::profile::Nip05Identifier>
+pub radroots_event::profile::edit::ProfileEdit::picture: radroots_event::profile::edit::ProfileMediaChange
 #[non_exhaustive] pub enum radroots_event::profile::AuthoredProfileError
 pub radroots_event::profile::AuthoredProfileError::InvalidName
 impl radroots_event::profile::AuthoredProfileError

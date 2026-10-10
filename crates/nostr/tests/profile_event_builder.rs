@@ -59,3 +59,68 @@ fn typed_profile_builder_finalizes_the_same_plan_for_an_external_signer() {
     let completed = request.complete(event).expect("exact typed completion");
     assert_eq!(completed.id.to_hex(), plan.expected_event_id().to_hex());
 }
+
+#[test]
+fn profile_complete_edit_external_signing_request_completes_exact_preserved_replacement() {
+    use nostr::JsonUtil;
+    use radroots_event::{
+        profile::edit::{ProfileEdit, ProfileFieldChange},
+        wire::Nip01EventWire,
+    };
+    use radroots_event_codec::{
+        admission::profile::verify_and_admit_profile_event, authoring::AuthoredEventPlan,
+    };
+    use radroots_nostr::event::ExternalSigningRequest;
+    let keys = RadrootsNostrKeys::new(
+        RadrootsNostrSecretKey::from_hex(test_fixtures::FIXTURE_ALICE_SECRET_KEY_HEX).unwrap(),
+    );
+    let signed = nostr::EventBuilder::new(
+        nostr::Kind::Metadata,
+        r#"{"name":"farm","website":"https://farm.example","custom":{"x":1}}"#,
+    )
+    .custom_created_at(RadrootsNostrTimestamp::from_secs(100))
+    .sign_with_keys(&keys)
+    .unwrap();
+    let baseline = verify_and_admit_profile_event(
+        Nip01EventWire::parse_json(&signed.as_json())
+            .unwrap()
+            .into_envelope()
+            .unwrap(),
+    )
+    .unwrap();
+    let plan = AuthoredEventPlan::from_profile_edit(
+        &baseline,
+        &baseline,
+        &ProfileEdit {
+            display_name: ProfileFieldChange::Set("Updated farm".into()),
+            ..Default::default()
+        },
+        101,
+        keys.public_key().to_hex(),
+    )
+    .unwrap();
+    let request = ExternalSigningRequest::from_authored_plan(plan.clone()).unwrap();
+    assert_eq!(request.authored_plan(), Some(&plan));
+    let unsigned: nostr::UnsignedEvent =
+        serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
+    let completed = request
+        .complete(unsigned.sign_with_keys(&keys).unwrap())
+        .unwrap();
+    assert_eq!(completed.id.to_hex(), plan.expected_event_id().to_hex());
+    let admitted = verify_and_admit_profile_event(
+        Nip01EventWire::parse_json(&completed.as_json())
+            .unwrap()
+            .into_envelope()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(admitted.metadata().display_name(), Some("Updated farm"));
+    assert_eq!(
+        admitted.metadata().raw_fields()["website"],
+        "https://farm.example"
+    );
+    assert_eq!(
+        admitted.metadata().raw_fields()["custom"],
+        serde_json::json!({"x":1})
+    );
+}

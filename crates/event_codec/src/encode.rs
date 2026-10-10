@@ -115,6 +115,7 @@ pub mod post {
 #[cfg(feature = "json")]
 pub mod profile {
     pub use crate::profile::authored::*;
+    pub use crate::profile::edit::ProfileEditError;
 }
 
 pub mod reply {

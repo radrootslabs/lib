@@ -5,4 +5,7 @@ pub mod admission;
 pub mod authored;
 
 #[cfg(feature = "json")]
+pub mod edit;
+
+#[cfg(feature = "json")]
 pub mod inbound;

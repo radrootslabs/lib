@@ -88,6 +88,108 @@ fn request() -> SignRequest {
     .expect("request")
 }
 
+fn profile_edit_plan() -> AuthoredEventPlan {
+    use radroots_event::profile::edit::{ProfileEdit, ProfileFieldChange};
+    use radroots_event_codec::admission::profile::verify_and_admit_profile_event;
+    let baseline = signed_event_with(
+        &keys(),
+        0,
+        r#"{"name":"farm","website":"https://farm.example","custom":{"x":1}}"#,
+        CREATED_AT,
+        Vec::new(),
+    );
+    let baseline = verify_and_admit_profile_event(baseline.envelope().clone()).unwrap();
+    AuthoredEventPlan::from_profile_edit(
+        &baseline,
+        &baseline,
+        &ProfileEdit {
+            display_name: ProfileFieldChange::Set("Updated farm".into()),
+            ..Default::default()
+        },
+        CREATED_AT + 1,
+        public_key().to_hex(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn profile_complete_edit_managed_signing_admits_exact_current_operation_and_signature() {
+    use radroots_signing::authorization::CurrentRegistryAuthority;
+    let plan = profile_edit_plan();
+    let request = SignRequest::new(
+        OperationId::SyncPush,
+        intent(41, 42),
+        actor(ActorSource::ExplicitPublicKey, [AuthorRole::Any]),
+        plan.clone(),
+        policy(),
+    )
+    .expect("current complete-profile edit must enter managed signing");
+    assert_eq!(
+        CurrentRegistryAuthority.evaluate(&plan),
+        CurrentAuthoringDecision::Allowed
+    );
+    assert_eq!(request.authored_plan(), Some(&plan));
+    let signed = signed_event_with(
+        &keys(),
+        0,
+        plan.body().content(),
+        plan.created_at(),
+        Vec::new(),
+    );
+    let receipt =
+        SignReceipt::from_signed_event(&request, signed, CREATED_AT * 1000 + 2000).unwrap();
+    assert_eq!(receipt.signed_event().id(), plan.expected_event_id());
+    let fields: serde_json::Value = serde_json::from_str(receipt.signed_event().content()).unwrap();
+    assert_eq!(fields["website"], "https://farm.example");
+    assert_eq!(fields["custom"], serde_json::json!({"x":1}));
+}
+
+#[test]
+fn profile_complete_edit_managed_signing_preserves_host_denial_and_managed_actor_policy() {
+    for decision in [
+        CurrentAuthoringDecision::Blocked {
+            code: "host_denied",
+        },
+        CurrentAuthoringDecision::Revoked {
+            code: "host_revoked",
+        },
+    ] {
+        let error = SignRequest::new_with_authority(
+            OperationId::SyncPush,
+            intent(41, 42),
+            actor(ActorSource::ExplicitPublicKey, [AuthorRole::Any]),
+            profile_edit_plan(),
+            policy(),
+            &FixedAuthority(decision),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), Kind::AuthorizationDenied);
+    }
+    let denied = SignRequest::new(
+        OperationId::SyncPush,
+        intent(41, 42),
+        actor(ActorSource::ExplicitPublicKey, [AuthorRole::Any]),
+        profile_edit_plan(),
+        policy().with_managed_signing_policy(ManagedSigningPolicy::AccountBackedOnly),
+    )
+    .unwrap_err();
+    assert_eq!(denied.kind(), Kind::AuthorizationDenied);
+    let local = actor(
+        ActorSource::LocalAccount(AccountId::from_hex(&public_key().to_hex()).unwrap()),
+        [AuthorRole::Any],
+    );
+    assert!(
+        SignRequest::new(
+            OperationId::SyncPush,
+            intent(41, 42),
+            local,
+            profile_edit_plan(),
+            policy().with_managed_signing_policy(ManagedSigningPolicy::LocalAccountOnly)
+        )
+        .is_ok()
+    );
+}
+
 fn blossom_plan() -> BlossomAuthorizationPlan {
     let claim = AuthoredUploadClaim::new(
         AuthorizationContent::parse("Upload exact image").expect("content"),

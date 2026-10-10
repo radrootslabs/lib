@@ -13,6 +13,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[doc(hidden)]
 pub mod registry_v7;
 
+/// Explicit profile-edit registry; the default registry remains frozen v7.
+pub mod registry_v8;
+
 pub use registry_v7::*;
 
 /// Maximum UTF-8 byte length of a versioned Radroots event-contract ID.
@@ -86,6 +89,7 @@ pub struct RegistryVersion(u32);
 impl RegistryVersion {
     /// Frozen registry profile used by the initial authored-plan storage wire.
     pub const V7: Self = Self(7);
+    pub const V8: Self = Self(8);
     pub const CURRENT: Self = Self(RADROOTS_EVENT_CONTRACT_REGISTRY_VERSION);
 
     pub const fn new(value: u32) -> Result<Self, ContractIdentityError> {
@@ -125,6 +129,7 @@ impl ContractKey {
     ) -> Result<Self, ContractIdentityError> {
         let contract = match registry_version {
             RegistryVersion::V7 => event_contract_registry_v7(contract_id.as_str()),
+            RegistryVersion::V8 => registry_v8::event_contract_registry_v8(contract_id.as_str()),
             _ => {
                 return Err(ContractIdentityError::UnsupportedRegistryVersion {
                     actual: registry_version.get(),
@@ -157,6 +162,10 @@ impl ContractKey {
         match self.registry_version {
             RegistryVersion::V7 => event_contract_registry_v7(self.contract_id.as_str())
                 .expect("validated registry-v7 contract key must remain resolvable"),
+            RegistryVersion::V8 => {
+                registry_v8::event_contract_registry_v8(self.contract_id.as_str())
+                    .expect("validated registry-v8 contract key must remain resolvable")
+            }
             _ => unreachable!("validated contract key must have a supported registry profile"),
         }
     }
@@ -327,10 +336,10 @@ mod identity_tests {
         );
         assert!(matches!(
             ContractKey::new(
-                RegistryVersion::new(8).expect("nonzero version"),
+                RegistryVersion::new(9).expect("nonzero version"),
                 ContractId::parse("radroots.social.geochat.v1").expect("contract ID")
             ),
-            Err(ContractIdentityError::UnsupportedRegistryVersion { actual: 8 })
+            Err(ContractIdentityError::UnsupportedRegistryVersion { actual: 9 })
         ));
         assert!(matches!(
             ContractKey::current("radroots.social.unknown.v1"),
@@ -351,7 +360,7 @@ mod identity_tests {
         invalid["registry_version"] = serde_json::json!(0);
         assert!(serde_json::from_value::<ContractKey>(invalid).is_err());
         let mut invalid = value.clone();
-        invalid["registry_version"] = serde_json::json!(8);
+        invalid["registry_version"] = serde_json::json!(9);
         assert!(serde_json::from_value::<ContractKey>(invalid).is_err());
         let mut invalid = value.clone();
         invalid["contract_id"] = serde_json::json!("radroots.social.unknown.v1");

@@ -463,11 +463,11 @@ mod tests {
             PlanWireV1::from_json(&schema),
             Err(PlanDecodeError::UnsupportedSchemaVersion { actual: 2 })
         );
-        let registry = mutate(|value| value["contract_registry_version"] = json!(8));
+        let registry = mutate(|value| value["contract_registry_version"] = json!(9));
         assert!(matches!(
             PlanWireV1::from_json(&registry),
             Err(PlanDecodeError::ContractIdentity(
-                ContractIdentityError::UnsupportedRegistryVersion { actual: 8 }
+                ContractIdentityError::UnsupportedRegistryVersion { actual: 9 }
             ))
         ));
     }

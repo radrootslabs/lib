@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "decision_id": "radroots.profile.complete_edit.v1",
+  "status": "approved_scope_implementation",
+  "contract_id": "radroots.profile.metadata_edit.v1",
+  "explicit_registry_version": 8,
+  "default_registry_version_unchanged": 7,
+  "current_managed_authoring_policy": "One private shared lookup admits supported explicit V8 authorable contracts (unchanged V7 plus profile edit). Current authority and role validation use it while retaining host decisions, deprecation, actor/source, deadline and cancellation checks. Embedded historical registry membership alone is not current signing permission.",
+  "domain": "Typed keep/set/clear for seven profile fields; no unknown or raw-JSON setter.",
+  "baseline": "Exact verified admitted canonical kind-0 head, matching expected author and advancing timestamp. Nonempty baseline tags refuse. Runtime persists and rechecks the actual canonical baseline before signing or side effects.",
+  "preservation": "Every untouched raw JSON field value remains exact, including residual wrong types, nested duplicate names and numeric lexemes. Top-level duplicate keys remain rejected.",
+  "media": "Kept string media requires matching byte-verified image proof. Explicit clear or typed replacement is supported. Proof does not establish BUD-02 completion, network availability or image decode safety.",
+  "bounds": { "content_utf8_bytes": 131072, "durable_wire_bytes": 262144 },
+  "history": "V7 source/inventory/vectors and existing strict initial/full-replacement authoring remain unchanged. V8 inherits exact V7 inventory and adds only the profile-edit operation. Existing generic signing and durable storage semantics apply.",
+  "exclusions": ["App editor policy", "new database", "new worker", "unknown-field authoring", "implicit trust promotion", "publication authorization"]
+}

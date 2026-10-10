@@ -101,6 +101,30 @@ lowest canonical event id, independent of relay or ingestion arrival order.
 
 ## Tolerant inbound boundary
 
+### Complete-profile edit
+
+`AuthoredEventPlan::from_profile_edit` adds an explicit registry-v8
+`radroots.profile.metadata_edit.v1` operation. Registry-v7 defaults,
+inventories, strict authoring and historical vectors remain unchanged.
+`ProfileEdit` accepts typed keep/set/clear intent for the seven known fields.
+Unknown and wrong-typed untouched values remain exact raw JSON values,
+including nested duplicate names and numeric lexemes. There is no unknown-field
+or raw-JSON setter. A kept string picture/banner requires a matching
+byte-verified `AuthoredImage`; unsupported references refuse unless explicitly
+cleared or replaced. Upload completion and decode safety remain runtime gates.
+
+The baseline and current head must be verified admitted kind-0 events from the
+expected author with the same exact event id. Output time must advance; nonempty
+baseline tags refuse rather than disappear. The runtime must supply its actual
+canonical head, persist the baseline id and recheck it before signing or side
+effects. The pure codec comparison does not provide storage CAS.
+
+Output is a complete tagless replacement, sorted by top-level field name,
+bounded to 131072 content bytes and 262144 serialized durable-plan bytes.
+Explicit clear removes a field. A set name retains strict name validation;
+untouched admitted values retain their original meaning and trust state.
+Existing initial/full-replacement authoring remains available.
+
 `profile.parse_inbound_metadata` accepts a JSON object of at most 131072 UTF-8
 bytes without requiring `name`. Correctly typed `name`, `display_name`, `about`,
 `picture`, `banner`, `nip05`, and `bot` fields are projected without JSON type

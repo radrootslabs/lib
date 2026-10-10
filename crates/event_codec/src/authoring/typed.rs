@@ -175,6 +175,14 @@ impl std::error::Error for AuthoredPlanError {}
 
 impl AuthoredEventBody {
     #[cfg(feature = "json")]
+    pub(crate) fn from_profile_edit_parts(
+        contract: ContractKey,
+        wire: Nip01EventWireParts,
+    ) -> Result<Self, AuthoredPlanError> {
+        build_typed_body_for_key(contract, wire)
+    }
+
+    #[cfg(feature = "json")]
     pub fn from_profile(profile: &AuthoredProfile) -> Result<Self, AuthoredPlanError> {
         let wire = authored_profile_to_wire_parts(profile).map_err(AuthoredPlanError::Profile)?;
         build_typed_body("radroots.profile.metadata.v1", wire)
@@ -441,6 +449,14 @@ fn build_typed_body(
 ) -> Result<AuthoredEventBody, AuthoredPlanError> {
     let contract =
         ContractKey::current(contract_id).map_err(AuthoredPlanError::ContractIdentity)?;
+    build_typed_body_for_key(contract, wire)
+}
+
+fn build_typed_body_for_key(
+    contract: ContractKey,
+    wire: Nip01EventWireParts,
+) -> Result<AuthoredEventBody, AuthoredPlanError> {
+    let contract_id = contract.contract_id().as_str();
     let definition = contract.contract();
     if definition.authoring_policy() != EventAuthoringPolicy::TypedOnly {
         return Err(AuthoredPlanError::ContractNotTyped {
@@ -480,6 +496,9 @@ pub(super) fn validate_historical_typed_profile(
     match contract_id {
         #[cfg(feature = "json")]
         "radroots.profile.metadata.v1" => validate_profile(tags, content),
+        "radroots.profile.metadata_edit.v1" => {
+            crate::profile::edit::validate_historical(tags, content)
+        }
         "radroots.social.update.v1" => validate_update(tags, content),
         "radroots.social.photo_update.v1" => {
             validate_post_profile(RadrootsPostClassification::PhotoUpdate, tags, content)

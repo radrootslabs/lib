@@ -1,6 +1,8 @@
 //! Current signing authorization, separate from historical plan integrity.
 
-use radroots_event::contract::{EventAuthoringPolicy, EventStability, event_contract};
+use radroots_event::contract::{
+    EventAuthoringPolicy, EventContract, EventStability, registry_v8::event_contract_registry_v8,
+};
 use radroots_event_codec::authoring::AuthoredEventPlan;
 
 use crate::{Actor, actor::ActorSource};
@@ -24,9 +26,17 @@ pub trait CurrentAuthoringAuthority: Send + Sync {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct CurrentRegistryAuthority;
 
+/// Current authoring includes explicit v8 capabilities; ordinary v7 defaults
+/// remain unchanged. Never authorize from an arbitrary embedded old registry.
+pub(crate) fn current_authoring_contract(
+    plan: &AuthoredEventPlan,
+) -> Option<&'static EventContract> {
+    event_contract_registry_v8(plan.body().contract().contract_id().as_str())
+}
+
 impl CurrentAuthoringAuthority for CurrentRegistryAuthority {
     fn evaluate(&self, plan: &AuthoredEventPlan) -> CurrentAuthoringDecision {
-        let Some(contract) = event_contract(plan.body().contract().contract_id().as_str()) else {
+        let Some(contract) = current_authoring_contract(plan) else {
             return CurrentAuthoringDecision::Blocked {
                 code: "contract_not_current",
             };

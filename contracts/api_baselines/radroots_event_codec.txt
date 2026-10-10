@@ -261,6 +261,8 @@ pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_profile(&radroot
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_rhi_evidence_attestation(&radroots_event_codec::decode::rhi::RadrootsRhiEvidenceAttestationV1, u64) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_trade_mutation(radroots_event::trade::TradeMutationEnvelopeV1) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
 pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_update(&radroots_event::post::AuthoredUpdate, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::authoring::AuthoredPlanError>
+impl radroots_event_codec::authoring::AuthoredEventPlan
+pub fn radroots_event_codec::authoring::AuthoredEventPlan::from_profile_edit(&radroots_event_codec::admission::profile::RadrootsAdmittedProfileEvent, &radroots_event_codec::admission::profile::RadrootsAdmittedProfileEvent, &radroots_event::profile::edit::ProfileEdit, u64, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_event_codec::encode::profile::ProfileEditError>
 pub struct radroots_event_codec::authoring::BlossomAuthorizationPlan
 impl radroots_event_codec::authoring::BlossomAuthorizationPlan
 pub const fn radroots_event_codec::authoring::BlossomAuthorizationPlan::author(&self) -> &radroots_identity::key::PublicKey
@@ -1014,6 +1016,29 @@ pub fn radroots_event_codec::encode::post::authored_ask_to_wire_parts(&radroots_
 pub fn radroots_event_codec::encode::post::authored_photo_update_to_wire_parts(&radroots_event::post::AuthoredPhotoUpdate) -> radroots_event::wire::v1::Nip01EventWireParts
 pub fn radroots_event_codec::encode::post::authored_update_to_wire_parts(&radroots_event::post::AuthoredUpdate) -> radroots_event::wire::v1::Nip01EventWireParts
 pub mod radroots_event_codec::encode::profile
+#[non_exhaustive] pub enum radroots_event_codec::encode::profile::ProfileEditError
+pub radroots_event_codec::encode::profile::ProfileEditError::AuthorMismatch
+pub radroots_event_codec::encode::profile::ProfileEditError::BaselineTagsUnsupported
+pub radroots_event_codec::encode::profile::ProfileEditError::ContentTooLarge
+pub radroots_event_codec::encode::profile::ProfileEditError::ContentTooLarge::actual: usize
+pub radroots_event_codec::encode::profile::ProfileEditError::ContentTooLarge::max: usize
+pub radroots_event_codec::encode::profile::ProfileEditError::DurableWireTooLarge
+pub radroots_event_codec::encode::profile::ProfileEditError::DurableWireTooLarge::actual: usize
+pub radroots_event_codec::encode::profile::ProfileEditError::DurableWireTooLarge::max: usize
+pub radroots_event_codec::encode::profile::ProfileEditError::InvalidMetadata
+pub radroots_event_codec::encode::profile::ProfileEditError::InvalidName
+pub radroots_event_codec::encode::profile::ProfileEditError::MediaVerificationMismatch
+pub radroots_event_codec::encode::profile::ProfileEditError::MediaVerificationMismatch::field: &'static str
+pub radroots_event_codec::encode::profile::ProfileEditError::MediaVerificationRequired
+pub radroots_event_codec::encode::profile::ProfileEditError::MediaVerificationRequired::field: &'static str
+pub radroots_event_codec::encode::profile::ProfileEditError::Plan(radroots_event_codec::authoring::AuthoredPlanError)
+pub radroots_event_codec::encode::profile::ProfileEditError::StaleBaseline
+pub radroots_event_codec::encode::profile::ProfileEditError::TimestampNotAdvancing
+impl radroots_event_codec::encode::profile::ProfileEditError
+pub const fn radroots_event_codec::encode::profile::ProfileEditError::code(&self) -> &'static str
+impl core::error::Error for radroots_event_codec::encode::profile::ProfileEditError
+impl core::fmt::Display for radroots_event_codec::encode::profile::ProfileEditError
+pub fn radroots_event_codec::encode::profile::ProfileEditError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError
 pub radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError::ContentTooLarge
 pub radroots_event_codec::encode::profile::RadrootsAuthoredProfileEncodeError::ContentTooLarge::actual: usize
