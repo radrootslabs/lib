@@ -27,33 +27,71 @@ pub(super) async fn page(
     }
 }
 
+pub(super) async fn page_at(
+    store: &SqliteStorage,
+    query: ProjectionDocumentQuery,
+    source: radroots_storage::event::EventSourceToken,
+    active: ProjectionGeneration,
+) -> Result<ProjectionDocumentPage, Error> {
+    if query.generations() != ProjectionDocumentGenerations::Exact(active) {
+        return Err(Error::InvalidProjectionDocument);
+    }
+    let mut transaction = store.pool().begin().await.map_err(map_backend)?;
+    super::batch::read_fence(
+        &mut transaction,
+        store,
+        source,
+        query.projection_id(),
+        active,
+    )
+    .await?;
+    let result = read_page(&mut transaction, &query).await;
+    let rollback = transaction.rollback().await.map_err(map_backend);
+    match result {
+        Ok(page) => {
+            rollback?;
+            Ok(page)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 async fn read_page(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     query: &ProjectionDocumentQuery,
 ) -> Result<ProjectionDocumentPage, Error> {
-    let generation = match query.generations() {
-        ProjectionDocumentGenerations::All => None,
-        ProjectionDocumentGenerations::Exact(value) => Some(value.as_bytes().to_vec()),
-    };
-    let after_generation = query
-        .after()
-        .map(|(generation, _)| generation.as_bytes().to_vec());
-    let after_key = query.after().map(|(_, key)| key);
     // CASE bounds every variable-width metadata value before SQLx allocates it.
     // Payloads are loaded separately, only after charging this page's byte budget.
-    let rows = sqlx::query(
+    let mut selection = sqlx::QueryBuilder::new(
         "SELECT CASE WHEN length(generation) = 32 THEN generation END AS generation,
                 CASE WHEN length(CAST(document_key AS BLOB)) BETWEEN 1 AND 512 THEN document_key END AS document_key,
                 CASE WHEN length(value_sha256) = 32 THEN value_sha256 END AS value_sha256,
                 length(value) AS value_bytes
          FROM radroots_runtime_projection_documents AS documents
-         WHERE projection_id = ? AND (? IS NULL OR generation = ?)
-           AND (? IS NULL OR (generation, document_key) > (?, ?))
-         ORDER BY documents.generation, documents.document_key LIMIT ?"
-    ).bind(query.projection_id().as_str()).bind(&generation).bind(generation)
-        .bind(&after_generation).bind(&after_generation).bind(after_key)
-        .bind(i64::from(query.limit()) + 1)
-        .fetch_all(&mut **transaction).await.map_err(map_backend)?;
+         WHERE projection_id = "
+    );
+    selection.push_bind(query.projection_id().as_str());
+    if let ProjectionDocumentGenerations::Exact(generation) = query.generations() {
+        selection
+            .push(" AND generation = ")
+            .push_bind(generation.as_bytes().to_vec());
+    }
+    if let Some((generation, key)) = query.after() {
+        selection
+            .push(" AND (generation, document_key) > (")
+            .push_bind(generation.as_bytes().to_vec())
+            .push(", ")
+            .push_bind(key)
+            .push(")");
+    }
+    selection
+        .push(" ORDER BY documents.generation, documents.document_key LIMIT ")
+        .push_bind(i64::from(query.limit()) + 1);
+    let rows = selection
+        .build()
+        .fetch_all(&mut **transaction)
+        .await
+        .map_err(map_backend)?;
     let mut has_more = rows.len() > usize::from(query.limit());
     let mut records = Vec::new();
     let mut bytes = 0;

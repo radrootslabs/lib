@@ -1,0 +1,27 @@
+{
+  "schema": "radroots.projection-atomic-generations.v1",
+  "status": "implemented",
+  "owners": [
+    "radroots_storage",
+    "radroots_storage_sqlite"
+  ],
+  "bounds": {
+    "batch_rows": 64,
+    "logical_batch_bytes": 16777216,
+    "key_bytes": 512
+  },
+  "charge": "4096 fixed bytes plus twice every opaque value and key plus256 bytes per row, checked before provider work. Callers already own input allocations.",
+  "scope": "ProjectionWriteScope binds caller-owned content-derived generation (including policy/schema), expected active generation and exact canonical source token. The first staging write persists that entire fence. Every later batch and promotion must agree. One staging generation per projection identity.",
+  "promotion": "One owner transaction or memory lock checks semantic source epoch and active-generation CAS, writes the bounded final batch, validates exact staged document count and source checkpoint, seals the target and publishes Ready atomically. Legacy APIs cannot rewrite registered generations. Failed checks publish neither rows nor status. Shared legacy checkpoint helpers (including atomic admission workflows) and legacy rebuild completion refuse registered generations before changes. Sealed checkpoint metadata cannot be rewritten through legacy operations.",
+  "reads": "query_projection_documents_at requires exact expected active generation, Ready health and registered promoted state whose persisted source token equals both caller and canonical source. All checks and page hydration share one read transaction or lock. A new current token cannot relabel an older projection. Write-side CAS still permits building a successor from current source while the old active generation is stale. Existing inventory remains a live bounded inventory.",
+  "compatibility": "Historical migrations remain unchanged. Unsupported providers refuse new operations with BackendUnavailable. No public SQL, pool, transaction or application policy.",
+  "later_qualification": "Aggregate protected-cache reservation and cache-only retirement require their separate owner implementation and qualification.",
+  "non_goals": [
+    "application row schema",
+    "policy interpretation",
+    "new per-read snapshots",
+    "lease framework",
+    "background tasks",
+    "second database"
+  ]
+}

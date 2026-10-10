@@ -14,6 +14,7 @@ use radroots_storage::{
 };
 use sqlx::{Row, Sqlite, SqliteConnection};
 
+mod batch;
 mod document_query;
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -257,6 +258,12 @@ impl ProjectionStore for SqliteStorage {
             }
             let next = current.transition(transition)?;
             if next.stage() == RebuildStage::Completed {
+                batch::refuse_registered_legacy(
+                    &mut transaction,
+                    next.invalidation().projection_id(),
+                    next.invalidation().replacement_generation(),
+                )
+                .await?;
                 let source = sqlx::query(
                     "SELECT generation, sequence_head
                      FROM radroots_runtime_source_generations WHERE state = 'active'",
@@ -451,32 +458,41 @@ impl ProjectionStore for SqliteStorage {
         })
     }
 
+    fn put_projection_batch(
+        &self,
+        value: radroots_storage::projection::batch::ProjectionDocumentBatch,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move { batch::write(self, value, None).await.map(|_| ()) })
+    }
+    fn promote_projection_batch(
+        &self,
+        value: radroots_storage::projection::batch::ProjectionDocumentBatch,
+        checkpoint: ProjectionCheckpoint,
+    ) -> BoxFuture<'_, Result<ProjectionStatus, Error>> {
+        Box::pin(async move {
+            batch::write(self, value, Some(checkpoint))
+                .await?
+                .ok_or(Error::CorruptProjectionRecord)
+        })
+    }
+    fn query_projection_documents_at(
+        &self,
+        query: radroots_storage::projection::document_query::ProjectionDocumentQuery,
+        source: radroots_storage::event::EventSourceToken,
+        active: ProjectionGeneration,
+    ) -> BoxFuture<
+        '_,
+        Result<radroots_storage::projection::document_query::ProjectionDocumentPage, Error>,
+    > {
+        Box::pin(document_query::page_at(self, query, source, active))
+    }
     fn put_projection_document(
         &self,
         projection_id: ProjectionId,
         generation: ProjectionGeneration,
         document: ProjectionDocument,
     ) -> BoxFuture<'_, Result<(), Error>> {
-        Box::pin(async move {
-            self.require_projection_writer()?;
-            sqlx::query(
-                "INSERT INTO radroots_runtime_projection_documents (
-                   projection_id, generation, document_key, value, value_sha256
-                 ) VALUES (?, ?, ?, ?, ?)
-                 ON CONFLICT(projection_id, generation, document_key) DO UPDATE SET
-                   value = excluded.value,
-                   value_sha256 = excluded.value_sha256",
-            )
-            .bind(projection_id.as_str())
-            .bind(generation.as_bytes().as_slice())
-            .bind(document.key())
-            .bind(document.value())
-            .bind(document.value_sha256().as_slice())
-            .execute(self.pool())
-            .await
-            .map_err(map_backend)?;
-            Ok(())
-        })
+        Box::pin(batch::legacy_put(self, projection_id, generation, document))
     }
 
     fn projection_document(
@@ -485,27 +501,7 @@ impl ProjectionStore for SqliteStorage {
         generation: ProjectionGeneration,
         key: String,
     ) -> BoxFuture<'_, Result<Option<ProjectionDocument>, Error>> {
-        Box::pin(async move {
-            sqlx::query(
-                "SELECT document_key, value, value_sha256
-                 FROM radroots_runtime_projection_documents
-                 WHERE projection_id = ? AND generation = ? AND document_key = ?",
-            )
-            .bind(projection_id.as_str())
-            .bind(generation.as_bytes().as_slice())
-            .bind(key)
-            .fetch_optional(self.pool())
-            .await
-            .map_err(map_backend)?
-            .map(|row| {
-                ProjectionDocument::from_stored_parts(
-                    row.try_get("document_key").map_err(map_corrupt)?,
-                    row.try_get("value").map_err(map_corrupt)?,
-                    array(row.try_get("value_sha256").map_err(map_corrupt)?)?,
-                )
-            })
-            .transpose()
-        })
+        Box::pin(batch::load_document(self, projection_id, generation, key))
     }
 
     fn query_projection_documents(
@@ -598,6 +594,12 @@ pub(crate) async fn checkpoint_transaction(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     checkpoint: ProjectionCheckpoint,
 ) -> Result<ProjectionStatus, Error> {
+    batch::refuse_registered_legacy(
+        transaction,
+        checkpoint.projection_id(),
+        checkpoint.generation(),
+    )
+    .await?;
     let prior = sqlx::query(
         "SELECT * FROM radroots_runtime_projection_checkpoints WHERE projection_id = ?",
     )

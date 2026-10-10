@@ -3,6 +3,7 @@
 //! Storage owns durable coordination metadata. Domain reducers and projected
 //! row representations remain in their domain packages.
 
+pub mod batch;
 pub mod document_query;
 
 pub use radroots_event::EventId;
@@ -1027,6 +1028,30 @@ impl ProjectionStatus {
 
 /// Backend-neutral projection coordination SPI.
 pub trait ProjectionStore: Send + Sync {
+    /// Atomically stages a bounded batch under a durable source and generation fence.
+    fn put_projection_batch(
+        &self,
+        _batch: batch::ProjectionDocumentBatch,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+    /// Writes the final bounded batch and publishes its complete generation atomically.
+    fn promote_projection_batch(
+        &self,
+        _batch: batch::ProjectionDocumentBatch,
+        _checkpoint: ProjectionCheckpoint,
+    ) -> BoxFuture<'_, Result<ProjectionStatus, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+    /// Reads an exact active generation under one canonical source fence.
+    fn query_projection_documents_at(
+        &self,
+        _query: document_query::ProjectionDocumentQuery,
+        _source: crate::event::EventSourceToken,
+        _active: ProjectionGeneration,
+    ) -> BoxFuture<'_, Result<document_query::ProjectionDocumentPage, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
     fn status(
         &self,
         projection_id: ProjectionId,
@@ -1115,7 +1140,7 @@ fn valid_label(value: &str, max: usize) -> bool {
         })
 }
 
-fn valid_document_key(value: &str) -> bool {
+pub(crate) fn valid_document_key(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= PROJECTION_DOCUMENT_KEY_MAX_BYTES
         && value == value.trim()

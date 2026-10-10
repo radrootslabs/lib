@@ -68,6 +68,9 @@ use crate::{
     },
 };
 
+#[path = "memory_projection_batch.rs"]
+mod projection_batch;
+
 #[derive(Clone)]
 struct EventEntry {
     position: EventPosition,
@@ -89,7 +92,11 @@ struct State {
     rebuilds: Vec<RebuildTicket>,
     event_index_manifests: Vec<EventIndexManifest>,
     event_index_checkpoints: Vec<EventIndexCheckpoint>,
-    projection_documents: Vec<(ProjectionId, ProjectionGeneration, ProjectionDocument)>,
+    projection_documents: projection_batch::Documents,
+    projection_generations: std::collections::BTreeMap<
+        (ProjectionId, ProjectionGeneration),
+        projection_batch::Generation,
+    >,
     projection_snapshots: Vec<ProjectionSnapshot>,
     private_artifacts: Vec<PrivateArtifactMetadata>,
     private_artifact_reseals: Vec<PrivateArtifactResealReceipt>,
@@ -130,7 +137,8 @@ impl MemoryStorage {
                 rebuilds: Vec::new(),
                 event_index_manifests: Vec::new(),
                 event_index_checkpoints: Vec::new(),
-                projection_documents: Vec::new(),
+                projection_documents: std::collections::BTreeMap::new(),
+                projection_generations: std::collections::BTreeMap::new(),
                 projection_snapshots: Vec::new(),
                 private_artifacts: Vec::new(),
                 private_artifact_reseals: Vec::new(),
@@ -467,6 +475,12 @@ impl MemoryStorage {
         state: &mut State,
         checkpoint: ProjectionCheckpoint,
     ) -> Result<ProjectionStatus, Error> {
+        if state
+            .projection_generations
+            .contains_key(&(checkpoint.projection_id().clone(), checkpoint.generation()))
+        {
+            return Err(Error::ProjectionRevisionConflict);
+        }
         if let Some(status) = state
             .projections
             .iter_mut()
@@ -1032,6 +1046,14 @@ impl ProjectionStore for MemoryStorage {
                 .ok_or(Error::ProjectionRevisionConflict)?;
             let next = state.rebuilds[index].transition(transition)?;
             if next.stage() == RebuildStage::Completed
+                && state.projection_generations.contains_key(&(
+                    next.invalidation().projection_id().clone(),
+                    next.invalidation().replacement_generation(),
+                ))
+            {
+                return Err(Error::ProjectionRevisionConflict);
+            }
+            if next.stage() == RebuildStage::Completed
                 && (next.source_generation() != self.generation
                     || next
                         .source_high_water()
@@ -1157,6 +1179,51 @@ impl ProjectionStore for MemoryStorage {
         })
     }
 
+    fn put_projection_batch(
+        &self,
+        batch: crate::projection::batch::ProjectionDocumentBatch,
+    ) -> BoxFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            projection_batch::write(&mut state, self.generation, &batch, None)?;
+            Ok(())
+        })
+    }
+    fn promote_projection_batch(
+        &self,
+        batch: crate::projection::batch::ProjectionDocumentBatch,
+        checkpoint: ProjectionCheckpoint,
+    ) -> BoxFuture<'_, Result<ProjectionStatus, Error>> {
+        Box::pin(async move {
+            let mut state = self.state()?;
+            projection_batch::write(&mut state, self.generation, &batch, Some(checkpoint))?
+                .ok_or(Error::CorruptProjectionRecord)
+        })
+    }
+    fn query_projection_documents_at(
+        &self,
+        query: crate::projection::document_query::ProjectionDocumentQuery,
+        source: EventSourceToken,
+        active: ProjectionGeneration,
+    ) -> BoxFuture<'_, Result<crate::projection::document_query::ProjectionDocumentPage, Error>>
+    {
+        Box::pin(async move {
+            if query.generations()
+                != crate::projection::document_query::ProjectionDocumentGenerations::Exact(active)
+            {
+                return Err(Error::InvalidProjectionDocument);
+            }
+            let state = self.state()?;
+            projection_batch::read_fence(
+                &state,
+                self.generation,
+                source,
+                query.projection_id(),
+                active,
+            )?;
+            projection_batch::page(&state, &query)
+        })
+    }
     fn put_projection_document(
         &self,
         projection_id: ProjectionId,
@@ -1165,59 +1232,29 @@ impl ProjectionStore for MemoryStorage {
     ) -> BoxFuture<'_, Result<(), Error>> {
         Box::pin(async move {
             let mut state = self.state()?;
-            if let Some((_, _, existing)) = state.projection_documents.iter_mut().find(
-                |(existing_id, existing_generation, existing)| {
-                    existing_id == &projection_id
-                        && *existing_generation == generation
-                        && existing.key() == document.key()
-                },
-            ) {
-                *existing = document;
-            } else {
-                state
-                    .projection_documents
-                    .push((projection_id, generation, document));
+            if state
+                .projection_generations
+                .contains_key(&(projection_id.clone(), generation))
+            {
+                return Err(Error::ProjectionRevisionConflict);
             }
+            state.projection_documents.insert(
+                (projection_id, generation, document.key().to_owned()),
+                document,
+            );
             Ok(())
         })
     }
-
     fn query_projection_documents(
         &self,
         query: crate::projection::document_query::ProjectionDocumentQuery,
     ) -> BoxFuture<'_, Result<crate::projection::document_query::ProjectionDocumentPage, Error>>
     {
-        use crate::projection::document_query::{
-            PROJECTION_DOCUMENT_PAGE_BYTES_MAX, ProjectionDocumentPage, ProjectionDocumentRecord,
-        };
         Box::pin(async move {
             let state = self.state()?;
-            let mut selected = std::collections::BTreeMap::new();
-            let maximum = usize::from(query.limit()) + 1;
-            for (id, generation, document) in &state.projection_documents {
-                if id == query.projection_id() && query.matches(*generation, document.key()) {
-                    selected.insert((*generation, document.key()), document);
-                    if selected.len() > maximum {
-                        selected.pop_last();
-                    }
-                }
-            }
-            let mut has_more = selected.len() > usize::from(query.limit());
-            let mut records = Vec::new();
-            let mut bytes = 0;
-            for ((generation, _), document) in selected.into_iter().take(usize::from(query.limit()))
-            {
-                if bytes + document.value().len() > PROJECTION_DOCUMENT_PAGE_BYTES_MAX {
-                    has_more = true;
-                    break;
-                }
-                bytes += document.value().len();
-                records.push(ProjectionDocumentRecord::new(generation, document.clone())?);
-            }
-            ProjectionDocumentPage::new(&query, records, has_more)
+            projection_batch::page(&state, &query)
         })
     }
-
     fn projection_document(
         &self,
         projection_id: ProjectionId,
@@ -1225,16 +1262,12 @@ impl ProjectionStore for MemoryStorage {
         key: String,
     ) -> BoxFuture<'_, Result<Option<ProjectionDocument>, Error>> {
         Box::pin(async move {
+            projection_batch::validate_key(&key)?;
             Ok(self
                 .state()?
                 .projection_documents
-                .iter()
-                .find(|(existing_id, existing_generation, existing)| {
-                    existing_id == &projection_id
-                        && *existing_generation == generation
-                        && existing.key() == key
-                })
-                .map(|(_, _, document)| document.clone()))
+                .get(&(projection_id, generation, key))
+                .cloned())
         })
     }
 
