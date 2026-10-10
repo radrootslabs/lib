@@ -24,6 +24,9 @@ async fn public_open_creates_both_databases_and_reuses_the_durable_generation() 
     assert!(paths.runtime().is_file());
     assert!(paths.private().is_file());
     let status = EventStore::status(&store).await.expect("event status");
+    let token = store.source_token().await.expect("source token");
+    assert_eq!(token.generation(), expected);
+    assert_eq!(token.epoch(), 0);
     assert_eq!(status.generation(), expected);
     assert_eq!(status.mode(), EventStoreMode::ReadWrite);
 
@@ -31,6 +34,10 @@ async fn public_open_creates_both_databases_and_reuses_the_durable_generation() 
         .await
         .expect("concurrent reader");
     let reader_status = EventStore::status(&reader).await.expect("reader status");
+    assert_eq!(
+        reader.source_token().await.expect("reader source token"),
+        token
+    );
     assert_eq!(reader_status.generation(), expected);
     assert_eq!(reader_status.mode(), EventStoreMode::ReadOnly);
     drop(reader);
@@ -50,6 +57,13 @@ async fn public_open_creates_both_databases_and_reuses_the_durable_generation() 
     let reopened = SqliteStorage::open(OpenOptions::new(paths, OpenMode::ReadWriteExisting))
         .await
         .expect("reopen after guard release");
+    assert_eq!(
+        reopened
+            .source_token()
+            .await
+            .expect("reopened source token"),
+        token
+    );
     assert_eq!(
         EventStore::status(&reopened)
             .await

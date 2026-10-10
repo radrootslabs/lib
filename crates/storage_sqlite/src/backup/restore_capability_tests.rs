@@ -1,6 +1,7 @@
 use super::*;
 use crate::OpenOptions;
 use radroots_storage::{
+    EventStore,
     authored_draft::{AuthoredDraft, AuthoredDraftId, AuthoredDraftStage, AuthoredDraftStore},
     event::SourceGeneration,
     status::ShutdownState,
@@ -54,6 +55,7 @@ async fn restore_spi_stages_without_live_changes_then_closes_and_reopens_exact_h
     let root = tempfile::tempdir().unwrap();
     let backup = tempfile::tempdir().unwrap();
     let (store, restore) = fixture(root.path(), backup.path()).await;
+    let source_token = store.source_token().await.unwrap();
     let owner: &dyn StorageReliability = &store;
     let paths = crate::Paths::from_directory(root.path()).unwrap();
     let staging = RestoreStaging::new(&paths, restore.manifest()).unwrap();
@@ -84,6 +86,10 @@ async fn restore_spi_stages_without_live_changes_then_closes_and_reopens_exact_h
     );
     owner.finalize_restore(restore.clone()).await.unwrap();
     assert_eq!(
+        store.source_token().await,
+        Err(radroots_storage::Error::BackendUnavailable)
+    );
+    assert_eq!(
         store.storage_status().await.unwrap().shutdown(),
         ShutdownState::Closed
     );
@@ -98,6 +104,7 @@ async fn restore_spi_stages_without_live_changes_then_closes_and_reopens_exact_h
     let reopened = SqliteStorage::open(OpenOptions::new(paths, OpenMode::ReadWriteExisting))
         .await
         .unwrap();
+    assert_eq!(reopened.source_token().await.unwrap(), source_token);
     assert_eq!(
         reopened
             .authored_draft_head(draft(1).draft_id())

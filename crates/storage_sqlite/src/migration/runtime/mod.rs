@@ -6,7 +6,7 @@
 /// Lowest runtime schema version this package can recognize.
 pub const MINIMUM_VERSION: u32 = 1;
 /// Current runtime schema version created by this package.
-pub const CURRENT_VERSION: u32 = 17;
+pub const CURRENT_VERSION: u32 = 18;
 
 const RUNTIME_V1_SQL: &str = include_str!("0001_runtime.up.sql");
 const CANONICAL_EVENT_STORAGE_V2_SQL: &str = include_str!("0002_canonical_event_storage.up.sql");
@@ -32,6 +32,8 @@ const AUTHORED_DELIVERY_FACTS_V16_SQL: &str = include_str!("0016_authored_delive
 
 const AUTHORED_DELIVERY_RECONCILIATION_V17_SQL: &str =
     include_str!("0017_authored_delivery_reconciliation.up.sql");
+
+const EVENT_MUTATION_EPOCH_V18_SQL: &str = include_str!("0018_event_mutation_epoch.up.sql");
 
 /// Stable, non-SQL description of one forward runtime migration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -894,6 +896,99 @@ const RUNTIME_V17_OBJECTS: &[&str] = &[
     "radroots_runtime_source_generations_sequence_guard",
 ];
 
+const RUNTIME_V18_OBJECTS: &[&str] = &[
+    "radroots_runtime_atomic_commits",
+    "radroots_runtime_authored_artifacts",
+    "radroots_runtime_authored_artifacts_admission_ready_idx",
+    "radroots_runtime_authored_artifacts_signed_fact_guard",
+    "radroots_runtime_authored_artifacts_signing_ready_idx",
+    "radroots_runtime_authored_atomic_commits",
+    "radroots_runtime_authored_atomic_commits_delete_guard",
+    "radroots_runtime_authored_atomic_commits_update_guard",
+    "radroots_runtime_authored_atomic_target_phase_idx",
+    "radroots_runtime_authored_delivery_attempts",
+    "radroots_runtime_authored_delivery_claims",
+    "radroots_runtime_authored_delivery_claims_delete_guard",
+    "radroots_runtime_authored_delivery_claims_update_guard",
+    "radroots_runtime_authored_delivery_facts",
+    "radroots_runtime_authored_delivery_facts_delete_guard",
+    "radroots_runtime_authored_delivery_facts_update_guard",
+    "radroots_runtime_authored_delivery_plans",
+    "radroots_runtime_authored_delivery_ready_idx",
+    "radroots_runtime_authored_delivery_reconciliations",
+    "radroots_runtime_authored_delivery_reconciliations_delete_guard",
+    "radroots_runtime_authored_delivery_reconciliations_update_guard",
+    "radroots_runtime_authored_delivery_stop_guard",
+    "radroots_runtime_authored_delivery_targets",
+    "radroots_runtime_authored_draft_author_head_idx",
+    "radroots_runtime_authored_draft_revisions",
+    "radroots_runtime_authored_draft_revisions_delete_guard",
+    "radroots_runtime_authored_draft_revisions_update_guard",
+    "radroots_runtime_authored_draft_scope_head_idx",
+    "radroots_runtime_authored_migration_evidence",
+    "radroots_runtime_authored_migration_evidence_delete_guard",
+    "radroots_runtime_authored_migration_evidence_update_guard",
+    "radroots_runtime_authored_operations",
+    "radroots_runtime_delivery_evidence",
+    "radroots_runtime_delivery_evidence_item_idx",
+    "radroots_runtime_event_index_checkpoints",
+    "radroots_runtime_event_index_manifests",
+    "radroots_runtime_event_index_shards",
+    "radroots_runtime_event_provenance",
+    "radroots_runtime_event_provenance_observed_idx",
+    "radroots_runtime_events",
+    "radroots_runtime_events_admission_idx",
+    "radroots_runtime_events_contract_metadata_guard",
+    "radroots_runtime_events_contract_metadata_insert_guard",
+    "radroots_runtime_events_delete_guard",
+    "radroots_runtime_events_event_id_idx",
+    "radroots_runtime_events_mutation_insert",
+    "radroots_runtime_events_mutation_update",
+    "radroots_runtime_events_raw_update_guard",
+    "radroots_runtime_journal_idempotency_idx",
+    "radroots_runtime_journal_operations",
+    "radroots_runtime_journal_recovery_idx",
+    "radroots_runtime_legacy_event_staging",
+    "radroots_runtime_legacy_event_staging_delete_guard",
+    "radroots_runtime_legacy_event_staging_insert_guard",
+    "radroots_runtime_legacy_event_staging_update_guard",
+    "radroots_runtime_legacy_import_commit_delete_guard",
+    "radroots_runtime_legacy_import_commit_update_guard",
+    "radroots_runtime_legacy_import_commits",
+    "radroots_runtime_legacy_import_delete_guard",
+    "radroots_runtime_legacy_import_identity_guard",
+    "radroots_runtime_legacy_import_member_delete_guard",
+    "radroots_runtime_legacy_import_member_identity_guard",
+    "radroots_runtime_legacy_import_member_state_guard",
+    "radroots_runtime_legacy_import_members",
+    "radroots_runtime_legacy_import_state_guard",
+    "radroots_runtime_legacy_import_state_idx",
+    "radroots_runtime_legacy_imports",
+    "radroots_runtime_legacy_outbox_staging",
+    "radroots_runtime_legacy_outbox_staging_delete_guard",
+    "radroots_runtime_legacy_outbox_staging_insert_guard",
+    "radroots_runtime_legacy_outbox_staging_parent_idx",
+    "radroots_runtime_legacy_outbox_staging_update_guard",
+    "radroots_runtime_outbox_items",
+    "radroots_runtime_outbox_operation_idx",
+    "radroots_runtime_outbox_ready_idx",
+    "radroots_runtime_outbox_targets",
+    "radroots_runtime_projection_checkpoints",
+    "radroots_runtime_projection_documents",
+    "radroots_runtime_projection_invalidations",
+    "radroots_runtime_projection_rebuilds",
+    "radroots_runtime_projection_rebuilds_stage_idx",
+    "radroots_runtime_projection_snapshots",
+    "radroots_runtime_projection_snapshots_created_idx",
+    "radroots_runtime_projection_snapshots_update_guard",
+    "radroots_runtime_source_generations",
+    "radroots_runtime_source_generations_active_idx",
+    "radroots_runtime_source_generations_delete_guard",
+    "radroots_runtime_source_generations_identity_guard",
+    "radroots_runtime_source_generations_mutation_guard",
+    "radroots_runtime_source_generations_sequence_guard",
+];
+
 /// Ordered, immutable runtime migration plan.
 pub const MIGRATIONS: &[MigrationDescriptor] = &[
     MigrationDescriptor {
@@ -998,6 +1093,12 @@ pub const MIGRATIONS: &[MigrationDescriptor] = &[
         up_sha256: "01463e7effeb368dd0577bfed79f566f7bb2af76d03e8e76898cc53332e2e573",
         owned_objects: RUNTIME_V17_OBJECTS,
     },
+    MigrationDescriptor {
+        version: 18,
+        name: "event_mutation_epoch",
+        up_sha256: "44e8f43722bb869f824dbfa28197d17c1e8f58c6d62b8219cdd19d452eb47c3c",
+        owned_objects: RUNTIME_V18_OBJECTS,
+    },
 ];
 
 pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
@@ -1019,6 +1120,7 @@ pub(crate) const fn migration_sql(version: u32) -> Option<&'static str> {
         15 => Some(AUTHORED_SIGNED_FACTS_V15_SQL),
         16 => Some(AUTHORED_DELIVERY_FACTS_V16_SQL),
         17 => Some(AUTHORED_DELIVERY_RECONCILIATION_V17_SQL),
+        18 => Some(EVENT_MUTATION_EPOCH_V18_SQL),
         _ => None,
     }
 }
@@ -1062,8 +1164,8 @@ mod tests {
     fn migration_plan_matches_governed_snapshot() {
         let snapshot = toml::from_str::<PlanSnapshot>(PLAN_SNAPSHOT).expect("valid snapshot");
         assert_eq!(MINIMUM_VERSION, 1);
-        assert_eq!(CURRENT_VERSION, 17);
-        assert_eq!(MIGRATIONS.len(), 17);
+        assert_eq!(CURRENT_VERSION, 18);
+        assert_eq!(MIGRATIONS.len(), 18);
         let migration = MIGRATIONS[8];
         assert_eq!(snapshot.schema_version, 1);
         assert_eq!(snapshot.database, "runtime.sqlite");

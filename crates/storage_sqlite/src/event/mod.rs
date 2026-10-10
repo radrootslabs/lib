@@ -6,7 +6,7 @@ use radroots_storage::{
     event::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, BoxFuture, EventAdmission,
         EventCursor, EventId, EventPage, EventPosition, EventQuery, EventQueryBounds,
-        EventSequence, SourceGeneration, StoredEventProvenance, StoredRawEvent,
+        EventSequence, EventSourceToken, SourceGeneration, StoredEventProvenance, StoredRawEvent,
         StoredVerifiedEvent, StoredVisibleEvent, VisibilityEvaluation, VisibilityInput,
         VisibilitySnapshot, evaluate_visibility,
     },
@@ -397,6 +397,24 @@ fn admission_contract_metadata(admission: &EventAdmission) -> Option<(&'static s
 
 #[cfg_attr(coverage_nightly, coverage(off))]
 impl EventStore for SqliteStorage {
+    fn source_token(&self) -> BoxFuture<'_, Result<EventSourceToken, Error>> {
+        Box::pin(async move {
+            let epoch = sqlx::query_scalar::<_, i64>(
+                "SELECT mutation_epoch FROM radroots_runtime_source_generations
+                 WHERE generation = ? AND state = 'active'",
+            )
+            .bind(self.generation.as_bytes().as_slice())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_backend)?
+            .ok_or(Error::SourceGenerationChanged)?;
+            Ok(EventSourceToken::new(
+                self.generation,
+                u64::try_from(epoch).map_err(|_| Error::CorruptStoredEvent)?,
+            ))
+        })
+    }
+
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>> {
         Box::pin(async move {
             let sql = "SELECT
@@ -627,6 +645,8 @@ fn map_corrupt(_: sqlx::Error) -> Error {
     Error::CorruptStoredEvent
 }
 
+#[cfg(test)]
+mod mutation_tests;
 #[cfg(test)]
 mod work;
 #[cfg(test)]
@@ -998,6 +1018,14 @@ mod tests {
             );
             let reopened =
                 SqliteStorage::new(store.pool.clone(), generation, EventStoreMode::ReadWrite);
+            assert_eq!(
+                reopened.source_token().await.unwrap(),
+                memory.source_token().await.unwrap()
+            );
+            assert_eq!(
+                reopened.source_token().await.unwrap().epoch(),
+                index as u64 + 1
+            );
             let snapshot = reopened.rebuild_visibility().await.unwrap();
             assert_eq!(snapshot, memory.rebuild_visibility().await.unwrap());
             let query = EventQuery::all(EventQueryBounds::first(10).unwrap());

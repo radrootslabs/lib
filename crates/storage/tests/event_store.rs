@@ -64,6 +64,14 @@ impl MemoryEventStore {
     }
 }
 
+#[test]
+fn unsupported_adapter_cannot_invent_a_source_fence() {
+    assert_eq!(
+        block_on(MemoryEventStore::new().source_token()),
+        Err(Error::BackendUnavailable)
+    );
+}
+
 impl EventStore for MemoryEventStore {
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>> {
         Box::pin(async move {

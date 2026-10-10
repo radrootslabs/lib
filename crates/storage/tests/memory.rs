@@ -158,6 +158,8 @@ fn verified_replacement_changes_visibility_without_increasing_raw_count() {
     block_on(store.admit(visible_admission(old.clone(), 10))).unwrap();
     let raw = admission(newer.clone(), 20);
     block_on(store.admit(raw.clone())).unwrap();
+    let token_before = block_on(store.source_token()).unwrap();
+    assert_eq!(token_before.epoch(), 2);
     let before = block_on(store.rebuild_visibility()).unwrap();
     assert_eq!(before.visible_event_ids(), &[*old.id()]);
     let verified = RawEvent::new(newer.envelope().clone())
@@ -178,6 +180,10 @@ fn verified_replacement_changes_visibility_without_increasing_raw_count() {
     assert_eq!(
         advanced.disposition(),
         radroots_storage::event::AdmissionDisposition::Advanced
+    );
+    assert_eq!(
+        block_on(store.source_token()).unwrap().epoch(),
+        token_before.epoch() + 1
     );
     let after = block_on(store.rebuild_visibility()).unwrap();
     assert_ne!(before.digest(), after.digest());

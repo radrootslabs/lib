@@ -1,0 +1,19 @@
+{
+  "schema": "radroots.event-mutation-epoch.v1",
+  "status": "approved",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "token": "event::EventSourceToken binds the canonical SourceGeneration and a u64 semantic admission epoch. EventStore::source_token reads current owning state without decoding retained history. Unsupported adapters return BackendUnavailable. Zero represents an empty source.",
+  "advance": "Insertion and actual admission-stage or contract-eligibility metadata changes advance the epoch atomically. The raw sequence alone is insufficient for same-count admission promotion. Exact duplicate admission, same-value SQL updates and provenance-only observations do not advance. Invalid/conflicting/regressing admissions have no effect.",
+  "atomicity": "Memory validates overflow before changing the event or provenance and publishes validated atomic candidates. SQLite insertion and eligibility triggers advance the owning generation in the same canonical transaction, covering direct admission and AtomicStorage ingestion. Event, source sequence, epoch, provenance and command receipt roll back together. Lost-receipt replay returns the durable receipt without another advancement.",
+  "writers": "Current production canonical writes are event admission and authored-v10 eligibility migration. Atomic ingest shares admit_transaction; Sync and local authored admission use that owner. Legacy import remains quarantine and does not itself admit canonical events. Forward v18 bootstrap fences earlier migration eligibility without rewriting any prior SQL or checksum. SQL insertion and actual eligibility updates cannot omit the epoch trigger.",
+  "bounds": {"memory_epoch_max": 18446744073709551615, "sqlite_epoch_max": 9223372036854775807, "token_read_rows_max": 1, "token_event_decode_count": 0},
+  "overflow": "EventMutationOverflow is redacted and refuses semantic mutation rather than wrapping. Exact duplicate and provenance-only observations remain legal at the ceiling. SQLite uses the exact private trigger message plus SQLITE_CONSTRAINT_TRIGGER code; other errors retain existing classification.",
+  "migration": {
+    "version": 18,
+    "name": "event_mutation_epoch",
+    "sha256": "44e8f43722bb869f824dbfa28197d17c1e8f58c6d62b8219cdd19d452eb47c3c",
+    "bootstrap": "Existing nonempty generations start at epoch1; empty generations start at0. No signed-event decode is required. Subsequent eligible changes advance monotonically. Earlier runtime schema readers reject version18; an adapter without the column cannot supply a token. Preserve prior migrations, descriptors, snapshots, receipts and canonical identity/delete guards."
+  },
+  "restore": "A verified whole-database restore preserves the backed-up generation and epoch together with its exact source bytes. Restore closes the previous provider handles and requires reopening. A token is not portable permission to continue a read across explicit history replacement: consumers must discard prior runtime scopes, derived presentation and cursors across restore/reopen. This does not claim a monotonic epoch across rollback to another complete database snapshot; that boundary includes runtime identity and is separately qualified by owning consumers.",
+  "non_goals": ["application policy", "indexed visibility implementation", "projection promotion", "new database", "public SQL", "new dependency", "artifact publication", "consumer adoption"]
+}

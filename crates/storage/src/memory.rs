@@ -3,6 +3,10 @@
 #[path = "memory_delivery_history.rs"]
 mod delivery_history;
 
+#[cfg(test)]
+#[path = "memory_mutation_tests.rs"]
+mod mutation_tests;
+
 use radroots_event::EventId;
 use radroots_protocol::runtime::v1::OperationId;
 use radroots_transport::{BoxFuture, source::EventProvenance};
@@ -30,9 +34,10 @@ use crate::{
     },
     event::{
         AdmissionDisposition, AdmissionReceipt, AdmissionStage, EventAdmission, EventPage,
-        EventPosition, EventQuery, EventQueryBounds, EventSequence, SourceGeneration,
-        StoredEventProvenance, StoredRawEvent, StoredVerifiedEvent, StoredVisibleEvent,
-        VisibilityEvaluation, VisibilityInput, VisibilitySnapshot, evaluate_visibility,
+        EventPosition, EventQuery, EventQueryBounds, EventSequence, EventSourceToken,
+        SourceGeneration, StoredEventProvenance, StoredRawEvent, StoredVerifiedEvent,
+        StoredVisibleEvent, VisibilityEvaluation, VisibilityInput, VisibilitySnapshot,
+        evaluate_visibility,
     },
     journal::{
         IdempotencyKey, JournalStage, JournalTransition, OperationInstanceId, OperationRecord,
@@ -71,6 +76,7 @@ struct EventEntry {
 #[derive(Clone, Default)]
 struct State {
     events: Vec<EventEntry>,
+    event_mutation_epoch: u64,
     journal: Vec<OperationRecord>,
     outbox: Vec<OutboxRecord>,
     projections: Vec<ProjectionStatus>,
@@ -109,6 +115,7 @@ impl MemoryStorage {
             generation,
             state: Mutex::new(State {
                 events: Vec::new(),
+                event_mutation_epoch: 0,
                 journal: Vec::new(),
                 outbox: Vec::new(),
                 projections: Vec::new(),
@@ -219,6 +226,10 @@ impl MemoryStorage {
             let disposition = if admission.stage() == entry.admission.stage() {
                 AdmissionDisposition::Duplicate
             } else {
+                state.event_mutation_epoch = state
+                    .event_mutation_epoch
+                    .checked_add(1)
+                    .ok_or(Error::EventMutationOverflow)?;
                 AdmissionDisposition::Advanced
             };
             if !entry.provenance.contains(admission.provenance()) {
@@ -237,6 +248,10 @@ impl MemoryStorage {
             .checked_add(1)
             .ok_or(Error::CorruptStoredEvent)?;
         let position = EventPosition::new(self.generation, EventSequence::new(next)?);
+        let epoch = state
+            .event_mutation_epoch
+            .checked_add(1)
+            .ok_or(Error::EventMutationOverflow)?;
         let receipt = AdmissionReceipt::new(
             *admission.event_id(),
             position,
@@ -249,6 +264,7 @@ impl MemoryStorage {
             admission,
             provenance,
         });
+        state.event_mutation_epoch = epoch;
         Ok(receipt)
     }
 
@@ -408,6 +424,16 @@ impl Default for MemoryStorage {
 }
 
 impl EventStore for MemoryStorage {
+    fn source_token(&self) -> BoxFuture<'_, Result<EventSourceToken, Error>> {
+        Box::pin(async move {
+            let state = self.state()?;
+            Ok(EventSourceToken::new(
+                self.generation,
+                state.event_mutation_epoch,
+            ))
+        })
+    }
+
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>> {
         Box::pin(async move {
             let state = self.state()?;

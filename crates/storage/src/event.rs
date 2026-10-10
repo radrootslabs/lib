@@ -51,6 +51,36 @@ const fn is_all_zero(bytes: &[u8; 32]) -> bool {
     true
 }
 
+/// Canonical source identity and its semantic admission epoch.
+///
+/// The epoch advances atomically on insertion or admission eligibility changes,
+/// including changes that leave the event count unchanged. Duplicate admission
+/// and provenance-only observations do not advance it. Zero denotes an empty
+/// source. Tokens belong to their source generation; they are not timestamps.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct EventSourceToken {
+    generation: SourceGeneration,
+    epoch: u64,
+}
+
+impl EventSourceToken {
+    /// Creates a source token from an owning provider's durable state.
+    pub const fn new(generation: SourceGeneration, epoch: u64) -> Self {
+        Self { generation, epoch }
+    }
+
+    /// Returns the source generation.
+    pub const fn generation(self) -> SourceGeneration {
+        self.generation
+    }
+
+    /// Returns the generation-local semantic mutation epoch.
+    pub const fn epoch(self) -> u64 {
+        self.epoch
+    }
+}
+
 /// Non-zero sequence within one source generation.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -596,6 +626,14 @@ impl StoredEventProvenance {
 /// idempotent for an identical event and provenance observation; a stage may
 /// advance but never regress. Query cursors are bound to one source generation.
 pub trait EventStore: Send + Sync {
+    /// Reads the current source token without decoding retained event history.
+    ///
+    /// Providers that cannot supply this fence fail closed. SQLite epochs have
+    /// an `i64::MAX` storage ceiling; the memory provider uses `u64::MAX`.
+    fn source_token(&self) -> BoxFuture<'_, Result<EventSourceToken, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+
     /// Returns passive event-store status without initiating maintenance.
     fn status(&self) -> BoxFuture<'_, Result<EventStoreStatus, Error>>;
 

@@ -28,6 +28,8 @@ pub enum Error {
     AdmissionEventMismatch,
     AdmissionRegression,
     EventConflict,
+    /// The canonical semantic epoch cannot advance; the mutation is rolled back.
+    EventMutationOverflow,
     EventPageLimitExceeded,
     CursorGenerationMismatch,
     SourceGenerationChanged,
@@ -154,6 +156,7 @@ impl fmt::Display for Error {
             Self::InvalidRetrySchedule => "storage authored retry schedule is invalid",
             Self::InvalidSourceGeneration => "storage source generation is invalid",
             Self::InvalidEventSequence => "storage event sequence is invalid",
+            Self::EventMutationOverflow => "storage event mutation epoch overflowed",
             Self::InvalidEventQueryLimit => "storage event query limit is invalid",
             Self::EmptyEventQueryIds => "storage event id query is empty",
             Self::TooManyEventQueryIds => "storage event id query exceeds its limit",

@@ -5,6 +5,11 @@ use radroots_storage::Error;
 pub(crate) fn map_backend(source: sqlx::Error) -> Error {
     if is_capacity(&source) {
         Error::SpaceInsufficient
+    } else if source.as_database_error().is_some_and(|error| {
+        error.code().as_deref() == Some("1811")
+            && error.message() == "runtime event mutation epoch overflow"
+    }) {
+        Error::EventMutationOverflow
     } else {
         Error::BackendUnavailable
     }
@@ -88,6 +93,7 @@ mod tests {
             Some("11"),
             Some("5"),
             Some("10"),
+            Some("1811"),
         ] {
             assert_eq!(
                 map_backend(sqlx::Error::Database(Box::new(Coded(code)))),
