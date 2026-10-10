@@ -304,11 +304,10 @@ fn validate_workspace_toolchain(
         .get("toolchain")
         .and_then(|value| value.get("channel"))
         .and_then(toml::Value::as_str);
-    if channel != Some(architecture.rust_version.as_str()) {
-        return Err(format!(
-            "rust-toolchain.toml channel must match architecture rust_version {}",
-            architecture.rust_version
-        ));
+    if channel != Some("1.99.0") {
+        return Err(
+            "rust-toolchain.toml channel must match development compiler 1.99.0".to_owned(),
+        );
     }
     Ok(())
 }
@@ -1412,7 +1411,7 @@ adr_required = false
         }
         fs::write(
             root.join("rust-toolchain.toml"),
-            "[toolchain]\nchannel = \"1.97.1\"\n",
+            "[toolchain]\nchannel = \"1.99.0\"\n",
         )
         .expect("write toolchain");
         let architecture = architecture();
@@ -1420,7 +1419,7 @@ adr_required = false
 
         fs::write(
             root.join("rust-toolchain.toml"),
-            "[toolchain]\nchannel = \"1.97.0\"\n",
+            "[toolchain]\nchannel = \"1.97.1\"\n",
         )
         .expect("write mismatched toolchain");
         let error = validate_workspace_toolchain(&root, &architecture)

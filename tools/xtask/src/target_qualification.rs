@@ -105,8 +105,10 @@ fn validate(matrix: &TargetMatrix) -> Result<(), String> {
             matrix.schema_version
         ));
     }
-    if matrix.msrv_toolchain != "1.97.1" || matrix.current_toolchain != "stable" {
-        return Err("target matrix must retain MSRV 1.97.1 and current stable".to_owned());
+    if matrix.msrv_toolchain != "1.97.1" || matrix.current_toolchain != "1.99.0" {
+        return Err(
+            "target matrix must retain MSRV 1.97.1 and development compiler 1.99.0".to_owned(),
+        );
     }
     let expected = [
         (
@@ -192,7 +194,7 @@ mod tests {
             .expect("workspace root");
         let (matrix, packages) = load(root).expect("target matrix");
         assert_eq!(matrix.msrv_toolchain, "1.97.1");
-        assert_eq!(matrix.current_toolchain, "stable");
+        assert_eq!(matrix.current_toolchain, "1.99.0");
         assert_eq!(matrix.operating_system.len(), 2);
         assert_eq!(
             matrix
@@ -213,7 +215,7 @@ mod tests {
         let mut matrix = TargetMatrix {
             schema_version: 1,
             msrv_toolchain: "1.97.1".to_owned(),
-            current_toolchain: "stable".to_owned(),
+            current_toolchain: "1.99.0".to_owned(),
             operating_system: vec![
                 OperatingSystem {
                     name: "linux".to_owned(),
@@ -229,6 +231,11 @@ mod tests {
                 },
             ],
         };
+        for toolchain in ["stable", "1.97.1"] {
+            matrix.current_toolchain = toolchain.to_owned();
+            assert!(validate(&matrix).is_err(), "accepted {toolchain}");
+        }
+        matrix.current_toolchain = "1.99.0".to_owned();
         for (name, target) in [
             ("windows", "x86_64-pc-windows-gnu"),
             ("macos", "x86_64-apple-darwin"),

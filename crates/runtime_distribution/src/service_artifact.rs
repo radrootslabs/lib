@@ -70,7 +70,7 @@ impl<'de> Deserialize<'de> for ServiceArtifactSha256 {
             return Err(serde::de::Error::custom("invalid sha256"));
         }
         let mut bytes = [0_u8; 32];
-        for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+        for (index, pair) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
             bytes[index] = (hex_nibble(pair[0])
                 .ok_or_else(|| serde::de::Error::custom("invalid sha256"))?
                 << 4)
@@ -229,7 +229,7 @@ impl HardenedServiceArtifact {
 
 fn sha256_literal(value: &str) -> ServiceArtifactSha256 {
     let mut bytes = [0_u8; 32];
-    for (index, pair) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, pair) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         bytes[index] = (hex_nibble(pair[0]).expect("literal sha256") << 4)
             | hex_nibble(pair[1]).expect("literal sha256");
     }

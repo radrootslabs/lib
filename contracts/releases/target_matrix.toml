@@ -1,6 +1,6 @@
 schema_version = 1
 msrv_toolchain = "1.97.1"
-current_toolchain = "stable"
+current_toolchain = "1.99.0"
 
 [[operating_system]]
 name = "linux"

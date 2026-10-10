@@ -144,7 +144,8 @@ Before editing code:
 
 ## 6. Rust engineering rules
 
-- Use Rust `1.97.1`, edition `2024`, resolver `3`, and workspace dependency
+- Use Rust `1.99.0` for development, retaining minimum supported Rust `1.97.1`,
+  edition `2024`, resolver `3`, and workspace dependency
   versions from the root `Cargo.toml` after the release-v1 workspace cutover.
 - Preserve intended `no_std` portability; gate `std`, wasm, and runtime-specific behavior explicitly.
 - Keep core logic functional and composable: prefer pure transformations, explicit state, and narrow side-effect boundaries.

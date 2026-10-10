@@ -632,7 +632,11 @@ fn run_inner(arguments: Arguments<'_>) -> Result<(), ReleaseArtifactError> {
             },
         },
     )
-    .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    .map_err(|_error| {
+        #[cfg(test)]
+        eprintln!("OCI admission category: {_error}");
+        ReleaseArtifactError::InvalidInputArtifact
+    })?;
     input_snapshot
         .revalidate()
         .map_err(|_| ReleaseArtifactError::InvalidInputRoot)?;
@@ -1920,8 +1924,11 @@ fn create_binary_archive_from_snapshot(
     if source_evidence.byte_length == 0 {
         return Err(ReleaseArtifactError::InvalidInputArtifact);
     }
-    artifact_admission::admit_binary(&stable_source, target, true)
-        .map_err(|_| ReleaseArtifactError::InvalidInputArtifact)?;
+    artifact_admission::admit_binary(&stable_source, target, true).map_err(|_error| {
+        #[cfg(test)]
+        eprintln!("binary admission category: {_error}");
+        ReleaseArtifactError::InvalidInputArtifact
+    })?;
     write_binary_archive(
         &stable_source,
         output,

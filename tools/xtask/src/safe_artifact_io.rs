@@ -3418,12 +3418,11 @@ mod tests {
 #[cfg(all(test, unix))]
 mod step_294_tests {
     use std::fs::{self, File};
-    use std::io::Write as _;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::{Path, PathBuf};
 
     use flate2::{Compression, GzBuilder};
-    use sha2::{Digest as _, Sha256};
+    use sha2::Sha256;
     use tar::{Builder, EntryType, Header};
     use tempfile::TempDir;
 

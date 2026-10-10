@@ -595,3 +595,18 @@ closure_evidence = [
   "crates/transport_nostr/src/source.rs tests remote selector translation and defensive result filtering before page bounds.",
   "Steps 282 and 283 qualified the SDK-owned signing, Nostr composition, and mobile presentation bridge without lower-package ownership leakage.",
 ]
+
+[[deviation]]
+id = "RCRV1-DEV-024"
+date = "2026-10-10"
+status = "closed"
+approval = "Explicit user authorization requires Rust 1.99 and necessary owning-repository repairs, verified commits and normal source pushes."
+affected_steps = ["018", "299"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = ["The development toolchain is pinned to 1.99.0 while package rust-version and the immutable release-v1 specification declare minimum supported Rust 1.97.1.", "Existing architecture validation conflated the development compiler with the public package minimum; the target matrix previously selected floating stable."]
+replacement_action = "Pin current development qualification to Rust 1.99.0 and validate it separately from unchanged MSRV 1.97.1; use fixed-size slice iteration for the required hexadecimal parsing lint while retaining validation, zeroization, public APIs and release-v1 contracts."
+verification = ["Run exact workspace format, check, tests and warnings-as-errors Clippy under 1.99.0.", "Run architecture, contracts, catalog, source/API boundary and graph controls, public feature matrix, supported SDK/WASM profiles and generated freshness.", "Verify the changed Event source against its pinned public API and unchanged coverage policy, and check compatibility with the retained minimum compiler.", "Reject the former development compiler and floating current compiler in policy controls; obtain independent exact-source acceptance before commit and source push."]
+unresolved_risk = "Current Rust1.99 owner checks pass. Downstream adoption and native qualification remain separate; earlier intermittent release-fixture failures remain preserved with cause unknown."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = ["Rust1.99.0 complete workspace compilation and all277 original compiled test executables, all12 profile cases, warnings-as-errors Clippy/Rustdoc, public feature matrix, SDK/WASM and source/contract/freshness checks pass with the reviewed fixed-size parsing correction and unchanged public APIs.", "Complete xtask and the original focused reproducible-artifact case pass under unchanged admission and watchdog policies; independent exact-source acceptance remains required before commit."]

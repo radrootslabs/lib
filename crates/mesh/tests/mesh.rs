@@ -581,7 +581,9 @@ fn decode_hex(value: &str) -> Vec<u8> {
     assert_eq!(value.len() % 2, 0, "hex fixture length must be even");
     value
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|chunk| {
             let high = hex_nibble(chunk[0]);
             let low = hex_nibble(chunk[1]);
