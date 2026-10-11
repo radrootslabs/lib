@@ -16,6 +16,7 @@ use sqlx::{Row, Sqlite, SqliteConnection};
 
 mod batch;
 mod cache;
+mod cache_retired;
 mod document_query;
 
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -41,6 +42,26 @@ impl ProjectionStore for SqliteStorage {
     ) -> BoxFuture<'_, Result<radroots_storage::projection::cache::ProjectionCacheCollection, Error>>
     {
         Box::pin(cache::collect(self, scope))
+    }
+    fn collect_retired_projection_cache(
+        &self,
+        id: ProjectionId,
+        source: radroots_storage::event::EventSourceToken,
+        expected_active: Option<ProjectionGeneration>,
+    ) -> BoxFuture<'_, Result<radroots_storage::projection::cache::ProjectionCacheCollection, Error>>
+    {
+        Box::pin(cache_retired::collect(self, id, source, expected_active))
+    }
+    fn collect_obsolete_projection_snapshots(
+        &self,
+        scope: radroots_storage::projection::cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<radroots_storage::projection::cache::ProjectionCacheCollection, Error>>
+    {
+        Box::pin(cache::collect_kind(
+            self,
+            scope,
+            cache::CollectionKind::ObsoleteSnapshots,
+        ))
     }
     fn status(
         &self,

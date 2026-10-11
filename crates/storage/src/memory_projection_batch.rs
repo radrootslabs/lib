@@ -177,6 +177,12 @@ pub(super) fn write(
                 .get_mut(&(identity.0.clone(), active))
         {
             previous.phase = Phase::Retired;
+            state
+                .projection_cache
+                .retired
+                .entry(identity.0.clone())
+                .or_default()
+                .insert(active);
         }
         if let Some(prior) = state
             .projections

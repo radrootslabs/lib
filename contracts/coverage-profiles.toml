@@ -27,3 +27,6 @@ test_threads = 1
 no_default_features = false
 features = ["full"]
 test_threads = 1
+
+[profiles.crates."radroots_storage"]
+test_packages = ["radroots_storage_sqlite"]

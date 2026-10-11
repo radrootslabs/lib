@@ -23,6 +23,7 @@ pub(super) struct Cache {
     pub(super) limits: Option<ProjectionCacheLimits>,
     pub(super) owners: BTreeSet<ProjectionId>,
     pub(super) protected: BTreeSet<Identity>,
+    pub(super) retired: BTreeMap<ProjectionId, BTreeSet<ProjectionGeneration>>,
     pub(super) snapshot_order: BTreeSet<(ProjectionId, ProjectionGeneration, u64, [u8; 32])>,
     pub(super) value_bytes: u64,
     pub(super) owner_time_ms: u64,
@@ -33,6 +34,7 @@ impl Cache {
             limits: None,
             owners: BTreeSet::new(),
             protected: BTreeSet::new(),
+            retired: BTreeMap::new(),
             snapshot_order: BTreeSet::new(),
             value_bytes: 0,
             owner_time_ms: 0,
@@ -103,20 +105,23 @@ pub(super) fn configure(
     state.projection_cache.time(now);
     Ok(state.projection_cache.usage())
 }
-fn fence(
+pub(super) fn fence_owner(
     state: &State,
     generation: SourceGeneration,
-    scope: &ProjectionCacheScope,
+    id: &ProjectionId,
+    source: EventSourceToken,
+    active: Option<ProjectionGeneration>,
 ) -> Result<(), Error> {
-    if scope.source() != EventSourceToken::new(generation, state.event_mutation_epoch) {
+    ProjectionId::parse(id.as_str())?;
+    if source != EventSourceToken::new(generation, state.event_mutation_epoch) {
         return Err(Error::SourceEpochChanged);
     }
     if state
         .projections
         .iter()
-        .find(|value| value.projection_id() == scope.projection_id())
+        .find(|value| value.projection_id() == id)
         .map(|value| value.generation())
-        != scope.expected_active()
+        != active
     {
         return Err(Error::ProjectionRevisionConflict);
     }
@@ -127,7 +132,13 @@ pub(super) fn retire(
     source: SourceGeneration,
     scope: ProjectionCacheScope,
 ) -> Result<ProjectionCacheUsage, Error> {
-    fence(state, source, &scope)?;
+    fence_owner(
+        state,
+        source,
+        scope.projection_id(),
+        scope.source(),
+        scope.expected_active(),
+    )?;
     let identity = (scope.projection_id().clone(), scope.generation());
     let prior = state.projection_generations.get(&identity);
     let configured = state
@@ -184,6 +195,12 @@ pub(super) fn retire(
         },
     );
     state.projection_cache.protected.remove(&identity);
+    state
+        .projection_cache
+        .retired
+        .entry(identity.0.clone())
+        .or_default()
+        .insert(identity.1);
     if configured && scope.expected_active() == Some(scope.generation()) {
         state
             .projections
@@ -197,7 +214,29 @@ pub(super) fn collect(
     scope: ProjectionCacheScope,
     now: u64,
 ) -> Result<ProjectionCacheCollection, Error> {
-    fence(state, source, &scope)?;
+    collect_kind(state, source, scope, now, CollectionKind::Generation)
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum CollectionKind {
+    Generation,
+    ObsoleteSnapshots,
+}
+
+pub(super) fn collect_kind(
+    state: &mut State,
+    source: SourceGeneration,
+    scope: ProjectionCacheScope,
+    now: u64,
+    kind: CollectionKind,
+) -> Result<ProjectionCacheCollection, Error> {
+    fence_owner(
+        state,
+        source,
+        scope.projection_id(),
+        scope.source(),
+        scope.expected_active(),
+    )?;
     if !state
         .projection_cache
         .owners
@@ -210,9 +249,26 @@ pub(super) fn collect(
         .projection_generations
         .get(&identity)
         .is_some_and(|value| value.phase != projection_batch::Phase::Retired);
-    let protected = scope.expected_active() == Some(scope.generation()) || reserved;
+    let active = scope.expected_active() == Some(scope.generation());
+    let snapshot_only = kind == CollectionKind::ObsoleteSnapshots;
+    if snapshot_only {
+        let invalidated = active
+            && state.projections.iter().any(|status| {
+                status.projection_id() == scope.projection_id()
+                    && status.health() == ProjectionHealth::Invalidated
+                    && status.active_rebuild().is_none()
+            });
+        let staging = state
+            .projection_generations
+            .get(&identity)
+            .is_some_and(|value| value.phase == projection_batch::Phase::Staging);
+        if ((reserved || active) && !invalidated) || staging {
+            return Err(Error::ProjectionRevisionConflict);
+        }
+    }
+    let protected = !snapshot_only && (active || reserved);
     let now = state.projection_cache.owner_time_ms.max(now);
-    let documents: Vec<_> = if protected {
+    let documents: Vec<_> = if protected || snapshot_only {
         Vec::new()
     } else {
         state
@@ -294,6 +350,7 @@ pub(super) fn collect(
     state.projection_cache.value_bytes = value_bytes;
     state.projection_cache.time(now);
     let document_more = !protected
+        && !snapshot_only
         && state
             .projection_documents
             .range((
@@ -329,15 +386,23 @@ pub(super) fn collect(
             .next()
             .is_some_and(|(id, generation, _, _)| id == &identity.0 && generation == &identity.1);
     if !protected
+        && !snapshot_only
         && !document_more
         && !snapshot_more
         && state.projection_generations.contains_key(&identity)
         && removed < PROJECTION_CACHE_COLLECTION_ROWS_MAX as u64
     {
         state.projection_generations.remove(&identity);
+        if let Some(generations) = state.projection_cache.retired.get_mut(&identity.0) {
+            generations.remove(&identity.1);
+            if generations.is_empty() {
+                state.projection_cache.retired.remove(&identity.0);
+            }
+        }
         removed += 1;
     }
-    let registration_more = !protected && state.projection_generations.contains_key(&identity);
+    let registration_more =
+        !protected && !snapshot_only && state.projection_generations.contains_key(&identity);
     Ok(ProjectionCacheCollection {
         removed_rows: removed,
         removed_value_bytes: freed,

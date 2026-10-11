@@ -72,6 +72,8 @@ use crate::{
 mod projection_batch;
 #[path = "memory_projection_cache.rs"]
 mod projection_cache;
+#[path = "memory_projection_cache_retired.rs"]
+mod projection_cache_retired;
 
 #[derive(Clone)]
 struct EventEntry {
@@ -925,6 +927,37 @@ impl ProjectionStore for MemoryStorage {
                 self.generation,
                 scope,
                 projection_cache::now()?,
+            )
+        })
+    }
+    fn collect_retired_projection_cache(
+        &self,
+        id: ProjectionId,
+        source: EventSourceToken,
+        expected_active: Option<ProjectionGeneration>,
+    ) -> BoxFuture<'_, Result<crate::projection::cache::ProjectionCacheCollection, Error>> {
+        Box::pin(async move {
+            projection_cache_retired::collect(
+                &mut *self.state()?,
+                self.generation,
+                id,
+                source,
+                expected_active,
+                projection_cache::now()?,
+            )
+        })
+    }
+    fn collect_obsolete_projection_snapshots(
+        &self,
+        scope: crate::projection::cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<crate::projection::cache::ProjectionCacheCollection, Error>> {
+        Box::pin(async move {
+            projection_cache::collect_kind(
+                &mut *self.state()?,
+                self.generation,
+                scope,
+                projection_cache::now()?,
+                projection_cache::CollectionKind::ObsoleteSnapshots,
             )
         })
     }

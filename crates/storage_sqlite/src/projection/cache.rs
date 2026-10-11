@@ -43,7 +43,9 @@ pub(super) async fn owner(
     .map_err(map)?;
     Ok(row.is_some())
 }
-async fn usage(transaction: &mut Transaction<'_, Sqlite>) -> Result<ProjectionCacheUsage, Error> {
+pub(super) async fn usage(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> Result<ProjectionCacheUsage, Error> {
     let row = sqlx::query("SELECT value_bytes,protected_generations,legacy_snapshots FROM radroots_runtime_projection_cache_budget WHERE singleton=1").fetch_one(&mut **transaction).await.map_err(map)?;
     Ok(ProjectionCacheUsage {
         value_bytes: u64_from_i64(row.try_get("value_bytes").map_err(map_corrupt)?)?,
@@ -103,28 +105,31 @@ pub(super) async fn configure(
     transaction.commit().await.map_err(map)?;
     Ok(current)
 }
-async fn fence(
+pub(super) async fn fence_owner(
     transaction: &mut Transaction<'_, Sqlite>,
     store: &SqliteStorage,
-    scope: &ProjectionCacheScope,
+    id: &ProjectionId,
+    source: radroots_storage::event::EventSourceToken,
+    active: Option<radroots_storage::projection::ProjectionGeneration>,
 ) -> Result<Option<radroots_storage::projection::ProjectionStatus>, Error> {
-    if scope.source().generation() != store.generation {
+    ProjectionId::parse(id.as_str())?;
+    if source.generation() != store.generation {
         return Err(Error::SourceEpochChanged);
     }
-    let epoch: Option<i64> = sqlx::query_scalar("SELECT mutation_epoch FROM radroots_runtime_source_generations WHERE generation=? AND state='active'").bind(scope.source().generation().as_bytes().as_slice()).fetch_optional(&mut **transaction).await.map_err(map)?;
-    if epoch.map(u64_from_i64).transpose()? != Some(scope.source().epoch()) {
+    let epoch: Option<i64> = sqlx::query_scalar("SELECT mutation_epoch FROM radroots_runtime_source_generations WHERE generation=? AND state='active'").bind(source.generation().as_bytes().as_slice()).fetch_optional(&mut **transaction).await.map_err(map)?;
+    if epoch.map(u64_from_i64).transpose()? != Some(source.epoch()) {
         return Err(Error::SourceEpochChanged);
     }
     let status =
         sqlx::query("SELECT * FROM radroots_runtime_projection_checkpoints WHERE projection_id=?")
-            .bind(scope.projection_id().as_str())
+            .bind(id.as_str())
             .fetch_optional(&mut **transaction)
             .await
             .map_err(map)?
             .as_ref()
             .map(decode_status)
             .transpose()?;
-    if status.as_ref().map(|value| value.generation()) != scope.expected_active() {
+    if status.as_ref().map(|value| value.generation()) != active {
         return Err(Error::ProjectionRevisionConflict);
     }
     Ok(status)
@@ -139,7 +144,14 @@ pub(super) async fn retire(
         .begin_with("BEGIN IMMEDIATE")
         .await
         .map_err(map)?;
-    let status = fence(&mut transaction, store, &scope).await?;
+    let status = fence_owner(
+        &mut transaction,
+        store,
+        scope.projection_id(),
+        scope.source(),
+        scope.expected_active(),
+    )
+    .await?;
     let row = sqlx::query("SELECT source_generation,source_epoch,phase FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_optional(&mut *transaction).await.map_err(map)?;
     let configured = owner(&mut transaction, scope.projection_id()).await?;
     if !configured {
@@ -191,41 +203,87 @@ pub(super) async fn collect(
     store: &SqliteStorage,
     scope: ProjectionCacheScope,
 ) -> Result<ProjectionCacheCollection, Error> {
+    collect_kind(store, scope, CollectionKind::Generation).await
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum CollectionKind {
+    Generation,
+    ObsoleteSnapshots,
+}
+
+pub(super) async fn collect_kind(
+    store: &SqliteStorage,
+    scope: ProjectionCacheScope,
+    kind: CollectionKind,
+) -> Result<ProjectionCacheCollection, Error> {
     store.require_projection_writer()?;
     let mut transaction = store
         .pool()
         .begin_with("BEGIN IMMEDIATE")
         .await
         .map_err(map)?;
-    fence(&mut transaction, store, &scope).await?;
-    if !owner(&mut transaction, scope.projection_id()).await? {
+    let result = collect_in(&mut transaction, store, &scope, kind).await?;
+    transaction.commit().await.map_err(map)?;
+    Ok(result)
+}
+pub(super) async fn collect_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    store: &SqliteStorage,
+    scope: &ProjectionCacheScope,
+    kind: CollectionKind,
+) -> Result<ProjectionCacheCollection, Error> {
+    let status = fence_owner(
+        transaction,
+        store,
+        scope.projection_id(),
+        scope.source(),
+        scope.expected_active(),
+    )
+    .await?;
+    if !owner(transaction, scope.projection_id()).await? {
         return Err(Error::ProjectionRevisionConflict);
     }
-    let phase: Option<String> = sqlx::query_scalar("SELECT phase FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_optional(&mut *transaction).await.map_err(map)?;
-    let protected = scope.expected_active() == Some(scope.generation())
-        || phase.as_deref().is_some_and(|value| value != "retired");
-    let now = time(&mut transaction, now()?).await?;
-    let limit = limits(&mut transaction)
+    let phase: Option<String> = sqlx::query_scalar("SELECT phase FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_optional(&mut **transaction).await.map_err(map)?;
+    let active = scope.expected_active() == Some(scope.generation());
+    let reserved = phase.as_deref().is_some_and(|value| value != "retired");
+    let snapshot_only = kind == CollectionKind::ObsoleteSnapshots;
+    if snapshot_only {
+        let invalidated = active
+            && status.as_ref().is_some_and(|status| {
+                status.health() == ProjectionHealth::Invalidated
+                    && status.active_rebuild().is_none()
+            });
+        let staging = phase
+            .as_deref()
+            .is_some_and(|value| value != "retired" && value != "promoted");
+        if ((reserved || active) && !invalidated) || staging {
+            return Err(Error::ProjectionRevisionConflict);
+        }
+    }
+    let protected = !snapshot_only && (active || reserved);
+    let now = time(transaction, now()?).await?;
+    let limit = limits(transaction)
         .await?
         .ok_or(Error::ProjectionRevisionConflict)?;
     let mut removed = 0u64;
     let mut freed = 0u64;
-    if !protected {
+    if !protected && !snapshot_only {
         let rows = sqlx::query("SELECT document_key,length(value) AS bytes FROM radroots_runtime_projection_documents WHERE projection_id=? AND generation=? ORDER BY document_key LIMIT 64")
-            .bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_all(&mut *transaction).await.map_err(map)?;
+            .bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_all(&mut **transaction).await.map_err(map)?;
         for row in rows {
             let key: String = row.try_get("document_key").map_err(map_corrupt)?;
             let bytes = u64_from_i64(row.try_get("bytes").map_err(map_corrupt)?)?;
-            sqlx::query("DELETE FROM radroots_runtime_projection_documents WHERE projection_id=? AND generation=? AND document_key=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind(key).execute(&mut *transaction).await.map_err(map)?;
+            sqlx::query("DELETE FROM radroots_runtime_projection_documents WHERE projection_id=? AND generation=? AND document_key=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind(key).execute(&mut **transaction).await.map_err(map)?;
             removed += 1;
             freed = freed
                 .checked_add(bytes)
                 .ok_or(Error::CorruptProjectionRecord)?;
         }
     }
-    let mut current = usage(&mut transaction).await?;
+    let mut current = usage(transaction).await?;
     let rows = sqlx::query("SELECT snapshot_id,created_at_unix_ms,length(value) AS bytes FROM radroots_runtime_projection_snapshots INDEXED BY radroots_runtime_projection_snapshots_generation_created_idx WHERE projection_id=? AND generation=? ORDER BY created_at_unix_ms,snapshot_id LIMIT ?")
-        .bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind((PROJECTION_CACHE_COLLECTION_ROWS_MAX as u64-removed) as i64).fetch_all(&mut *transaction).await.map_err(map)?;
+        .bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind((PROJECTION_CACHE_COLLECTION_ROWS_MAX as u64-removed) as i64).fetch_all(&mut **transaction).await.map_err(map)?;
     let mut future_after = now;
     let mut future_id = vec![255; 32];
     for row in rows {
@@ -239,7 +297,7 @@ pub(super) async fn collect(
         }
         let id: Vec<u8> = row.try_get("snapshot_id").map_err(map_corrupt)?;
         let bytes = u64_from_i64(row.try_get("bytes").map_err(map_corrupt)?)?;
-        delete_snapshot(&mut transaction, scope.projection_id(), &id).await?;
+        delete_snapshot(transaction, scope.projection_id(), &id).await?;
         if created > now {
             future_after = created;
             future_id = id;
@@ -252,18 +310,18 @@ pub(super) async fn collect(
     }
     if protected && removed < PROJECTION_CACHE_COLLECTION_ROWS_MAX as u64 {
         let rows = sqlx::query("SELECT snapshot_id,length(value) AS bytes FROM radroots_runtime_projection_snapshots INDEXED BY radroots_runtime_projection_snapshots_generation_created_idx WHERE projection_id=? AND generation=? AND (created_at_unix_ms,snapshot_id)>(?,?) ORDER BY created_at_unix_ms,snapshot_id LIMIT ?")
-            .bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind(i64_from_u64(future_after)?).bind(future_id).bind((PROJECTION_CACHE_COLLECTION_ROWS_MAX as u64-removed) as i64).fetch_all(&mut *transaction).await.map_err(map)?;
+            .bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind(i64_from_u64(future_after)?).bind(future_id).bind((PROJECTION_CACHE_COLLECTION_ROWS_MAX as u64-removed) as i64).fetch_all(&mut **transaction).await.map_err(map)?;
         for row in rows {
             let id: Vec<u8> = row.try_get("snapshot_id").map_err(map_corrupt)?;
-            delete_snapshot(&mut transaction, scope.projection_id(), &id).await?;
+            delete_snapshot(transaction, scope.projection_id(), &id).await?;
             removed += 1;
             freed = freed
                 .checked_add(u64_from_i64(row.try_get("bytes").map_err(map_corrupt)?)?)
                 .ok_or(Error::CorruptProjectionRecord)?;
         }
     }
-    let document_more: bool = !protected && sqlx::query_scalar::<_,i64>("SELECT EXISTS(SELECT 1 FROM radroots_runtime_projection_documents WHERE projection_id=? AND generation=?)").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_one(&mut *transaction).await.map_err(map)? != 0;
-    current = usage(&mut transaction).await?;
+    let document_more: bool = !protected && !snapshot_only && sqlx::query_scalar::<_,i64>("SELECT EXISTS(SELECT 1 FROM radroots_runtime_projection_documents WHERE projection_id=? AND generation=?)").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_one(&mut **transaction).await.map_err(map)? != 0;
+    current = usage(transaction).await?;
     let snapshot_sql = "SELECT EXISTS(SELECT 1 FROM radroots_runtime_projection_snapshots INDEXED BY radroots_runtime_projection_snapshots_generation_created_idx WHERE projection_id=? AND generation=? AND created_at_unix_ms<=?)";
     let cutoff = if !protected || current.legacy_snapshots > limit.legacy_snapshots() {
         i64::MAX as u64
@@ -274,19 +332,20 @@ pub(super) async fn collect(
         .bind(scope.projection_id().as_str())
         .bind(scope.generation().as_bytes().as_slice())
         .bind(i64_from_u64(cutoff)?)
-        .fetch_one(&mut *transaction)
+        .fetch_one(&mut **transaction)
         .await
         .map_err(map)?;
-    let future_more: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM radroots_runtime_projection_snapshots INDEXED BY radroots_runtime_projection_snapshots_generation_created_idx WHERE projection_id=? AND generation=? AND created_at_unix_ms>?)").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind(i64_from_u64(now)?).fetch_one(&mut *transaction).await.map_err(map)?;
+    let future_more: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM radroots_runtime_projection_snapshots INDEXED BY radroots_runtime_projection_snapshots_generation_created_idx WHERE projection_id=? AND generation=? AND created_at_unix_ms>?)").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind(i64_from_u64(now)?).fetch_one(&mut **transaction).await.map_err(map)?;
     let snapshot_more = expired_more | future_more;
-    let mut registration_more = !protected && phase.is_some();
+    let mut registration_more = !protected && !snapshot_only && phase.is_some();
     if !protected
+        && !snapshot_only
         && !document_more
         && snapshot_more == 0
         && phase.is_some()
         && removed < PROJECTION_CACHE_COLLECTION_ROWS_MAX as u64
     {
-        sqlx::query("DELETE FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).execute(&mut *transaction).await.map_err(map)?;
+        sqlx::query("DELETE FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).execute(&mut **transaction).await.map_err(map)?;
         removed += 1;
         registration_more = false;
     }
@@ -294,9 +353,8 @@ pub(super) async fn collect(
         removed_rows: removed,
         removed_value_bytes: freed,
         more: document_more || snapshot_more != 0 || registration_more,
-        usage: usage(&mut transaction).await?,
+        usage: usage(transaction).await?,
     };
-    transaction.commit().await.map_err(map)?;
     Ok(result)
 }
 async fn delete_snapshot(

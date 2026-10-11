@@ -469,7 +469,7 @@ fn schema_metadata_error(source: &sqlx::Error, database: &'static str) -> Error 
 fn validate_plan(plan: &MigrationPlan) -> Result<(), Error> {
     let valid = plan.minimum_version > 0
         && plan.minimum_version <= plan.current_version
-        && plan.current_version <= 22
+        && plan.current_version <= 23
         && plan.steps.len() == usize::try_from(plan.current_version).unwrap_or(usize::MAX)
         && plan
             .steps
@@ -598,6 +598,7 @@ const fn set_user_version_sql(version: u32) -> Option<&'static str> {
         20 => Some("PRAGMA user_version = 20"),
         21 => Some("PRAGMA user_version = 21"),
         22 => Some("PRAGMA user_version = 22"),
+        23 => Some("PRAGMA user_version = 23"),
         _ => None,
     }
 }
@@ -882,8 +883,8 @@ mod tests {
             .await
             .expect("application id");
         let newer_version = runtime::CURRENT_VERSION + 1;
-        assert_eq!(newer_version, 23);
-        sqlx::raw_sql("PRAGMA user_version = 23")
+        assert_eq!(newer_version, 24);
+        sqlx::raw_sql("PRAGMA user_version = 24")
             .execute(&mut newer)
             .await
             .expect("newer version");

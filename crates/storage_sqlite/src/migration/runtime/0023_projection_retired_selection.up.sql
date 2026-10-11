@@ -1,0 +1,3 @@
+CREATE INDEX radroots_runtime_projection_retired_generation_idx
+ON radroots_runtime_projection_generations(projection_id,generation)
+WHERE phase='retired';

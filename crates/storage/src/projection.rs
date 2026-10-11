@@ -1055,6 +1055,26 @@ pub trait ProjectionStore: Send + Sync {
     ) -> BoxFuture<'_, Result<cache::ProjectionCacheCollection, Error>> {
         Box::pin(async { Err(Error::BackendUnavailable) })
     }
+    /// Collects at most64 derived rows from one indexed retired generation.
+    /// The registered owner, current source and active identity are fenced under
+    /// the same provider transaction or lock; `more` includes other retired work.
+    fn collect_retired_projection_cache(
+        &self,
+        _id: ProjectionId,
+        _source: crate::event::EventSourceToken,
+        _expected_active: Option<ProjectionGeneration>,
+    ) -> BoxFuture<'_, Result<cache::ProjectionCacheCollection, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
+    /// Retires only obsolete snapshots, preserving documents and other owner state.
+    /// A current target must be explicitly Invalidated without a rebuild; live
+    /// staging is refused. Exact registered-owner/source/active fences apply.
+    fn collect_obsolete_projection_snapshots(
+        &self,
+        _scope: cache::ProjectionCacheScope,
+    ) -> BoxFuture<'_, Result<cache::ProjectionCacheCollection, Error>> {
+        Box::pin(async { Err(Error::BackendUnavailable) })
+    }
     /// Atomically stages a bounded batch under a durable source and generation fence.
     fn put_projection_batch(
         &self,
