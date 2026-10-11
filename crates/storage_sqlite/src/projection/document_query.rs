@@ -56,10 +56,7 @@ pub(super) async fn page_at(
     }
 }
 
-async fn read_page(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    query: &ProjectionDocumentQuery,
-) -> Result<ProjectionDocumentPage, Error> {
+fn selection(query: &ProjectionDocumentQuery) -> sqlx::QueryBuilder<sqlx::Sqlite> {
     // CASE bounds every variable-width metadata value before SQLx allocates it.
     // Payloads are loaded separately, only after charging this page's byte budget.
     let mut selection = sqlx::QueryBuilder::new(
@@ -84,9 +81,24 @@ async fn read_page(
             .push_bind(key)
             .push(")");
     }
+    if let Some(range) = query.key_range() {
+        selection
+            .push(" AND document_key >= ")
+            .push_bind(range.first())
+            .push(" AND document_key <= ")
+            .push_bind(range.last());
+    }
     selection
         .push(" ORDER BY documents.generation, documents.document_key LIMIT ")
         .push_bind(i64::from(query.limit()) + 1);
+    selection
+}
+
+async fn read_page(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    query: &ProjectionDocumentQuery,
+) -> Result<ProjectionDocumentPage, Error> {
+    let mut selection = selection(query);
     let rows = selection
         .build()
         .fetch_all(&mut **transaction)
@@ -127,7 +139,10 @@ async fn read_page(
             continue;
         }
         let size = size as usize;
-        if bytes + size > PROJECTION_DOCUMENT_PAGE_BYTES_MAX {
+        if bytes + size > query.payload_budget() {
+            if records.is_empty() {
+                return Err(Error::SpaceInsufficient);
+            }
             has_more = true;
             break;
         }
@@ -146,5 +161,7 @@ async fn read_page(
     ProjectionDocumentPage::new(query, records, has_more)
 }
 
+#[cfg(test)]
+mod selection_tests;
 #[cfg(test)]
 mod tests;

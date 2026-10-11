@@ -1507,6 +1507,11 @@ pub enum radroots_storage::projection::document_query::ProjectionDocumentGenerat
 pub radroots_storage::projection::document_query::ProjectionDocumentGenerations::All
 pub radroots_storage::projection::document_query::ProjectionDocumentGenerations::Exact(radroots_storage::projection::ProjectionGeneration)
 pub struct radroots_storage::projection::document_query::ProjectionDocumentCursor
+pub struct radroots_storage::projection::document_query::ProjectionDocumentKeyRange
+impl radroots_storage::projection::document_query::ProjectionDocumentKeyRange
+pub fn radroots_storage::projection::document_query::ProjectionDocumentKeyRange::first(&self) -> &str
+pub fn radroots_storage::projection::document_query::ProjectionDocumentKeyRange::last(&self) -> &str
+pub fn radroots_storage::projection::document_query::ProjectionDocumentKeyRange::new(alloc::string::String, alloc::string::String) -> core::result::Result<Self, radroots_storage::Error>
 pub struct radroots_storage::projection::document_query::ProjectionDocumentPage
 impl radroots_storage::projection::document_query::ProjectionDocumentPage
 pub fn radroots_storage::projection::document_query::ProjectionDocumentPage::into_records(self) -> alloc::vec::Vec<radroots_storage::projection::document_query::ProjectionDocumentRecord>
@@ -1517,11 +1522,16 @@ pub struct radroots_storage::projection::document_query::ProjectionDocumentQuery
 impl radroots_storage::projection::document_query::ProjectionDocumentQuery
 pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::after(&self) -> core::option::Option<(radroots_storage::projection::ProjectionGeneration, &str)>
 pub const fn radroots_storage::projection::document_query::ProjectionDocumentQuery::generations(&self) -> radroots_storage::projection::document_query::ProjectionDocumentGenerations
+pub const fn radroots_storage::projection::document_query::ProjectionDocumentQuery::key_range(&self) -> core::option::Option<&radroots_storage::projection::document_query::ProjectionDocumentKeyRange>
 pub const fn radroots_storage::projection::document_query::ProjectionDocumentQuery::limit(&self) -> u16
 pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::matches(&self, radroots_storage::projection::ProjectionGeneration, &str) -> bool
 pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::new(radroots_storage::projection::ProjectionId, radroots_storage::projection::document_query::ProjectionDocumentGenerations, u16) -> core::result::Result<Self, radroots_storage::Error>
+pub const fn radroots_storage::projection::document_query::ProjectionDocumentQuery::payload_budget(&self) -> usize
 pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::with_after_key(self, alloc::string::String) -> core::result::Result<Self, radroots_storage::Error>
 pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::with_cursor(self, &radroots_storage::projection::document_query::ProjectionDocumentCursor) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::with_key_range(self, radroots_storage::projection::document_query::ProjectionDocumentKeyRange) -> core::result::Result<Self, radroots_storage::Error>
+pub fn radroots_storage::projection::document_query::ProjectionDocumentQuery::with_payload_budget(self, usize) -> core::result::Result<Self, radroots_storage::Error>
 pub struct radroots_storage::projection::document_query::ProjectionDocumentRecord
 impl radroots_storage::projection::document_query::ProjectionDocumentRecord
 pub fn radroots_storage::projection::document_query::ProjectionDocumentRecord::corrupt(radroots_storage::projection::ProjectionGeneration, alloc::string::String) -> core::result::Result<Self, radroots_storage::Error>

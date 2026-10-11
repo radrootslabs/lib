@@ -1,0 +1,13 @@
+{
+  "schema": "radroots.projection-document-inventory.v2",
+  "status": "implemented_candidate",
+  "supersedes_without_mutation": "radroots.projection-document-inventory.v1",
+  "owners": ["radroots_storage", "radroots_storage_sqlite"],
+  "selection": "Optional validated inclusive UTF-8 key intervals select one exact generation. Independently supplied identity, generation and interval bind provider-produced continuations. A validated after-key can seek within that exact selection without creating a retained session. Neither mechanism establishes frozen application scope or proves position existence.",
+  "bounds": {"page_records": 256, "metadata_lookahead": 1, "key_bytes": 512, "generation_bytes": 32, "digest_bytes": 32, "maximum_page_payload_bytes": 16777216, "minimum_caller_payload_budget": 1},
+  "allocation": "A caller may lower the encoded payload budget within the existing maximum. Providers inspect scalar lengths before cloning or loading payloads. A first valid value that cannot fit returns SpaceInsufficient; exhaustion after admitted records returns a continuation. Metadata remains separately bounded by count plus one lookahead. Callers charge decoding, intermediate buffers and product work within their own envelope.",
+  "consistency": "Key ranges use bounded BTreeMap selection or SQLite primary-key predicates. Source-bound reads retain the exact canonical source, Ready health, registered promoted generation and expected-active checks under the same existing transaction or lock.",
+  "corruption": "Keep explicit bounded corrupt-record locators for invalid stored values; invalid key/generation prevents safe continuation. No malformed record or oversized valid value becomes empty complete success.",
+  "compatibility": "Default queries preserve the original full inventory, ordering, byte maximum and corruption rules. Historical v1 contract, stored bytes, migrations, features, dependencies and unsupported-provider refusals remain unchanged.",
+  "non_goals": ["application ranking or schema", "frozen product cursors", "new snapshots or leases", "garbage collection policy", "raw SQL escape hatch", "new database", "release qualification"]
+}

@@ -6,8 +6,8 @@ use crate::{
         ProjectionId, ProjectionStatus,
         batch::{ProjectionDocumentBatch, ProjectionWriteScope},
         document_query::{
-            PROJECTION_DOCUMENT_PAGE_BYTES_MAX, ProjectionDocumentGenerations,
-            ProjectionDocumentPage, ProjectionDocumentQuery, ProjectionDocumentRecord,
+            ProjectionDocumentGenerations, ProjectionDocumentPage, ProjectionDocumentQuery,
+            ProjectionDocumentRecord,
         },
     },
 };
@@ -206,12 +206,23 @@ pub(super) fn page(
     };
     // The smallest valid generation is [0,..,1]; zero is never admitted.
     let start = query.after().map_or_else(
-        || Included((id.clone(), generation, String::new())),
+        || {
+            Included((
+                id.clone(),
+                generation,
+                query
+                    .key_range()
+                    .map_or_else(String::new, |range| range.first().to_owned()),
+            ))
+        },
         |(generation, key)| Excluded((id.clone(), generation, key.to_owned())),
     );
+    let end = query.key_range().map_or(Unbounded, |range| {
+        Included((id.clone(), generation, range.last().to_owned()))
+    });
     let selected: Vec<_> = state
         .projection_documents
-        .range((start, Unbounded))
+        .range((start, end))
         .take_while(|((row_id, generation, _), _)| {
             row_id == &id
                 && match query.generations() {
@@ -225,7 +236,10 @@ pub(super) fn page(
     let mut records = Vec::new();
     let mut bytes = 0usize;
     for ((_, generation, _), document) in selected.into_iter().take(usize::from(query.limit())) {
-        if bytes + document.value().len() > PROJECTION_DOCUMENT_PAGE_BYTES_MAX {
+        if bytes + document.value().len() > query.payload_budget() {
+            if records.is_empty() {
+                return Err(Error::SpaceInsufficient);
+            }
             more = true;
             break;
         }

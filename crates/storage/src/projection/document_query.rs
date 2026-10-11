@@ -1,10 +1,37 @@
 //! Bounded opaque document inventory. A continuation is not a frozen snapshot.
 #[cfg(test)]
+mod selection_tests;
+#[cfg(test)]
 mod tests;
 use super::{Error, ProjectionDocument, ProjectionGeneration, ProjectionId, valid_document_key};
 
 pub const PROJECTION_DOCUMENT_QUERY_LIMIT_MAX: u16 = 256;
 pub const PROJECTION_DOCUMENT_PAGE_BYTES_MAX: usize = super::PROJECTION_DOCUMENT_VALUE_MAX_BYTES;
+
+/// Inclusive opaque key interval within one independently selected generation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectionDocumentKeyRange {
+    first: String,
+    last: String,
+}
+
+impl ProjectionDocumentKeyRange {
+    pub fn new(first: String, last: String) -> Result<Self, Error> {
+        if !valid_document_key(&first) || !valid_document_key(&last) || first > last {
+            return Err(Error::InvalidProjectionDocument);
+        }
+        Ok(Self { first, last })
+    }
+    pub fn first(&self) -> &str {
+        &self.first
+    }
+    pub fn last(&self) -> &str {
+        &self.last
+    }
+    fn contains(&self, key: &str) -> bool {
+        self.first.as_str() <= key && key <= self.last.as_str()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectionDocumentGenerations {
@@ -18,6 +45,8 @@ pub struct ProjectionDocumentQuery {
     generations: ProjectionDocumentGenerations,
     limit: u16,
     after: Option<(ProjectionGeneration, String)>,
+    key_range: Option<ProjectionDocumentKeyRange>,
+    payload_budget: usize,
 }
 
 impl ProjectionDocumentQuery {
@@ -38,14 +67,61 @@ impl ProjectionDocumentQuery {
             generations,
             limit,
             after: None,
+            key_range: None,
+            payload_budget: PROJECTION_DOCUMENT_PAGE_BYTES_MAX,
         })
     }
     pub fn with_cursor(mut self, cursor: &ProjectionDocumentCursor) -> Result<Self, Error> {
-        if self.projection_id != cursor.projection_id || self.generations != cursor.generations {
+        if self.projection_id != cursor.projection_id
+            || self.generations != cursor.generations
+            || self.key_range != cursor.key_range
+        {
             return Err(Error::InvalidProjectionDocument);
         }
         self.after = Some(cursor.after.clone());
         Ok(self)
+    }
+    /// Configure selection before seeking; a continuation cannot widen this interval.
+    pub fn with_key_range(mut self, range: ProjectionDocumentKeyRange) -> Result<Self, Error> {
+        if !matches!(self.generations, ProjectionDocumentGenerations::Exact(_))
+            || self.after.is_some()
+        {
+            return Err(Error::InvalidProjectionDocument);
+        }
+        self.key_range = Some(range);
+        Ok(self)
+    }
+    /// Seek a caller-validated key in this exact generation, without a retained snapshot.
+    /// This does not prove that the position exists or freeze application read scope.
+    pub fn with_after_key(mut self, key: String) -> Result<Self, Error> {
+        let ProjectionDocumentGenerations::Exact(generation) = self.generations else {
+            return Err(Error::InvalidProjectionDocument);
+        };
+        if !valid_document_key(&key)
+            || self
+                .key_range
+                .as_ref()
+                .is_some_and(|range| !range.contains(&key))
+        {
+            return Err(Error::InvalidProjectionDocument);
+        }
+        self.after = Some((generation, key));
+        Ok(self)
+    }
+    /// Lower the encoded-payload ceiling before provider allocation. Metadata remains
+    /// bounded by the record limit plus one lookahead; callers charge their decoding.
+    pub fn with_payload_budget(mut self, bytes: usize) -> Result<Self, Error> {
+        if bytes == 0 || bytes > PROJECTION_DOCUMENT_PAGE_BYTES_MAX {
+            return Err(Error::InvalidProjectionDocument);
+        }
+        self.payload_budget = bytes;
+        Ok(self)
+    }
+    pub const fn payload_budget(&self) -> usize {
+        self.payload_budget
+    }
+    pub const fn key_range(&self) -> Option<&ProjectionDocumentKeyRange> {
+        self.key_range.as_ref()
     }
     pub fn projection_id(&self) -> &ProjectionId {
         &self.projection_id
@@ -66,6 +142,10 @@ impl ProjectionDocumentQuery {
             ProjectionDocumentGenerations::Exact(expected) => generation == expected,
             ProjectionDocumentGenerations::All => true,
         }) && self.after().is_none_or(|after| (generation, key) > after)
+            && self
+                .key_range
+                .as_ref()
+                .is_none_or(|range| range.contains(key))
     }
 }
 
@@ -75,6 +155,7 @@ pub struct ProjectionDocumentCursor {
     projection_id: ProjectionId,
     generations: ProjectionDocumentGenerations,
     after: (ProjectionGeneration, String),
+    key_range: Option<ProjectionDocumentKeyRange>,
 }
 
 /// An absent document is explicit corruption requiring caller reconciliation.
@@ -155,7 +236,7 @@ impl ProjectionDocumentPage {
             bytes += record
                 .document()
                 .map_or(0, |document| document.value().len());
-            if bytes > PROJECTION_DOCUMENT_PAGE_BYTES_MAX {
+            if bytes > query.payload_budget {
                 return Err(Error::InvalidProjectionDocument);
             }
             previous = Some(position);
@@ -165,6 +246,7 @@ impl ProjectionDocumentPage {
                 projection_id: query.projection_id.clone(),
                 generations: query.generations,
                 after: (generation, key.to_owned()),
+                key_range: query.key_range.clone(),
             })
         } else {
             None
