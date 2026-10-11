@@ -111,16 +111,12 @@ fn fence(
     if scope.source() != EventSourceToken::new(generation, state.event_mutation_epoch) {
         return Err(Error::SourceEpochChanged);
     }
-    if !state
-        .projection_cache
-        .owners
-        .contains(scope.projection_id())
-        || state
-            .projections
-            .iter()
-            .find(|value| value.projection_id() == scope.projection_id())
-            .map(|value| value.generation())
-            != scope.expected_active()
+    if state
+        .projections
+        .iter()
+        .find(|value| value.projection_id() == scope.projection_id())
+        .map(|value| value.generation())
+        != scope.expected_active()
     {
         return Err(Error::ProjectionRevisionConflict);
     }
@@ -134,6 +130,29 @@ pub(super) fn retire(
     fence(state, source, &scope)?;
     let identity = (scope.projection_id().clone(), scope.generation());
     let prior = state.projection_generations.get(&identity);
+    let configured = state
+        .projection_cache
+        .owners
+        .contains(scope.projection_id());
+    if !configured {
+        let legacy = state
+            .projections
+            .iter()
+            .find(|value| value.projection_id() == scope.projection_id());
+        if scope.expected_active() != Some(scope.generation())
+            || legacy.is_none_or(|value| {
+                value.health() != ProjectionHealth::Invalidated
+                    || value.active_rebuild().is_some()
+                    || value
+                        .checkpoint()
+                        .and_then(|value| value.source_position())
+                        .is_some_and(|position| position.generation() != source)
+            })
+            || prior.is_some_and(|value| value.phase != projection_batch::Phase::Retired)
+        {
+            return Err(Error::ProjectionRevisionConflict);
+        }
+    }
     if scope.expected_active() == Some(scope.generation()) {
         let current = state
             .projections
@@ -165,7 +184,7 @@ pub(super) fn retire(
         },
     );
     state.projection_cache.protected.remove(&identity);
-    if scope.expected_active() == Some(scope.generation()) {
+    if configured && scope.expected_active() == Some(scope.generation()) {
         state
             .projections
             .retain(|value| value.projection_id() != scope.projection_id());
@@ -179,6 +198,13 @@ pub(super) fn collect(
     now: u64,
 ) -> Result<ProjectionCacheCollection, Error> {
     fence(state, source, &scope)?;
+    if !state
+        .projection_cache
+        .owners
+        .contains(scope.projection_id())
+    {
+        return Err(Error::ProjectionRevisionConflict);
+    }
     let identity = (scope.projection_id().clone(), scope.generation());
     let reserved = state
         .projection_generations

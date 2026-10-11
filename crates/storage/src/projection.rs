@@ -1039,6 +1039,9 @@ pub trait ProjectionStore: Send + Sync {
         Box::pin(async { Err(Error::BackendUnavailable) })
     }
     /// Retires an exact obsolete generation without touching canonical or authored data.
+    /// An unconfigured legacy checkpoint must be explicitly invalidated without an
+    /// active rebuild; retirement retains its refusal status and bytes, and grants
+    /// no collection authority. Source and expected-active fences still apply.
     fn retire_projection_generation(
         &self,
         _scope: cache::ProjectionCacheScope,

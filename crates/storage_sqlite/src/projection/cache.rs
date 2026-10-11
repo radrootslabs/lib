@@ -124,9 +124,7 @@ async fn fence(
             .as_ref()
             .map(decode_status)
             .transpose()?;
-    if !owner(transaction, scope.projection_id()).await?
-        || status.as_ref().map(|value| value.generation()) != scope.expected_active()
-    {
+    if status.as_ref().map(|value| value.generation()) != scope.expected_active() {
         return Err(Error::ProjectionRevisionConflict);
     }
     Ok(status)
@@ -142,7 +140,27 @@ pub(super) async fn retire(
         .await
         .map_err(map)?;
     let status = fence(&mut transaction, store, &scope).await?;
-    let row = sqlx::query("SELECT source_generation,source_epoch FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_optional(&mut *transaction).await.map_err(map)?;
+    let row = sqlx::query("SELECT source_generation,source_epoch,phase FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_optional(&mut *transaction).await.map_err(map)?;
+    let configured = owner(&mut transaction, scope.projection_id()).await?;
+    if !configured {
+        let phase = row
+            .as_ref()
+            .map(|row| row.try_get::<String, _>("phase").map_err(map_corrupt))
+            .transpose()?;
+        if scope.expected_active() != Some(scope.generation())
+            || status.as_ref().is_none_or(|value| {
+                value.health() != ProjectionHealth::Invalidated
+                    || value.active_rebuild().is_some()
+                    || value
+                        .checkpoint()
+                        .and_then(|value| value.source_position())
+                        .is_some_and(|position| position.generation() != store.generation)
+            })
+            || phase.as_deref().is_some_and(|value| value != "retired")
+        {
+            return Err(Error::ProjectionRevisionConflict);
+        }
+    }
     if scope.expected_active() == Some(scope.generation())
         && status
             .as_ref()
@@ -162,7 +180,7 @@ pub(super) async fn retire(
     }
     sqlx::query("INSERT INTO radroots_runtime_projection_generations(projection_id,generation,source_generation,source_epoch,expected_active,phase) VALUES(?,?,?,?,NULL,'retired') ON CONFLICT(projection_id,generation) DO UPDATE SET phase='retired'")
         .bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).bind(scope.source().generation().as_bytes().as_slice()).bind(i64_from_u64(scope.source().epoch())?).execute(&mut *transaction).await.map_err(map)?;
-    if scope.expected_active() == Some(scope.generation()) {
+    if configured && scope.expected_active() == Some(scope.generation()) {
         sqlx::query("DELETE FROM radroots_runtime_projection_checkpoints WHERE projection_id=? AND projection_generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).execute(&mut *transaction).await.map_err(map)?;
     }
     let current = usage(&mut transaction).await?;
@@ -180,6 +198,9 @@ pub(super) async fn collect(
         .await
         .map_err(map)?;
     fence(&mut transaction, store, &scope).await?;
+    if !owner(&mut transaction, scope.projection_id()).await? {
+        return Err(Error::ProjectionRevisionConflict);
+    }
     let phase: Option<String> = sqlx::query_scalar("SELECT phase FROM radroots_runtime_projection_generations WHERE projection_id=? AND generation=?").bind(scope.projection_id().as_str()).bind(scope.generation().as_bytes().as_slice()).fetch_optional(&mut *transaction).await.map_err(map)?;
     let protected = scope.expected_active() == Some(scope.generation())
         || phase.as_deref().is_some_and(|value| value != "retired");
@@ -396,3 +417,7 @@ pub(super) async fn put_snapshot(
 #[cfg(test)]
 #[path = "cache_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "cache_legacy_retirement_tests.rs"]
+mod legacy_retirement_tests;
