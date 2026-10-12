@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-026"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the full successor refactor and local verified checkpoints; this is prospective reevaluation of an earlier uncommitted candidate."
+affected_steps = ["010", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "The actual service initializer returned success after a real deferred foreign-key commit failure, while no product, metadata or ledger tables were durably present.",
+  "Result::or combines commit or rollback errors with later successful hook removal and connection close, allowing cleanup to mask failure.",
+  "The earlier uncommitted candidate replaces these three combinations with Result::and and tests failed and valid deferred commits; its prior evidence does not authorize or qualify current adoption.",
+]
+replacement_action = "Reevaluate and qualify the contained initializer correction before further dependent SQLite orchestration: attempt every cleanup, preserve failure rather than false success, retain authority and pathname checks, and keep schema and public API contracts unchanged."
+verification = [
+  "Validate this standalone deviation and confirm exact baseline-source equality to the original actual reproduction without rewriting its history.",
+  "Revalidate the precise candidate hash and run real failed/valid deferred commits, retained SQLite cause, failed-state removal, authority release and successful durable product/metadata inspection.",
+  "Run fresh exact Rust 1.99.0 scoped format, all-target check, full package tests and warnings-as-errors Clippy, then stage only the verified coherent owner paths.",
+]
+unresolved_risk = "The exact earlier candidate is prospectively verified locally. Published consumer adoption and Linux/successor qualification remain separate and pending."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Five exact committed source blobs still match the original actual false-success reproduction; its original authority and limited historical claim are preserved.",
+  "The unchanged candidate passed a fresh real failed/valid deferred-foreign-key regression, including SQLite cause 787, failed-file removal, authority release and valid metadata/product rows.",
+  "Exact Rust 1.99.0 scoped format, all-target check, full service-SQLite tests and all-target warnings-as-errors Clippy passed on local macOS arm64. The unit suite reports 255 passed and five ignored; integration/documentation checks passed and ignored process-entry cases remain unclaimed.",
+  "Every cleanup is attempted before combining results; Result::and preserves commit/rollback/cleanup failure. Schema, public APIs, dependencies and protected-state ownership are unchanged.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-025"
 date = "2026-10-12"
 status = "closed"

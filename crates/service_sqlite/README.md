@@ -66,6 +66,12 @@ and bounded row count. Integrity diagnostics use a borrowed-byte cap over the
 exact `PRAGMA integrity_check(1)` operation and never convert an unbounded
 diagnostic to UTF-8.
 
+Initialization reports success only after its governed commit and cleanup
+succeed. Hook removal and connection close are attempted even when commit or
+rollback fails; successful cleanup cannot hide an earlier failure. A failed
+commit's SQLite cause survives successful cleanup and cannot grant initialized
+state or writer authority.
+
 Cancelling a host transaction before the runner enables outer commit
 quarantines its connection and leaves no authoritative transaction effect. A
 service-operation error is returned only after rollback is confirmed; an

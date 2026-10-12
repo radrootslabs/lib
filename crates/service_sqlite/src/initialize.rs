@@ -1000,7 +1000,7 @@ mod supported {
             authority.validate_for(paths)?;
             let close = connection.close().await;
             authority.validate_for(paths)?;
-            if let Err(source) = rollback.or(remove).or(close) {
+            if let Err(source) = rollback.and(remove).and(close) {
                 return Err(initialization_error(InitializationCause::with_source(
                     InitializationFailureKind::SchemaInitializationFailed,
                     source,
@@ -1016,7 +1016,7 @@ mod supported {
             let remove = gate.remove(&mut connection).await;
             let close = connection.close().await;
             authority.validate_for(paths)?;
-            rollback.or(remove).or(close).map_err(|source| {
+            rollback.and(remove).and(close).map_err(|source| {
                 initialization_error(InitializationCause::with_source(
                     InitializationFailureKind::SchemaInitializationFailed,
                     source,
@@ -1039,7 +1039,7 @@ mod supported {
         authority.validate_for(paths)?;
         let closed = connection.close().await;
         authority.validate_for(paths)?;
-        committed.or(removed).or(closed).map_err(|source| {
+        committed.and(removed).and(closed).map_err(|source| {
             initialization_error(InitializationCause::with_source(
                 InitializationFailureKind::SchemaInitializationFailed,
                 source,
@@ -1390,6 +1390,113 @@ mod supported {
             .expect("retry after cleanup");
             assert!(retry.is_held());
             assert!(paths.state_database().exists());
+        }
+
+        #[tokio::test(flavor = "current_thread")]
+        async fn deferred_foreign_key_commit_failure_is_reported_without_initialized_state() {
+            use sqlx::{Connection, sqlite::SqliteConnectOptions};
+
+            const PARENT: &str = "CREATE TABLE initialization_parent (id INTEGER PRIMARY KEY)";
+            const CHILD: &str = "CREATE TABLE initialization_child (id INTEGER PRIMARY KEY, parent_id INTEGER NOT NULL REFERENCES initialization_parent(id) DEFERRABLE INITIALLY DEFERRED)";
+
+            for valid_parent in [false, true] {
+                let root = tempfile::tempdir().expect("root");
+                let paths = paths(root.path(), "deferred-commit");
+                prepare(&paths);
+                let metadata = metadata(&paths);
+                let objects = [
+                    ("initialization_parent", PARENT),
+                    ("initialization_child", CHILD),
+                ]
+                .into_iter()
+                .map(|(name, sql)| {
+                    crate::SchemaObject::new(
+                        crate::SchemaObjectKind::Table,
+                        name,
+                        name,
+                        sql,
+                        crate::SchemaObject::computed_digest(
+                            crate::SchemaObjectKind::Table,
+                            name,
+                            name,
+                            sql,
+                        )
+                        .expect("schema object digest"),
+                    )
+                    .expect("schema object")
+                })
+                .collect();
+                let result = initialize_database(
+                    &paths,
+                    OpenMode::Initialize,
+                    &metadata,
+                    &schema_catalog(objects),
+                    move |initializer| {
+                        Box::pin(async move {
+                            sqlx::query(PARENT).execute(&mut *initializer).await?;
+                            sqlx::query(CHILD).execute(&mut *initializer).await?;
+                            if valid_parent {
+                                sqlx::query("INSERT INTO initialization_parent(id) VALUES (1)")
+                                    .execute(&mut *initializer)
+                                    .await?;
+                            }
+                            sqlx::query(
+                                "INSERT INTO initialization_child(id, parent_id) VALUES (1, 1)",
+                            )
+                            .execute(&mut *initializer)
+                            .await?;
+                            Ok::<(), sqlx::Error>(())
+                        })
+                    },
+                )
+                .await;
+                if valid_parent {
+                    let mut authority = result.expect("valid deferred foreign key commits");
+                    let mut connection = SqliteConnection::connect_with(
+                        &SqliteConnectOptions::new()
+                            .filename(paths.state_database())
+                            .read_only(true)
+                            .create_if_missing(false),
+                    )
+                    .await
+                    .expect("inspect initialized state");
+                    crate::metadata::verify_database_metadata(
+                        &mut connection,
+                        &metadata.identity(),
+                    )
+                    .await
+                    .expect("metadata committed with product state");
+                    assert_eq!(
+                        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM initialization_child")
+                            .fetch_one(&mut connection)
+                            .await
+                            .expect("committed child"),
+                        1
+                    );
+                    connection.close().await.expect("close inspection");
+                    authority.release().expect("release initialized authority");
+                } else {
+                    let error = result.expect_err("a failed commit cannot initialize state");
+                    assert_eq!(error.kind(), ServiceSqliteErrorKind::Create);
+                    let cause = error
+                        .source()
+                        .and_then(Error::source)
+                        .and_then(|source| source.downcast_ref::<sqlx::Error>())
+                        .expect("original SQLite commit error remains available");
+                    assert_eq!(
+                        cause
+                            .as_database_error()
+                            .and_then(|error| error.code())
+                            .as_deref(),
+                        Some("787")
+                    );
+                    assert!(!paths.state_database().exists());
+                    let mut authority = WriterAuthority::acquire(&paths, OpenMode::Initialize)
+                        .expect("failed initialization releases authority")
+                        .expect("initialize authority");
+                    authority.release().expect("release reacquired authority");
+                }
+            }
         }
 
         #[tokio::test(flavor = "current_thread")]
