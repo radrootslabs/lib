@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-031"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the successor refactor, its scoped execution/recovery amendments and all remaining local verified checkpoints; publication and supported consumer qualification remain separate."
+affected_steps = ["010", "040", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "The public padded-message encoder casts unrestricted plaintext length to u16 after checking only padding capacity; its decoder uses that two-byte length to select returned bytes.",
+  "The current owner and freshly fetched published integration branch retain the identical message helper; no newer published correction was observed.",
+  "Complete crypto/transport source and caller review identifies the helper in public prelude, ratchet, short-link and live transport paths; source observation alone is not an executed reproduction.",
+]
+replacement_action = "Bring forward contained lossless padding admission during source reevaluation. Reproduce accepted-byte truncation through the public helper, then reject plaintext lengths unrepresentable by its existing two-byte prefix before allocation or encryption, using the existing typed error. Preserve accepted wire bytes, public API shapes, algorithms, dependencies and feature ownership."
+verification = [
+  "Validate this standalone deviation before any production edit, then preserve the retained public boundary regression result against unchanged source.",
+  "Use only fixed disposable key/nonce bytes and bounded local payloads. Prove exact accepted encode/decode at empty, small and maximum representable lengths, and typed rejection above the field limit without network or account operations.",
+  "Run exact Rust 1.99.0 scoped formatting, all-feature/all-target check, full package tests, no-default-feature library check and warnings-as-errors Clippy; check and test direct owning crypto/transport callers before the local owner commit.",
+]
+unresolved_risk = "Contained lossless padding admission is locally verified. Aggregate resource limits, ratchet state/custody, independent crypto vectors, actual live transport and supported consumer adoption remain separate; no deployed loss or full platform acceptance is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The retained public boundary suite failed against unchanged production source: a 65536-byte accepted plaintext decoded to zero bytes. Both valid-boundary and insufficient-capacity controls passed.",
+  "Checked u16 admission now rejects 65536- and 65537-byte plaintexts before padding/encryption; empty, small and 65535-byte accepted payloads preserve exact bytes with both exact and extra padding.",
+  "Exact Rust 1.99.0 scoped formatting, all-feature/all-target crypto/agent/transport checking, 72 passing package tests with zero ignored, crypto/agent no-default-feature library checking and warnings-as-errors Clippy passed on local macOS arm64.",
+  "Only checked plaintext-length admission, meaningful public boundary regressions, package guidance and this deviation changed. Accepted wire bytes, public API shapes, cryptographic algorithms, dependencies and feature ownership remain unchanged.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-030"
 date = "2026-10-12"
 status = "closed"

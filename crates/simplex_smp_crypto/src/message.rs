@@ -158,6 +158,12 @@ pub fn encrypt_padded(
     plaintext: &[u8],
     padded_len: usize,
 ) -> Result<Vec<u8>, RadrootsSimplexSmpCryptoError> {
+    let plaintext_length = u16::try_from(plaintext.len()).map_err(|_| {
+        RadrootsSimplexSmpCryptoError::InvalidMessageLength {
+            actual: plaintext.len(),
+            padded: padded_len,
+        }
+    })?;
     if plaintext.len().saturating_add(2) > padded_len {
         return Err(RadrootsSimplexSmpCryptoError::InvalidMessageLength {
             actual: plaintext.len(),
@@ -165,7 +171,7 @@ pub fn encrypt_padded(
         });
     }
     let mut padded = Vec::with_capacity(padded_len);
-    padded.extend_from_slice(&(plaintext.len() as u16).to_be_bytes());
+    padded.extend_from_slice(&plaintext_length.to_be_bytes());
     padded.extend_from_slice(plaintext);
     padded.resize(padded_len, b'#');
     encrypt_no_pad(shared_secret, nonce, &padded)

@@ -10,6 +10,11 @@ authorization and ratchet cryptography for the `radroots` core libraries.
  * ratchet header, role, and state types for SimpleX SMP sessions;
  * X.509 conversion helpers and related nonce and authentication constants.
 
+Padded messages carry a two-byte plaintext length. Payloads larger than
+`u16::MAX` are rejected before padding or encryption; accepted payloads retain
+every byte. This field limit does not establish application-wide resource
+limits or independently qualify ratchet state, custody or live transport.
+
 ## Copyright
 
 Except as otherwise noted, all files in the `radroots_simplex_smp_crypto`
