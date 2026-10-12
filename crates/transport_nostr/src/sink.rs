@@ -526,7 +526,7 @@ mod tests {
     #[test]
     fn upstream_messages_map_to_stable_outcomes() {
         let cases = [
-            ("duplicate: already have", DeliveryOutcomeKind::Accepted),
+            ("duplicate: already have", DeliveryOutcomeKind::Unavailable),
             ("blocked by policy", DeliveryOutcomeKind::Rejected),
             ("rate limited", DeliveryOutcomeKind::Unavailable),
             ("auth required", DeliveryOutcomeKind::Failed),

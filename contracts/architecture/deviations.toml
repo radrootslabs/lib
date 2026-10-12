@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-025"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the full successor refactor and local verified checkpoint commits; publication remains separate."
+affected_steps = ["010", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr"]
+source_evidence = [
+  "A real loopback relay sent a matching OK with accepted=false and the message 'blocked: not a duplicate; event was rejected'; the transport returned a satisfied acceptance receipt.",
+  "The shared failure classifier turns any occurrence of 'duplicate' or 'already have' into Accepted, including untyped publication errors without an acknowledgement.",
+  "NIP-01 requires the acknowledgement boolean to be true for acceptance and illustrates duplicate acceptance with true.",
+]
+replacement_action = "Bring forward this contained safety correction during source review: failure classification can never produce acceptance, while matching positive acknowledgements retain acceptance. Preserve event-ID and connection binding without changing public APIs, dependencies, retry policy or package ownership."
+verification = [
+  "Validate the standalone architecture deviation before editing the relay classifier.",
+  "Record a failing real-loopback regression on the old classifier, then prove negative acknowledgements never satisfy delivery and positive duplicate acknowledgements remain accepted.",
+  "Run exact Rust 1.99.0 scoped formatting, all-target check, full package tests and warnings-as-errors Clippy; review the final diff and preserve unrelated source candidates.",
+]
+unresolved_risk = "The contained local repair is verified. Published consumer adoption and the broader successor transport/platform qualification remain separate and pending."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The real loopback regression failed on the original classifier; the repaired package rejects seven negative-ACK message variants while accepting positive empty and duplicate acknowledgements.",
+  "Exact Rust 1.99.0 scoped format, all-target check, full package tests and all-target warnings-as-errors Clippy passed on local macOS arm64. Generic error normalization and matching-ID/disconnect regressions also passed.",
+  "Only private failure classification, tests and package guidance changed; public APIs, features, dependencies, retained EVENT bytes and target/connection binding are unchanged. Unrelated source candidates are excluded from this checkpoint.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-023"
 date = "2026-09-22"
 status = "closed"

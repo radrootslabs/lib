@@ -271,6 +271,88 @@ async fn rejection_lost_ack_and_disconnect_never_invent_acceptance() {
 }
 
 #[tokio::test]
+async fn matching_negative_ack_never_accepts_duplicate_text() {
+    for message in [
+        "blocked: not a duplicate; event was rejected",
+        "duplicate: already have this event",
+        "already have this event",
+        "error: duplicate detector unavailable",
+        "auth-required: duplicate path requires login",
+        "rate-limited: duplicate retries",
+        "invalid: duplicate event format",
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 2_000);
+        let raw = raw_event();
+        let expected = format!("[\"EVENT\",{raw}]");
+        let (done, wait) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(tcp).await.unwrap();
+            let wire = text(&mut socket).await;
+            assert_eq!(wire, expected);
+            let event: Value = serde_json::from_str(&wire).unwrap();
+            reply(&mut socket, json!(["OK", event[1]["id"], false, message])).await;
+            tokio::time::timeout(Duration::from_secs(5), wait)
+                .await
+                .unwrap()
+                .unwrap();
+        });
+        let transport = NostrTransport::new(config.clone());
+        let request = request(&config, &raw);
+        let receipt =
+            tokio::time::timeout(Duration::from_secs(5), transport.deliver(request.clone()))
+                .await
+                .unwrap()
+                .unwrap();
+        done.send(()).unwrap();
+        server.await.unwrap();
+        receipt.validate_for_request(&request).unwrap();
+        assert!(receipt.target_receipts()[0].was_attempted());
+        assert!(!receipt.is_satisfied(&request).unwrap(), "{message}");
+        assert!(
+            !receipt.target_receipts()[0]
+                .outcome()
+                .satisfies(SatisfactionClass::Accepted),
+            "{message}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn matching_positive_ack_accepts_existing_duplicate_and_empty_messages() {
+    for message in ["", "duplicate: already have this event"] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 2_000);
+        let raw = raw_event();
+        let (done, wait) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(tcp).await.unwrap();
+            let event: Value = serde_json::from_str(&text(&mut socket).await).unwrap();
+            assert_eq!(event[0], "EVENT");
+            reply(&mut socket, json!(["OK", event[1]["id"], true, message])).await;
+            tokio::time::timeout(Duration::from_secs(5), wait)
+                .await
+                .unwrap()
+                .unwrap();
+        });
+        let request = request(&config, &raw);
+        let receipt = tokio::time::timeout(
+            Duration::from_secs(5),
+            NostrTransport::new(config).deliver(request.clone()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        done.send(()).unwrap();
+        server.await.unwrap();
+        receipt.validate_for_request(&request).unwrap();
+        assert!(receipt.is_satisfied(&request).unwrap(), "{message}");
+    }
+}
+
+#[tokio::test]
 async fn quota_refusal_is_terminal_and_redacted_at_the_receipt_boundary() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 2_000);

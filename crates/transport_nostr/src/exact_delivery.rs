@@ -114,9 +114,20 @@ mod tests {
             acknowledgement(id, ok(id, true, "")).unwrap(),
             DeliveryOutcome::accepted()
         );
-        assert!(!status::delivery_succeeded(
-            &acknowledgement(id, ok(id, false, "blocked: denied")).unwrap()
-        ));
+        assert_eq!(
+            acknowledgement(id, ok(id, true, "duplicate: already have this event")).unwrap(),
+            DeliveryOutcome::accepted()
+        );
+        for message in [
+            "blocked: denied",
+            "blocked: not a duplicate; event was rejected",
+            "duplicate: already have this event",
+            "already have this event",
+        ] {
+            assert!(!status::delivery_succeeded(
+                &acknowledgement(id, ok(id, false, message)).unwrap()
+            ));
+        }
         for status in [
             nostr_sdk::RelayStatus::Disconnected,
             nostr_sdk::RelayStatus::Terminated,

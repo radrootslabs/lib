@@ -12,7 +12,6 @@ use std::sync::Mutex;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FailureClass {
-    Duplicate,
     Rejected,
     AuthRequired,
     Quota,
@@ -26,7 +25,6 @@ enum FailureClass {
 impl FailureClass {
     const fn code(self) -> &'static str {
         match self {
-            Self::Duplicate => "duplicate",
             Self::Rejected => "rejected",
             Self::AuthRequired => "auth_required",
             Self::Quota => "quota_exceeded",
@@ -40,7 +38,6 @@ impl FailureClass {
 
     const fn message(self) -> &'static str {
         match self {
-            Self::Duplicate => "relay already has the event",
             Self::Rejected => "relay rejected the event",
             Self::AuthRequired => "relay authentication is required",
             Self::Quota => "relay quota was exhausted",
@@ -580,9 +577,9 @@ pub(crate) fn sink_status(tracker: &StatusTracker) -> SinkStatus {
 }
 
 pub(crate) fn delivery_failure(upstream: &str) -> DeliveryOutcome {
+    // Error text can classify a failure, but cannot establish relay acceptance.
     let class = classify(upstream).class;
     let outcome = match class {
-        FailureClass::Duplicate => DeliveryOutcome::accepted(),
         FailureClass::Rejected | FailureClass::Malformed | FailureClass::Quota => {
             DeliveryOutcome::rejected()
         }
@@ -611,9 +608,7 @@ pub(crate) fn fetch_failure(upstream: &str) -> (FetchTargetState, &'static str) 
 
 fn classify(upstream: &str) -> RedactedDiagnostic {
     let message = upstream.to_ascii_lowercase();
-    let class = if message.contains("duplicate") || message.contains("already have") {
-        FailureClass::Duplicate
-    } else if message.contains("auth") {
+    let class = if message.contains("auth") {
         FailureClass::AuthRequired
     } else if message.contains("quota") {
         FailureClass::Quota
@@ -668,7 +663,7 @@ mod tests {
     fn every_upstream_class_maps_to_stable_secret_safe_output() {
         let secret = "token=very-secret-value";
         let cases = [
-            ("duplicate: already have", "duplicate"),
+            ("duplicate: already have", "relay_failure"),
             ("blocked by policy", "rejected"),
             ("auth required", "auth_required"),
             ("quota exceeded", "quota_exceeded"),
@@ -684,6 +679,21 @@ mod tests {
             assert!(!outcome.message().expect("message").contains(secret));
             let diagnostic = classify(format!("{message} {secret}").as_str());
             assert!(!format!("{diagnostic:?}").contains(secret));
+        }
+    }
+
+    #[test]
+    fn duplicate_text_cannot_turn_an_untyped_failure_into_acceptance() {
+        for message in [
+            "duplicate: already have this event",
+            "already have this event",
+            "blocked: not a duplicate; event was rejected",
+            "auth-required: duplicate path requires login",
+            "connection failed: duplicate acknowledgement unavailable",
+            "error: duplicate detector unavailable",
+        ] {
+            let outcome = delivery_failure(message);
+            assert!(!delivery_succeeded(&outcome), "{message}");
         }
     }
 
@@ -898,7 +908,10 @@ mod tests {
         failed.record_write(&writable, false, false, 10);
         assert_eq!(failed.report().state(), RelayAggregateState::Failed);
 
-        assert_eq!(delivery_failure("already have").code(), Some("duplicate"));
+        assert_eq!(
+            delivery_failure("already have").code(),
+            Some("relay_failure")
+        );
         assert_eq!(
             fetch_failure("timed out").0,
             FetchTargetState::FailedRetryable

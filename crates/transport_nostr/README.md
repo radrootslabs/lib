@@ -71,7 +71,11 @@ bytes in the Nostr `EVENT` frame without parsing and serializing them again;
 whitespace, field order, and admitted extension fields remain unchanged. The
 frame must fit the existing 512 KiB wire bound. Publication shares the existing
 hardened connection writer with SDK authentication and subscription messages.
-It requires a matching event-ID `OK` from that relay before recording acceptance.
+It requires a matching event-ID `OK` with `accepted=true` from that relay before
+recording acceptance. Duplicate-event acceptance also requires `true`, as
+defined by [NIP-01](https://github.com/nostr-protocol/nips/blob/master/01.md).
+A negative acknowledgement or untyped error remains unsuccessful regardless
+of message text, including `duplicate` or `already have`.
 Closed or replaced connections do not grant fresh send authority to a retained
 writer. Missing acknowledgements remain unknown or unavailable evidence.
 
