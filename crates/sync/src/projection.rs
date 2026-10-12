@@ -27,7 +27,7 @@ pub const PROJECTION_RAW_SOURCE_MAX_EVENTS: u64 = 1_000_000;
 const RAW_SOURCE_DIGEST_DOMAIN: &[u8] = b"radroots:projection:raw-source:v1\0";
 
 /// Bounded refresh request for one exact reducer generation.
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RefreshRequest {
     projection_id: ProjectionId,
@@ -72,6 +72,31 @@ impl RefreshRequest {
 
     pub const fn max_batches(&self) -> u16 {
         self.max_batches
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for RefreshRequest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Wire {
+            projection_id: ProjectionId,
+            generation: ProjectionGeneration,
+            batch_limit: u16,
+            max_batches: u16,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        Self::new(
+            wire.projection_id,
+            wire.generation,
+            wire.batch_limit,
+            wire.max_batches,
+        )
+        .map_err(serde::de::Error::custom)
     }
 }
 

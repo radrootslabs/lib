@@ -17,6 +17,10 @@ signed observation through `AdmissionPolicy::contract_failure` for canonical
 replacement evidence; its closed decision permits only rejection or verified
 retention, never visibility. Invalid IDs and signatures cannot reach this policy.
 
+Projection refresh JSON uses the same checked constructor as native requests.
+Zero or oversized batch bounds are rejected before storage or reducer work;
+valid boundary values and the existing wire shape remain unchanged.
+
 Pull receipts retain the last available outcome for each target and bounded
 cumulative target summaries across returned pages. A later complete outcome
 does not erase an earlier incomplete or missing outcome. Summaries preserve

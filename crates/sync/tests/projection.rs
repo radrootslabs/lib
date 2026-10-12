@@ -263,6 +263,53 @@ fn incremental_refresh_checkpoints_visible_events() {
     );
 }
 
+#[cfg(feature = "serde")]
+#[test]
+fn serialized_refresh_requests_enforce_constructor_bounds() {
+    use radroots_storage::event::EVENT_QUERY_LIMIT_MAX;
+    use radroots_sync::projection::PROJECTION_REFRESH_MAX_BATCHES;
+
+    let id = ProjectionId::parse("wire.projection").unwrap();
+    let generation = ProjectionGeneration::new([2; 32]).unwrap();
+    let original = RefreshRequest::new(id.clone(), generation, 1, 1).unwrap();
+    let wire = serde_json::to_value(&original).unwrap();
+    for (batch_limit, max_batches) in [
+        (0, 1),
+        (EVENT_QUERY_LIMIT_MAX + 1, 1),
+        (1, 0),
+        (1, PROJECTION_REFRESH_MAX_BATCHES + 1),
+    ] {
+        assert!(RefreshRequest::new(id.clone(), generation, batch_limit, max_batches).is_err());
+        let mut changed = wire.clone();
+        changed["batch_limit"] = serde_json::json!(batch_limit);
+        changed["max_batches"] = serde_json::json!(max_batches);
+        assert!(
+            serde_json::from_value::<RefreshRequest>(changed).is_err(),
+            "batch_limit={batch_limit}, max_batches={max_batches}"
+        );
+    }
+    for (batch_limit, max_batches) in [
+        (1, 1),
+        (EVENT_QUERY_LIMIT_MAX, 1),
+        (1, PROJECTION_REFRESH_MAX_BATCHES),
+        (EVENT_QUERY_LIMIT_MAX, PROJECTION_REFRESH_MAX_BATCHES),
+    ] {
+        let request =
+            RefreshRequest::new(id.clone(), generation, batch_limit, max_batches).unwrap();
+        let mut wire = serde_json::to_value(&request).unwrap();
+        assert_eq!(
+            serde_json::from_value::<RefreshRequest>(wire.clone()).unwrap(),
+            request
+        );
+        wire["application_extension"] = serde_json::json!(true);
+        assert_eq!(
+            serde_json::from_value::<RefreshRequest>(wire).unwrap(),
+            request,
+            "the existing unknown-field policy is unchanged"
+        );
+    }
+}
+
 #[test]
 fn generation_change_rebuilds_and_reducer_failure_is_durable() {
     let (engine, storage, id) = setup();

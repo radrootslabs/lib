@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-027"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the full successor refactor and local verified checkpoint commits; publication and integrated acceptance remain separate."
+affected_steps = ["010", "040", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sync"]
+source_evidence = [
+  "A bounded public-API probe decoded batch_limit and max_batches values zero and 1001 even though RefreshRequest::new rejects them.",
+  "The real engine panicked at its unreachable zero-batch branch after receiving the invalid deserialized request; the isolated probe observed no network or durable effects.",
+  "Derived deserialization bypasses the request's constructor invariants, leaving source-level field privacy insufficient admission protection.",
+]
+replacement_action = "Bring forward the contained request-admission correction during source review: deserialize through the checked constructor, preserve existing valid wire and unknown-field policy, and keep projection ownership, bounds, public APIs and features unchanged."
+verification = [
+  "Validate the standalone deviation before changing production request deserialization.",
+  "Record a failing invalid-JSON regression on the original source, then reject zero/upper-bound violations and round-trip valid lower/upper boundary requests.",
+  "Run exact Rust 1.99.0 scoped format, all-target check, full sync tests, serde-disabled library check and all-target warnings-as-errors Clippy; review the exact source diff before a local owner commit.",
+]
+unresolved_risk = "The contained JSON admission repair is locally verified. Supported consumer adoption and broader request/binding/platform qualification remain separate and pending."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The invalid-JSON regression failed on unchanged production source, then passed after routing deserialization through RefreshRequest::new. Zero and above-maximum values for both fields are rejected before orchestration.",
+  "Valid lower/upper request bounds round-trip with the existing wire shape and unknown-field policy; the original public engine-panic probe remains immutable baseline evidence.",
+  "Exact Rust 1.99.0 scoped formatting, all-target check, full sync package tests, serde-disabled library check and all-target warnings-as-errors Clippy passed on local macOS arm64.",
+  "Only deserialization, its regression, package guidance and this deviation changed. Public types, constructor bounds, features, dependencies, storage/reducer ownership and generated API shapes are unchanged.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-026"
 date = "2026-10-12"
 status = "closed"
