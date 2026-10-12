@@ -11,6 +11,12 @@ facades and shaped query helpers for the `radroots` core libraries.
  * shaped query helpers for common trade, farm, and event freshness lookups;
  * feature-gated web and SQLx native backend support through `radroots_sql_core`.
 
+Off-profile relay reads and deletes select the complete complement of a
+profile's relay memberships. This includes unassigned relays and relays assigned
+only to other profiles; it excludes every relay assigned to the requested
+profile, including relays shared with other profiles. A missing profile has all
+relays in its complement, with each relay returned once.
+
 ## Copyright
 
 Except as otherwise noted, all files in the `radroots_replica_store` distribution

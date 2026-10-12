@@ -84,7 +84,7 @@ fn rel_query(rel: &NostrRelayFindManyRel) -> (&'static str, Vec<Value>) {
             vec![Value::from(args.public_key.clone())],
         ),
         NostrRelayFindManyRel::OffProfile(args) => (
-            "SELECT rl.* FROM nostr_relay rl LEFT JOIN nostr_profile_relay pr_rl ON rl.id = pr_rl.tb_rl LEFT JOIN nostr_profile pr ON pr.id = pr_rl.tb_pr WHERE pr.public_key <> ?",
+            "SELECT rl.* FROM nostr_relay rl WHERE NOT EXISTS (SELECT 1 FROM nostr_profile_relay pr_rl JOIN nostr_profile pr ON pr.id = pr_rl.tb_pr WHERE pr_rl.tb_rl = rl.id AND pr.public_key = ?)",
             vec![Value::from(args.public_key.clone())],
         ),
     }

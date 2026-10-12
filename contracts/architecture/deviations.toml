@@ -2,6 +2,35 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-032"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the successor refactor, scoped execution/recovery amendments and all remaining local verified checkpoints; publication and supported consumer qualification remain separate."
+affected_steps = ["010", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "Relay off-profile selection filters joined rows by a different public key; the profile-side off-relay query instead uses a complete NOT EXISTS complement.",
+  "The full actual-SQLite suite only asserts that relay relation calls succeed, without checking returned membership.",
+  "The current owner and freshly fetched published integration branch retain the identical relay query; no newer published correction was observed.",
+  "All three retained actual-SQLite regressions failed against unchanged source: unassigned omission/shared inclusion, missing-profile duplicate rows and incomplete single/delete membership effects.",
+]
+replacement_action = "Bring forward a contained relation-query correction during source reevaluation. Prove membership through disposable actual SQLite, then select relays having no edge to the requested profile using a bound NOT EXISTS predicate shared by existing many/single/delete paths. Preserve public API shapes, on-profile behavior and source/feature ownership."
+verification = [
+  "The prospective standalone architecture check passed before the production edit; the retained public regression then failed all three cases against unchanged source.",
+  "Fresh in-memory SQLite with two synthetic profiles, four non-contacted fixture relay URLs and four edges now proves the complete membership complement, missing-profile uniqueness and single/delete effects while preserving on-profile membership.",
+  "Exact Rust 1.99.0 package formatting, all-feature/all-target checking, the full replica-store tests (76 passed, zero ignored) and warnings-as-errors Clippy passed after the bound NOT EXISTS correction; actual command outputs are retained in the parent checkpoint evidence.",
+]
+unresolved_risk = "Local relation qualification is complete. Bounded typed admission, complete transaction/cleanup outcomes, missing relation sources, browser backend, protected restore/caller qualification and supported consumer adoption remain separate; no deployed incident or full G1 is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "All three retained public relation tests failed against unchanged production source, after the prospective architecture check passed.",
+  "The shared parameterized NOT EXISTS query now selects the complete off-profile complement, including unassigned relays, excluding shared memberships and returning each eligible relay once; actual single/delete effects preserve assigned relays.",
+  "Exact Rust 1.99.0 scoped formatting, all-feature/all-target checking, the full package tests (76 passed, zero ignored) and warnings-as-errors Clippy passed on local macOS arm64.",
+  "The first closure validation rejected this record because closure_evidence was absent; that failed attempt is retained, and only this evidence field was added before repeating the architecture check.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-031"
 date = "2026-10-12"
 status = "closed"
