@@ -34,10 +34,17 @@ fn push_required_tag(
     Ok(())
 }
 
-fn push_optional_tag(tags: &mut Vec<Vec<String>>, key: &'static str, value: &Option<String>) {
+fn push_optional_tag(
+    tags: &mut Vec<Vec<String>>,
+    key: &'static str,
+    value: &Option<String>,
+    field: &'static str,
+) -> Result<(), EventEncodeError> {
     if let Some(value) = value {
+        validate_required(value, field)?;
         tags.push(vec![key.to_string(), value.clone()]);
     }
+    Ok(())
 }
 
 fn push_dimensions_tag(tags: &mut Vec<Vec<String>>, dimensions: &Option<MessageFileDimensions>) {
@@ -81,13 +88,13 @@ pub fn message_file_build_tags(
     )?;
     push_required_tag(&mut tags, "x", &message.encrypted_hash, "encrypted_hash")?;
 
-    push_optional_tag(&mut tags, "ox", &message.original_hash);
+    push_optional_tag(&mut tags, "ox", &message.original_hash, "original_hash")?;
     if let Some(size) = message.size {
         tags.push(vec!["size".to_string(), size.to_string()]);
     }
     push_dimensions_tag(&mut tags, &message.dimensions);
-    push_optional_tag(&mut tags, "blurhash", &message.blurhash);
-    push_optional_tag(&mut tags, "thumb", &message.thumb);
+    push_optional_tag(&mut tags, "blurhash", &message.blurhash, "blurhash")?;
+    push_optional_tag(&mut tags, "thumb", &message.thumb, "thumb")?;
     for fallback in &message.fallbacks {
         validate_required(fallback, "fallback")?;
         tags.push(vec!["fallback".to_string(), fallback.clone()]);

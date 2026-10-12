@@ -543,3 +543,79 @@ fn message_file_from_tags_rejects_invalid_dimension_components() {
         message_file_from_tags(KIND_MESSAGE_FILE, &tags, &file_url("encrypted.bin")).unwrap_err();
     assert!(matches!(err, EventParseError::InvalidTag("dim")));
 }
+
+#[test]
+fn message_file_optional_strings_roundtrip_absent_and_exact_nonblank_values() {
+    for value in [None, Some("metadata"), Some(" \tmetadata\n")] {
+        let mut message = sample_message_file();
+        message.original_hash = value.map(str::to_string);
+        message.blurhash = value.map(str::to_string);
+        message.thumb = value.map(str::to_string);
+        let parts = to_wire_parts(&message).expect("valid optional metadata");
+        let decoded = message_file_from_tags(parts.kind, &parts.tags, &parts.content)
+            .expect("authored optional metadata must decode");
+        assert_eq!(decoded.original_hash, message.original_hash);
+        assert_eq!(decoded.blurhash, message.blurhash);
+        assert_eq!(decoded.thumb, message.thumb);
+    }
+}
+
+#[test]
+fn message_file_to_wire_parts_rejects_blank_optional_original_hash() {
+    for value in ["", " \t\n"] {
+        let mut message = sample_message_file();
+        message.original_hash = Some(value.to_string());
+        let authored = to_wire_parts(&message);
+        if let Ok(parts) = &authored {
+            assert!(matches!(
+                message_file_from_tags(parts.kind, &parts.tags, &parts.content),
+                Err(EventParseError::InvalidTag("ox"))
+            ));
+            panic!("authoring accepted optional metadata rejected by its own decoder");
+        }
+        assert!(matches!(
+            authored,
+            Err(EventEncodeError::EmptyRequiredField("original_hash"))
+        ));
+    }
+}
+
+#[test]
+fn message_file_to_wire_parts_rejects_blank_optional_blurhash() {
+    for value in ["", " \t\n"] {
+        let mut message = sample_message_file();
+        message.blurhash = Some(value.to_string());
+        let authored = to_wire_parts(&message);
+        if let Ok(parts) = &authored {
+            assert!(matches!(
+                message_file_from_tags(parts.kind, &parts.tags, &parts.content),
+                Err(EventParseError::InvalidTag("blurhash"))
+            ));
+            panic!("authoring accepted optional metadata rejected by its own decoder");
+        }
+        assert!(matches!(
+            authored,
+            Err(EventEncodeError::EmptyRequiredField("blurhash"))
+        ));
+    }
+}
+
+#[test]
+fn message_file_to_wire_parts_rejects_blank_optional_thumb() {
+    for value in ["", " \t\n"] {
+        let mut message = sample_message_file();
+        message.thumb = Some(value.to_string());
+        let authored = to_wire_parts(&message);
+        if let Ok(parts) = &authored {
+            assert!(matches!(
+                message_file_from_tags(parts.kind, &parts.tags, &parts.content),
+                Err(EventParseError::InvalidTag("thumb"))
+            ));
+            panic!("authoring accepted optional metadata rejected by its own decoder");
+        }
+        assert!(matches!(
+            authored,
+            Err(EventEncodeError::EmptyRequiredField("thumb"))
+        ));
+    }
+}

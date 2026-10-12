@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-034"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the successor refactor, scoped execution/recovery amendments and all remaining local verified checkpoints; publication and supported consumer qualification remain separate."
+affected_steps = ["010", "040", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_event_codec"]
+source_evidence = [
+  "The file-message authoring helper emits present original_hash, blurhash and thumb strings without validating that they are nonblank; the paired decoder rejects those same present blank values.",
+  "The full source and sixteen existing file-message cases were reviewed, and the freshly fetched published integration branch retains identical encoder and decoder bytes; no newer published correction was observed.",
+  "Retained unchanged-source regressions prove that all three first blank optional values are accepted by authoring and then rejected by its paired decoder; seventeen existing and valid-value controls pass. This is not a private crypto/media exposure claim.",
+]
+replacement_action = "Bring forward contained optional-string admission during source reevaluation. Reproduce the existing file-message authoring/decoder mismatch, then reject present blank optional original_hash, blurhash and thumb values with the existing typed required-field error. Preserve absent and exact nonblank values, accepted wire order/bytes, public API and feature ownership, algorithms, dependencies and frozen historical evidence."
+verification = [
+  "Validate this prospective standalone deviation before production edits, then retain actual unchanged-source regressions for all three optional fields plus absent and exact nonblank round-trip controls.",
+  "Run the complete file-message suite against the correction, exact Rust 1.99.0 all-feature/all-target package checking and warnings-as-errors Clippy, scoped formatting and no-default-feature library checking.",
+  "Check the unchanged owning native Wasm binding caller, run final standalone architecture validation with explicit closure evidence, and review exact owned source/test/deviation changes before the local owner commit.",
+]
+unresolved_risk = "The contained optional-string admission correction is locally verified. Strict recipient/key/hash/algorithm/URL contracts, private encryption/custody, delivery/media/resource proving, packed browser behavior, supported target/consumer adoption and full G1 remain separate."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Prospective standalone architecture validation passed before production edits. The first three retained admission regressions fail against unchanged source; strengthened regressions then prove each actually authored invalid wire record is rejected by the paired decoder, with seventeen controls passing in both runs.",
+  "The existing optional-tag helper now rejects present empty or whitespace-only original_hash, blurhash and thumb values with the existing typed required-field error. All twenty file-message tests pass, including all sixteen original cases, absent/exact nonblank round trips and both blank forms for each optional field.",
+  "Rust 1.99.0 scoped formatting, event-codec all-feature/all-target check and warnings-as-errors Clippy, no-default-feature library check, active architecture validation and native all-feature/all-target compilation of the unchanged Wasm binding caller passed on local macOS arm64.",
+  "Only private helper admission, meaningful retained regressions, package guidance and this controlled deviation changed. Accepted nonblank text and wire ordering, public type/API shapes, dependencies, algorithms and feature ownership are preserved; final closed-deviation architecture validation is required before local commit. No packed browser, crypto/media/delivery, complete package-test or consumer/G1 qualification is claimed.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-033"
 date = "2026-10-12"
 status = "closed"

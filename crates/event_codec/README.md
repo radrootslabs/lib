@@ -33,6 +33,10 @@ surface is recorded in the
 
 ## Verification pipeline
 
+File-message authoring requires a supplied `original_hash`, `blurhash`, or
+`thumb` value to contain non-whitespace text, matching the decoder's admission
+rules. Nonblank values retain their exact text; use `None` to omit a field.
+
 Wire parsing and cryptographic trust are separate operations. A successful
 decode returns a structurally valid `RawEvent`; it does not make the declared
 event ID, signature, contract, referenced events, relay hints, or remote media
