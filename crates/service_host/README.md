@@ -93,7 +93,9 @@ deadlines, task names, metric snapshots, reason collections, and shutdown
 phases have explicit bounds. Safe Display and ordinary Debug projections
 exclude raw paths, SQL, credentials, payloads, and provider or relay errors.
 Where a host error retains an original cause for trusted inspection, that cause
-is not rendered by its safe projection.
+is not rendered by its safe projection or ordinary/pretty `Debug`. `HostError`
+formatting does not invoke the retained cause's formatters; explicit trusted
+`source()` inspection and downcasting retain the original cause.
 
 Reason-code iterators and wire arrays stop at the first item beyond their fixed
 maximum. Administration payloads are traversed directly from the bounded input

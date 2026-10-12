@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-029"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the full successor refactor and local verified checkpoints; publication and supported consumer qualification remain separate."
+affected_steps = ["010", "040", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "HostError derives ordinary Debug over its retained dependency-owned cause, while Display and safe_error use fixed host-owned projections.",
+  "The service-host package requires ordinary Debug to exclude private input and dependency diagnostics; its current error test checks Display with a fieldless cause only.",
+  "The upstream integration branch has the same error implementation; no newer correction is available there. Enclosing admin and lifecycle errors already redact retained causes separately.",
+]
+replacement_action = "Reproduce ordinary and pretty Debug with synthetic sensitive and non-renderable causes. If reproduced, redact retained causes in HostError Debug while preserving typed categories, fixed public errors, explicitly trusted source inspection, public API shapes and effect ownership."
+verification = [
+  "Validate this standalone deviation before changing production formatting, then record failing diagnostic regressions against unchanged production source.",
+  "Prove ordinary and pretty Debug do not render the dependency cause, while trusted source downcasting and safe Display remain available; cover sourced and unsourced host errors.",
+  "Run exact Rust 1.99.0 scoped formatting, all-target check, full service-host package tests and warnings-as-errors Clippy; review the exact owner diff before a local commit.",
+]
+unresolved_risk = "The contained ordinary Debug correction is locally verified. Supported consumer adoption and full host/platform qualification remain separate; no deployed disclosure is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Both diagnostic regressions failed against unchanged production formatting: ordinary Debug exposed synthetic private input and invoked the retained dependency's Debug formatter.",
+  "Ordinary and pretty Debug now retain the host category and source presence without rendering the dependency; safe Display, explicitly trusted source inspection and original-cause downcasting remain available.",
+  "Exact Rust 1.99.0 scoped formatting, all-feature/all-target check, all-feature package tests including 167 passing tests/doctests and zero ignored, and warnings-as-errors all-target Clippy passed on local macOS arm64.",
+  "Only private host diagnostic formatting, its inline regressions, package guidance and this deviation changed. Public API shapes, features, dependencies, transports, lifecycle and effect ownership are unchanged.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-028"
 date = "2026-10-12"
 status = "closed"

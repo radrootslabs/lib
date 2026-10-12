@@ -134,8 +134,7 @@ impl fmt::Display for SafeHostError {
     }
 }
 
-/// A typed host failure whose public display never includes its internal cause.
-#[derive(Debug)]
+/// A typed host failure whose Display and Debug never render its internal cause.
 pub struct HostError {
     kind: HostErrorKind,
     source: Option<Box<dyn Error + Send + Sync + 'static>>,
@@ -169,6 +168,16 @@ impl HostError {
     }
 }
 
+impl fmt::Debug for HostError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("HostError")
+            .field("kind", &self.kind)
+            .field("source", &self.source.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
+}
+
 impl fmt::Display for HostError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.safe_error().fmt(formatter)
@@ -188,11 +197,11 @@ mod tests {
     use super::*;
 
     #[derive(Debug)]
-    struct SensitiveCause;
+    struct SensitiveCause(&'static str);
 
     impl fmt::Display for SensitiveCause {
         fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("secret upstream detail")
+            formatter.write_str(self.0)
         }
     }
 
@@ -200,7 +209,10 @@ mod tests {
 
     #[test]
     fn display_is_safe_while_source_is_preserved() {
-        let error = HostError::with_source(HostErrorKind::ConfigDocument, SensitiveCause);
+        let error = HostError::with_source(
+            HostErrorKind::ConfigDocument,
+            SensitiveCause("secret upstream detail"),
+        );
 
         assert_eq!(
             error.to_string(),
@@ -211,6 +223,65 @@ mod tests {
             error.source().map(ToString::to_string).as_deref(),
             Some("secret upstream detail")
         );
+    }
+
+    #[test]
+    fn ordinary_debug_preserves_category_and_redacts_trusted_cause() {
+        let marker = "synthetic private diagnostic input";
+        let error = HostError::with_source(HostErrorKind::ConfigDocument, SensitiveCause(marker));
+
+        for rendered in [
+            format!("{error:?}"),
+            format!("{error:#?}"),
+            error.to_string(),
+        ] {
+            assert!(!rendered.contains(marker));
+        }
+        assert!(format!("{error:?}").contains("ConfigDocument"));
+        assert_eq!(error.kind(), HostErrorKind::ConfigDocument);
+        assert_eq!(
+            error
+                .source()
+                .unwrap()
+                .downcast_ref::<SensitiveCause>()
+                .unwrap()
+                .0,
+            marker
+        );
+        assert_eq!(error.source().unwrap().to_string(), marker);
+
+        let unsourced = HostError::new(HostErrorKind::TaskFailure);
+        assert!(unsourced.source().is_none());
+        assert!(format!("{unsourced:?}").contains("TaskFailure"));
+        assert!(format!("{unsourced:#?}").contains("TaskFailure"));
+    }
+
+    #[test]
+    fn ordinary_debug_does_not_format_retained_dependency_cause() {
+        struct ExplicitInspectionCause;
+
+        impl fmt::Debug for ExplicitInspectionCause {
+            fn fmt(&self, _formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                panic!("dependency Debug requires explicit trusted inspection")
+            }
+        }
+
+        impl fmt::Display for ExplicitInspectionCause {
+            fn fmt(&self, _formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                panic!("dependency Display requires explicit trusted inspection")
+            }
+        }
+
+        impl Error for ExplicitInspectionCause {}
+
+        let error = HostError::with_source(HostErrorKind::TaskFailure, ExplicitInspectionCause);
+        assert!(format!("{error:?}").contains("TaskFailure"));
+        assert!(format!("{error:#?}").contains("TaskFailure"));
+        assert_eq!(
+            error.to_string(),
+            HostErrorKind::TaskFailure.safe_error().to_string()
+        );
+        assert!(error.source().unwrap().is::<ExplicitInspectionCause>());
     }
 
     #[test]
