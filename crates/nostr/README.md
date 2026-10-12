@@ -73,6 +73,11 @@ admission proves the received event and its typed projection; it does not prove
 that referenced events, authors, addresses, relays, or external resources
 exist.
 
+`event::EventAdapter` preserves the original numeric wire kind in its borrowed
+and owned job conversions, including named Nostr kinds such as feedback kind
+7000. The job decoder separately enforces its supported kind; conversion does
+not establish event authenticity or job admission.
+
 ## Local signing
 
 The `signing` feature provides an opaque `key::SecretKey` and a concrete local

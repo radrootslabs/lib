@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-028"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the full successor refactor and local verified checkpoints; publication and consumer qualification remain separate."
+affected_steps = ["010", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_nostr"]
+source_evidence = [
+  "Both EventAdapter trait implementations replace every named upstream Nostr kind with profile kind zero; custom kinds retain their number.",
+  "The locked Nostr dependency represents feedback kind 7000 as the named JobFeedback variant; the public trait feedback decoder requires numeric kind 7000.",
+  "The direct conversion functions already preserve numeric kinds, while the existing adapter coverage checks only a custom request and profile kind zero.",
+]
+replacement_action = "Reevaluate the public adapter with actual signed feedback and named/custom wire cases; if reproduced, preserve every numeric wire kind in both trait implementations while retaining decoder-owned job admission, public API shapes, features and dependencies."
+verification = [
+  "Validate this standalone deviation before changing production conversion and record failing regressions against unchanged production source.",
+  "Exercise borrowed and owned adapters, real feedback metadata/index decoding, direct conversion agreement and wrong-job-kind rejection.",
+  "Run exact Rust 1.99.0 scoped formatting, all-target check, full Nostr package tests and warnings-as-errors Clippy; review the exact owner diff before a local commit.",
+]
+unresolved_risk = "The contained Lib conversion repair is locally verified. Separate RHI adapter correction and exact supported consumer adoption remain pending; no deployed incident or full platform qualification is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Both regressions failed against unchanged production conversion: named kind 1 became zero and real signed kind-7000 feedback failed the public trait decoder while direct conversion succeeded.",
+  "Borrowed and owned adapters now preserve named/custom wire kinds, including zero and u16 maximum; actual feedback metadata/index decoding agrees with direct conversion, and wrong-job-kind admission remains rejected.",
+  "Exact Rust 1.99.0 scoped formatting, all-feature/all-target check, all-feature package tests including 104 passing tests/doctests and zero ignored, conversion-only no-default-features library check and warnings-as-errors all-target Clippy passed on local macOS arm64.",
+  "Only private numeric conversion, its regressions, package guidance and this deviation changed. Public API shapes, features, dependencies, signing, networking, persistence and decoder admission are unchanged.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-027"
 date = "2026-10-12"
 status = "closed"

@@ -7,7 +7,7 @@ use nostr::{Keys as RadrootsNostrKeys, RelayUrl as RadrootsNostrRelayUrl, nips::
 #[cfg(feature = "events")]
 use radroots_event::post::reply::{AuthoredNip10Reply, Nip10ReplyReference};
 #[cfg(feature = "events")]
-use radroots_event_codec::decode::job::{JobEventBorrow, JobEventLike};
+use radroots_event_codec::decode::job::{BorrowedEventAdapter, JobEventBorrow, JobEventLike};
 #[cfg(feature = "events")]
 use radroots_nostr::event::build_nip10_reply as build_nip10_reply_event;
 #[cfg(feature = "events")]
@@ -404,6 +404,85 @@ fn event_and_job_adapters_cover_native_value_boundaries() {
     let _ = to_job_result_index(&event);
     let _ = to_job_feedback_metadata(&event);
     let _ = to_job_feedback_index(&event);
+}
+
+#[cfg(feature = "events")]
+#[test]
+fn job_adapter_preserves_named_and_custom_wire_kinds() {
+    let keys = make_keys();
+    for wire_kind in [0_u16, 1, 6, 5_001, 6_001, 7_000, u16::MAX] {
+        let event = nostr::EventBuilder::new(RadrootsNostrKind::from(wire_kind), "kind")
+            .custom_created_at(RadrootsNostrTimestamp::from(1_700_000_000))
+            .sign_with_keys(&keys)
+            .expect("signed synthetic event");
+        let adapter = EventAdapter::new(&event);
+        assert_eq!(JobEventLike::raw_kind(&adapter), u32::from(wire_kind));
+        assert_eq!(JobEventBorrow::raw_kind(&adapter), u32::from(wire_kind));
+        if wire_kind != 7_000 {
+            assert!(matches!(
+                adapter.to_job_feedback_metadata(),
+                Err(
+                    radroots_event_codec::decode::job::JobParseError::InvalidTag(
+                        "kind (expected 7000)"
+                    )
+                )
+            ));
+        }
+    }
+}
+
+#[cfg(feature = "events")]
+#[test]
+fn job_adapter_decodes_signed_named_feedback_through_both_traits() {
+    let keys = make_keys();
+    let request = nostr::EventBuilder::new(RadrootsNostrKind::Custom(5_001), "request")
+        .custom_created_at(RadrootsNostrTimestamp::from(1_700_000_000))
+        .sign_with_keys(&keys)
+        .expect("signed synthetic request");
+    let feedback = build_event_job_feedback(&request, "processing", None, None)
+        .expect("feedback builder")
+        .sign_with_keys(&keys)
+        .expect("signed synthetic feedback");
+    assert_eq!(feedback.kind, RadrootsNostrKind::JobFeedback);
+    feedback.verify().expect("valid signed feedback");
+    let adapter = EventAdapter::new(&feedback);
+    let tags = JobEventLike::raw_tags(&adapter);
+    let borrowed = BorrowedEventAdapter::new(
+        &adapter,
+        feedback.created_at.as_secs(),
+        &tags,
+        feedback.sig.to_string(),
+    );
+    let expected = to_job_feedback_metadata(&feedback).expect("direct feedback metadata");
+    assert_eq!(expected.kind, 7_000);
+    assert_eq!(expected.data.kind, 7_000);
+    assert_eq!(expected.data.request_event.id, request.id.to_hex());
+    assert_eq!(
+        adapter.to_job_feedback_metadata().expect("owned metadata"),
+        expected
+    );
+    assert_eq!(
+        borrowed
+            .to_job_feedback_metadata()
+            .expect("borrowed metadata"),
+        expected
+    );
+    for parsed in [
+        adapter
+            .to_job_feedback_event_index()
+            .expect("owned feedback index"),
+        borrowed
+            .to_job_feedback_event_index()
+            .expect("borrowed feedback index"),
+    ] {
+        assert_eq!(parsed.data, expected);
+        assert_eq!(parsed.event.kind_u32(), 7_000);
+        assert_eq!(parsed.event.id_hex(), feedback.id.to_hex());
+    }
+    assert_eq!(
+        to_job_feedback_index(&feedback).expect("direct index").data,
+        expected
+    );
 }
 
 #[cfg(feature = "events")]

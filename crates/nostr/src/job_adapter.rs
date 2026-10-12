@@ -5,8 +5,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::types::{RadrootsNostrEvent, RadrootsNostrKind};
-use radroots_event::envelope::kind::KIND_PROFILE;
+use crate::types::RadrootsNostrEvent;
 use radroots_event_codec::decode::job::{JobEventBorrow, JobEventLike};
 
 #[derive(Clone, Debug)]
@@ -51,10 +50,7 @@ impl<'a> JobEventBorrow<'a> for EventAdapter<'a> {
     }
     #[inline]
     fn raw_kind(&'a self) -> u32 {
-        match self.evt.kind {
-            RadrootsNostrKind::Custom(v) => v as u32,
-            _ => KIND_PROFILE,
-        }
+        u32::from(self.evt.kind.as_u16())
     }
 }
 
@@ -69,10 +65,7 @@ impl JobEventLike for EventAdapter<'_> {
         self.evt.created_at.as_secs()
     }
     fn raw_kind(&self) -> u32 {
-        match self.evt.kind {
-            RadrootsNostrKind::Custom(v) => v as u32,
-            _ => KIND_PROFILE,
-        }
+        u32::from(self.evt.kind.as_u16())
     }
     fn raw_content(&self) -> String {
         self.evt.content.clone()
