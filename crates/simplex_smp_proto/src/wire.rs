@@ -691,7 +691,7 @@ impl RadrootsSimplexSmpBrokerMessage {
                 {
                     buffer.extend_from_slice(b"AUTH");
                 } else {
-                    buffer.extend_from_slice(&encode_error(error));
+                    buffer.extend_from_slice(&encode_error(error)?);
                 }
             }
             Self::Pong => buffer.extend_from_slice(TAG_PONG),
@@ -1374,8 +1374,8 @@ fn decode_send_payload(
     })
 }
 
-fn encode_error(error: &RadrootsSimplexSmpError) -> Vec<u8> {
-    match error {
+fn encode_error(error: &RadrootsSimplexSmpError) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
+    Ok(match error {
         RadrootsSimplexSmpError::Block => b"BLOCK".to_vec(),
         RadrootsSimplexSmpError::Session => b"SESSION".to_vec(),
         RadrootsSimplexSmpError::Command(command_error) => {
@@ -1393,7 +1393,7 @@ fn encode_error(error: &RadrootsSimplexSmpError) -> Vec<u8> {
         }
         RadrootsSimplexSmpError::Proxy(proxy_error) => {
             let mut bytes = b"PROXY ".to_vec();
-            bytes.extend_from_slice(&encode_proxy_error(proxy_error));
+            bytes.extend_from_slice(&encode_proxy_error(proxy_error)?);
             bytes
         }
         RadrootsSimplexSmpError::Auth => b"AUTH".to_vec(),
@@ -1416,7 +1416,7 @@ fn encode_error(error: &RadrootsSimplexSmpError) -> Vec<u8> {
         RadrootsSimplexSmpError::Internal => b"INTERNAL".to_vec(),
         RadrootsSimplexSmpError::Duplicate => b"DUPLICATE_".to_vec(),
         RadrootsSimplexSmpError::Other(raw) => raw.clone(),
-    }
+    })
 }
 
 fn decode_error(bytes: &[u8]) -> Result<RadrootsSimplexSmpError, RadrootsSimplexSmpProtoError> {
@@ -1485,21 +1485,23 @@ fn decode_error(bytes: &[u8]) -> Result<RadrootsSimplexSmpError, RadrootsSimplex
     Ok(RadrootsSimplexSmpError::Other(bytes.to_vec()))
 }
 
-fn encode_proxy_error(error: &RadrootsSimplexSmpProxyError) -> Vec<u8> {
-    match error {
+fn encode_proxy_error(
+    error: &RadrootsSimplexSmpProxyError,
+) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
+    Ok(match error {
         RadrootsSimplexSmpProxyError::Protocol(error) => {
             let mut bytes = b"PROTOCOL ".to_vec();
-            bytes.extend_from_slice(&encode_error(error));
+            bytes.extend_from_slice(&encode_error(error)?);
             bytes
         }
         RadrootsSimplexSmpProxyError::Broker(error) => {
             let mut bytes = b"BROKER ".to_vec();
-            bytes.extend_from_slice(&encode_broker_error(error));
+            bytes.extend_from_slice(&encode_broker_error(error)?);
             bytes
         }
         RadrootsSimplexSmpProxyError::BasicAuth => b"BASIC_AUTH".to_vec(),
         RadrootsSimplexSmpProxyError::NoSession => b"NO_SESSION".to_vec(),
-    }
+    })
 }
 
 fn decode_proxy_error(
@@ -1519,18 +1521,18 @@ fn decode_proxy_error(
     }
 }
 
-fn encode_broker_error(error: &RadrootsSimplexSmpBrokerError) -> Vec<u8> {
-    match error {
+fn encode_broker_error(
+    error: &RadrootsSimplexSmpBrokerError,
+) -> Result<Vec<u8>, RadrootsSimplexSmpProtoError> {
+    Ok(match error {
         RadrootsSimplexSmpBrokerError::Response(response_error) => {
             let mut bytes = b"RESPONSE ".to_vec();
-            push_short_string(&mut bytes, response_error)
-                .expect("response_error length is bounded by SMP short-string encoding");
+            push_short_string(&mut bytes, response_error)?;
             bytes
         }
         RadrootsSimplexSmpBrokerError::Unexpected(response_error) => {
             let mut bytes = b"UNEXPECTED ".to_vec();
-            push_short_string(&mut bytes, response_error)
-                .expect("response_error length is bounded by SMP short-string encoding");
+            push_short_string(&mut bytes, response_error)?;
             bytes
         }
         RadrootsSimplexSmpBrokerError::Network(_) => b"NETWORK".to_vec(),
@@ -1542,7 +1544,7 @@ fn encode_broker_error(error: &RadrootsSimplexSmpBrokerError) -> Vec<u8> {
             bytes
         }
         RadrootsSimplexSmpBrokerError::Timeout => b"TIMEOUT".to_vec(),
-    }
+    })
 }
 
 fn decode_broker_error(
@@ -2767,7 +2769,8 @@ mod tests {
         assert_eq!(
             encode_broker_error(&RadrootsSimplexSmpBrokerError::Network(
                 RadrootsSimplexSmpNetworkError::Connect("dns".to_string()),
-            )),
+            ))
+            .unwrap(),
             b"NETWORK".to_vec()
         );
     }

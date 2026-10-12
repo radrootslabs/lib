@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-030"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the successor refactor and local verified checkpoints through RCLD-RDP-030; publication and supported consumer qualification remain separate."
+affected_steps = ["010", "040", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "The public fallible broker-message encoder panics when unrestricted Response or Unexpected strings exceed the one-byte short-field length.",
+  "An isolated public-API probe reproduced both panics at 256 bytes, including multibyte UTF-8, while both variants round-tripped at 255 bytes and all 39 existing package tests passed.",
+  "The freshly fetched upstream integration branch retains the identical wire blob; no newer correction is available there.",
+]
+replacement_action = "Bring forward the contained short-field failure propagation during source reevaluation. Return the existing typed length error through private nested error encoders and public message/transmission APIs, preserving accepted bytes, tested version downgrades, network-detail compatibility, public API shapes and feature boundaries."
+verification = [
+  "Validate this standalone deviation before changing production encoding, then record failing public regressions against unchanged production source.",
+  "Prove UTF-8 byte-length rejection and valid boundaries through direct, versioned and nested message/transmission APIs without truncation or panic.",
+  "Run exact Rust 1.99.0 scoped formatting, all-feature/all-target check, full package tests, no-default-feature library check and warnings-as-errors Clippy; review the exact owner diff before a local commit.",
+]
+unresolved_risk = "The contained short-field repair is locally verified. Aggregate frame and recursion bounds, private diagnostics, actual crypto/transport/caller qualification and supported consumer adoption remain separate; no deployed incident or complete platform acceptance is claimed."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The isolated unchanged-source public probe reproduced both 256-byte panics with valid 255-byte controls; the retained public regression suite also failed nested transmission propagation before the production repair.",
+  "Direct and versioned message/transmission encoders now return InvalidShortFieldLength for oversized details, including nested proxy protocol errors, without truncation or panic. Empty and 255-byte ASCII/multibyte details round-trip.",
+  "Exact Rust 1.99.0 scoped formatting, all-feature/all-target check, 43 passing package tests with zero ignored, no-default-feature library check and warnings-as-errors all-target Clippy passed on local macOS arm64.",
+  "Only private encoding failure propagation, meaningful public boundary regressions, package guidance and this deviation changed. Accepted wire bytes, existing version/network-detail compatibility, public API shapes, dependencies, features and effect ownership remain unchanged.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-029"
 date = "2026-10-12"
 status = "closed"

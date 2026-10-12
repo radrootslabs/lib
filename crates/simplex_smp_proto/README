@@ -11,6 +11,11 @@ wire protocol primitives for the `radroots` core libraries.
  * portable shared models with optional serialization and shared type export
    support.
 
+Broker response and unexpected-error details use the protocol's one-byte
+length prefix. Message and transmission encoders reject details over 255
+UTF-8 bytes with `InvalidShortFieldLength`, including nested proxy errors;
+they do not truncate the detail or panic at that boundary.
+
 ## Copyright
 
 Except as otherwise noted, all files in the `radroots_simplex_smp_proto`
