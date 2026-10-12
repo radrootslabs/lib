@@ -2,6 +2,35 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-033"
+date = "2026-10-12"
+status = "closed"
+approval = "The user approved the successor refactor, scoped execution/recovery amendments and all remaining local verified checkpoints; publication and supported consumer qualification remain separate."
+affected_steps = ["010", "020", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "The unanchored result ignore pattern also matches the tracked crates/event_codec/src/job/result source directory.",
+  "Default source traversal found five canonicalize_tags paths, while explicit tracked-file inspection found the sixth result encoder; all three result module files match the ignore rule.",
+  "The published integration branch and current owner retain the same ignore file; no newer published correction was observed.",
+]
+replacement_action = "Bring forward a contained source-discovery hygiene correction: anchor the result output ignore at the repository root, preserving root output and descendant ignoring while making the tracked job result module and future source additions visible. Preserve source bytes, package/API/feature ownership and frozen qualification history."
+verification = [
+  "Validate this prospective standalone deviation before editing the ignore rule; preserve the actual default-traversal versus tracked-source mismatch and Git ignore classifications against unchanged source.",
+  "Prove the actual root result output remains ignored, all three tracked job result files become unignored, and default canonicalizer traversal agrees with explicit tracked-file matches. Exercise root output descendants and future source paths in a disposable Git fixture with the exact ignore bytes; the actual output is a symlink and Git refuses descendant pathspecs through it.",
+  "Check the complete tracked Rust source set for remaining ignored paths and record the scoped source-discovery result; separately admit task-owned untracked candidates in successor caller audits.",
+  "Run final standalone architecture validation and review the exact two-file diff/status before a local owner commit; source discovery is not Rust/runtime, artifact, platform or consumer qualification.",
+]
+unresolved_risk = "The contained ignore correction is locally qualified. Existing reference inventories still require explicit tracked-source reevaluation before their caller closure; broader source/history, exact published consumer adoption and supported runtime/platform qualification remain open."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Prospective standalone architecture validation passed before the ignore edit. Actual Git and source traversal showed the three tracked result files ignored and five default matches versus six explicit tracked matches against unchanged source.",
+  "The exact one-byte root anchor correction preserves the actual root result symlink ignore and makes all three tracked result files visible. Disposable Git controls with the exact ignore bytes preserve root output descendants while admitting a future untracked source path.",
+  "The complete 1098-path tracked Rust source census now contains no ignored Rust files; default and explicit tracked canonicalizer searches agree on all six paths, and every Rust source byte is unchanged.",
+  "Post-correction standalone architecture validation passed through extbuild with Rust 1.99.0. The rejected descendant-path probe through the existing root symlink is retained separately; no Rust runtime, artifact, full G1 or consumer/platform acceptance is claimed.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-032"
 date = "2026-10-12"
 status = "closed"

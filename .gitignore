@@ -47,7 +47,7 @@ prompt*.txt
 .local
 .direnv/
 .treefmt-cache/
-result
+/result
 
 # Beads / Dolt runtime files
 .beads/dolt/
