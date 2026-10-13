@@ -134,6 +134,17 @@ cancelled incomplete handler may be entered again and must be idempotent and
 cancellation safe. The first phase or task failure is retained while later
 close phases continue as long as the original deadline remains.
 
+Bulk and phase supervision retain already joined observations in the supervisor
+when their wait is cancelled. Retrying bulk supervision includes that prefix
+and keeps the first fatal outcome; switching to `join_next` returns retained
+observations first in join order. A completed bulk call consumes its batch and
+returns either the nonfatal exits or the first fatal failure; `join_next`
+consumes one observation. Phased shutdown retains its fatal result while
+continuing the remaining close phases. Forced abort-and-drain joins remaining tasks and
+preserves unconsumed observations for a later explicit read. `task_count` and
+`is_empty` describe tasks that have not yet been joined, so an empty supervisor
+can still have retained observations.
+
 ## Supported targets and publication
 
 The generic host/config/status/lifecycle surfaces support the workspace's

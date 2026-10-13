@@ -1,7 +1,10 @@
 //! Join-owned task supervision with typed completion policy.
 
 use core::{fmt, future::Future};
-use std::{collections::HashMap, error::Error};
+use std::{
+    collections::{HashMap, VecDeque},
+    error::Error,
+};
 
 use tokio::task::{Id, JoinError, JoinSet};
 
@@ -15,6 +18,7 @@ pub struct TaskSupervisor {
     cancellation: CancellationToken,
     tasks: JoinSet<TaskCompletion>,
     controls: HashMap<Id, TaskControl>,
+    observed: VecDeque<Result<SupervisedTaskExit, SupervisionFailure>>,
 }
 
 struct TaskControl {
@@ -28,6 +32,7 @@ impl TaskSupervisor {
             cancellation: CancellationToken::new(),
             tasks: JoinSet::new(),
             controls: HashMap::new(),
+            observed: VecDeque::new(),
         }
     }
 
@@ -42,11 +47,13 @@ impl TaskSupervisor {
         self.cancellation.cancel();
     }
 
+    /// Returns the number of tasks whose join results have not yet been collected.
     #[must_use]
     pub fn task_count(&self) -> usize {
         self.tasks.len()
     }
 
+    /// Returns whether every task has been joined; unconsumed observations may remain.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.tasks.is_empty()
@@ -108,25 +115,41 @@ impl TaskSupervisor {
         &mut self,
         phase: ShutdownPhase,
     ) -> Result<Vec<SupervisedTaskExit>, SupervisionFailure> {
-        let mut exits = Vec::new();
+        if let Some(index) = self.observed.iter().position(Result::is_err) {
+            return Err(self
+                .observed
+                .remove(index)
+                .expect("retained fatal outcome must exist")
+                .expect_err("retained fatal outcome must be a failure"));
+        }
         while self.has_phase_work(phase) {
             let outcome = self
-                .join_next()
+                .join_task()
                 .await
                 .expect("phase work must retain a join-owned task");
             match outcome {
-                Ok(exit) => exits.push(exit),
+                Ok(exit) => self.observed.push_back(Ok(exit)),
                 Err(failure) => return Err(failure),
             }
         }
-        Ok(exits)
+        self.take_observed()
     }
 
     /// Observes all task exits, cancels peers on the first fatal outcome, and drains every join.
+    ///
+    /// Cancelling this wait retains already joined outcomes. A subsequent bulk,
+    /// per-join or phase wait consumes those observations exactly once.
     pub async fn supervise(&mut self) -> Result<Vec<SupervisedTaskExit>, SupervisionFailure> {
-        let mut exits = Vec::with_capacity(self.tasks.len());
+        while let Some(outcome) = self.join_task().await {
+            self.observed.push_back(outcome);
+        }
+        self.take_observed()
+    }
+
+    fn take_observed(&mut self) -> Result<Vec<SupervisedTaskExit>, SupervisionFailure> {
+        let mut exits = Vec::with_capacity(self.observed.len());
         let mut first_failure = None;
-        while let Some(outcome) = self.join_next().await {
+        for outcome in self.observed.drain(..) {
             match outcome {
                 Ok(exit) => exits.push(exit),
                 Err(failure) => {
@@ -147,8 +170,16 @@ impl TaskSupervisor {
     ///
     /// Optional failures are returned without cancelling peers. A fatal
     /// outcome requests cancellation before it is returned. Cancelling this
-    /// wait does not remove a task or lose its later outcome.
+    /// wait does not remove a task or lose its later outcome. Previously joined
+    /// outcomes retained by a cancelled bulk or phase wait are returned first.
     pub async fn join_next(&mut self) -> Option<Result<SupervisedTaskExit, SupervisionFailure>> {
+        if let Some(outcome) = self.observed.pop_front() {
+            return Some(outcome);
+        }
+        self.join_task().await
+    }
+
+    async fn join_task(&mut self) -> Option<Result<SupervisedTaskExit, SupervisionFailure>> {
         let joined = self.tasks.join_next_with_id().await?;
         let outcome = self.classify_join(joined);
         if outcome.is_err() {
@@ -211,10 +242,13 @@ impl TaskSupervisor {
         }
     }
 
+    /// Joins aborted work while retaining unconsumed observations for an explicit read.
     pub(crate) async fn abort_and_drain(&mut self) {
         self.cancellation.cancel();
         self.tasks.abort_all();
-        while self.join_next().await.is_some() {}
+        while let Some(outcome) = self.join_task().await {
+            self.observed.push_back(outcome);
+        }
     }
 
     fn has_phase_work(&self, phase: ShutdownPhase) -> bool {

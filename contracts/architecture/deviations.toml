@@ -2,6 +2,35 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-035"
+date = "2026-10-13"
+status = "closed"
+approval = "The user approved the successor refactor, scoped execution/recovery amendments and all remaining local verified checkpoints; publication and supported consumer qualification remain separate."
+affected_steps = ["010", "040", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "The public bulk supervise future stores already joined exits and its first fatal failure in local variables while awaiting peers. Controlled unchanged-source regressions reproduce loss of both after cancellation and retry.",
+  "The per-join API retains unjoined tasks, while phased supervision also accumulates joined exits locally. GracefulShutdown separately retains its first failure, completed phase progress and original deadline.",
+  "Existing consumer foundations/adapters use bulk supervision and service graphs combine per-join supervision with phased graceful shutdown; this shared-API reproduction does not establish an application or deployed incident.",
+]
+replacement_action = "Bring forward contained cancellation-safe outcome retention. Retain joined observations in private supervisor-owned state until an explicit bulk, per-join or phase observation consumes them. Keep the first fatal outcome on bulk retry, retain phase-drain observations across cancellation, and preserve unobserved outcomes while aborting and draining remaining tasks. Preserve public signatures, task classification/cancellation policy, phase order, original shutdown deadline and task-count semantics without new workers, dependencies, runtime ownership or wire contracts."
+verification = [
+  "Validate this prospective deviation before production edits, then retain unchanged-source public regressions using at most two synthetic tasks, oneshot barriers and explicit polling, with no network, account or persisted-state effects.",
+  "Prove bulk prefix/first-failure retry, exact once per-join transfer, phased shutdown handoff/retry and forced abort-and-drain preservation; retain original fatal/nonfatal/panic/cancellation/name/phase/deadline cases.",
+  "Run exact Rust 1.99.0 scoped formatting, all-feature/all-target package check, complete host package tests and warnings-as-errors Clippy. Validate the final closed deviation with explicit executed closure evidence.",
+  "Review exact source/test/guidance/deviation ownership and actual supported consumer call sites before local commit; supported adoption, graph interruption, blocking-worker/resource and platform qualification remain separate.",
+]
+unresolved_risk = "The contained supervisor retention correction is locally qualified. Exact published supported consumer adoption, complete graph/process interruption, blocking-worker cancellation, resources, platform behavior and whole source closure remain open."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Prospective standalone architecture validation passed before production edits. All seven public regressions compiled and failed against unchanged production source with two synthetic tasks per case, oneshot barriers and explicit polling; no network, account, file or persisted-state effects occurred.",
+  "Private supervisor-owned observations now retain joined prefixes and the first fatal outcome across cancelled bulk waits, provide once-only per-join transfer, preserve phase-drain handoff and the original shutdown deadline, and retain observations while aborting and joining peers. Original classification, phase order, cancellation authority and unjoined-task count semantics are preserved.",
+  "Exact Rust 1.99.0 scoped formatting, all-feature/all-target package check, all 174 host package tests/doctests with zero ignored or filtered cases, warnings-as-errors Clippy and architecture validation passed on local macOS arm64. The same seven unchanged regressions pass with the correction; all 167 original cases remain green.",
+  "Actual Myc bulk foundation/supervision and RHI bulk adapter paths, and their per-join plus graceful-shutdown graph paths, are reviewed as scoped caller windows. Their resolved shared-host source still uses the earlier exact Lib pin; no consumer adoption, complete graph/platform/resource qualification or whole source closure follows from the local package result. Final closed-deviation architecture validation and exact source binding are required before the local owner commit.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-034"
 date = "2026-10-12"
 status = "closed"
