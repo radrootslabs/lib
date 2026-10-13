@@ -3,6 +3,8 @@
 mod admission_authority;
 pub(crate) mod artifact_bundle;
 mod comment_authority;
+#[cfg(test)]
+mod conformance_inventory_tests;
 mod deletion_authority;
 mod registry_v7;
 pub(crate) use registry_v7::{
@@ -4497,17 +4499,79 @@ fn validate_version_governance(
     validate_conformance_vector_mirrors(workspace_root)
 }
 
-fn collect_conformance_vector_paths(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), String> {
+fn validate_conformance_directory(workspace_root: &Path, dir: &Path) -> Result<(), String> {
+    let relative = dir.strip_prefix(workspace_root).map_err(|error| {
+        format!(
+            "conformance inventory directory {} is outside workspace root {}: {error}",
+            dir.display(),
+            workspace_root.display()
+        )
+    })?;
+    let mut current = workspace_root.to_path_buf();
+    validate_real_conformance_directory(&current)?;
+    for component in relative.components() {
+        let std::path::Component::Normal(segment) = component else {
+            return Err(format!(
+                "conformance inventory directory must be workspace-relative and normalized: {}",
+                dir.display()
+            ));
+        };
+        current.push(segment);
+        validate_real_conformance_directory(&current)?;
+    }
+    Ok(())
+}
+
+fn validate_real_conformance_directory(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| format!("inspect conformance inventory {}: {error}", path.display()))?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!(
+            "conformance inventory directory contains a symlink: {}",
+            path.display()
+        ));
+    }
+    if !metadata.is_dir() {
+        return Err(format!(
+            "conformance inventory path must be a directory: {}",
+            path.display()
+        ));
+    }
+    Ok(())
+}
+
+fn collect_conformance_vector_paths(
+    workspace_root: &Path,
+    dir: &Path,
+    paths: &mut Vec<PathBuf>,
+) -> Result<(), String> {
+    validate_conformance_directory(workspace_root, dir)?;
     let read_dir = match fs::read_dir(dir) {
         Ok(read_dir) => read_dir,
         Err(e) => return Err(format!("read dir {}: {e}", dir.display())),
     };
-    let mut entries = read_dir.filter_map(Result::ok).collect::<Vec<_>>();
+    let mut entries = read_dir
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("read dir {}: {error}", dir.display()))?;
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
         let path = entry.path();
-        if path.is_dir() {
-            collect_conformance_vector_paths(&path, paths)?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("inspect conformance entry {}: {error}", path.display()))?;
+        if file_type.is_symlink() {
+            return Err(format!(
+                "conformance inventory entry must not be a symlink: {}",
+                path.display()
+            ));
+        }
+        if file_type.is_dir() {
+            collect_conformance_vector_paths(workspace_root, &path, paths)?;
+        } else if !file_type.is_file() {
+            return Err(format!(
+                "conformance inventory entry must be a regular file or a directory: {}",
+                path.display()
+            ));
         } else if path.extension().and_then(|ext| ext.to_str()) == Some("json") {
             paths.push(path);
         }
@@ -4586,7 +4650,7 @@ fn validate_all_conformance_vectors(
         return validate_missing_conformance_vectors(workspace_root, &vectors_dir);
     }
     let mut paths = Vec::new();
-    collect_conformance_vector_paths(&vectors_dir, &mut paths)?;
+    collect_conformance_vector_paths(workspace_root, &vectors_dir, &mut paths)?;
     if paths.is_empty() {
         return Err(format!(
             "conformance vectors directory {} must contain JSON vectors",
@@ -4861,6 +4925,7 @@ fn validate_knowledge_conformance_vector_inventory(workspace_root: &Path) -> Res
     ]);
     let mut paths = Vec::new();
     collect_conformance_vector_paths(
+        workspace_root,
         &workspace_root.join("contracts/conformance/vectors/knowledge"),
         &mut paths,
     )?;
