@@ -1049,17 +1049,55 @@ fn read_bounded_prototype_input(
     display_path: &str,
     max_file_bytes: u64,
 ) -> Result<String, String> {
-    let file = fs::File::open(path)
-        .map_err(|error| format!("open prototype guard input {display_path}: {error}"))?;
-    let mut bytes = Vec::new();
-    file.take(max_file_bytes + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("read prototype guard input {display_path}: {error}"))?;
-    if bytes.len() as u64 > max_file_bytes {
-        return Err(format!(
-            "prototype guard input exceeds {max_file_bytes} bytes: {display_path}"
-        ));
-    }
+    #[cfg(unix)]
+    let bytes = {
+        use crate::safe_artifact_io::{ArtifactIoFailureKind, LimitKind};
+
+        crate::safe_artifact_io::read_regular_path(path, max_file_bytes).map_err(|error| {
+            match error.kind() {
+                ArtifactIoFailureKind::LimitExceeded(LimitKind::FileBytes) => format!(
+                    "prototype guard input exceeds {max_file_bytes} bytes: {display_path}"
+                ),
+                ArtifactIoFailureKind::InvalidObject => format!(
+                    "prototype guard input must be a regular single-link file without linked path components: {display_path}"
+                ),
+                _ => format!("admit prototype guard input {display_path}: {error}"),
+            }
+        })?
+    };
+    #[cfg(not(unix))]
+    let bytes = {
+        let metadata = fs::symlink_metadata(path)
+            .map_err(|error| format!("inspect prototype guard input {display_path}: {error}"))?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(format!(
+                "prototype guard input must be a regular non-symlink file: {display_path}"
+            ));
+        }
+        let file = fs::File::open(path)
+            .map_err(|error| format!("open prototype guard input {display_path}: {error}"))?;
+        if !file
+            .metadata()
+            .map_err(|error| {
+                format!("inspect opened prototype guard input {display_path}: {error}")
+            })?
+            .is_file()
+        {
+            return Err(format!(
+                "prototype guard input must be a regular file: {display_path}"
+            ));
+        }
+        let mut bytes = Vec::new();
+        file.take(max_file_bytes + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|error| format!("read prototype guard input {display_path}: {error}"))?;
+        if bytes.len() as u64 > max_file_bytes {
+            return Err(format!(
+                "prototype guard input exceeds {max_file_bytes} bytes: {display_path}"
+            ));
+        }
+        bytes
+    };
     String::from_utf8(bytes)
         .map_err(|error| format!("prototype guard input is not UTF-8 {display_path}: {error}"))
 }
@@ -1108,6 +1146,11 @@ fn collect_prototype_inputs(
         return Ok(());
     }
     if !metadata.is_dir() {
+        if is_prototype_text_input(path, extensions, extensionless_names) {
+            return Err(format!(
+                "prototype guard input must be a regular file: {relative}"
+            ));
+        }
         return Ok(());
     }
     let entries = fs::read_dir(path)
@@ -2564,3 +2607,7 @@ description = "bounded pattern"
         let _ = fs::remove_dir_all(root);
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "hygiene/prototype_input_tests.rs"]
+mod prototype_input_tests;
