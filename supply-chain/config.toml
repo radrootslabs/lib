@@ -396,8 +396,9 @@ version = "0.9.1"
 criteria = ["crypto-reviewed", "network-parser-reviewed"]
 
 [[exemptions.chacha20]]
-version = "0.10.0"
+version = "0.10.2"
 criteria = "safe-to-deploy"
+notes = "Version-specific exemption after replacing yanked 0.10.0. Full independent crate review remains outstanding; this exemption does not claim one."
 
 [[exemptions.chacha20poly1305]]
 version = "0.10.1"
@@ -568,8 +569,9 @@ version = "0.7.10"
 criteria = "crypto-reviewed"
 
 [[exemptions.der]]
-version = "0.8.0"
+version = "0.8.2"
 criteria = "safe-to-deploy"
+notes = "Version-specific exemption after replacing yanked 0.8.0. Full independent crate review remains outstanding; this exemption does not claim one."
 
 [[exemptions.der-parser]]
 version = "10.0.0"
@@ -1690,16 +1692,18 @@ version = "1.1.4"
 criteria = "secret-handling-reviewed"
 
 [[exemptions.rustls]]
-version = "0.23.37"
+version = "0.23.46"
 criteria = "network-parser-reviewed"
+notes = "Version-specific exemption after RUSTSEC-2026-0346 through RUSTSEC-2026-0349. Full independent crate review remains outstanding; this exemption does not claim one."
 
 [[exemptions.rustls-pki-types]]
 version = "1.14.0"
 criteria = "network-parser-reviewed"
 
 [[exemptions.rustls-webpki]]
-version = "0.103.13"
+version = "0.103.15"
 criteria = "network-parser-reviewed"
+notes = "Version-specific TLS dependency policy exemption. Full independent crate review remains outstanding; this exemption does not claim one."
 
 [[exemptions.rustversion]]
 version = "1.0.22"
