@@ -1,6 +1,35 @@
 schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
+
+[[deviation]]
+id = "RCRV1-DEV-040"
+date = "2026-10-15"
+status = "closed"
+approval = "The user approved the complete shared SDK refactor, exact stable and MSRV Rust 1.99.0 across active inputs, and all local verified implementation checkpoints. Publication and host toolchain removal remain separately unauthorized."
+affected_steps = ["030", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy", "contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy"]
+source_evidence = [
+  "The active development selector already chooses1.99.0, but Cargo/catalog MSRV and target qualification still select1.97.1; architecture and catalog guards reject the approved new minimum.",
+  "The approved shared_sdk_refactor.v1 decision requires exact stable/MSRV1.99.0 and preserves historical receipts and dedicated nightly/SP1 identities. ReleaseV1 and original consolidation baselines are immutable history, not the active successor compiler minimum.",
+]
+replacement_action = "Apply the approved current minimum to Cargo, catalog and target qualification; distinguish it from the unchanged frozenReleaseV1 compiler identity in architecture/public-metadata admission. Share the exact current compiler policy among those validators, reject old/floating compiler drift, avoid duplicate identical compiler runs, and regenerate only current catalog projections through their owning producer. Keep all imported/native provenance, dependencies, frozen specs, original receipts and unrelated source unchanged."
+verification = [
+  "Validate the prospective deviation before implementation. Bind existing architecture/catalog/target test purposes and exact original source under the retained-test register; keep all existing tests and add current-minimum/frozen-history denial controls.",
+  "Retain actual focused unchanged-guard failures for the new policy cases, then prove the same source cases pass with current compiler/source changes. Do not reinterpret frozen history or the prior MSRV PASS.",
+  "Run exact1.99 locked all-feature/all-target xtask check/tests, strictClippy, formatting, owning catalog write/check, architecture and contract validation. Prove unchanged Cargo.lock/package identities and original frozen artifacts; inspect the exact generated delta before a local commit.",
+]
+unresolved_risk = "This contained Lib policy migration does not qualify all native/WASM/iOS/browser products, source-lock/artifact generators, other capsule or root consumers, acquisition images/Nix inputs, final supported matrix, publication/adoption or host removal. Those remain required in the owning030/130units."
+normative_architecture_change = true
+adr_required = true
+
+closure_evidence = [
+  "The prospective deviation passed the existing architecture command before implementation. Four focused current-minimum/history/target cases fail against unchanged policy. All four exact test-function bodies remain byte-identical through green qualification; no existing test is removed or newly ignored.",
+  "Current Cargo/catalog/MSRV and target qualification now require exact1.99.0, sharing the current compiler constant with standalone target admission. Architecture independently checks the unchanged originalReleaseV1 minimum1.97.1; public package metadata uses the successor current minimum. Identical current/MSRV compiler lanes execute once.",
+  "Exact Rust1.99.0 all-feature/all-target xtask checking and603passing tests, strictClippy, formatting, owning catalog write/check, architecture and complete contract validation passed locally. The same two pre-existing canonical native/WASM generator tests remain ignored. Actual metadata shows all51workspace packages at1.99.0/edition2024; the installed compiler release and commit were captured.",
+  "Cargo.lock, the exact frozenReleaseV1 artifact set, original consolidation baseline/steps, current selector components/target and all51catalog package/provenance/dependency identities remain unchanged. Source-owned generation changes only the catalog SHA in three current projections. Other stable inputs, acquisition, source-lock/artifact emitters, actual whole product matrix, final consumer adoption and host removal remain open in030/130. Final closed-deviation architecture/source review is required before local commit.",
+]
+
 [[deviation]]
 id = "RCRV1-DEV-039"
 date = "2026-10-15"

@@ -12,6 +12,9 @@ mod decision_package;
 mod dependency_boundary;
 mod retired_compatibility;
 
+pub(crate) const STABLE_TOOLCHAIN: &str = "1.99.0";
+const FROZEN_V1_MSRV: &str = "1.97.1";
+
 const DEVIATIONS_RELATIVE: &str = "contracts/architecture/deviations.toml";
 const ARCHITECTURE_RELATIVE: &str = "contracts/crates/release_v1/radroots_crates_release_v1.toml";
 const ARCHITECTURE_ID: &str = "radroots.crates.release.v1";
@@ -214,12 +217,13 @@ fn validate_workspace_toolchain(
             manifest.workspace.resolver, architecture.resolver
         ));
     }
-    if manifest.workspace.package.rust_version != architecture.rust_version
-        || architecture.rust_version != "1.97.1"
-    {
+    if architecture.rust_version != FROZEN_V1_MSRV {
+        return Err("frozen release-v1 compiler identity must remain unchanged".to_owned());
+    }
+    if manifest.workspace.package.rust_version != STABLE_TOOLCHAIN {
         return Err(format!(
-            "workspace rust-version {} must match architecture rust_version {}",
-            manifest.workspace.package.rust_version, architecture.rust_version
+            "workspace rust-version {} must match current minimum {STABLE_TOOLCHAIN}",
+            manifest.workspace.package.rust_version
         ));
     }
     let workspace_package = &manifest.workspace.package;
@@ -306,10 +310,10 @@ fn validate_workspace_toolchain(
         .get("toolchain")
         .and_then(|value| value.get("channel"))
         .and_then(toml::Value::as_str);
-    if channel != Some("1.99.0") {
-        return Err(
-            "rust-toolchain.toml channel must match development compiler 1.99.0".to_owned(),
-        );
+    if channel != Some(STABLE_TOOLCHAIN) {
+        return Err(format!(
+            "rust-toolchain.toml channel must match current compiler {STABLE_TOOLCHAIN}"
+        ));
     }
     Ok(())
 }
@@ -394,7 +398,7 @@ fn validate_public_package_metadata(
             package,
             "rust-version",
             &workspace.workspace.package.rust_version,
-            &architecture.rust_version,
+            STABLE_TOOLCHAIN,
             name,
         )?;
         validate_public_manifest_field(
@@ -1290,7 +1294,7 @@ adr_required = false
 
     fn complete_workspace_manifest(members: &str) -> String {
         format!(
-            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.97.1\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n\n[workspace.lints.rust]\nunsafe_code = \"deny\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"deny\"\n\n[workspace.lints.clippy]\ndbg_macro = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n"
+            "[workspace]\nmembers = [{members}]\nresolver = \"3\"\n\n[workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\nrust-version = \"1.99.0\"\nlicense = \"MIT OR Apache-2.0\"\nrepository = \"https://github.com/radrootslabs/sdk\"\nhomepage = \"https://radroots.org\"\nreadme = \"README\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\n\n[workspace.metadata.radroots.public-package]\nversion = \"0.1.0\"\nauthors = [\"Tyson Lupul <tyson@radroots.org>\"]\nreadme = \"README.md\"\n\n[workspace.lints.rust]\nunsafe_code = \"deny\"\n\n[workspace.lints.rustdoc]\nbroken_intra_doc_links = \"deny\"\n\n[workspace.lints.clippy]\ndbg_macro = \"deny\"\ntodo = \"deny\"\nunimplemented = \"deny\"\n"
         )
     }
 
@@ -1344,14 +1348,14 @@ adr_required = false
         }
         fs::write(
             root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"crates/a\", \"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.97.1\"\n",
+            "[workspace]\nmembers = [\"crates/a\", \"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.99.0\"\n",
         )
         .expect("write complete workspace");
         validate_workspace_members(&root).expect("complete membership");
 
         fs::write(
             root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.97.1\"\n",
+            "[workspace]\nmembers = [\"tools/xtask\"]\nresolver = \"3\"\n\n[workspace.package]\nrust-version = \"1.99.0\"\n",
         )
         .expect("write incomplete workspace");
         let error = validate_workspace_members(&root).expect_err("missing member must fail");
@@ -1416,8 +1420,26 @@ adr_required = false
             "[toolchain]\nchannel = \"1.99.0\"\n",
         )
         .expect("write toolchain");
-        let architecture = architecture();
-        validate_workspace_toolchain(&root, &architecture).expect("exact toolchain policy");
+        let mut architecture = architecture();
+        assert_eq!(architecture.rust_version, "1.97.1");
+        validate_workspace_toolchain(&root, &architecture).expect("exact current toolchain policy");
+
+        for minimum in ["1.97.1", "1.98.0", "stable", "1.100.0"] {
+            let manifest = complete_workspace_manifest("").replace("1.99.0", minimum);
+            fs::write(root.join("Cargo.toml"), manifest).expect("write wrong current minimum");
+            assert!(
+                validate_workspace_toolchain(&root, &architecture).is_err(),
+                "accepted wrong current minimum {minimum}"
+            );
+        }
+        fs::write(root.join("Cargo.toml"), complete_workspace_manifest(""))
+            .expect("restore current minimum");
+        architecture.rust_version = "1.99.0".to_owned();
+        assert!(
+            validate_workspace_toolchain(&root, &architecture).is_err(),
+            "accepted relabeled frozen release minimum"
+        );
+        architecture.rust_version = "1.97.1".to_owned();
 
         fs::write(
             root.join("rust-toolchain.toml"),

@@ -1,4 +1,4 @@
-use std::{fs, path::Path, process::Command};
+use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use serde::Deserialize;
 
@@ -32,7 +32,10 @@ struct CatalogPackage {
 
 pub fn run(workspace_root: &Path) -> Result<(), String> {
     let (matrix, packages) = load(workspace_root)?;
-    for toolchain in [&matrix.msrv_toolchain, &matrix.current_toolchain] {
+    for toolchain in [&matrix.msrv_toolchain, &matrix.current_toolchain]
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+    {
         run_command(
             workspace_root,
             "rustup",
@@ -105,10 +108,13 @@ fn validate(matrix: &TargetMatrix) -> Result<(), String> {
             matrix.schema_version
         ));
     }
-    if matrix.msrv_toolchain != "1.97.1" || matrix.current_toolchain != "1.99.0" {
-        return Err(
-            "target matrix must retain MSRV 1.97.1 and development compiler 1.99.0".to_owned(),
-        );
+    if matrix.msrv_toolchain != crate::architecture::STABLE_TOOLCHAIN
+        || matrix.current_toolchain != crate::architecture::STABLE_TOOLCHAIN
+    {
+        return Err(format!(
+            "target matrix must select exact current/MSRV compiler {}",
+            crate::architecture::STABLE_TOOLCHAIN
+        ));
     }
     let expected = [
         (
@@ -193,7 +199,7 @@ mod tests {
             .and_then(std::path::Path::parent)
             .expect("workspace root");
         let (matrix, packages) = load(root).expect("target matrix");
-        assert_eq!(matrix.msrv_toolchain, "1.97.1");
+        assert_eq!(matrix.msrv_toolchain, "1.99.0");
         assert_eq!(matrix.current_toolchain, "1.99.0");
         assert_eq!(matrix.operating_system.len(), 2);
         assert_eq!(
@@ -214,7 +220,7 @@ mod tests {
     fn unsupported_production_targets_are_rejected() {
         let mut matrix = TargetMatrix {
             schema_version: 1,
-            msrv_toolchain: "1.97.1".to_owned(),
+            msrv_toolchain: "1.99.0".to_owned(),
             current_toolchain: "1.99.0".to_owned(),
             operating_system: vec![
                 OperatingSystem {
@@ -236,6 +242,11 @@ mod tests {
             assert!(validate(&matrix).is_err(), "accepted {toolchain}");
         }
         matrix.current_toolchain = "1.99.0".to_owned();
+        for toolchain in ["stable", "1.97.1", "1.98.0", "1.100.0"] {
+            matrix.msrv_toolchain = toolchain.to_owned();
+            assert!(validate(&matrix).is_err(), "accepted minimum {toolchain}");
+        }
+        matrix.msrv_toolchain = "1.99.0".to_owned();
         for (name, target) in [
             ("windows", "x86_64-pc-windows-gnu"),
             ("macos", "x86_64-apple-darwin"),

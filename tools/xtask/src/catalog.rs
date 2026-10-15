@@ -303,7 +303,7 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         || catalog.architecture != RELEASE_ID
         || catalog.consolidation != CONSOLIDATION_ID
         || catalog.version != VERSION
-        || catalog.rust_version != "1.97.1"
+        || catalog.rust_version != crate::architecture::STABLE_TOOLCHAIN
         || catalog.edition != "2024"
         || catalog.resolver != "3"
         || catalog.public_package_count != 19
@@ -1744,6 +1744,17 @@ mod tests {
             .retired_packages
             .retain(|name| name != "radroots_mobile_core");
         assert!(validate_catalog(&reactivated).is_err());
+    }
+
+    #[test]
+    fn catalog_rejects_obsolete_and_floating_compiler_minimum() {
+        let mut catalog = checked_in_catalog();
+        catalog.rust_version = "1.99.0".to_owned();
+        validate_catalog(&catalog).expect("exact current compiler minimum");
+        for minimum in ["1.97.1", "1.98.0", "stable", "1.100.0"] {
+            catalog.rust_version = minimum.to_owned();
+            assert!(validate_catalog(&catalog).is_err(), "accepted {minimum}");
+        }
     }
 
     #[test]

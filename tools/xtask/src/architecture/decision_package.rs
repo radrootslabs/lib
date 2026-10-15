@@ -240,8 +240,8 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
 fn validate_ownership(p: &Policy) -> Result<(), String> {
     require(
         p.toolchain.edition == "2024"
-            && p.toolchain.stable == "1.99.0"
-            && p.toolchain.msrv == "1.99.0"
+            && p.toolchain.stable == super::STABLE_TOOLCHAIN
+            && p.toolchain.msrv == super::STABLE_TOOLCHAIN
             && p.toolchain.historical_receipts_immutable
             && p.toolchain.dedicated_nightly_and_sp1_separate,
         "exact compiler target drift",
