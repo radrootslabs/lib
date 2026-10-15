@@ -19,6 +19,31 @@ consumes source-owned generators and artifacts. Its target package graph is
 prospective; implementation, compiler migration and qualification require
 their actual source-bound checks before acceptance.
 
+## Source and behavior provenance
+
+Reusable application behavior is independently reimplemented in Lib under
+the shared SDK decision. Referencing Tera's GPL application behavior does not
+authorize copying or translating its implementation, test bodies, fixtures or
+generated derivatives into differently licensed packages. Organizational
+ownership and a Cargo license field do not establish a separate rights grant.
+Preserve the original source and notices; retain each meaningful test purpose
+through independently authored successor cases before removing its old owner.
+
+For an affected implementation, record the exact source repository, revision,
+path, declared license, retained behavior and successor test. Preserve imported
+catalog provenance and existing third-party notices. New repository-native
+packages use the catalog's native introduction-tree mechanism. Neither a
+catalog entry nor a rewritten implementation claims rights to relicense its
+references.
+
+Retained optional capabilities, including mesh, Reticulum, SimpleX, NostrDB
+and replica support, keep their source and proving obligations. Before exposing
+them in a supported artifact, review the actual target and feature dependency
+closure, upstream material and redistribution notices. Resolve incompatible or
+unverified reuse at its owner; do not discard the approved capability or infer
+dependency licensing from the workspace license. Generate artifact notices
+from their source-owned inputs and bind them to the actual shipped bytes.
+
 ## Workflow
 
 1. Inspect repository status and the current source authority.
