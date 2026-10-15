@@ -1,6 +1,6 @@
 # Radroots Core Libraries - Agent Instructions
 
-**For repository overview and setup, see [README](README). For repository rules, see [AGENTS.md](AGENTS.md).**
+**For repository overview and setup, see [README.md](README.md). For repository rules, see [AGENTS.md](AGENTS.md).**
 
 This document contains detailed operational instructions for contributors and coding agents working on development, testing, and releases in the Radroots Core Libraries repository.
 
@@ -43,7 +43,7 @@ Before editing code:
 
 - Read `AGENTS.md`.
 - Read this file.
-- Read `README` when the change touches workflow or public surfaces.
+- Read `README.md` when the change touches workflow or public surfaces.
 - When preserving deferred Nix behavior, read `flake.nix` and the relevant
   implementation files under `build/nix/`, but do not install, invoke, or
   require Nix as part of current qualification.
@@ -87,6 +87,14 @@ Use this mental model:
   - typed repo-owned automation used by canonical lanes
 
 Do not duplicate contract knowledge between crates when `contracts/`, `contracts/conformance/`, or `tools/xtask` already owns it.
+
+The approved successor authority is
+`contracts/architecture/decisions/shared_sdk_refactor.v1.json`. Shared reusable
+semantics and execution belong in Lib, with `radroots` as the facade; the SDK
+repository consumes the owning generators and artifacts. Its complete actor,
+host, budget and provenance requirements govern direct replacement. Target
+metadata does not qualify current APIs, artifacts, compiler migration or a
+consumer. Preserve original release evidence and bind actual changed inputs.
 
 Do not add or retain tracked `docs/**`, `.github/**`, or `.act/**`. Root
 `README.md`, `AGENTS.md`, `AGENT_INSTRUCTIONS.md`, conventional public project

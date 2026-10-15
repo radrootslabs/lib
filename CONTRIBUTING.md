@@ -10,10 +10,14 @@ reviewable. Before editing, read these files in order:
    crate-surface work
 5. the affected manifests, implementation, contracts, and tests
 
-The release-v1 architecture identifier is `radroots.crates.release.v1`. This
-repository owns its first 17 public packages, from `radroots_core` through
-`radroots_geonames`; the standalone SDK repository owns `radroots_sdk` and
-`radroots`.
+Release V2 records the nineteen current public Lib packages, including
+`radroots_sdk` and `radroots`. The earlier `radroots.crates.release.v1`
+repository split remains immutable history. The approved successor is
+`contracts/architecture/decisions/shared_sdk_refactor.v1.json`: Lib owns shared
+semantics and execution, `radroots` remains the facade, and the SDK repository
+consumes source-owned generators and artifacts. Its target package graph is
+prospective; implementation, compiler migration and qualification require
+their actual source-bound checks before acceptance.
 
 ## Workflow
 

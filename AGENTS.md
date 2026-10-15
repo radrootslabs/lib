@@ -22,6 +22,13 @@ This file exists for compatibility with tools that look for AGENTS.md.
   specifications, decisions, runbooks, and qualification evidence belong
   under the parent monorepo's `docs/oss/lib/**` authority and must never become
   a standalone build, test, package, or release input.
+- The approved shared SDK target is
+  `contracts/architecture/decisions/shared_sdk_refactor.v1.json`.
+  Lib owns shared domain, execution, persistence, signing, transport and recovery;
+  `radroots` is the ordinary facade. The SDK repository consumes source-owned
+  generators and artifacts. Its target graph, roles, limits and host matrix are
+  prospective requirements, not current implementation or qualification claims.
+  Preserve the exact source and proving inputs at each migration checkpoint.
 - The pre-implementation service-event reservation is
   `contracts/architecture/decisions/services_hardening_events.v1.json`.
   Service-event source, registry, generated, and consumer work must implement
@@ -76,7 +83,8 @@ This file exists for compatibility with tools that look for AGENTS.md.
   shell, NixOS-module, and Nix-produced OCI outputs are explicitly deferred
   and are not qualified by that contract.
 - Current source and tests are implementation evidence. They do not silently
-  override `radroots.crates.release.v1`.
+  override machine contracts. Release V2 preserves Release V1 as historical
+  authority; the approved shared SDK decision governs the successor target.
 - Record any evidence-based plan deviation in
   `contracts/architecture/deviations.toml` before proceeding. Validate it with
   `cargo xtask architecture`; a normative architecture exception also requires
@@ -109,7 +117,7 @@ This file exists for compatibility with tools that look for AGENTS.md.
 
 Before editing code:
 
-- Read this file, `AGENT_INSTRUCTIONS.md`, and `README`.
+- Read this file, `AGENT_INSTRUCTIONS.md`, and `README.md`.
 - When preserving deferred Nix behavior, read `flake.nix` and the relevant
   implementation files under `build/nix/`, but do not install, invoke, or
   require Nix as part of current qualification.
@@ -144,9 +152,11 @@ Before editing code:
 
 ## 6. Rust engineering rules
 
-- Use Rust `1.99.0` for development, retaining minimum supported Rust `1.97.1`,
-  edition `2024`, resolver `3`, and workspace dependency
-  versions from the root `Cargo.toml` after the release-v1 workspace cutover.
+- Use exact stable Rust and MSRV `1.99.0`, edition `2024`, and resolver `3` as
+  the approved successor target. Update active selectors, compiler acquisition,
+  validators, generators and qualification together; the existing workspace
+  metadata has not been declared migrated by adopting the target decision.
+  Frozen receipts and dedicated nightly/SP1 toolchains retain their identities.
 - Preserve intended `no_std` portability; gate `std`, wasm, and runtime-specific behavior explicitly.
 - Keep core logic functional and composable: prefer pure transformations, explicit state, and narrow side-effect boundaries.
 - Prefer enums, newtypes, and typed domain models over stringly APIs, boolean mode switches, or loosely typed maps.
@@ -177,9 +187,11 @@ Before editing code:
 - Preserve deferred flake expressions as unqualified compatibility inputs;
   do not use their evaluation or outputs as evidence until an accepted
   contract explicitly reactivates them.
-- This repository owns packages 1-17 in `radroots.crates.release.v1`, from
-  `radroots_core` through `radroots_geonames`. `radroots_sdk` and `radroots`
-  remain owned by the standalone SDK repository.
+- `contracts/crates/release.v2.toml` records the nineteen current public Lib
+  packages, including `radroots_sdk` and `radroots`. Release V1's earlier
+  repository split remains history. The approved successor replaces old
+  SDK/trade/model boundaries directly and retains ancillary capabilities;
+  target package declarations do not create implemented or published packages.
 - Public packages have no dependency on private Radroots packages. Every
   Radroots dependency edge points downward in the approved graph.
 - Domain and protocol packages do not own storage, live networking, host UI,
