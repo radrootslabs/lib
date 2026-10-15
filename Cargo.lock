@@ -2916,6 +2916,8 @@ dependencies = [
  "radroots_sdk",
  "radroots_trade",
  "radroots_transport",
+ "serde_json",
+ "toml 0.8.23",
 ]
 
 [[package]]

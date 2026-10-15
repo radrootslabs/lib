@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-039"
+date = "2026-10-15"
+status = "closed"
+approval = "The user approved the complete shared SDK refactor and all remaining local verified checkpoints, including retained ancillary capabilities and direct replacement of incompatible active guards. Publication remains separately unauthorized."
+affected_steps = ["020", "040", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots"]
+source_evidence = [
+  "The complete current radroots package-boundary test rejects every manifest occurrence of reticulum, mesh, simplex, nostrdb or replica. The approved shared_sdk_refactor.v1 target explicitly retains those package families as optional advanced capabilities.",
+  "Current ordinary facade source, normal dependencies and forwarding assertions remain buildable and unchanged. This is an obsolete source-policy restriction, not a reproduced product or network incident. The existing SP1 exclusion and no private dependencies, namespace or wildcard exports remain retained purposes.",
+]
+replacement_action = "Replace only the blanket ancillary vocabulary ban with bounded fixture-level manifest and approved-package admission. Admit the five approved advanced capability families only through declared optional dependencies and explicit feature activation; reject private or unapproved package targets, missing/nonoptional activation and local default activation. Preserve current production features, all other package/API assertions, SP1 separation and actual no-hidden-role-reduction gates. Add only cached test-parser dev dependencies and prove an exact lock delta with no registry package changes."
+verification = [
+  "Validate the prospective deviation before source edits. Map the old forbidden-token assertion to approved optional admission and retained denial cases before replacement; keep all other original test functions and assertions.",
+  "Use disposable in-memory TOML/JSON fixtures only, with no filesystem mutation, network, signer, account, product runtime or meaningful state. Prove the approved optional fixtures fail the faithful old lexical guard and then pass the replacement; malformed/private/nonoptional/default or unapproved cases retain explicit refusal.",
+  "Run Rust1.99.0 scoped formatting, locked all-feature/all-target facade check/test and strict Clippy, standalone architecture/contract, and exact package/checksum/dependency lock comparison. Full supported native/browser feature/default closure and actual capability execution remain separate required gates.",
+]
+unresolved_risk = "This unit governs a local source test and fixture manifests only. It does not implement or qualify any ancillary feature, new SDK API, transport, target graph, browser, compiler migration, package publication or consumer adoption. Other exact old API/feature assertions require their retained-purpose binding and atomic updates with actual successor source."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Prospective architecture validation passed before the test source or dependency change. A faithful extraction of the original lexical rule plus the initial twelve fixtures yields eight failures and eight passing controls: all five approved optional families are denied, while malformed/private/oversize input is accepted. This is a source-policy mismatch, not a product incident.",
+  "The manifest-aware guard uses the approved target owner graph, explicit optional activation, private/unapproved owner and alias refusal, local default feature traversal, bounded parsing and retained SP1 separation. Review added an independent owner-admission case, which failed before arbitrary and tooling-only owners were excluded. The twelve initial fixture functions and builder remain byte-identical; the extra review case is also unchanged through its fix. All four original test functions and their other assertions remain retained.",
+  "Final Rust1.99.0 scoped formatting, locked all-feature/all-target facade checking, all26facade tests with zero failures/ignored/filtered cases, strict Clippy, complete workspace formatting, architecture and standalone contract validation passed locally. All17package-boundary cases pass, including13new fixtures. A final closed-deviation architecture check and exact owned source review remain required before commit.",
+  "Normal runtime dependencies, feature definitions, exports and targets are unchanged. Exactly two dev-parser edges were added to the facade lock node; all584package identities/checksums and every other package/edge are unchanged. No ancillary capability, public API, compiler migration, browser/full target closure, package publication, generated artifact or supported consumer adoption is implemented or qualified by this contained test-policy correction. Other old guard purposes remain bound to their actual successor source changes.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-038"
 date = "2026-10-15"
 status = "closed"
