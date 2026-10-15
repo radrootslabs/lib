@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-038"
+date = "2026-10-15"
+status = "closed"
+approval = "The user approved the complete shared SDK clean-break refactor, independent app-behavior reimplementation, exact Rust 1.99.0 and all required local verified implementation checkpoints. Publication remains separately unauthorized."
+affected_steps = ["020", "030", "040", "050", "060", "070", "080", "090", "100", "110", "120", "130", "140"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy", "contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy"]
+source_evidence = [
+  "Current standalone source and exact consumed producer trees have reviewed dispositions. Existing facade, binding, commerce and portability guards describe the prior product and cannot define the approved successor SDK.",
+  "The approved prospective machine decision is contracts/architecture/decisions/shared_sdk_refactor.v1.json. It defines ownership, full buyer/seller shared API, seller-only Tera, supported targets, exact compiler, limits, independent implementation and retained ancillary behavior without asserting current implementation.",
+]
+replacement_action = "Bind the prospective standalone target before changing product code. Implement typed closed contract admission through the existing architecture validator; require the approved roles, target graph, initial values/budgets, browser-local futures, selected executor and protected recovery. Preserve original release artifacts and actual qualification status. Subsequent separately verified checkpoints replace incompatible active guards, compiler inputs, APIs, stores and consumers; no old API alias or publication authority is added."
+verification = [
+  "Validate this prospective deviation with the current standalone architecture command before tooling implementation; retain exact source/lock inputs and the observed result.",
+  "Add meaningful deterministic admission regressions for hidden role reduction, unsupported target/host dependencies, cycles or unknown package edges, unsafe portability, limit drift, premature unassigned-kind authoring and false implementation/publication claims.",
+  "Run exact Rust 1.99.0 formatting, locked all-feature/all-target xtask check and tests, warnings-as-errors Clippy, standalone architecture and contract validation, then review exact source/deviation/contract paths before a local commit.",
+]
+unresolved_risk = "This unit binds prospective scope only. Product APIs, stores, source/generator/consumer replacement, exact compiler acquisition, individual requirement and test maps, protocol/currency provenance, actual supported matrix, final acceptance and publication remain unimplemented or unqualified until their owning checkpoints. No old PASS or public pin is rewritten."
+normative_architecture_change = true
+adr_required = true
+closure_evidence = [
+  "The prospective active deviation and standalone target decision passed the unchanged architecture command before tooling implementation. No product code, package identity, dependency lock, generated output, consumer pin or historical receipt changed in that preparation.",
+  "The existing architecture command now admits the standalone target through bounded regular-source reads and closed typed JSON, validates all41target package identities and dependency closure/cycles, and enforces the approved roles, host matrix, initial budgets, independent implementation, issuance/recovery and blocked unassigned-kind prerequisites. Target metadata explicitly cannot claim implementation, qualification or publication.",
+  "Exact Rust1.99.0 formatting, locked all-feature/all-target xtask checking, all602passing xtask tests with zero failures or filtered cases, strict Clippy, architecture validation and complete standalone contract validation passed locally on macOS arm64. All10new contract-admission tests pass. The same two pre-existing canonical native/WASM generator integration tests remain explicitly ignored; neither their execution nor product/native/browser/device qualification is inferred.",
+  "This closes the contained prospective scope-admission unit only. The successor guard/authority, provenance/test maps, compiler acquisition, actual APIs/stores/hosts, generated and consumer replacement, current advisory/resource/license review, full software/device matrix and final adoption remain required at their own checkpoints. The new target graph is not current Cargo metadata, no old PASS is rewritten, and final closed-deviation architecture/source review remains required before the local commit.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-037"
 date = "2026-10-13"
 status = "closed"

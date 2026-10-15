@@ -1,0 +1,575 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots.shared_sdk.refactor.v1",
+  "state": "approved_target_implementation_pending",
+  "publication_authorized": false,
+  "toolchain": {
+    "edition": "2024",
+    "stable": "1.99.0",
+    "msrv": "1.99.0",
+    "historical_receipts_immutable": true,
+    "dedicated_nightly_and_sp1_separate": true
+  },
+  "ownership": {
+    "shared_repository": "https://github.com/radrootslabs/lib",
+    "ordinary_facade": "radroots",
+    "native_bindings": "radroots_ffi",
+    "browser_artifact": "radroots_browser",
+    "sdk_repository_role": "generated_artifact_consumer",
+    "app_owns_shared_semantics": false
+  },
+  "roles": {
+    "cli": [
+      "buyer",
+      "seller"
+    ],
+    "tera": [
+      "seller"
+    ],
+    "browser": [
+      "buyer",
+      "seller"
+    ],
+    "generic_ffi": [
+      "buyer",
+      "seller"
+    ]
+  },
+  "deferred_application_migrations": [
+    "harvestcircle",
+    "applesauce",
+    "kotlin_application"
+  ],
+  "retained_capability_families": [
+    "farm",
+    "social",
+    "calendar",
+    "media",
+    "places",
+    "knowledge",
+    "communication",
+    "optional_attestation"
+  ],
+  "independence": {
+    "hosted_account_required": false,
+    "farm_hierarchy_required": false,
+    "rhi_required": false,
+    "payment_implementation_in_scope": false,
+    "seller_owner_executor_optional_to_single_device": true
+  },
+  "provenance": {
+    "app_behavior_implementation": "independent_reimplementation",
+    "retain_source_provenance": true,
+    "retain_notices": true,
+    "map_meaningful_removed_tests_before_removal": true,
+    "relabel_app_source_license": false
+  },
+  "targets": {
+    "native": [
+      "aarch64-apple-darwin",
+      "x86_64-unknown-linux-gnu"
+    ],
+    "apple_artifacts": [
+      "aarch64-apple-ios",
+      "aarch64-apple-ios-sim"
+    ],
+    "browsers": [
+      "chromium",
+      "firefox",
+      "webkit"
+    ],
+    "browser_contexts": [
+      "main_thread",
+      "dedicated_worker"
+    ],
+    "generic_binding_languages": [
+      "swift",
+      "kotlin"
+    ],
+    "node_ssr_import_required": true,
+    "full_node_client_in_scope": false,
+    "actual_beta_iphone_required": true
+  },
+  "portability": {
+    "native_futures": "send",
+    "browser_futures": "local",
+    "unsafe_send_bridge_allowed": false,
+    "portable_core_has_native_hosts": false,
+    "memory_store_firm_stock_allowed": false,
+    "nostr_forces_media": false,
+    "global_no_std_promise": false
+  },
+  "packages": [
+    {
+      "key": "identity",
+      "package": "radroots_identity",
+      "directory": "crates/identity",
+      "dependencies": [],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "domain",
+      "package": "radroots_domain",
+      "directory": "crates/domain",
+      "dependencies": [
+        "identity"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "protocol",
+      "package": "radroots_protocol",
+      "directory": "crates/protocol",
+      "dependencies": [
+        "domain",
+        "identity"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "signing",
+      "package": "radroots_signing",
+      "directory": "crates/signing",
+      "dependencies": [
+        "identity",
+        "protocol"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "storage",
+      "package": "radroots_storage",
+      "directory": "crates/storage",
+      "dependencies": [
+        "domain",
+        "protocol"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "transport",
+      "package": "radroots_transport",
+      "directory": "crates/transport",
+      "dependencies": [
+        "protocol",
+        "identity"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "execution",
+      "package": "radroots_execution",
+      "directory": "crates/execution",
+      "dependencies": [
+        "domain",
+        "protocol",
+        "signing",
+        "storage",
+        "transport"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "storage_sqlite",
+      "package": "radroots_storage_sqlite",
+      "directory": "crates/storage_sqlite",
+      "dependencies": [
+        "storage",
+        "domain"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "storage_indexeddb",
+      "package": "radroots_storage_indexeddb",
+      "directory": "crates/storage_indexeddb",
+      "dependencies": [
+        "storage",
+        "domain"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "transport_nostr",
+      "package": "radroots_transport_nostr",
+      "directory": "crates/transport_nostr",
+      "dependencies": [
+        "transport",
+        "protocol"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "transport_nostr_native",
+      "package": "radroots_transport_nostr_native",
+      "directory": "crates/transport_nostr_native",
+      "dependencies": [
+        "transport_nostr"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "transport_nostr_browser",
+      "package": "radroots_transport_nostr_browser",
+      "directory": "crates/transport_nostr_browser",
+      "dependencies": [
+        "transport_nostr"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "secrets",
+      "package": "radroots_secrets",
+      "directory": "crates/secrets",
+      "dependencies": [
+        "identity"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "nostr_connect",
+      "package": "radroots_nostr_connect",
+      "directory": "crates/nostr_connect",
+      "dependencies": [
+        "signing",
+        "transport"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "blossom",
+      "package": "radroots_blossom",
+      "directory": "crates/blossom",
+      "dependencies": [
+        "identity",
+        "signing"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "geonames",
+      "package": "radroots_geonames",
+      "directory": "crates/geonames",
+      "dependencies": [
+        "domain"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "nostrdb",
+      "package": "radroots_nostrdb",
+      "directory": "crates/nostrdb",
+      "dependencies": [
+        "storage",
+        "protocol"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "sql_core",
+      "package": "radroots_sql_core",
+      "directory": "crates/sql_core",
+      "dependencies": [],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "replica_schema",
+      "package": "radroots_replica_schema",
+      "directory": "crates/replica_schema",
+      "dependencies": [
+        "domain"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "replica_store",
+      "package": "radroots_replica_store",
+      "directory": "crates/replica_store",
+      "dependencies": [
+        "replica_schema",
+        "sql_core"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "replica_sync",
+      "package": "radroots_replica_sync",
+      "directory": "crates/replica_sync",
+      "dependencies": [
+        "replica_store",
+        "protocol",
+        "transport"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "runtime_paths",
+      "package": "radroots_runtime_paths",
+      "directory": "crates/runtime_paths",
+      "dependencies": [],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "runtime_distribution",
+      "package": "radroots_runtime_distribution",
+      "directory": "crates/runtime_distribution",
+      "dependencies": [
+        "runtime_paths"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "runtime_manager",
+      "package": "radroots_runtime_manager",
+      "directory": "crates/runtime_manager",
+      "dependencies": [
+        "runtime_paths",
+        "runtime_distribution"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "service_host",
+      "package": "radroots_service_host",
+      "directory": "crates/service_host",
+      "dependencies": [
+        "runtime_paths"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "service_sqlite",
+      "package": "radroots_service_sqlite",
+      "directory": "crates/service_sqlite",
+      "dependencies": [
+        "sql_core",
+        "service_host"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "mesh_agent_proto",
+      "package": "radroots_mesh_agent_proto",
+      "directory": "crates/mesh_agent_proto",
+      "dependencies": [],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "mesh_agent_client",
+      "package": "radroots_mesh_agent_client",
+      "directory": "crates/mesh_agent_client",
+      "dependencies": [
+        "mesh_agent_proto"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "mesh",
+      "package": "radroots_mesh",
+      "directory": "crates/mesh",
+      "dependencies": [
+        "mesh_agent_proto",
+        "mesh_agent_client",
+        "identity"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "transport_reticulum",
+      "package": "radroots_transport_reticulum",
+      "directory": "crates/transport_reticulum",
+      "dependencies": [
+        "transport",
+        "mesh"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "simplex_agent_proto",
+      "package": "radroots_simplex_agent_proto",
+      "directory": "crates/simplex_agent_proto",
+      "dependencies": [],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "simplex_smp_crypto",
+      "package": "radroots_simplex_smp_crypto",
+      "directory": "crates/simplex_smp_crypto",
+      "dependencies": [],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "simplex_smp_proto",
+      "package": "radroots_simplex_smp_proto",
+      "directory": "crates/simplex_smp_proto",
+      "dependencies": [
+        "simplex_smp_crypto"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "simplex_smp_transport",
+      "package": "radroots_simplex_smp_transport",
+      "directory": "crates/simplex_smp_transport",
+      "dependencies": [
+        "simplex_smp_proto"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "simplex_chat_proto",
+      "package": "radroots_simplex_chat_proto",
+      "directory": "crates/simplex_chat_proto",
+      "dependencies": [
+        "simplex_smp_proto"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "simplex_app_store",
+      "package": "radroots_simplex_app_store",
+      "directory": "crates/simplex_app_store",
+      "dependencies": [
+        "simplex_chat_proto",
+        "sql_core"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "radroots",
+      "package": "radroots",
+      "directory": "crates/radroots",
+      "dependencies": [
+        "execution",
+        "storage_sqlite",
+        "transport_nostr_native",
+        "secrets",
+        "nostr_connect",
+        "blossom",
+        "geonames",
+        "replica_sync",
+        "mesh",
+        "simplex_chat_proto"
+      ],
+      "dependency_mode": "target_specific_optional_concrete_hosts"
+    },
+    {
+      "key": "radroots_browser",
+      "package": "radroots_browser",
+      "directory": "crates/radroots_browser",
+      "dependencies": [
+        "execution",
+        "storage_indexeddb",
+        "transport_nostr_browser"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "radroots_ffi",
+      "package": "radroots_ffi",
+      "directory": "crates/radroots_ffi",
+      "dependencies": [
+        "radroots"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "test_fixtures",
+      "package": "radroots_test_fixtures",
+      "directory": "crates/test_fixtures",
+      "dependencies": [
+        "domain",
+        "protocol"
+      ],
+      "dependency_mode": "selected_target_required"
+    },
+    {
+      "key": "xtask",
+      "package": "xtask",
+      "directory": "tools/xtask",
+      "dependencies": [
+        "test_fixtures"
+      ],
+      "dependency_mode": "selected_target_required"
+    }
+  ],
+  "values": {
+    "quantity_coefficient_max": 999999999999,
+    "quantity_scale_max": 6,
+    "count_quantities_integral": true,
+    "money_minor_max": 999999999999999,
+    "currency_exponent_max": 4,
+    "currency_registry": "pinned_supported_registry_with_verified_redistribution",
+    "rounding": "half_even_once_per_net_line_then_checked_sum",
+    "binding_numbers": "exact_decimal_or_integer_strings",
+    "stock_ticks_max": 1000000000000000000,
+    "generation_max": 9223372036854775807
+  },
+  "limits": {
+    "public_event_bytes": 65536,
+    "private_record_bytes": 16384,
+    "complete_rumor_bytes": 24576,
+    "chat_bytes": 4096,
+    "json_depth": 16,
+    "single_profile_tag_bytes": 32768,
+    "order_lines": 32,
+    "listing_options": 16,
+    "parent_records": 8,
+    "read_page_events": 1000,
+    "unknown_quarantine_events_per_scope": 1024,
+    "live_queue_events": 256,
+    "live_queue_bytes": 4194304,
+    "default_relays": 4,
+    "maximum_session_relays": 16,
+    "concurrent_verifications": 4,
+    "delivery_attempts_per_target": 12,
+    "first_issuance_seconds": 120
+  },
+  "execution": {
+    "phases": [
+      "T0",
+      "T1",
+      "S",
+      "T2",
+      "D"
+    ],
+    "selected_executor_required_for_stock": true,
+    "fresh_same_key_cache_can_allocate": false,
+    "shared_route_local_fallback_allowed": false,
+    "effects_inside_stock_transaction": false,
+    "unknown_is_nonspendable": true,
+    "expiry_proves_nonissuance": false,
+    "obtained_evidence_append_only": true,
+    "observation_time_nullable": true,
+    "positive_amendment_hold_before_issuance": true,
+    "negative_amendment_release_at_installation": true,
+    "handover_consumes_once": true,
+    "buyer_receipt_moves_stock": false,
+    "private_causal_heads_use_timestamp_lww": false
+  },
+  "protocol": {
+    "listing_kind": 30402,
+    "chat_rumor_kind": 14,
+    "seal_kind": 13,
+    "gift_wrap_kind": 1059,
+    "commerce_kind": null,
+    "capability_kind": null,
+    "structured_authoring": "blocked_until_qualified_kind_assignment",
+    "independent_vectors_required": true,
+    "duplicate_json_fields_rejected": true
+  },
+  "cutover": {
+    "new_persistent_namespace": true,
+    "protected_export_and_quarantine_required": true,
+    "restore_starts_nonpublishing": true,
+    "unknowns_and_obligations_protected": true,
+    "automatic_legacy_reissue_allowed": false,
+    "meaningful_state_reset_requires_operator_approval": true
+  },
+  "qualification": {
+    "implementation_claimed": false,
+    "software_matrix_executed": false,
+    "device_matrix_executed": false,
+    "final_gate_acceptance_claimed": false
+  }
+}

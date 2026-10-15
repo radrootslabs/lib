@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 mod api_leakage;
 mod core_contract;
+mod decision_package;
 mod dependency_boundary;
 mod retired_compatibility;
 
@@ -170,6 +171,7 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
     api_leakage::validate_policy_catalog(workspace_root, &architecture_packages)?;
     dependency_boundary::validate_policy_catalog(workspace_root, &architecture_packages)?;
     retired_compatibility::validate(workspace_root)?;
+    decision_package::validate(workspace_root)?;
     validate_workspace_toolchain(workspace_root, &architecture)?;
     validate_public_package_metadata(workspace_root, &architecture)?;
     validate_no_production_sibling_paths(workspace_root)?;
