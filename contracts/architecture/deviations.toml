@@ -2,6 +2,21 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-042"
+date = "2026-10-16"
+status = "closed"
+approval = "The user authorizes full current compiler/source-lock integration and verified owning-repository source contributions."
+affected_steps = ["030", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy"]
+source_evidence = ["The current service-source-lock and artifact commands reuse a deferred-only Nix validator. Actual services use the Lib flake and its five helper inputs with a root Crane follow, which that validator refuses."]
+replacement_action = "Share current bounded Nix input admission between source-lock and artifact consumers. Admit the exact helper graph with immutable referenced inputs and one exact Lib selector, reject duplicate/unknown or drifting Lib identity, and preserve historical deferred admission unchanged. Bound metadata remains distinct from executed Nix qualification."
+verification = ["Prove the actual helper input shape and independent source, graph, hash and duplicate refusals with synthetic fixtures.", "Run current locked tooling checks/tests, strict lint, formatting, architecture and contracts; preserve earlier failure records."]
+unresolved_risk = "Input validation alone does not qualify service Nix builds, runtime artifacts or release acceptance."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = ["Current flake helper input admission and independent revision, unknown-field, input, immutable hash, missing-reference, source-selector and duplicate refusals pass. Historical deferred admission and its tests retain their behavior.", "Exact Rust 1.99 checking and all 627 serialized tooling tests pass, with the same two original ignored annotations. Strict Clippy, formatting, architecture and contract validation pass. The initial unused-helper lint failure and a refused overlapping formatter check remain recorded separately."]
+
+[[deviation]]
 id = "RCRV1-DEV-041"
 date = "2026-10-16"
 status = "closed"

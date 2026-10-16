@@ -384,7 +384,7 @@ pub(crate) fn validate_deferred_nix_lock(bytes: &[u8]) -> Result<String, Service
     }
 }
 
-struct NoDuplicateJsonValue(serde_json::Value);
+pub(crate) struct NoDuplicateJsonValue(pub(crate) serde_json::Value);
 
 impl<'de> Deserialize<'de> for NoDuplicateJsonValue {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -479,7 +479,7 @@ impl<'de> Visitor<'de> for NoDuplicateJsonValueVisitor {
     }
 }
 
-fn valid_nix_sha256(value: &str) -> bool {
+pub(crate) fn valid_nix_sha256(value: &str) -> bool {
     let Some(encoded) = value.strip_prefix("sha256-") else {
         return false;
     };

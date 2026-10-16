@@ -14,7 +14,8 @@ use tar::{Builder as TarBuilder, Header as TarHeader};
 use tempfile::TempDir;
 
 use crate::safe_artifact_io::{TarGzipLimits, TraversalLimits};
-use crate::service_source_lock::{LIB_REPOSITORY, validate_deferred_nix_material};
+use crate::service_source_lock::LIB_REPOSITORY;
+use crate::service_source_lock_nix::validate_bound_nix_material;
 use crate::service_source_lock_v4::{
     LOCK_FILENAME, MAX_LOCK_BYTES, PREDECESSOR_LOCK_FILENAMES, RUST_VERSION, ServiceSourceLockV4,
     validate_lib_compiler_inputs, validate_toolchain_bytes,
@@ -923,15 +924,15 @@ fn validate_source_lock_files(
         MAX_SERVICE_FLAKE_LOCK_BYTES,
         ReleaseArtifactError::InvalidSourceLock,
     )?;
-    let evidence = validate_deferred_nix_material(&flake_nix, &flake_lock)
+    let evidence = validate_bound_nix_material(&flake_nix, &flake_lock)
         .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
     let artifact_contract = hash_regular(
         &root.join(source_lock.artifact_contract_path()),
         MAX_TEXT_INPUT_BYTES,
     )
     .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
-    if evidence.lib_revision() == source_lock.revision()
-        && evidence.flake_lock_sha256() == source_lock.flake_lock_sha256()
+    if evidence.revision == source_lock.revision()
+        && evidence.lock_sha256 == source_lock.flake_lock_sha256()
         && artifact_contract.sha256 == source_lock.artifact_contract_sha256()
     {
         Ok(())

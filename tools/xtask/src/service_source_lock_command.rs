@@ -14,9 +14,8 @@ use walkdir::WalkDir;
 
 use crate::build_output::is_build_output_directory;
 use crate::exact_tree_archive;
-use crate::service_source_lock::{
-    ContractVersions, LIB_REPOSITORY, validate_deferred_nix_material,
-};
+use crate::service_source_lock::{ContractVersions, LIB_REPOSITORY};
+use crate::service_source_lock_nix::{validate_bound_nix_lock, validate_bound_nix_material};
 use crate::service_source_lock_v4::{
     LOCK_FILENAME, MAX_LOCK_BYTES, PREDECESSOR_LOCK_FILENAMES, ServiceSourceLockV4,
     ServiceSourceLockV4Parts, validate_lib_compiler_inputs, validate_toolchain_bytes,
@@ -619,20 +618,18 @@ fn read_nix_material(root: &Path) -> Result<NixMaterialEvidence, CommandError> {
         MAX_FLAKE_LOCK_BYTES,
         CommandError::InvalidFlakeLock,
     )?;
-    crate::service_source_lock::validate_deferred_nix_lock(&lock)
-        .map_err(|_| CommandError::InvalidFlakeLock)?;
-    let evidence = validate_deferred_nix_material(&expression, &lock)
+    validate_bound_nix_lock(&lock).map_err(|_| CommandError::InvalidFlakeLock)?;
+    let evidence = validate_bound_nix_material(&expression, &lock)
         .map_err(|_| CommandError::InvalidNixMaterial)?;
     Ok(NixMaterialEvidence {
-        lib_revision: evidence.lib_revision().to_owned(),
-        flake_lock_sha256: evidence.flake_lock_sha256().to_owned(),
+        lib_revision: evidence.revision,
+        flake_lock_sha256: evidence.lock_sha256,
     })
 }
 
 #[cfg(test)]
 fn validate_flake_lock(bytes: &[u8]) -> Result<String, CommandError> {
-    crate::service_source_lock::validate_deferred_nix_lock(bytes)
-        .map_err(|_| CommandError::InvalidFlakeLock)
+    validate_bound_nix_lock(bytes).map_err(|_| CommandError::InvalidFlakeLock)
 }
 
 fn validate_toolchain(root: &Path) -> Result<(), CommandError> {
