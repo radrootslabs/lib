@@ -17,6 +17,16 @@ implies = "safe-to-deploy"
 description = "The package's secret lifecycle, redaction, zeroization, persistence, keyring boundary, and error behavior were reviewed for the Radroots use case."
 implies = "safe-to-deploy"
 
+[[audits.anyhow]]
+who = "Codex (automated single-owner source review)"
+criteria = [
+    "crypto-reviewed",
+    "network-parser-reviewed",
+    "secret-handling-reviewed",
+]
+delta = "1.0.102 -> 1.0.104"
+notes = "Reviewed the complete published 1.0.102 -> 1.0.104 production and manifest delta, the downcast entry points and pointer wrappers, and the new context-chain mutation/drop regression. Context and nested-error pointer selection now takes raw field addresses without first creating a shared reference to the payload; TypeId admission and owning Error lifetime remain unchanged. This incorporates the RUSTSEC-2026-0190 fix. There is no new cryptographic algorithm, network decoder, formatting, logging or persistence behavior. The selected native public normal/build graphs are byte-identical and exclude this WASI generator dependency. The automated delta review inherits the existing 1.0.102 baseline exemption; it is not an independent full-crate audit, general redaction guarantee, Miri proof or WASI/browser runtime qualification."
+
 [[audits.async-utility]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
