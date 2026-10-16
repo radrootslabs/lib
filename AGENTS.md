@@ -45,43 +45,42 @@ This file exists for compatibility with tools that look for AGENTS.md.
   accepting a service consumer marker must not expose an artifact route.
   Tera owns its application packages and native/WASM artifact routes. Lib must
   not regain an application package or a dependency on the Tera application.
-- The canonical service source lock is the bounded, canonical
-  `radroots.service.source-lock.v2.toml` model. It binds the exact active public
-  Lib repository and full revision, Lib source-archive and workspace-catalog
-  digests, the service `Cargo.lock` digest, Rust `1.97.1`, the `service-host`
-  feature profile, positive config, state, admin, status, and provider contract
-  versions, and an exact closed Nix-material state. `absent` requires both Nix
-  files to be absent. `deferred` independently binds an exact mutually
-  consistent `flake.nix` and `flake.lock` revision and digest without claiming
-  Nix qualification or active-revision alignment. Keep the model and
-  diagnostics private to repo tooling, reject noncanonical or extra fields,
-  and never put credentials, local paths, floating refs, or private repository
-  identity in it.
-- Generate or verify that lock with `cargo xtask service-source-lock --mode
-  write|check --service-root <absolute-directory> --source-archive
-  <absolute-bundle>`. The service root supplies the exact
-  `workspace.metadata.radroots.service_source_lock` Cargo metadata. Every Lib
-  dependency, the Cargo lock, source archive, and canonical public remote must
-  agree on the active revision. Deferred Nix inputs must agree with each other
-  and remain remotely reachable, but need not equal the active revision before
-  terminal Nix alignment. The command rejects every source-tree change except
-  the exact generated lock path.
+- The current service source lock is the bounded, canonical
+  `radroots.service.source_lock.v4.toml`, defined by
+  `contracts/architecture/decisions/services_hardening_source_lock.v4.json`.
+  It binds exact public Lib source, catalog, Cargo/Nix lock and service artifact
+  inputs to Rust `1.99.0`, the `service-host` profile and positive contract
+  versions. Bound Nix inputs must match the active Lib revision and do not
+  establish executed qualification. Preserve V1-V3 contracts and bootstrap
+  evidence as history. Reject noncanonical/extra fields and coexisting
+  predecessor locks; keep the codec and diagnostics private to repo tooling.
+- Generate or verify the current lock with `cargo xtask service-source-lock
+  --mode write|check --service-root <absolute-directory> --source-archive
+  <absolute-bundle>`. The verified bundle transports the exact public revision;
+  the lock binds its canonical exact-tree archive, never its Git history.
+  Every Lib dependency, Cargo/Nix input and public remote must agree. The
+  service-owned V4 artifact contract must be committed in that service revision.
+  Reject every source-tree change except the exact generated lock path.
+- Current unsigned artifact preparation is governed by
+  `contracts/architecture/decisions/services_hardening_release_artifacts.v5.json`.
+  Bound source and generated outputs require separate executed platform and
+  release evidence; this command never activates a candidate.
 - Generate or verify one immutable service release artifact set with `cargo
   xtask service-release-artifacts --mode write|check --service-root
-  <absolute-directory> --input-root <absolute-directory> --output-root
-  <absolute-directory> --target <rust-target> --source-date-epoch <seconds>`.
+  <absolute-directory> --lib-root <absolute-directory> --input-root
+  <absolute-directory> --output-root <absolute-directory> --target <rust-target>
+  --source-date-epoch <seconds> --candidate-digest <sha256>`.
   The command consumes the exact fixed input inventory, validates clean and
   stable service and Lib source bundles, and emits the canonical binary
   archive, OCI/source metadata, CycloneDX SBOM, notices, manifest, unsigned
   provenance signing input, and checksums. Signing credentials and signatures
   remain external; generated artifacts must contain no protected material.
-- The native shared-build qualification contract is
-  `contracts/architecture/decisions/services_hardening_build_qualification.v2.json`.
-  It freezes the supported Rust targets, standalone Cargo and xtask commands,
-  native release evidence, and the fixture agreement among Cargo metadata,
-  the source lock, and release metadata. Nix package/app/check, development
-  shell, NixOS-module, and Nix-produced OCI outputs are explicitly deferred
-  and are not qualified by that contract.
+- Historical shared-build qualification contracts V2 and V3 remain under
+  `contracts/architecture/decisions/services_hardening_build_qualification.*.json`.
+  Their fixed targets, fixtures and evidence do not qualify current compiler
+  changes. Current native checks use the approved shared SDK compiler target;
+  successor qualification and actual platform execution remain required.
+  Preserve the historical Nix output deferrals without claiming execution.
 - Current source and tests are implementation evidence. They do not silently
   override machine contracts. Release V2 preserves Release V1 as historical
   authority; the approved shared SDK decision governs the successor target.

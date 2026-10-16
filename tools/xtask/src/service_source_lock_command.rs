@@ -13,10 +13,13 @@ use tempfile::{NamedTempFile, TempDir};
 use walkdir::WalkDir;
 
 use crate::build_output::is_build_output_directory;
+use crate::exact_tree_archive;
 use crate::service_source_lock::{
-    ContractVersions, LIB_REPOSITORY, LOCK_FILENAME, NixMaterialParts, NixMaterialState,
-    PREDECESSOR_LOCK_FILENAME, ServiceSourceLockParts, ServiceSourceLockV2,
-    validate_deferred_nix_material,
+    ContractVersions, LIB_REPOSITORY, validate_deferred_nix_material,
+};
+use crate::service_source_lock_v4::{
+    LOCK_FILENAME, MAX_LOCK_BYTES, PREDECESSOR_LOCK_FILENAMES, ServiceSourceLockV4,
+    ServiceSourceLockV4Parts, validate_lib_compiler_inputs, validate_toolchain_bytes,
 };
 
 const CATALOG_RELATIVE: &str = "contracts/crates/catalog.v2.toml";
@@ -28,7 +31,6 @@ const RUST_TOOLCHAIN: &str = "rust-toolchain.toml";
 const LIB_VERSION_REQUIREMENT: &str = "=0.1.0-alpha";
 const HOST_PACKAGE: &str = "radroots_service_host";
 const HOST_FEATURE_PROFILE: &str = "service-host";
-const RUST_VERSION: &str = "1.97.1";
 const MAX_MANIFEST_BYTES: usize = 1_048_576;
 const MAX_CARGO_LOCK_BYTES: usize = 16_777_216;
 const MAX_FLAKE_LOCK_BYTES: usize = 4_194_304;
@@ -53,6 +55,7 @@ enum CommandError {
     InvalidServiceMetadata,
     InvalidCargoManifest,
     InvalidCargoLock,
+    InvalidArtifactContract,
     InvalidNixMaterial,
     InvalidFlakeLock,
     InvalidToolchain,
@@ -71,7 +74,8 @@ impl fmt::Display for CommandError {
             Self::InvalidServiceMetadata => "service source-lock metadata is invalid",
             Self::InvalidCargoManifest => "service Cargo manifest dependency is invalid",
             Self::InvalidCargoLock => "service Cargo lock is invalid",
-            Self::InvalidNixMaterial => "service deferred Nix material is invalid",
+            Self::InvalidArtifactContract => "service artifact contract is invalid",
+            Self::InvalidNixMaterial => "service bound Nix material is invalid",
             Self::InvalidFlakeLock => "service flake lock is invalid",
             Self::InvalidToolchain => "service Rust toolchain is invalid",
             Self::InvalidSourceArchive => "Lib source archive is invalid",
@@ -88,39 +92,13 @@ impl std::error::Error for CommandError {}
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ServiceMetadata {
     service: String,
-    nix_material: NixMaterialState,
     contract_versions: ContractVersions,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum NixMaterialEvidence {
-    Absent,
-    Deferred {
-        lib_revision: String,
-        flake_lock_sha256: String,
-    },
-}
-
-impl NixMaterialEvidence {
-    fn as_parts(&self) -> NixMaterialParts<'_> {
-        match self {
-            Self::Absent => NixMaterialParts::Absent,
-            Self::Deferred {
-                lib_revision,
-                flake_lock_sha256,
-            } => NixMaterialParts::Deferred {
-                lib_revision,
-                flake_lock_sha256,
-            },
-        }
-    }
-
-    fn revision(&self) -> Option<&str> {
-        match self {
-            Self::Absent => None,
-            Self::Deferred { lib_revision, .. } => Some(lib_revision),
-        }
-    }
+struct NixMaterialEvidence {
+    lib_revision: String,
+    flake_lock_sha256: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -187,9 +165,11 @@ fn run_with(
     reachability: &dyn RevisionReachability,
 ) -> Result<(), CommandError> {
     let service_root = validate_service_root(service_root)?;
-    match fs::symlink_metadata(service_root.join(PREDECESSOR_LOCK_FILENAME)) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        _ => return Err(CommandError::InvalidSourceLock),
+    for predecessor in PREDECESSOR_LOCK_FILENAMES {
+        match fs::symlink_metadata(service_root.join(predecessor)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            _ => return Err(CommandError::InvalidSourceLock),
+        }
     }
     let initial_head = service_head(&service_root)?;
     validate_service_cleanliness(&service_root)?;
@@ -203,7 +183,10 @@ fn run_with(
     let metadata = parse_service_metadata(&root_manifest)?;
     let revision = validate_cargo_manifests(&service_root, None)?;
 
-    let nix = read_nix_material(&service_root, metadata.nix_material)?;
+    let nix = read_nix_material(&service_root)?;
+    if nix.lib_revision != revision {
+        return Err(CommandError::InvalidNixMaterial);
+    }
 
     validate_toolchain(&service_root)?;
     let archive = validate_archive(source_archive, &revision)?;
@@ -219,23 +202,39 @@ fn run_with(
     validate_cargo_lock(&cargo_lock, &revision, &archive.package_names)?;
     let cargo_lock_sha256 = sha256(&cargo_lock);
     reachability.verify(&archive.revision)?;
-    if let Some(nix_revision) = nix.revision()
-        && nix_revision != archive.revision
-    {
-        reachability.verify(nix_revision)?;
+    let artifact_path = format!(
+        "contracts/release/{}-artifact-contract.v4.json",
+        metadata.service
+    );
+    let artifact_contract = exact_tree_archive::read_blob(
+        &service_root,
+        &initial_head,
+        &artifact_path,
+        MAX_MANIFEST_BYTES,
+    )
+    .map_err(|_| CommandError::InvalidArtifactContract)?;
+    let live_contract = read_bounded_regular(
+        &service_root.join(&artifact_path),
+        MAX_MANIFEST_BYTES,
+        CommandError::InvalidArtifactContract,
+    )?;
+    if artifact_contract != live_contract {
+        return Err(CommandError::InvalidArtifactContract);
     }
+    let artifact_contract_sha256 = sha256(&artifact_contract);
     validate_service_cleanliness(&service_root)?;
     if service_head(&service_root)? != initial_head {
         return Err(CommandError::DirtyServiceSource);
     }
 
-    let desired = ServiceSourceLockV2::new(ServiceSourceLockParts {
+    let desired = ServiceSourceLockV4::new(ServiceSourceLockV4Parts {
         service: &metadata.service,
         revision: &archive.revision,
         workspace_catalog_sha256: &archive.catalog_sha256,
         source_archive_sha256: &archive.archive_sha256,
         cargo_lock_sha256: &cargo_lock_sha256,
-        nix: nix.as_parts(),
+        flake_lock_sha256: &nix.flake_lock_sha256,
+        artifact_contract_sha256: &artifact_contract_sha256,
         contract_versions: metadata.contract_versions,
     })
     .map_err(|_| CommandError::InvalidServiceMetadata)?;
@@ -243,8 +242,9 @@ fn run_with(
     let lock_path = service_root.join(LOCK_FILENAME);
     let result = match mode {
         CommandMode::Check => {
-            let current = read_bounded_regular(&lock_path, 4096, CommandError::InvalidSourceLock)?;
-            let current = ServiceSourceLockV2::from_canonical_bytes(&current)
+            let current =
+                read_bounded_regular(&lock_path, MAX_LOCK_BYTES, CommandError::InvalidSourceLock)?;
+            let current = ServiceSourceLockV4::from_canonical_bytes(&current)
                 .map_err(|_| CommandError::InvalidSourceLock)?;
             if current == desired {
                 Ok(())
@@ -254,8 +254,9 @@ fn run_with(
         }
         CommandMode::Write => {
             atomic_write_lock(&service_root, &lock_path, desired.canonical_bytes())?;
-            let current = read_bounded_regular(&lock_path, 4096, CommandError::WriteFailure)?;
-            let current = ServiceSourceLockV2::from_canonical_bytes(&current)
+            let current =
+                read_bounded_regular(&lock_path, MAX_LOCK_BYTES, CommandError::WriteFailure)?;
+            let current = ServiceSourceLockV4::from_canonical_bytes(&current)
                 .map_err(|_| CommandError::WriteFailure)?;
             if current == desired {
                 Ok(())
@@ -318,7 +319,7 @@ fn validate_service_cleanliness(root: &Path) -> Result<(), CommandError> {
             "--quiet",
             "--",
             ".",
-            ":(exclude)radroots.service.source-lock.v2.toml",
+            ":(exclude)radroots.service.source_lock.v4.toml",
         ],
     )
     .map_err(|_| CommandError::DirtyServiceSource)?;
@@ -330,7 +331,7 @@ fn validate_service_cleanliness(root: &Path) -> Result<(), CommandError> {
             "--quiet",
             "--",
             ".",
-            ":(exclude)radroots.service.source-lock.v2.toml",
+            ":(exclude)radroots.service.source_lock.v4.toml",
         ],
     )
     .map_err(|_| CommandError::DirtyServiceSource)?;
@@ -388,14 +389,11 @@ fn parse_service_metadata(root: &toml::Value) -> Result<ServiceMetadata, Command
     if text("host_feature_profile")? != HOST_FEATURE_PROFILE {
         return Err(CommandError::InvalidServiceMetadata);
     }
-    let nix_material = match text("nix_material")? {
-        "absent" => NixMaterialState::Absent,
-        "deferred" => NixMaterialState::Deferred,
-        _ => return Err(CommandError::InvalidServiceMetadata),
-    };
+    if text("nix_material")? != "bound" || !matches!(text("service")?, "myc" | "rhi") {
+        return Err(CommandError::InvalidServiceMetadata);
+    }
     Ok(ServiceMetadata {
         service: text("service")?.to_owned(),
-        nix_material,
         contract_versions: ContractVersions::new(
             version("config_contract_version")?,
             version("state_contract_version")?,
@@ -576,41 +574,25 @@ fn validate_cargo_lock(
     }
 }
 
-fn read_nix_material(
-    root: &Path,
-    state: NixMaterialState,
-) -> Result<NixMaterialEvidence, CommandError> {
-    match state {
-        NixMaterialState::Absent => {
-            for name in [FLAKE_NIX, FLAKE_LOCK] {
-                match fs::symlink_metadata(root.join(name)) {
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    _ => return Err(CommandError::InvalidNixMaterial),
-                }
-            }
-            Ok(NixMaterialEvidence::Absent)
-        }
-        NixMaterialState::Deferred => {
-            let expression = read_bounded_regular(
-                &root.join(FLAKE_NIX),
-                MAX_FLAKE_NIX_BYTES,
-                CommandError::InvalidNixMaterial,
-            )?;
-            let lock = read_bounded_regular(
-                &root.join(FLAKE_LOCK),
-                MAX_FLAKE_LOCK_BYTES,
-                CommandError::InvalidFlakeLock,
-            )?;
-            crate::service_source_lock::validate_deferred_nix_lock(&lock)
-                .map_err(|_| CommandError::InvalidFlakeLock)?;
-            let evidence = validate_deferred_nix_material(&expression, &lock)
-                .map_err(|_| CommandError::InvalidNixMaterial)?;
-            Ok(NixMaterialEvidence::Deferred {
-                lib_revision: evidence.lib_revision().to_owned(),
-                flake_lock_sha256: evidence.flake_lock_sha256().to_owned(),
-            })
-        }
-    }
+fn read_nix_material(root: &Path) -> Result<NixMaterialEvidence, CommandError> {
+    let expression = read_bounded_regular(
+        &root.join(FLAKE_NIX),
+        MAX_FLAKE_NIX_BYTES,
+        CommandError::InvalidNixMaterial,
+    )?;
+    let lock = read_bounded_regular(
+        &root.join(FLAKE_LOCK),
+        MAX_FLAKE_LOCK_BYTES,
+        CommandError::InvalidFlakeLock,
+    )?;
+    crate::service_source_lock::validate_deferred_nix_lock(&lock)
+        .map_err(|_| CommandError::InvalidFlakeLock)?;
+    let evidence = validate_deferred_nix_material(&expression, &lock)
+        .map_err(|_| CommandError::InvalidNixMaterial)?;
+    Ok(NixMaterialEvidence {
+        lib_revision: evidence.lib_revision().to_owned(),
+        flake_lock_sha256: evidence.flake_lock_sha256().to_owned(),
+    })
 }
 
 #[cfg(test)]
@@ -625,17 +607,7 @@ fn validate_toolchain(root: &Path) -> Result<(), CommandError> {
         MAX_TOOLCHAIN_BYTES,
         CommandError::InvalidToolchain,
     )?;
-    let value = parse_toml(&bytes, CommandError::InvalidToolchain)?;
-    if value
-        .get("toolchain")
-        .and_then(|value| value.get("channel"))
-        .and_then(toml::Value::as_str)
-        == Some(RUST_VERSION)
-    {
-        Ok(())
-    } else {
-        Err(CommandError::InvalidToolchain)
-    }
+    validate_toolchain_bytes(&bytes).map_err(|_| CommandError::InvalidToolchain)
 }
 
 fn validate_archive(path: &Path, revision: &str) -> Result<ArchiveEvidence, CommandError> {
@@ -655,7 +627,6 @@ fn validate_archive(path: &Path, revision: &str) -> Result<ArchiveEvidence, Comm
         .metadata()
         .map_err(|_| CommandError::InvalidSourceArchive)?;
     let mut stable = NamedTempFile::new().map_err(|_| CommandError::InvalidSourceArchive)?;
-    let mut hasher = Sha256::new();
     let mut total = 0_u64;
     let mut buffer = [0_u8; 65_536];
     loop {
@@ -669,7 +640,6 @@ fn validate_archive(path: &Path, revision: &str) -> Result<ArchiveEvidence, Comm
             .checked_add(u64::try_from(read).map_err(|_| CommandError::InvalidSourceArchive)?)
             .filter(|total| *total <= MAX_ARCHIVE_BYTES)
             .ok_or(CommandError::InvalidSourceArchive)?;
-        hasher.update(&buffer[..read]);
         stable
             .write_all(&buffer[..read])
             .map_err(|_| CommandError::InvalidSourceArchive)?;
@@ -739,9 +709,37 @@ fn validate_archive(path: &Path, revision: &str) -> Result<ArchiveEvidence, Comm
         return Err(CommandError::InvalidSourceArchive);
     }
     let package_names = catalog_package_names(&catalog)?;
+    let manifest = exact_tree_archive::read_blob(
+        &fs::canonicalize(verification.path()).map_err(|_| CommandError::InvalidSourceArchive)?,
+        revision,
+        CARGO_MANIFEST,
+        MAX_MANIFEST_BYTES,
+    )
+    .map_err(|_| CommandError::InvalidSourceArchive)?;
+    let verification_root =
+        fs::canonicalize(verification.path()).map_err(|_| CommandError::InvalidSourceArchive)?;
+    let toolchain = exact_tree_archive::read_blob(
+        &verification_root,
+        revision,
+        RUST_TOOLCHAIN,
+        MAX_TOOLCHAIN_BYTES,
+    )
+    .map_err(|_| CommandError::InvalidSourceArchive)?;
+    validate_lib_compiler_inputs(&manifest, &toolchain, &catalog)
+        .map_err(|_| CommandError::InvalidSourceArchive)?;
+    // The bundle is transfer evidence. The lock always binds the canonical tree.
+    let mtime = exact_tree_archive::commit_timestamp(&verification_root, revision)
+        .map_err(|_| CommandError::InvalidSourceArchive)?;
+    let tree = exact_tree_archive::create(
+        &verification_root,
+        revision,
+        &verification_root.join("source-tree.tar"),
+        mtime,
+    )
+    .map_err(|_| CommandError::InvalidSourceArchive)?;
     Ok(ArchiveEvidence {
         revision: revision.to_owned(),
-        archive_sha256: hex::encode(hasher.finalize()),
+        archive_sha256: tree.sha256,
         catalog_sha256: sha256(&catalog),
         package_names,
     })
@@ -963,6 +961,9 @@ mod tests {
 schema = "radroots.workspace.catalog.v2"
 architecture = "radroots.crates.release.v2"
 version = "0.1.0-alpha"
+rust_version = "1.99.0"
+edition = "2024"
+resolver = "3"
 package_count = 2
 
 [[package]]
@@ -973,6 +974,14 @@ name = "radroots_service_host"
 "#,
             )
             .expect("catalog");
+            fs::write(lib.join(CARGO_MANIFEST),
+                "[workspace]\nresolver = \"3\"\n[workspace.package]\nversion = \"0.1.0-alpha\"\nrust-version = \"1.99.0\"\nedition = \"2024\"\n"
+            ).expect("Lib manifest");
+            fs::write(
+                lib.join(RUST_TOOLCHAIN),
+                "[toolchain]\nchannel = \"1.99.0\"\n",
+            )
+            .expect("Lib toolchain");
             git(&lib, &["add", "."]);
             git(&lib, &["commit", "--quiet", "-m", "fixture"]);
             git(&lib, &["branch", "-M", "archive"]);
@@ -1000,9 +1009,9 @@ name = "radroots_service_host"
 resolver = "3"
 
 [workspace.metadata.radroots.service_source_lock]
-service = "fixture_service"
+service = "myc"
 host_feature_profile = "service-host"
-nix_material = "deferred"
+nix_material = "bound"
 config_contract_version = 1
 state_contract_version = 2
 admin_contract_version = 3
@@ -1039,9 +1048,15 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
             .expect("flake.lock");
             fs::write(
                 service.join(RUST_TOOLCHAIN),
-                "[toolchain]\nchannel = \"1.97.1\"\ncomponents = [\"clippy\", \"rustfmt\"]\n",
+                "[toolchain]\nchannel = \"1.99.0\"\ncomponents = [\"clippy\", \"rustfmt\"]\n",
             )
             .expect("toolchain");
+            fs::create_dir_all(service.join("contracts/release")).expect("artifact parent");
+            fs::write(
+                service.join("contracts/release/myc-artifact-contract.v4.json"),
+                b"{}\n",
+            )
+            .expect("artifact contract");
             git(&service, &["init", "--quiet"]);
             git(
                 &service,
@@ -1095,12 +1110,30 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
 
         let bytes = fs::read(fixture.service.join(LOCK_FILENAME)).expect("lock");
         let text = std::str::from_utf8(&bytes).expect("UTF-8");
-        assert!(text.contains("service = \"fixture_service\""));
+        assert!(text.contains("service = \"myc\""));
         assert!(text.contains(&format!("revision = \"{}\"", fixture.revision)));
-        assert!(text.contains("material = \"deferred\""));
+        assert!(text.contains("material = \"bound\""));
         assert!(text.contains(&format!("lib_revision = \"{}\"", fixture.revision)));
         assert!(text.contains("config = 1\nstate = 2\nadmin = 3\nstatus = 4\nprovider = 5"));
         assert!(fixture.root.path().exists());
+        let lock = ServiceSourceLockV4::from_canonical_bytes(&bytes).expect("V4 lock");
+        let lib = fs::canonicalize(fixture.root.path().join("lib")).expect("Lib root");
+        let tree = exact_tree_archive::create(
+            &lib,
+            &fixture.revision,
+            &lib.parent()
+                .expect("fixture parent")
+                .join("expected-source.tar"),
+            exact_tree_archive::commit_timestamp(&lib, &fixture.revision).expect("commit time"),
+        )
+        .expect("exact source tree");
+        assert_eq!(lock.source_archive_sha256(), tree.sha256);
+        assert_ne!(
+            lock.source_archive_sha256(),
+            sha256(&fs::read(&fixture.archive).expect("bundle"))
+        );
+        crate::service_release_artifacts::validate_writer_fixture(&fixture.service, &lock)
+            .expect("artifact consumer admits actual writer output");
     }
 
     #[test]
@@ -1217,7 +1250,7 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
             ),
             (
                 RUST_TOOLCHAIN,
-                "1.97.1",
+                "1.99.0",
                 "1.97.0",
                 CommandError::InvalidToolchain,
             ),
@@ -1390,88 +1423,85 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
     }
 
     #[test]
-    fn absent_and_independently_revisioned_deferred_nix_material_are_exact() {
+    fn current_lock_rejects_historical_bootstrap_and_independently_revisioned_nix() {
+        for state in ["absent", "deferred", "qualified"] {
+            let fixture = Fixture::new();
+            let manifest = fixture.service.join(CARGO_MANIFEST);
+            let source = fs::read_to_string(&manifest).expect("manifest");
+            fs::write(
+                &manifest,
+                source.replace(
+                    "nix_material = \"bound\"",
+                    &format!("nix_material = \"{state}\""),
+                ),
+            )
+            .expect("historical metadata");
+            if state == "absent" {
+                fs::remove_file(fixture.service.join(FLAKE_NIX)).expect("remove flake");
+                fs::remove_file(fixture.service.join(FLAKE_LOCK)).expect("remove lock");
+            }
+            git(&fixture.service, &["add", "-A"]);
+            git(
+                &fixture.service,
+                &["commit", "--quiet", "-m", "historical state"],
+            );
+            assert_eq!(
+                run_with(
+                    CommandMode::Write,
+                    &fixture.service,
+                    &fixture.archive,
+                    &fixture.reachable()
+                ),
+                Err(CommandError::InvalidServiceMetadata)
+            );
+            assert!(!fixture.service.join(LOCK_FILENAME).exists());
+        }
         let fixture = Fixture::new();
-        let manifest = fixture.service.join(CARGO_MANIFEST);
-        let source = fs::read_to_string(&manifest).expect("manifest");
-        fs::write(
-            &manifest,
-            source.replacen(
-                "nix_material = \"deferred\"",
-                "nix_material = \"absent\"",
-                1,
-            ),
-        )
-        .expect("absent metadata");
-        fs::remove_file(fixture.service.join(FLAKE_NIX)).expect("remove flake expression");
-        fs::remove_file(fixture.service.join(FLAKE_LOCK)).expect("remove flake lock");
-        git(&fixture.service, &["add", "-A"]);
-        git(&fixture.service, &["commit", "--quiet", "-m", "absent Nix"]);
-        run_with(
-            CommandMode::Write,
-            &fixture.service,
-            &fixture.archive,
-            &fixture.reachable(),
-        )
-        .expect("write absent-Nix lock");
-        let lock = fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock");
-        let lock = ServiceSourceLockV2::from_canonical_bytes(&lock).expect("canonical lock");
-        assert_eq!(lock.nix_material_state(), NixMaterialState::Absent);
-        assert_eq!(lock.nix_lib_revision(), None);
-        assert_eq!(lock.flake_lock_sha256(), None);
-
-        let fixture = Fixture::new();
-        let deferred_revision = "b".repeat(40);
         for name in [FLAKE_NIX, FLAKE_LOCK] {
             let path = fixture.service.join(name);
-            let current = fs::read_to_string(&path).expect("Nix source");
-            fs::write(
-                &path,
-                current.replace(&fixture.revision, &deferred_revision),
-            )
-            .expect("deferred revision");
+            let source = fs::read_to_string(&path).expect("Nix input");
+            fs::write(&path, source.replace(&fixture.revision, &"b".repeat(40)))
+                .expect("independent revision");
         }
         git(&fixture.service, &["add", "."]);
         git(
             &fixture.service,
-            &["commit", "--quiet", "-m", "defer Nix revision"],
-        );
-        run_with(
-            CommandMode::Write,
-            &fixture.service,
-            &fixture.archive,
-            &fixture.reachable(),
-        )
-        .expect("write independently revisioned lock");
-        let lock = fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock");
-        let lock = ServiceSourceLockV2::from_canonical_bytes(&lock).expect("canonical lock");
-        assert_eq!(lock.revision(), fixture.revision);
-        assert_eq!(lock.nix_material_state(), NixMaterialState::Deferred);
-        assert_eq!(lock.nix_lib_revision(), Some(deferred_revision.as_str()));
-    }
-
-    #[test]
-    fn predecessor_source_lock_is_rejected_instead_of_forming_dual_authority() {
-        let fixture = Fixture::new();
-        fs::write(
-            fixture.service.join(PREDECESSOR_LOCK_FILENAME),
-            b"historical lock",
-        )
-        .expect("predecessor lock");
-        git(&fixture.service, &["add", "."]);
-        git(
-            &fixture.service,
-            &["commit", "--quiet", "-m", "retain predecessor lock"],
+            &["commit", "--quiet", "-m", "independent revision"],
         );
         assert_eq!(
             run_with(
                 CommandMode::Write,
                 &fixture.service,
                 &fixture.archive,
-                &fixture.reachable(),
+                &fixture.reachable()
             ),
-            Err(CommandError::InvalidSourceLock)
+            Err(CommandError::InvalidNixMaterial)
         );
+        assert!(!fixture.service.join(LOCK_FILENAME).exists());
+    }
+
+    #[test]
+    fn predecessor_source_lock_is_rejected_instead_of_forming_dual_authority() {
+        for predecessor in PREDECESSOR_LOCK_FILENAMES {
+            let fixture = Fixture::new();
+            fs::write(fixture.service.join(predecessor), b"historical lock")
+                .expect("predecessor lock");
+            git(&fixture.service, &["add", "."]);
+            git(
+                &fixture.service,
+                &["commit", "--quiet", "-m", "predecessor lock"],
+            );
+            assert_eq!(
+                run_with(
+                    CommandMode::Write,
+                    &fixture.service,
+                    &fixture.archive,
+                    &fixture.reachable()
+                ),
+                Err(CommandError::InvalidSourceLock)
+            );
+            assert!(!fixture.service.join(LOCK_FILENAME).exists());
+        }
     }
 
     #[test]
@@ -1636,6 +1666,9 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
         let catalog = br#"schema = "radroots.workspace.catalog.v2"
 architecture = "radroots.crates.release.v2"
 version = "0.1.0-alpha"
+rust_version = "1.99.0"
+edition = "2024"
+resolver = "3"
 package_count = 2
 
 [[package]]
@@ -1981,6 +2014,7 @@ package = []
             CommandError::InvalidServiceMetadata,
             CommandError::InvalidCargoManifest,
             CommandError::InvalidCargoLock,
+            CommandError::InvalidArtifactContract,
             CommandError::InvalidNixMaterial,
             CommandError::InvalidFlakeLock,
             CommandError::InvalidToolchain,
@@ -1993,9 +2027,70 @@ package = []
         for error in errors {
             assert!(error.source().is_none());
             let rendered = format!("{error:?} {error}");
-            assert!(!rendered.contains("fixture_service"));
+            assert!(!rendered.contains("myc"));
             assert!(!rendered.contains("radrootslabs"));
             assert!(!rendered.contains("/tmp"));
         }
+    }
+
+    #[test]
+    fn archive_rejects_obsolete_committed_lib_compiler_inputs() {
+        for name in [CARGO_MANIFEST, RUST_TOOLCHAIN, CATALOG_RELATIVE] {
+            let fixture = Fixture::new();
+            let lib = fixture.root.path().join("lib");
+            let path = lib.join(name);
+            let original = fs::read_to_string(&path).expect("Lib input");
+            fs::write(&path, original.replace("1.99.0", "1.97.1")).expect("obsolete Lib input");
+            git(&lib, &["add", "."]);
+            git(
+                &lib,
+                &["commit", "--quiet", "-m", "obsolete compiler input"],
+            );
+            let revision =
+                String::from_utf8(git_stdout(&lib, ["rev-parse", "HEAD"], 128).expect("revision"))
+                    .expect("UTF-8")
+                    .trim()
+                    .to_owned();
+            let bundle = fixture.root.path().join("obsolete.bundle");
+            let status = Command::new("git")
+                .args(["bundle", "create"])
+                .arg(&bundle)
+                .arg("refs/heads/archive")
+                .current_dir(&lib)
+                .status()
+                .expect("bundle");
+            assert!(status.success());
+            assert!(
+                matches!(
+                    validate_archive(&bundle, &revision),
+                    Err(CommandError::InvalidSourceArchive)
+                ),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn current_artifact_contract_must_exist_in_the_committed_service_revision() {
+        let fixture = Fixture::new();
+        let artifact = fixture
+            .service
+            .join("contracts/release/myc-artifact-contract.v4.json");
+        fs::remove_file(&artifact).expect("remove contract");
+        git(&fixture.service, &["add", "-A"]);
+        git(
+            &fixture.service,
+            &["commit", "--quiet", "-m", "missing artifact contract"],
+        );
+        assert_eq!(
+            run_with(
+                CommandMode::Write,
+                &fixture.service,
+                &fixture.archive,
+                &fixture.reachable()
+            ),
+            Err(CommandError::InvalidArtifactContract)
+        );
+        assert!(!fixture.service.join(LOCK_FILENAME).exists());
     }
 }

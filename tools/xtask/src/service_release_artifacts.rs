@@ -15,13 +15,14 @@ use tempfile::TempDir;
 
 use crate::safe_artifact_io::{TarGzipLimits, TraversalLimits};
 use crate::service_source_lock::{LIB_REPOSITORY, validate_deferred_nix_material};
-use crate::service_source_lock_v3::{
-    LOCK_FILENAME, PREDECESSOR_LOCK_FILENAME, ServiceSourceLockV3,
+use crate::service_source_lock_v4::{
+    LOCK_FILENAME, MAX_LOCK_BYTES, PREDECESSOR_LOCK_FILENAMES, RUST_VERSION, ServiceSourceLockV4,
+    validate_lib_compiler_inputs, validate_toolchain_bytes,
 };
 use crate::{artifact_admission, exact_tree_archive, safe_artifact_io};
 
 const CONTRACT_RELATIVE: &str =
-    "contracts/architecture/decisions/services_hardening_release_artifacts.v4.json";
+    "contracts/architecture/decisions/services_hardening_release_artifacts.v5.json";
 const INPUT_NAMES: [&str; 6] = [
     "config.example.toml",
     "config.schema.json",
@@ -46,7 +47,7 @@ const OUTPUT_NAMES: [&str; 20] = [
     "oci-image.tar.gz",
     "oci-image.v1.json",
     "provenance.intoto.jsonl",
-    "radroots.service.source-lock.v3.toml",
+    "radroots.service.source_lock.v4.toml",
     "sbom.cdx.json",
     "service-source.tar",
     "source-archives.v3.json",
@@ -66,7 +67,8 @@ const MAX_CONTRACT_BYTES: usize = 65_536;
 const MAX_MANIFEST_BYTES: usize = 1_048_576;
 const MAX_TEXT_INPUT_BYTES: u64 = 1_048_576;
 const MAX_GENERATED_DOCUMENT_BYTES: u64 = 16_777_216;
-const MAX_SOURCE_LOCK_BYTES: u64 = 4_096;
+const MAX_SOURCE_LOCK_BYTES: u64 = MAX_LOCK_BYTES as u64;
+const MAX_TOOLCHAIN_BYTES: usize = 65_536;
 const MAX_SERVICE_CARGO_LOCK_BYTES: u64 = 16_777_216;
 const MAX_SERVICE_FLAKE_LOCK_BYTES: u64 = 4_194_304;
 const MAX_BINARY_BYTES: u64 = 536_870_912;
@@ -440,7 +442,10 @@ struct ReleaseDecision {
     schema: String,
     contract_version: u32,
     decision_state: String,
-    owner_step: u32,
+    implementation_scope: String,
+    rust_version: String,
+    edition: String,
+    qualification_posture: String,
     predecessor: ReleasePredecessor,
     command: String,
     modes: Vec<String>,
@@ -488,6 +493,7 @@ struct ReleasePredecessor {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ReleaseMaximums {
+    source_lock_bytes: u64,
     text_input_bytes: u64,
     generated_document_bytes: u64,
     service_cargo_lock_bytes: u64,
@@ -555,7 +561,7 @@ fn run_inner(arguments: Arguments<'_>) -> Result<(), ReleaseArtifactError> {
         MAX_SOURCE_LOCK_BYTES,
         ReleaseArtifactError::InvalidSourceLock,
     )?;
-    let source_lock = ServiceSourceLockV3::from_canonical_bytes(&source_lock_bytes)
+    let source_lock = ServiceSourceLockV4::from_canonical_bytes(&source_lock_bytes)
         .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
     if source_lock.service() != metadata.service {
         return Err(ReleaseArtifactError::InvalidSourceLock);
@@ -666,6 +672,22 @@ fn run_inner(arguments: Arguments<'_>) -> Result<(), ReleaseArtifactError> {
         MAX_TEXT_INPUT_BYTES as usize,
     )
     .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
+    let lib_manifest = exact_tree_archive::read_blob(
+        &lib_root,
+        source_lock.revision(),
+        "Cargo.toml",
+        MAX_TEXT_INPUT_BYTES as usize,
+    )
+    .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
+    let lib_toolchain = exact_tree_archive::read_blob(
+        &lib_root,
+        source_lock.revision(),
+        "rust-toolchain.toml",
+        MAX_TOOLCHAIN_BYTES,
+    )
+    .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
+    validate_lib_compiler_inputs(&lib_manifest, &lib_toolchain, &catalog)
+        .map_err(|_| ReleaseArtifactError::InvalidSourceBundle)?;
     if sha256_bytes(&catalog) != source_lock.workspace_catalog_sha256() {
         return Err(ReleaseArtifactError::InvalidSourceBundle);
     }
@@ -747,7 +769,7 @@ fn run_inner(arguments: Arguments<'_>) -> Result<(), ReleaseArtifactError> {
         source_date_epoch,
         service_revision: initial_head.clone(),
         lib_revision: source_lock.revision().to_owned(),
-        rust_version: "1.97.1",
+        rust_version: RUST_VERSION,
         host_feature_profile: "service-host",
         contract_versions: ContractVersionsDocument {
             config: versions.config(),
@@ -872,17 +894,20 @@ fn read_release_metadata(root: &Path) -> Result<ReleaseMetadata, ReleaseArtifact
 
 fn validate_source_lock_files(
     root: &Path,
-    source_lock: &ServiceSourceLockV3,
+    source_lock: &ServiceSourceLockV4,
 ) -> Result<(), ReleaseArtifactError> {
-    for name in [
-        PREDECESSOR_LOCK_FILENAME,
-        "radroots.service.source-lock.v1.toml",
-    ] {
+    for name in PREDECESSOR_LOCK_FILENAMES {
         match fs::symlink_metadata(root.join(name)) {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             _ => return Err(ReleaseArtifactError::InvalidSourceLock),
         }
     }
+    let toolchain = read_bounded_regular(
+        &root.join("rust-toolchain.toml"),
+        MAX_TOOLCHAIN_BYTES as u64,
+        ReleaseArtifactError::InvalidSourceLock,
+    )?;
+    validate_toolchain_bytes(&toolchain).map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
     let cargo_lock = hash_regular(&root.join("Cargo.lock"), MAX_SERVICE_CARGO_LOCK_BYTES)
         .map_err(|_| ReleaseArtifactError::InvalidSourceLock)?;
     if cargo_lock.sha256 != source_lock.cargo_lock_sha256() {
@@ -913,6 +938,14 @@ fn validate_source_lock_files(
     } else {
         Err(ReleaseArtifactError::InvalidSourceLock)
     }
+}
+
+#[cfg(test)]
+pub(crate) fn validate_writer_fixture(
+    root: &Path,
+    source_lock: &ServiceSourceLockV4,
+) -> Result<(), String> {
+    validate_source_lock_files(root, source_lock).map_err(|error| error.to_string())
 }
 
 fn cargo_metadata(root: &Path) -> Result<CargoMetadata, ReleaseArtifactError> {
@@ -2297,7 +2330,7 @@ fn output_maximum(name: &str) -> Result<u64, ReleaseArtifactError> {
         | "config.example.toml"
         | "config.schema.json"
         | "nixos-module.nix"
-        | "radroots.service.source-lock.v3.toml"
+        | "radroots.service.source_lock.v4.toml"
         | "systemd.service" => Ok(MAX_TEXT_INPUT_BYTES),
         "SHA256SUMS"
         | "THIRD-PARTY-LICENSES.txt"
@@ -2669,13 +2702,17 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
         ReleaseArtifactError::StaleOutput,
         ReleaseArtifactError::GenerationFailure,
     ];
-    if decision.schema != "radroots.services-hardening.release-artifacts-decisions.v4"
-        || decision.contract_version != 4
-        || decision.decision_state != "active"
-        || decision.owner_step != 305
+    if decision.schema != "radroots.service.release_artifacts.v5"
+        || decision.contract_version != 5
+        || decision.decision_state != "active_unsigned_preparation"
+        || decision.implementation_scope != "current_compiler_preparation"
+        || decision.rust_version != RUST_VERSION
+        || decision.edition != "2024"
+        || decision.qualification_posture
+            != "source_bound_preparation_requires_separate_executed_platform_and_release_evidence"
         || decision.predecessor.schema
-            != "radroots.services-hardening.release-artifacts-decisions.v3"
-        || decision.predecessor.filename != "services_hardening_release_artifacts.v3.json"
+            != "radroots.services-hardening.release-artifacts-decisions.v4"
+        || decision.predecessor.filename != "services_hardening_release_artifacts.v4.json"
         || decision.predecessor.transition != "forward_only_replace"
         || decision.command != "cargo xtask service-release-artifacts"
         || decision.modes != ["check", "write"]
@@ -2696,9 +2733,9 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
             != ["service", "service_package", "binary_name", "version"]
         || decision.service_license_path
             != "Cargo.toml.workspace.package.license_or_package.license"
-        || decision.source_lock_schema != "radroots.service.source-lock.v3"
+        || decision.source_lock_schema != "radroots.service.source_lock.v4"
         || decision.source_lock_definition
-            != "contracts/architecture/decisions/services_hardening_source_lock.v3.json"
+            != "contracts/architecture/decisions/services_hardening_source_lock.v4.json"
         || decision.artifact_contract_binding
             != "source_lock_exact_regular_file_bytes_in_same_service_revision"
         || decision.artifact_admission_contract
@@ -2729,6 +2766,7 @@ fn validate_decision(decision: &ReleaseDecision) -> Result<(), ReleaseArtifactEr
         || decision.source_cleanliness != "no_tracked_staged_or_untracked_changes"
         || decision.revision_stability != "same_service_head_before_and_after_generation"
         || !decision.no_protected_material
+        || decision.maximums.source_lock_bytes != MAX_SOURCE_LOCK_BYTES
         || decision.maximums.text_input_bytes != MAX_TEXT_INPUT_BYTES
         || decision.maximums.generated_document_bytes != MAX_GENERATED_DOCUMENT_BYTES
         || decision.maximums.service_cargo_lock_bytes != MAX_SERVICE_CARGO_LOCK_BYTES
@@ -2769,7 +2807,7 @@ mod tests {
     use std::process::Command;
 
     use crate::service_source_lock::ContractVersions;
-    use crate::service_source_lock_v3::FixtureParts;
+    use crate::service_source_lock_v4::ServiceSourceLockV4Parts;
 
     use super::*;
 
@@ -2795,9 +2833,15 @@ mod tests {
 
             write_file(
                 &lib.join("contracts/crates/catalog.v2.toml"),
-                b"schema_version = 2\n",
+                b"schema_version = 2\nschema = \"radroots.workspace.catalog.v2\"\narchitecture = \"radroots.crates.release.v2\"\nversion = \"0.1.0-alpha\"\nrust_version = \"1.99.0\"\nedition = \"2024\"\nresolver = \"3\"\n",
             );
             write_file(&lib.join("README.md"), b"fixture Lib source\n");
+            write_file(&lib.join("Cargo.toml"),
+                b"[workspace]\nresolver = \"3\"\n[workspace.package]\nversion = \"0.1.0-alpha\"\nrust-version = \"1.99.0\"\nedition = \"2024\"\n");
+            write_file(
+                &lib.join("rust-toolchain.toml"),
+                b"[toolchain]\nchannel = \"1.99.0\"\n",
+            );
             initialize_git(&lib, "https://github.com/radrootslabs/lib");
             let lib_revision = git_output(&lib, &["rev-parse", "HEAD"]);
             let lib_archive_path = canonical_root.join("lib-source.tar");
@@ -2818,6 +2862,7 @@ mod tests {
 name = "fixture-service"
 version = "0.1.0-alpha"
 edition = "2024"
+rust-version = "1.99.0"
 license = "AGPL-3.0-or-later"
 
 [[bin]]
@@ -2835,6 +2880,10 @@ version = "0.1.0-alpha"
 "#,
             );
             write_file(&service.join("src/main.rs"), b"fn main() {}\n");
+            write_file(
+                &service.join("rust-toolchain.toml"),
+                b"[toolchain]\nchannel = \"1.99.0\"\n",
+            );
             write_file(
                 &service.join("Cargo.lock"),
                 br#"# This file is automatically @generated by Cargo.
@@ -2866,7 +2915,7 @@ version = "0.1.0-alpha"
             );
             write_file(&service.join("LICENSE-MIT"), b"MIT fixture license\n");
             let artifact_contract_path =
-                service.join("contracts/release/myc-artifact-contract.v3.json");
+                service.join("contracts/release/myc-artifact-contract.v4.json");
             fs::create_dir_all(
                 artifact_contract_path
                     .parent()
@@ -2877,7 +2926,7 @@ version = "0.1.0-alpha"
             let cargo_lock = fs::read(service.join("Cargo.lock")).expect("Cargo lock");
             let flake_lock = fs::read(service.join("flake.lock")).expect("flake lock");
             let artifact_contract = fs::read(&artifact_contract_path).expect("artifact contract");
-            let source_lock = ServiceSourceLockV3::fixture(FixtureParts {
+            let source_lock = ServiceSourceLockV4::new(ServiceSourceLockV4Parts {
                 service: "myc",
                 revision: &lib_revision,
                 workspace_catalog_sha256: &sha256_bytes(&catalog),
@@ -3442,7 +3491,11 @@ version = "0.1.0-alpha"
             ("/schema", serde_json::json!("other")),
             ("/contract_version", serde_json::json!(1)),
             ("/decision_state", serde_json::json!("draft")),
-            ("/owner_step", serde_json::json!(1)),
+            ("/implementation_scope", serde_json::json!("other")),
+            ("/rust_version", serde_json::json!("1.97.1")),
+            ("/edition", serde_json::json!("2021")),
+            ("/qualification_posture", serde_json::json!("qualified")),
+            ("/maximums/source_lock_bytes", serde_json::json!(1)),
             ("/predecessor/schema", serde_json::json!("other")),
             ("/predecessor/filename", serde_json::json!("other")),
             ("/predecessor/transition", serde_json::json!("other")),
@@ -4084,7 +4137,7 @@ version = "0.1.0-alpha"
             Err(ReleaseArtifactError::StaleOutput)
         );
 
-        let source_lock = ServiceSourceLockV3::from_canonical_bytes(
+        let source_lock = ServiceSourceLockV4::from_canonical_bytes(
             &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
         )
         .expect("source lock");
@@ -4419,6 +4472,20 @@ version = "0.1.0-alpha"
             );
         }
 
+        let manifest: serde_json::Value = serde_json::from_slice(
+            &fs::read(fixture.output_a.join("artifact-manifest.v2.json")).expect("manifest"),
+        )
+        .expect("manifest JSON");
+        assert_eq!(manifest["rust_version"], "1.99.0");
+        let produced_lock = ServiceSourceLockV4::from_canonical_bytes(
+            &fs::read(fixture.output_a.join(LOCK_FILENAME)).expect("output source lock"),
+        )
+        .expect("current canonical output");
+        assert!(
+            std::str::from_utf8(produced_lock.canonical_bytes())
+                .expect("UTF-8")
+                .contains("material = \"bound\"")
+        );
         let sums =
             fs::read_to_string(fixture.output_a.join("SHA256SUMS")).expect("checksum inventory");
         let mut prior = "";
@@ -4483,11 +4550,11 @@ version = "0.1.0-alpha"
     }
 
     #[test]
-    fn qualified_nix_material_is_required_and_preserved() {
+    fn bound_nix_inputs_are_required_and_preserved_without_qualification_claim() {
         let fixture = ReleaseFixture::new();
         fixture
             .write(&fixture.output_a)
-            .expect("qualified-Nix release");
+            .expect("bound-input preparation");
 
         let document: serde_json::Value = serde_json::from_slice(
             &fs::read(fixture.output_a.join("source-archives.v3.json"))
@@ -4503,23 +4570,23 @@ version = "0.1.0-alpha"
             64
         ));
 
-        let lock = ServiceSourceLockV3::from_canonical_bytes(
+        let lock = ServiceSourceLockV4::from_canonical_bytes(
             &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
         )
         .expect("valid source lock");
         for name in ["flake.nix", "flake.lock"] {
             let path = fixture.service.join(name);
-            let original = fs::read(&path).expect("qualified Nix file");
-            fs::remove_file(&path).expect("remove qualified Nix file");
+            let original = fs::read(&path).expect("bound Nix file");
+            fs::remove_file(&path).expect("remove bound Nix file");
             assert_eq!(
                 validate_source_lock_files(&fixture.service, &lock),
                 Err(ReleaseArtifactError::InvalidSourceLock),
-                "accepted missing qualified-Nix file {name}"
+                "accepted missing bound-Nix file {name}"
             );
             write_file(&path, &original);
         }
         write_file(
-            &fixture.service.join(PREDECESSOR_LOCK_FILENAME),
+            &fixture.service.join(PREDECESSOR_LOCK_FILENAMES[2]),
             b"unexpected",
         );
         assert_eq!(
@@ -4568,7 +4635,7 @@ version = "0.1.0-alpha"
         );
 
         let fixture = ReleaseFixture::new();
-        let current = ServiceSourceLockV3::from_canonical_bytes(
+        let current = ServiceSourceLockV4::from_canonical_bytes(
             &fs::read(fixture.service.join(LOCK_FILENAME)).expect("source lock"),
         )
         .expect("source lock");
@@ -4832,7 +4899,7 @@ version = "0.1.0-alpha"
                 source_date_epoch: 1_700_000_000,
                 service_revision: "1".repeat(40),
                 lib_revision: "2".repeat(40),
-                rust_version: "1.97.1",
+                rust_version: RUST_VERSION,
                 host_feature_profile: "service-host",
                 contract_versions: ContractVersionsDocument {
                     config: 1,

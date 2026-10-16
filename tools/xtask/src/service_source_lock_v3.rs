@@ -497,6 +497,28 @@ provider = 5
         assert_eq!(lock.canonical_bytes(), MYC_LOCK);
         assert_eq!(lock.service(), "myc");
         assert_eq!(lock.revision(), "1".repeat(40));
+        assert_eq!(LOCK_FILENAME, "radroots.service.source-lock.v3.toml");
+        assert_eq!(
+            PREDECESSOR_LOCK_FILENAME,
+            "radroots.service.source-lock.v2.toml"
+        );
+        assert_eq!(lock.workspace_catalog_sha256(), "2".repeat(64));
+        assert_eq!(lock.source_archive_sha256(), "3".repeat(64));
+        assert_eq!(lock.cargo_lock_sha256(), "4".repeat(64));
+        assert_eq!(lock.flake_lock_sha256(), "5".repeat(64));
+        assert_eq!(lock.artifact_contract_sha256(), "6".repeat(64));
+        let reconstructed = ServiceSourceLockV3::fixture(FixtureParts {
+            service: lock.service(),
+            revision: lock.revision(),
+            workspace_catalog_sha256: lock.workspace_catalog_sha256(),
+            source_archive_sha256: lock.source_archive_sha256(),
+            cargo_lock_sha256: lock.cargo_lock_sha256(),
+            flake_lock_sha256: lock.flake_lock_sha256(),
+            artifact_contract_sha256: lock.artifact_contract_sha256(),
+            contract_versions: lock.contract_versions(),
+        })
+        .expect("historical constructor");
+        assert_eq!(reconstructed.canonical_bytes(), MYC_LOCK);
         assert_eq!(
             lock.artifact_contract_path(),
             "contracts/release/myc-artifact-contract.v3.json"
