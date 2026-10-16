@@ -60,7 +60,12 @@ This file exists for compatibility with tools that look for AGENTS.md.
   the lock binds its canonical exact-tree archive, never its Git history.
   Every Lib dependency, Cargo/Nix input and public remote must agree. The
   service-owned V4 artifact contract must be committed in that service revision.
-  Reject every source-tree change except the exact generated lock path.
+  Ordinary write/check rejects every source-tree change except the exact
+  generated lock path. For an atomic migration before a green commit, use
+  `--mode prepare`: stage the complete intended candidate first. Preparation
+  requires no other unstaged/untracked inputs, a resolved stable index and
+  HEAD, and exact index/live artifact-contract bytes. It grants no acceptance;
+  verify and commit the complete candidate, then run clean-source check.
 - Current unsigned artifact preparation is governed by
   `contracts/architecture/decisions/services_hardening_release_artifacts.v5.json`.
   Bound source and generated outputs require separate executed platform and

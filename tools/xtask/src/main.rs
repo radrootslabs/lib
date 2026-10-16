@@ -332,6 +332,7 @@ enum SourceMode {
 enum ServiceSourceLockMode {
     Check,
     Write,
+    Prepare,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -471,7 +472,7 @@ fn usage() {
     );
     eprintln!("  cargo xtask source-lock --consumer-root <absolute-directory>");
     eprintln!(
-        "  cargo xtask service-source-lock --mode <check|write> --service-root <absolute-directory> --source-archive <absolute-bundle>"
+        "  cargo xtask service-source-lock --mode <check|write|prepare> --service-root <absolute-directory> --source-archive <absolute-bundle>"
     );
     eprintln!(
         "  cargo xtask service-release-artifacts --mode <check|write> --service-root <absolute-directory> --lib-root <absolute-directory> --input-root <absolute-directory> --output-root <absolute-directory> --target <rust-target> --source-date-epoch <seconds> --candidate-digest <sha256>"
@@ -794,6 +795,7 @@ fn run(args: &[String]) -> Result<(), String> {
             match mode {
                 ServiceSourceLockMode::Check => service_source_lock_command::CommandMode::Check,
                 ServiceSourceLockMode::Write => service_source_lock_command::CommandMode::Write,
+                ServiceSourceLockMode::Prepare => service_source_lock_command::CommandMode::Prepare,
             },
             &service_root,
             &source_archive,
@@ -1004,19 +1006,21 @@ mod tests {
             ])
             .is_err()
         );
-        assert!(
-            Cli::try_parse_from([
-                "xtask",
-                "service-source-lock",
-                "--mode",
-                "write",
-                "--service-root",
-                "/tmp/service",
-                "--source-archive",
-                "/tmp/lib.bundle",
-            ])
-            .is_ok()
-        );
+        for mode in ["write", "prepare"] {
+            assert!(
+                Cli::try_parse_from([
+                    "xtask",
+                    "service-source-lock",
+                    "--mode",
+                    mode,
+                    "--service-root",
+                    "/tmp/service",
+                    "--source-archive",
+                    "/tmp/lib.bundle",
+                ])
+                .is_ok()
+            );
+        }
         assert!(
             Cli::try_parse_from([
                 "xtask",

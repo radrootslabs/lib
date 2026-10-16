@@ -1,6 +1,21 @@
 schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
+[[deviation]]
+id = "RCRV1-DEV-041"
+date = "2026-10-16"
+status = "closed"
+approval = "The user authorizes the complete shared SDK and Rust 1.99 migration, verified local commits, source pushes and master integration."
+affected_steps = ["030", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy"]
+source_evidence = ["V4 source-lock generation rejects staged source changes, while service compilation requires the matching generated lock before the migration can be committed green."]
+replacement_action = "Add an explicit prepare mode for exact staged service inputs. Retain clean-source write/check, reject unstaged/untracked inputs and unresolved indexes, bind stable HEAD/index and exact index/live contract bytes, and require clean committed checking after candidate verification. Keep V4 bytes, public provider reachability and existing source/compiler/lock validation unchanged."
+verification = ["Exercise staged generation and committed checking, refusal of unstaged and untracked inputs, artifact index binding and concurrent index/HEAD changes.", "Run locked xtask checking/tests, strict Clippy, formatting, architecture and contract validation before committing and pushing the provider."]
+unresolved_risk = "Preparation is not source or artifact qualification. Actual consumer generation, clean committed checking, platform evidence and final supported adoption remain required."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = ["Exact staged contract generation and subsequent clean committed checking pass; unstaged/untracked inputs and concurrent index/HEAD changes are rejected before output creation. Ordinary write/check admission and V4 canonical bytes are retained.", "Rust 1.99 locked xtask checking and all 625 tests pass with serialized execution and the two original ignored annotations. Strict Clippy, formatting, architecture and contract validation pass. An unchanged advisory fixture failed in the initial concurrent run and passed alone and in the complete serialized suite; its concurrency reliability remains a qualification obligation, not a claimed repair."]
+
 
 [[deviation]]
 id = "RCRV1-DEV-040"

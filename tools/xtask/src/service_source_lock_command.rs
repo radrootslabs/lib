@@ -46,6 +46,7 @@ const MAX_MANIFESTS: usize = 512;
 pub(crate) enum CommandMode {
     Check,
     Write,
+    Prepare,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -172,7 +173,13 @@ fn run_with(
         }
     }
     let initial_head = service_head(&service_root)?;
-    validate_service_cleanliness(&service_root)?;
+    let prepared = mode == CommandMode::Prepare;
+    validate_service_cleanliness(&service_root, prepared)?;
+    let initial_index = if prepared {
+        Some(service_index(&service_root)?)
+    } else {
+        None
+    };
 
     let root_manifest = read_bounded_regular(
         &service_root.join(CARGO_MANIFEST),
@@ -206,13 +213,19 @@ fn run_with(
         "contracts/release/{}-artifact-contract.v4.json",
         metadata.service
     );
-    let artifact_contract = exact_tree_archive::read_blob(
-        &service_root,
-        &initial_head,
-        &artifact_path,
-        MAX_MANIFEST_BYTES,
-    )
-    .map_err(|_| CommandError::InvalidArtifactContract)?;
+    let artifact_contract = if prepared {
+        let specification = format!(":{artifact_path}");
+        git_stdout(&service_root, ["show", &specification], MAX_MANIFEST_BYTES)
+            .map_err(|_| CommandError::InvalidArtifactContract)?
+    } else {
+        exact_tree_archive::read_blob(
+            &service_root,
+            &initial_head,
+            &artifact_path,
+            MAX_MANIFEST_BYTES,
+        )
+        .map_err(|_| CommandError::InvalidArtifactContract)?
+    };
     let live_contract = read_bounded_regular(
         &service_root.join(&artifact_path),
         MAX_MANIFEST_BYTES,
@@ -222,10 +235,7 @@ fn run_with(
         return Err(CommandError::InvalidArtifactContract);
     }
     let artifact_contract_sha256 = sha256(&artifact_contract);
-    validate_service_cleanliness(&service_root)?;
-    if service_head(&service_root)? != initial_head {
-        return Err(CommandError::DirtyServiceSource);
-    }
+    validate_service_snapshot(&service_root, &initial_head, initial_index.as_deref())?;
 
     let desired = ServiceSourceLockV4::new(ServiceSourceLockV4Parts {
         service: &metadata.service,
@@ -252,7 +262,7 @@ fn run_with(
                 Err(CommandError::StaleSourceLock)
             }
         }
-        CommandMode::Write => {
+        CommandMode::Write | CommandMode::Prepare => {
             atomic_write_lock(&service_root, &lock_path, desired.canonical_bytes())?;
             let current =
                 read_bounded_regular(&lock_path, MAX_LOCK_BYTES, CommandError::WriteFailure)?;
@@ -266,12 +276,34 @@ fn run_with(
         }
     };
     result?;
-    validate_service_cleanliness(&service_root)?;
-    if service_head(&service_root)? == initial_head {
-        Ok(())
+    validate_service_snapshot(&service_root, &initial_head, initial_index.as_deref())
+}
+
+fn service_index(root: &Path) -> Result<String, CommandError> {
+    let bytes =
+        git_stdout(root, ["write-tree"], 128).map_err(|_| CommandError::DirtyServiceSource)?;
+    let tree = std::str::from_utf8(&bytes)
+        .map_err(|_| CommandError::DirtyServiceSource)?
+        .trim();
+    if valid_lower_hex(tree, 40) {
+        Ok(tree.to_owned())
     } else {
         Err(CommandError::DirtyServiceSource)
     }
+}
+
+fn validate_service_snapshot(
+    root: &Path,
+    head: &str,
+    index: Option<&str>,
+) -> Result<(), CommandError> {
+    validate_service_cleanliness(root, index.is_some())?;
+    if service_head(root)? != head
+        || index.is_some_and(|expected| service_index(root).as_deref() != Ok(expected))
+    {
+        return Err(CommandError::DirtyServiceSource);
+    }
+    Ok(())
 }
 
 fn service_head(root: &Path) -> Result<String, CommandError> {
@@ -311,7 +343,7 @@ fn validate_service_root(path: &Path) -> Result<PathBuf, CommandError> {
     }
 }
 
-fn validate_service_cleanliness(root: &Path) -> Result<(), CommandError> {
+fn validate_service_cleanliness(root: &Path, prepared: bool) -> Result<(), CommandError> {
     git_status(
         root,
         [
@@ -323,18 +355,20 @@ fn validate_service_cleanliness(root: &Path) -> Result<(), CommandError> {
         ],
     )
     .map_err(|_| CommandError::DirtyServiceSource)?;
-    git_status(
-        root,
-        [
-            "diff",
-            "--cached",
-            "--quiet",
-            "--",
-            ".",
-            ":(exclude)radroots.service.source_lock.v4.toml",
-        ],
-    )
-    .map_err(|_| CommandError::DirtyServiceSource)?;
+    if !prepared {
+        git_status(
+            root,
+            [
+                "diff",
+                "--cached",
+                "--quiet",
+                "--",
+                ".",
+                ":(exclude)radroots.service.source_lock.v4.toml",
+            ],
+        )
+        .map_err(|_| CommandError::DirtyServiceSource)?;
+    }
     let untracked = git_stdout(
         root,
         ["ls-files", "--others", "--exclude-standard", "-z"],
@@ -926,6 +960,18 @@ mod tests {
         service: PathBuf,
     }
 
+    struct IndexOnVerify {
+        service: PathBuf,
+    }
+
+    impl RevisionReachability for IndexOnVerify {
+        fn verify(&self, _revision: &str) -> Result<(), CommandError> {
+            fs::write(self.service.join("concurrent"), b"staged").expect("concurrent file");
+            git(&self.service, &["add", "concurrent"]);
+            Ok(())
+        }
+    }
+
     impl RevisionReachability for CommitOnVerify {
         fn verify(&self, _revision: &str) -> Result<(), CommandError> {
             fs::write(self.service.join("concurrent"), b"changed").expect("concurrent file");
@@ -1213,6 +1259,90 @@ radroots_service_host = {{ git = "{LIB_REPOSITORY}", rev = "{revision}", version
             Err(CommandError::DirtyServiceSource)
         );
         assert!(!fixture.service.join(LOCK_FILENAME).exists());
+    }
+
+    #[test]
+    fn prepared_candidate_binds_index_and_requires_committed_checking() {
+        let fixture = Fixture::new();
+        let path = "contracts/release/myc-artifact-contract.v4.json";
+        let contract = b"{\"candidate\":true}\n";
+        fs::write(fixture.service.join(path), contract).expect("candidate contract");
+        git(&fixture.service, &["add", path]);
+        assert_eq!(
+            run_with(
+                CommandMode::Write,
+                &fixture.service,
+                &fixture.archive,
+                &fixture.reachable()
+            ),
+            Err(CommandError::DirtyServiceSource)
+        );
+        run_with(
+            CommandMode::Prepare,
+            &fixture.service,
+            &fixture.archive,
+            &fixture.reachable(),
+        )
+        .expect("prepare staged candidate");
+        let bytes = fs::read(fixture.service.join(LOCK_FILENAME)).expect("prepared lock");
+        let lock = ServiceSourceLockV4::from_canonical_bytes(&bytes).expect("canonical lock");
+        assert_eq!(lock.artifact_contract_sha256(), sha256(contract));
+        assert_eq!(
+            run_with(
+                CommandMode::Check,
+                &fixture.service,
+                &fixture.archive,
+                &fixture.reachable()
+            ),
+            Err(CommandError::DirtyServiceSource)
+        );
+        git(&fixture.service, &["add", LOCK_FILENAME]);
+        git(
+            &fixture.service,
+            &["commit", "--quiet", "-m", "verified candidate"],
+        );
+        run_with(
+            CommandMode::Check,
+            &fixture.service,
+            &fixture.archive,
+            &fixture.reachable(),
+        )
+        .expect("check complete committed candidate");
+    }
+
+    #[test]
+    fn preparation_refuses_unstaged_untracked_and_changed_index_inputs() {
+        for case in ["unstaged", "untracked", "index", "head"] {
+            let fixture = Fixture::new();
+            if case == "unstaged" {
+                fs::write(fixture.service.join(CARGO_MANIFEST), b"changed").expect("unstaged");
+            } else if case == "untracked" {
+                fs::write(fixture.service.join("unexpected"), b"changed").expect("untracked");
+            }
+            let index = IndexOnVerify {
+                service: fixture.service.clone(),
+            };
+            let head = CommitOnVerify {
+                service: fixture.service.clone(),
+            };
+            let normal = fixture.reachable();
+            let remote: &dyn RevisionReachability = match case {
+                "index" => &index,
+                "head" => &head,
+                _ => &normal,
+            };
+            assert_eq!(
+                run_with(
+                    CommandMode::Prepare,
+                    &fixture.service,
+                    &fixture.archive,
+                    remote
+                ),
+                Err(CommandError::DirtyServiceSource),
+                "{case}"
+            );
+            assert!(!fixture.service.join(LOCK_FILENAME).exists(), "{case}");
+        }
     }
 
     #[test]
