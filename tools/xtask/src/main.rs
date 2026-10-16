@@ -56,6 +56,7 @@ mod service_release_artifacts;
 mod service_repro_install;
 mod service_source_lock;
 mod service_source_lock_command;
+mod service_source_lock_parts;
 mod service_source_lock_v3;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod supply_chain_qualification;

@@ -3,6 +3,9 @@ use std::fmt;
 use serde::Deserialize;
 
 use crate::service_source_lock::{ContractVersions, LIB_REPOSITORY};
+use crate::service_source_lock_parts::{
+    RawArtifactContract, RawSourceArchiveContract, RawSqliteContract,
+};
 
 pub(crate) const LOCK_FILENAME: &str = "radroots.service.source-lock.v3.toml";
 pub(crate) const PREDECESSOR_LOCK_FILENAME: &str = "radroots.service.source-lock.v2.toml";
@@ -11,29 +14,6 @@ const ARCHITECTURE: &str = "radroots.crates.release.v2";
 const LIB_VERSION: &str = "0.1.0-alpha";
 const RUST_VERSION: &str = "1.97.1";
 const HOST_FEATURE_PROFILE: &str = "service-host";
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
-struct RawSourceArchiveContract {
-    binding: String,
-    format: String,
-    compression: String,
-    compression_timestamp: String,
-    entry_order: String,
-    path_prefix: String,
-    file_mode: String,
-    uid: u32,
-    gid: u32,
-    uname: String,
-    gname: String,
-    mtime: String,
-    pax_headers: String,
-    directory_entries: String,
-    symlinks: String,
-    hardlinks: String,
-    submodules: String,
-    trailer: String,
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -61,23 +41,6 @@ struct RawQualifiedNix {
     supported_systems: Vec<String>,
     public_input_lock: RawPublicInputLock,
     parent_result: RawParentResult,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
-struct RawArtifactContract {
-    path: String,
-    sha256: String,
-    binding: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[serde(deny_unknown_fields)]
-struct RawSqliteContract {
-    high_level_authority: String,
-    second_pool_connection_query_transaction_migration_authority: String,
-    incremental_backup_adapter: String,
-    native_linkage_count: u32,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
