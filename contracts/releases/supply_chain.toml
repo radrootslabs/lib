@@ -33,15 +33,6 @@ mitigation = "radroots_transport_nostr canonicalizes every relay URL with url >=
 remove_when = "nostr >=0.45.0 stable"
 
 [[advisory_exception]]
-id = "RUSTSEC-2026-0243"
-package = "nostr-relay-pool"
-affected_version = "0.44.3"
-introduced_by = "nostr-sdk 0.44.1 and radroots_transport_nostr"
-classification = "unmaintained"
-mitigation = "The advisory reports no vulnerability; retain the locked release line only until the governed Nostr 0.45 migration."
-remove_when = "nostr >=0.45.0 stable"
-
-[[advisory_exception]]
 id = "CARGO-YANKED-SPIN-0.9.8"
 package = "spin"
 affected_version = "0.9.8"
@@ -51,10 +42,16 @@ mitigation = "The package has no RustSec vulnerability; the gate rejects every y
 remove_when = "sqlx no longer resolves flume 0.12.0 with spin 0.9.8"
 
 [[git_source]]
-url = "https://github.com/rust-nostr/nostr.git"
-revision = "5bba5163eb77107f82c4a8262cf29d7f33a73219"
-packages = ["nostr", "nostr-relay-builder", "nostr-sdk"]
-removal_when = "nostr 0.45 stable satisfies Studio compatibility tests"
+url = "https://github.com/nostrdevkit/nostr.git"
+revision = "de3031aa99986eb29b3f34580355f9a099e4c927"
+packages = ["nostr", "nostr-database", "nostr-gossip", "nostr-sdk"]
+removal_when = "A registry SDK retains receiver-local notification gaps and passes the complete native transport controls."
+
+[[git_source]]
+url = "https://github.com/yukibtc/async-utility"
+revision = "b323ae0c1c1424b78bf8bb8832b95e86771f1dee"
+packages = ["async-utility"]
+removal_when = "The selected upstream SDK uses a registry async-utility with the same required behavior."
 
 [[package]]
 name = "radroots_core"

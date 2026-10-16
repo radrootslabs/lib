@@ -4,9 +4,18 @@
 [cargo-vet]
 version = "0.10"
 
+[policy."async-utility:0.3.2@git:b323ae0c1c1424b78bf8bb8832b95e86771f1dee"]
+audit-as-crates-io = true
+
+[policy."nostr-database:0.45.2@git:de3031aa99986eb29b3f34580355f9a099e4c927"]
+audit-as-crates-io = true
+
 [policy."nostr-gossip:0.44.0"]
 
 [policy."nostr-gossip:0.44.0@git:5bba5163eb77107f82c4a8262cf29d7f33a73219"]
+audit-as-crates-io = true
+
+[policy."nostr-gossip:0.45.1@git:de3031aa99986eb29b3f34580355f9a099e4c927"]
 audit-as-crates-io = true
 
 [policy.nostr-relay-builder]
@@ -17,10 +26,16 @@ audit-as-crates-io = true
 
 [policy."nostr-relay-pool:0.44.3"]
 
+[policy."nostr-sdk:0.45.4@git:de3031aa99986eb29b3f34580355f9a099e4c927"]
+audit-as-crates-io = true
+
 [policy."nostr:0.44.1@git:5bba5163eb77107f82c4a8262cf29d7f33a73219"]
 audit-as-crates-io = true
 
 [policy."nostr:0.44.7"]
+
+[policy."nostr:0.45.5@git:de3031aa99986eb29b3f34580355f9a099e4c927"]
+audit-as-crates-io = true
 
 [policy.radroots_identity]
 dependency-criteria = { k256 = "crypto-reviewed" }
@@ -34,7 +49,6 @@ zeroize = "secret-handling-reviewed"
 
 [policy.radroots_transport_nostr.dependency-criteria]
 async-wsocket = "network-parser-reviewed"
-nostr-relay-pool = "network-parser-reviewed"
 nostr-sdk = "network-parser-reviewed"
 tokio-tungstenite = "network-parser-reviewed"
 url = "network-parser-reviewed"

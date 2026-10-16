@@ -1,5 +1,5 @@
 use futures::{SinkExt, StreamExt};
-use nostr_sdk::prelude::{EventBuilder, JsonUtil, Keys};
+use nostr_sdk::prelude::{EventBuilder, FinalizeEvent, Keys, Kind};
 use radroots_transport::{
     EventSource, FetchRequest, TargetSet, outcome::FetchTargetState, source::FetchBounds,
 };
@@ -57,8 +57,8 @@ async fn listener() -> (TcpListener, String) {
 fn event(content: &str) -> Value {
     let keys =
         Keys::parse("0000000000000000000000000000000000000000000000000000000000000001").unwrap();
-    let event = EventBuilder::text_note(content)
-        .sign_with_keys(&keys)
+    let event = EventBuilder::new(Kind::TextNote, content)
+        .finalize(&keys)
         .unwrap();
     serde_json::from_str(&event.as_json()).unwrap()
 }
@@ -99,6 +99,94 @@ async fn serve(
                 .unwrap();
         }
         std::future::pending::<()>().await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cached_event_id_never_admits_a_changed_signature() {
+    let (listener, url) = listener().await;
+    let valid = event("cached signature admission");
+    let mut changed = valid.clone();
+    changed["sig"] = Value::String("0".repeat(128));
+    let (release, released) = oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(stream).await.unwrap();
+        for payload in [valid, changed, event("valid continuation after rejection")] {
+            loop {
+                let message = socket.next().await.unwrap().unwrap();
+                let Message::Text(text) = message else {
+                    socket.flush().await.unwrap();
+                    continue;
+                };
+                let values: Value = serde_json::from_str(&text).unwrap();
+                if values[0] != "REQ" {
+                    continue;
+                }
+                socket
+                    .send(Message::Text(
+                        serde_json::to_string(&("EVENT", &values[1], &payload))
+                            .unwrap()
+                            .into(),
+                    ))
+                    .await
+                    .unwrap();
+                socket
+                    .send(Message::Text(
+                        serde_json::to_string(&("EOSE", &values[1])).unwrap().into(),
+                    ))
+                    .await
+                    .unwrap();
+                break;
+            }
+        }
+        released.await.unwrap();
+    });
+    let (transport, request) = transport(&[url], 1);
+    let pages = tokio::time::timeout(Duration::from_secs(5), async {
+        let first = transport.fetch(request.clone()).await.unwrap();
+        let repeated = transport.fetch(request.clone()).await.unwrap();
+        let continuation = transport.fetch(request).await.unwrap();
+        (first, repeated, continuation)
+    })
+    .await
+    .unwrap();
+    release.send(()).unwrap();
+    server.await.unwrap();
+    assert_eq!(pages.0.events().len(), 1);
+    assert!(
+        pages.1.events().is_empty(),
+        "changed signature reached fetch output"
+    );
+    assert_eq!(pages.2.events().len(), 1);
+    assert!(
+        [&pages.0, &pages.1, &pages.2]
+            .into_iter()
+            .all(|page| page.target_outcomes()[0].state() == FetchTargetState::Complete)
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn overlong_event_identifiers_never_become_normalized_fetch_results() {
+    for field in ["id", "pubkey", "sig"] {
+        let (listener, url) = listener().await;
+        let mut payload = event("strict wire identifiers");
+        payload[field] = Value::String(format!("{}00", payload[field].as_str().unwrap()));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let server = tokio::spawn(serve(listener, Some(payload), true, Arc::clone(&calls)));
+        let (transport, request) = transport(&[url], 1);
+        let page = tokio::time::timeout(Duration::from_secs(5), transport.fetch(request))
+            .await
+            .unwrap()
+            .unwrap();
+        server.abort();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(page.events().is_empty(), "{field}");
+        assert_ne!(
+            page.target_outcomes()[0].state(),
+            FetchTargetState::Complete,
+            "{field}"
+        );
     }
 }
 

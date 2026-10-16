@@ -22,7 +22,7 @@ fn tls_verification_and_pinned_dns_are_non_configurable_live_defaults() {
         ".max_frame_size(Some(MAX_WIRE_MESSAGE_BYTES))",
         "validate_resolved_addresses(",
         "connect_pinned(addresses.as_slice())",
-        "ConnectionMode::Direct",
+        "if proxy.is_some()",
     ] {
         assert!(
             RELAY_SOURCE.contains(required),

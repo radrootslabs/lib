@@ -213,6 +213,45 @@ fn validate_timeout(field: &'static str, value_ms: u64) -> Result<(), Error> {
     Ok(())
 }
 
+pub(crate) async fn connect_relay(
+    client: &nostr_sdk::client::Client,
+    url: &str,
+    timeout: std::time::Duration,
+) -> Result<nostr_sdk::relay::Relay, nostr_sdk::error::Error> {
+    let relay = client.relay(url).await?.ok_or_else(|| {
+        nostr_sdk::error::Error::with_static_message(
+            nostr_sdk::error::ErrorKind::NotFound,
+            "configured relay is unavailable",
+        )
+    })?;
+    relay.try_connect().timeout(timeout).await?;
+    Ok(relay)
+}
+
+#[derive(Debug)]
+struct VerifiedEventAdmission;
+
+impl nostr_sdk::policy::AdmitPolicy for VerifiedEventAdmission {
+    fn admit_event<'a>(
+        &'a self,
+        _relay_url: &'a nostr_sdk::prelude::RelayUrl,
+        _subscription_id: &'a nostr_sdk::prelude::SubscriptionId,
+        event: &'a nostr_sdk::prelude::Event,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<nostr_sdk::policy::AdmitStatus, nostr_sdk::error::Error>,
+    > {
+        Box::pin(async move {
+            // The SDK verification cache keys only the ID, not the received body or signature.
+            Ok(if event.verify().is_ok() {
+                nostr_sdk::policy::AdmitStatus::Success
+            } else {
+                nostr_sdk::policy::AdmitStatus::Rejected { reason: None }
+            })
+        })
+    }
+}
+
 /// Concrete Nostr implementation of the transport source and sink SPIs.
 #[derive(Clone)]
 pub struct NostrTransport {
@@ -228,13 +267,20 @@ pub struct NostrTransport {
 impl NostrTransport {
     /// Creates an inert transport from validated explicit configuration.
     pub fn new(config: Config) -> Self {
-        let connector = crate::relay::HardenedWebsocketTransport::new(config.endpoints());
+        let connector = crate::relay::HardenedWebsocketTransport::new(
+            config.endpoints(),
+            std::time::Duration::from_millis(config.connect_timeout_ms()),
+        );
         let writers = connector.writers.clone();
         let ingress = connector.ingress.clone();
-        let client = nostr_sdk::Client::builder()
+        let client = nostr_sdk::client::Client::builder()
             .websocket_transport(connector)
+            .admit_policy(VerifiedEventAdmission)
+            .max_relays(std::num::NonZeroUsize::new(config.endpoints().len()))
+            .connect_timeout(std::time::Duration::from_millis(
+                config.connect_timeout_ms(),
+            ))
             .build();
-        client.automatic_authentication(false);
         let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
@@ -335,6 +381,10 @@ impl fmt::Debug for NostrTransport {
             .finish_non_exhaustive()
     }
 }
+
+#[cfg(test)]
+#[path = "native_backend_tests.rs"]
+mod native_backend_tests;
 
 #[cfg(test)]
 mod tests {

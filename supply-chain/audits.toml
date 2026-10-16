@@ -17,8 +17,326 @@ implies = "safe-to-deploy"
 description = "The package's secret lifecycle, redaction, zeroization, persistence, keyring boundary, and error behavior were reviewed for the Radroots use case."
 implies = "safe-to-deploy"
 
+[[audits.async-utility]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.3.2 -> 0.3.2@git:b323ae0c1c1424b78bf8bb8832b95e86771f1dee"
+notes = "Reviewed the complete registry-to-Git Rust delta and manifest change. Native task handles delegate polling, completion and abort to Tokio; ordinary drop detaches while AbortOnDrop requests cancellation. Native timeout/runtime modules are unchanged and parse no network bytes. The WASM implementation uses local spawning, an Abortable future, oneshot output and an acquire/release completion guard; its source review does not qualify a browser runtime. Added tests cover cancellation before polling, repeated abort, retained completed output, detached ownership and non-Unpin/non-Send values. This automated delta review inherits the existing registry 0.3.2 exemption and makes no independent audit or universal task-termination claim."
+
+[[audits.async-wsocket]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.17.0"
+notes = "Reviewed the complete native production modules, message/socket conversions, manifest and selected SDK WebSocket SPI, plus browser actor/stream ownership. Native errors and sink/stream polling delegate to Tokio/Tungstenite; no new unsafe Send wrapper is introduced. The Radroots adapter supplies its own DNS/address/TLS policy, exact wire-identifier admission, configured connection deadline, fixed frame bounds and metered ingress, so default proxy/SOCKS dialing is not admitted. Both native loopback suites exercise the actual composition. The new browser actor uses unbounded channels; it is not admitted as the bounded Radroots browser implementation. This focused automated native-use review does not qualify those browser queues or unrestricted default dialing."
+
+[[audits.autocfg]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.5.1"
+notes = "Reviewed the complete production sources and the published 1.5.0 -> 1.5.1 delta. This build-only helper accepts trusted build-script snippets and compiler/wrapper/flag inputs, invokes Command without a shell, checks the output directory, writes compiler IR there and removes only its generated probe path. Version/IO/process failures remain errors; it has no runtime network parser. The release changes the wrapper test harness, not production probing. Current Rust 1.99 compilation executes the selected build dependency. This automated review assumes governed compiler/build inputs and is not an independent audit or permission to compile untrusted network text."
+
+[[audits.bech32]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.12.0"
+notes = "Reviewed the manifest, top-level decode entry, HRP admission, character/separator checking and checksum-to-byte-iterator path. HRPs have a fixed 83-byte buffer; invalid characters, mixed case, missing separators, insufficient checksum and code-length violations return errors before collecting decoded bytes. Allocating decoding is proportional to admitted input, so callers still need input bounds. The private native Nostr path receives bounded frames and requires canonical hexadecimal EVENT/OK identities before SDK parsing; it does not accept Bech32 aliases as wire identity. This focused automated native-use review does not qualify Bitcoin witness policies, checksum selection by arbitrary callers or unbounded NIP-19 data."
+
+[[audits.bitcoin-consensus-encoding]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.3.0"
+notes = "Reviewed the manifest and feature boundaries, slice decoder drivers, fixed ArrayDecoder and byte/array encoders, and complete compact-size byte admission and minimal-encoding checks. The selected native dependency has no alloc/std/serde features; bitcoin_hashes uses fixed-size array codec traits, not a Bitcoin peer or transaction parser. Fixed buffers advance by the available remaining bytes and reject incomplete completion; exact slice decoding rejects trailing input. Arbitrary user-supplied decoders must make progress, and optional allocating collection/IO drivers are outside this admitted use. This focused automated native-use review does not qualify those optional APIs or provide a general resource bound for caller-defined codecs."
+
+[[audits.bitcoin-internals]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.6.0"
+notes = "Reviewed all production modules and the build script/manifest: fixed-array/slice transformations, the Copy-only ArrayVec safety boundary, bounded serde insertion, error/storage macros and integer casts. ArrayVec tracks initialized elements within static capacity; safe insertion refuses excess capacity and its raw slice view covers only initialized elements. Slice chunking checks nonzero constant chunk sizes. Some caller APIs can panic on invalid ranges/capacity, and allocating errors can retain raw input. Native hash callers use fixed block/array sizes and public adapter errors normalize upstream causes. The build script runs the governed rustc directly and writes only OUT_DIR/rust_version.rs. This automated source review is not a general unsafe-code proof or redaction guarantee for arbitrary callers."
+
+[[audits.bitcoin-internals]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.6.0 -> 0.7.0"
+notes = "Reviewed the complete production delta and manifest: shared array/slice safety code and build script remain unchanged, input-error formatting escapes debug characters, an integer widening cast is added, and U256 uses two fixed u128 words. U256 hex/byte serde requires exactly 32 bytes; decimal parsing returns overflow/invalid-input errors, formatting uses fixed buffers, and arithmetic/division retain documented panic conditions. Test-only serde dependencies move out of the production feature surface. Current native dependencies select no optional serde/alloc features on either internals version and do not expose U256 arithmetic as Radroots agreement values. This automated delta inherits the reviewed 0.6 source and does not qualify arbitrary arithmetic operands or monetary semantics."
+
+[[audits.bitcoin_hashes]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.2.0"
+notes = "Reviewed the selected feature manifest, fixed-hash construction/serde/hex macros, SHA256 buffering and finalization, normal software and CPU-dispatched block-processing paths, and native call sites. Fixed hash byte decoding requires exact array length; string decoding uses the reviewed fixed-size hex decoder. SHA256 buffers at most one 64-byte block and dispatches intrinsic implementations only after CPU feature detection; their four 16-byte block loads are reached with complete blocks. Native adapter ingress is bounded before hashing and its interoperation tests compare event identities across the independent codecs on macOS and Linux. This focused automated native-use review does not independently certify the cryptographic algorithm, every hash family, batch hashing API, unlimited incremental input, or another platform."
+
+[[audits.bitflags]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.3.2"
+notes = "Reviewed the manifest and complete production macro expansion and attribute filtering. Generated values contain a caller-selected integer; checked from_bits rejects unknown bits, truncate masks them, and remove uses bit-clear while toggle uses XOR. The unsafe constructor preserves bits and requires the caller's documented validity invariant. There is no byte decoder, allocation, filesystem or process access. This same-version package was already locked with a safe-to-deploy exemption; its newly inherited network criterion is evaluated for the current native composition, where the optional embedded logging edge is not selected. This is automated source review, not application authorization or optional-feature execution evidence."
+
+[[audits.byteorder]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.5.0"
+notes = "Reviewed feature boundaries, fixed integer reads/writes, variable-byte-length admission and slice conversion macros used by the hash32 edge. The selected no_std feature set excludes I/O extension helpers. Primitive reads use exact bounded slices and native endian conversions; invalid caller buffer lengths panic, rather than supplying partial values. This edge is compiled through heapless, while the admitted faster-hex std/alloc runtime uses its allocating implementation and no hash32 parser. This focused automated native-use review qualifies no arbitrary-length reader, dynamic allocation policy or invalid-call panic freedom."
+
+[[audits.chacha20]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.10.2"
+notes = "Reviewed manifest and feature selection, fixed-size state/seed and RNG entry points and CPU-dispatch boundaries. This optional rand software-generator dependency is absent from both selected native graphs: the SDK selects SysRng, not StdRng/ThreadRng or this package's cipher/RNG APIs. The package owns no network parser; its internal cipher constructors require trusted fixed key/nonce sizes. This automated review admits the inactive dependency in the current macOS/Linux composition only, and does not independently certify a new stream-cipher algorithm, optional RNG state serialization, architecture backend or secret lifecycle."
+
+[[audits.cpufeatures]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.2.17 -> 0.3.0"
+notes = "Reviewed the complete production release delta and manifest: trusted CPU detection tokens gain initialization helpers; Apple sysctl reads retain fixed-size outputs and null write arguments; x86 adds CPUID leaf 7 subleaf 1 feature bits; LoongArch feature detection combines CPUCFG and OS capability bits. No network text, collection lengths, parser or writable system setting is introduced. The 0.3 dependency belongs to an optional software RNG edge absent from the current native feature graphs. This automated delta review inherits the existing 0.2.17 exemption and does not qualify cryptographic algorithms or execute the changed optional architecture paths."
+
+[[audits.defmt]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.3.101"
+notes = "Reviewed the complete production source and manifest. This compatibility package reexports defmt 1.x macros, traits and encoding helpers and forwards its feature flags; it has no independent build script, runtime parser or network owner. Both selected native public graphs exclude it. This automated review admits that inactive reexport package for the current composition and does not qualify embedded logging, arbitrary global logger implementations or another platform."
+
+[[audits.defmt]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.2.0"
+notes = "Reviewed manifest/module boundaries, the complete build script, logger safety contract and raw-frame/rzcobs encoder ownership. The script reads the packaged linker template and writes only its generated linker script under Cargo OUT_DIR; the encoder consumes caller slices with fixed run/zero counters, not a network decoding API. Global logger thread/interrupt safety remains the implementing host's obligation. This package and build script are absent from both selected native public graphs. This focused automated review admits the inactive dependency for that composition, not embedded runtime qualification, every formatter implementation or a global logger safety proof."
+
+[[audits.defmt-macros]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.2.0"
+notes = "Reviewed manifest/build entry, macro dispatch and format-string argument parsing, log expansion/code generation, symbol construction and compile-time environment filtering. The build script emits only DEFMT_LOG rerun tracking; macros accept Rust token streams and literal format strings and generate typed Rust/linker metadata. The selected native graphs exclude this package. Format argument indices and generated code are trusted compiler inputs, not admitted network text; optional logger/panic attributes still require their host safety contracts. This focused automated inactive-use review does not certify all macro expansions or bounded parsing of arbitrary untrusted Rust/format strings."
+
+[[audits.defmt-parser]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.1.0"
+notes = "Reviewed all production parsing modules: format fragments, type names, display hints, array/range integers, brace admission and argument consistency. Parsing follows UTF-8 character boundaries and reports malformed types/ranges/braces. Argument indices control vector resizing and index-plus-one arithmetic, so this parser is unsuitable for untrusted network input without separate input/index bounds. The only relevant dependency route is optional compile-time defmt macros with trusted literals, and both selected native graphs exclude it. This automated inactive-use review supplies no runtime parser/resource qualification or permission to route network strings through this API."
+
+[[audits.faster-hex]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.10.1"
+notes = "Reviewed all production encoder, decoder, dispatch, error, serde and build-probe source and the actual Nostr fixed-array call sites. CPU dispatch checks x86 processor/OS state or aarch64 NEON support; vector reads and writes require complete source and destination chunks, with scalar tails. Encoding returns only its initialized ASCII prefix. Checked decoding rejects odd/nonhex input but permits a longer even source than the destination: it is not an exact-identifier validator. The bounded native adapter therefore checks canonical exact-length EVENT and OK identifiers before upstream normalization; real socket regressions retain the previously observed failures. Allocating helpers assume caller-sized inputs, and the admitted messages retain the adapter's frame/ingress limits. This automated native-use review does not claim general constant-time behavior, unrestricted allocation safety, optional embedded logging or browser qualification."
+
+[[audits.getrandom]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.4.2"
+notes = "Reviewed feature/backend selection, the public fill/u32/u64 and SysRng interfaces, initialization helpers and the native macOS and Linux implementations, including the Linux file fallback. macOS uses at most 256-byte getentropy chunks; Linux handles partial reads and EINTR, rejects zero/invalid progress and selects the fixed OS source rather than network-supplied paths. Initialized slice conversion follows successful complete fill. Native SDK callers request fixed-size values for ping/jitter and protocol contexts, and no packet selects a backend or buffer length. System entropy can block or fail, and the upstream UnwrapErr adapter can panic on that failure. This focused automated native-use review does not claim nonblocking entropy, panic freedom, cryptographic implementation audit or qualification of alternate Windows/UEFI/WASI/browser backends."
+
+[[audits.hash32]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.3.1"
+notes = "Reviewed all three production modules and the manifest: trait forwarding, stateless hasher construction, FNV wrapping accumulation and the Murmur3 block/tail implementation. This is a non-cryptographic hash dependency, not an event-identity or signature algorithm. The only selected reverse edge is heapless through faster-hex; the native faster-hex std/alloc implementation invokes neither those collections nor either hasher. Murmur3's potentially uninitialized buffer references are outside the admitted native call path and require separate review/proving inputs before any use. This automated use-scoped review does not certify that unsafe implementation, adversarial collision resistance or an embedded runtime."
+
+[[audits.heapless]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.8.0"
+notes = "Reviewed module/feature and build-probe boundaries plus fixed-capacity Vec/String insertion, initialization and UTF-8 conversion paths referenced by faster-hex's non-alloc alternative. Checked push/extend refuse excess capacity and strings preserve UTF-8 after safe insertion; unsafe constructors retain caller initialization/encoding requirements. The build script compiles a fixed trusted probe under OUT_DIR with governed compiler/wrapper arguments and owns no runtime network parser. The only selected reverse edge is faster-hex, whose actual std/alloc implementation uses alloc Vec/String instead; optional embedded logging and non-alloc containers are not invoked by this native composition. This focused automated review does not qualify every pool/queue/map API or the hash32 Murmur3 implementation."
+
+[[audits.hex-conservative]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "1.3.0"
+notes = "Reviewed manifest/feature boundaries, fixed/variable decoding entries, complete hex iterators and their initialized-output handling, Char representation/table conversion and the bounded buffer encoder. Fixed-array decoding checks exactly N*2 bytes before writing; invalid/odd/nonhex input returns typed errors, and decoded Vec length is published only after initialization succeeds. Unchecked ASCII conversions originate from the closed ASCII Char variants. Allocating helpers scale with caller input, so they are not standalone network size limits. The native graph supplies bounded frames and fixed-size public hash values. This focused automated source review does not qualify unbounded formatting/collection by arbitrary callers or every optional feature."
+
+[[audits.lru]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.16.4 -> 0.18.5"
+notes = "Reviewed the complete published release delta: the returned mutable reference now borrows the cache, pop detaches before a potentially panicking key destructor, allocation replaces unchecked NonNull construction, and sparse/find-and-promote/retain preserve list ownership. Reviewed the borrowed return and added retention, promotion and destructor regressions. Native SDK callers retain bounded capacities and immutable EventId keys. This delta inherits the existing 0.16.4 exemption; it is not an independent full-crate audit or a general unsafe-code proof."
+
 [[audits.negentropy]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 delta = "0.5.0 -> 0.5.2"
 notes = "Reviewed only the published 0.5.0 -> 0.5.2 delta: count admission before allocation, equivalent accumulator carry and duplicate ordering, private helper visibility and const additions. Protocol 0x61 and MIT licensing remain. Existing upstream regression tests execute separately. This automated single-owner delta review inherits the existing 0.5.0 baseline exemption; it does not claim independent/full-crate audit, complete parser canonicality or release qualification."
+
+[[audits.nostr]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.45.5"
+notes = "Reviewed the native protocol path: relay-message sequence visitor and serializers, event intermediate decoding, exact-width kind, tag/vector admission, event ID computation, key/signature decoding and verification, JSON helpers, feature manifest and the paired registry-to-Git source changes. Original bounded wire fields must pass the Radroots canonical-length guard before the upstream fixed-array hex decoder can normalize them; real malformed-ID/ACK controls prove that composition. Tags remain raw nonempty string lists, not domain-policy or typed-NIP validation. Complete event verification is required through private client admission even when the SDK ID cache hits. Optional encrypted/remote-signer NIPs are disabled in the selected native graph. This focused automated native-use review does not qualify every NIP helper, unrestricted parser inputs, cryptographic algorithms independently or another platform."
+
+[[audits.nostr]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.45.5 -> 0.45.5@git:de3031aa99986eb29b3f34580355f9a099e4c927"
+notes = "Reviewed the complete registry-to-Git Rust delta: stronger CryptoRng key-generation bounds and fixed-array conversions, key/tag conversion helpers, optional NIP47 BIP321 request/response codecs, removed infallible NIP66 accessors and relay-URL length admission. The native composition does not enable NIP47 or treat typed helper conversion as domain validation. The admitted bounded JSON/identity path retains the original-wire guard and per-event verification. This automated delta review does not qualify optional payment behavior, a browser runtime or unrestricted helper inputs."
+
+[[audits.nostr-database]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.45.2"
+notes = "Reviewed all three production modules and the complete original manifest. The unsafe-forbidden crate now contains typed database traits, statuses, owned Arc conversions, errors and a query-to-negentropy default transformation; it owns no wire decoder, storage backend, socket, process or implicit filesystem access. Save assumes an already verified Event and default negentropy collection inherits the supplied backend query's bounds. The native SDK selects its separate 35,000-entry EventId-only LRU tracker; Radroots does not admit this trait as its durable product store. This automated source review is not qualification of arbitrary backend implementations or an unbounded query."
+
+[[audits.nostr-database]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.45.2 -> 0.45.2@git:de3031aa99986eb29b3f34580355f9a099e4c927"
+notes = "Verified that every Rust source and the original package manifest are byte-identical to registry 0.45.2. The Git workspace resolves the reviewed exact private Nostr family and opaquerr dependency under the immutable source policy. No additional database implementation or parser is introduced by this Git delta."
+
+[[audits.nostr-gossip]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.45.1"
+notes = "Reviewed all production modules and the manifest. This unsafe-forbidden crate contains backend traits, typed selection limits/statuses, deterministic ordering, URL category selection, bit flags and typed errors; it opens no network connection and owns no byte decoder or storage backend. A backend must enforce its own query and collection bounds. The native adapter leaves SDK gossip unconfigured and admits destinations only through its explicit hardened connector. The flag remove operation toggles bits and is not an idempotent clear; that optional API is not used by this composition. This automated native-use review does not qualify optional gossip discovery, arbitrary backend behavior or another platform."
+
+[[audits.nostr-gossip]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.45.1 -> 0.45.1@git:de3031aa99986eb29b3f34580355f9a099e4c927"
+notes = "Reviewed the complete registry-to-Git Rust delta: default without_tls becomes false and its two documentation defaults follow that stricter choice. No parser, backend or connection authority is added. Radroots still uses no configured upstream gossip backend."
+
+[[audits.nostr-sdk]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.45.4"
+notes = "Reviewed the selected native client/pool/relay ownership, WebSocket SPI, notification and subscription paths, relay-message admission, exact ACK/authentication flow, configured limits, tracker and verification-cache behavior. Radroots supplies one hardened connector, a finite configured relay inventory, bounded ingress and operation budgets, no gossip backend and no implicit authenticator. An ID-only verification cache cannot authenticate a later changed signature, so private per-event admission verifies the complete event; a real loopback regression failed before this correction. Ordinary notification streams lose receiver gaps and are not admitted: this baseline is paired with the exact Git gap/reconnect delta and with_gaps consumers. This focused automated native-use review does not qualify optional discovery/sync/local-relay APIs, upstream diagnostic redaction, an unbounded browser implementation or another platform."
+
+[[audits.nostr-sdk]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.45.4 -> 0.45.4@git:de3031aa99986eb29b3f34580355f9a099e4c927"
+notes = "Reviewed the affected native connection driver and ownership, notification stream, persistent subscription/queued-REQ and admission changes against the registry source. Connection attempts retain identity and completion notification; stale generations cannot take current frames, queued request counters decrement on drop, and explicit disconnect revokes reconnect authority. The added with_gaps stream preserves each receiver's repeated loss and continuation instead of silently filtering it. Real Radroots socket controls cover repeated local gaps, single REQ after reconnect, configured deadlines, wire identity, explicit AUTH and retained receive limits; native source publication requires their executed results. This focused automated delta review is not an independent full-SDK audit or qualification of unused optional APIs, browser actors or diagnostic redaction."
+
+[[audits.opaquerr]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.2.0"
+notes = "Reviewed both complete production modules and the manifest. The no_std error container and declarative macros construct typed kinds and optional boxed sources; they do not decode network input, invoke processes, access files or use unsafe code. Allocating construction caches the source Display text and Debug exposes the source, so this dependency supplies neither redaction nor an independent allocation limit. The native adapter maps upstream causes into its existing typed public errors, with ingress bounded before parsing. This is automated source review for that use, not a secret-handling or unrestricted-error-formatting claim."
+
+[[audits.r-efi]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "6.0.0"
+notes = "Reviewed target/package boundaries, no_std module ownership, RNG protocol ABI and the getrandom UEFI caller. This reference crate supplies constants, ABI structures and unsafe firmware function pointers, not a network decoder or default startup routine. getrandom admits it only for target_os=uefi with the explicit efi_rng backend; its native caller is inactive in both selected macOS/Linux public graphs. This focused automated review admits that inactive target dependency and does not certify all firmware ABIs, a firmware provider, entropy quality or a UEFI artifact."
+
+[[audits.rand]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.10.1"
+notes = "Reviewed the feature manifest, RNG extension interface and integer uniform sampling used by the selected SDK. Its actual features select std/alloc/sys_rng and the getrandom SysRng reexport; software StdRng/ThreadRng and their optional ChaCha generator are not selected. The SDK uses fixed ping bytes and a constant nonempty bounded reconnect-jitter range, with no network-controlled sampling range or collection allocation. Infallible wrappers can panic on OS entropy failure and invalid caller ranges; this review does not claim those are impossible. This focused automated native-use review is not a full distribution/cryptographic algorithm audit or another platform's runtime qualification."
+
+[[audits.rand_core]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.10.1"
+notes = "Reviewed the TryRng/Rng and crypto-marker trait interfaces, dereference forwarding, complete UnwrapErr adapter and integer/byte conversion helpers used by SysRng. These interfaces own no network decoder or variable-length packet queue; they forward bounded caller buffers and propagate fallible completion. The explicit UnwrapErr conversion panics on provider errors, and a crypto marker alone proves no algorithm properties. The selected native SDK supplies fixed-size arrays and trusted sampling bounds. This focused automated source review does not qualify optional block/seed generators, arbitrary provider implementations or secret generation policy."
+
+[[audits.secp256k1]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.29.1 -> 0.30.0"
+notes = "Reviewed the complete published Rust release delta and manifest. Fixed-array key/signature constructors reject incorrect slice lengths before FFI; recovery IDs become a closed checked enum. Schnorr signing and verification now pass an explicit message slice length through the existing C backend, and the admitted Nostr path supplies a fixed 32-byte event digest. Secret Debug output remains hidden or an explicit feature-gated fingerprint, and removed no-context parsing paths no longer panic unconditionally. The resolved secp256k1-sys 0.10.1 source is unchanged. This automated delta review inherits the existing 0.29.1 network-parser exemption and does not claim a fresh C/cryptographic algorithm audit, arbitrary-message signing policy, or another platform's runtime qualification."
+
+[[audits.syn]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "3.0.2"
+notes = "Reviewed package/features, parser entry/completion checks and token-buffer construction/cursor ownership, tracing the optional defmt procedural-macro route. It parses compiler-owned token streams and rejects unconsumed tokens; recursive token construction and syntax trees do not supply a network-input allocation/depth limit. Version 3.0.2 is absent from both selected native public graphs, including build dependencies. This focused automated review admits that inactive compile-time dependency for the current composition; it does not audit every Rust grammar/unsafe cursor operation or qualify an untrusted runtime source parser."
+
+[[audits.tokio-happy-eyeballs]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.1.0"
+notes = "Reviewed the entire unsafe-free source and manifest, including empty resolution, IPv4/IPv6 partitioning, the 250 ms race, error completion and remaining-address iteration. The helper extracts the prior Async WebSocket dialing algorithm; it owns no protocol decoder, filesystem or credential input. Its caller owns total dialing deadlines and destination admission. The configured Radroots native connector bypasses this default dialer and enforces its own bounded DNS/address/TLS admission and deadline. This automated native-use review does not qualify unrestricted default dialing or another platform."
+
+[[audits.tokio-stream]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.1.18"
+notes = "Reviewed the manifest, module/feature boundaries, complete BroadcastStream and bounded/unbounded MPSC wrappers, and actual SDK call sites. The admitted SDK notification path uses BroadcastStream: each poll preserves Lagged(n), retains receiver ownership across future replacement and returns None on closure. It performs no byte decoding and owns no additional input queue. The SDK ordinary stream discards gaps, so the adapter uses only with_gaps; real socket overflow tests verify two receiver-local losses and continued retained delivery. The SDK local-relay feature is disabled. This focused automated native-use review builds on the existing same-version safe-to-deploy exemption; it does not qualify optional filesystem/signal/local-relay APIs, unbounded channels or every stream combinator."
+
+[[audits.tokio-tungstenite]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.26.2 -> 0.28.0"
+notes = "Reviewed the complete published release delta: into-inner/get-ref accessors, boxed TLS error conversion, the matching Tungstenite parent and example error adaptation. The native connector retains its verified TLS roots, original server name, pinned addresses and bounded frame configuration; real socket, exact-byte, cancellation, authentication and deadline controls execute separately. This automated delta review inherits the existing 0.26.2 exemption and does not claim an independent full-crate audit or browser/runtime-platform qualification."
+
+[[audits.tokio-util]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.7.19"
+notes = "Reviewed the manifest and complete ReusableBoxFuture, PollSender and PollSemaphore implementations, tracing the actual SDK BroadcastStream dependency. The selected helper owns one pinned Send future; replacement checks size and alignment before reuse, drops the old value in place, and restores ownership through its unwind guard. Sync exposes no shared access to the non-Sync future. PollSender retains typed ownership around its lifetime cast and reserves bounded channel permits; it is not the SDK notification reader. These helpers parse no network bytes. Current native receiver-local repeated-gap and closure tests exercise the admitted future replacement path. This focused automated review builds on the existing same-version safe-to-deploy exemption; it is not a full-crate unsafe-code proof or qualification of optional codecs, filesystem, task trackers or another platform."
+
+[[audits.tungstenite]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.26.2 -> 0.28.0"
+notes = "Reviewed the complete published release delta: boxed errors, HTTP-version admission and duplicate-header handling, frame buffer reservation/read bounds, borrowed UTF-8 hashing, fragment/control/close state transitions and TLS error conversion. The native Radroots connector supplies fixed message/frame limits and metered ingress before this decoder. Real malformed, oversized, continuation, exact-byte and deadline cases execute separately. This automated delta review inherits the existing 0.26.2 exemption; it is not an independent full-crate audit, unbounded-input guarantee or 32-bit/browser qualification."
+
+[[audits.universal-time]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.3.1"
+notes = "Reviewed all production source, feature gates and manifest: native std time uses a OnceLock monotonic origin and explicit wall-clock conversion; checked arithmetic returns Option and duration subtraction saturates, while duration operators can panic on overflow/underflow. There is no network parser or variable-sized input allocation. Native SDK connection durations come from validated adapter configuration, and packet timestamps do not supply Instant arithmetic. The no_std/WASM provider is a separately linked Sync static and is not admitted as the Radroots browser clock. This automated native-use source review is not independent audit, arbitrary-duration panic freedom or browser/no_std runtime qualification."
+
+[[audits.wasip3]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.4.0+wasi-0.3.0-rc-2026-01-06"
+notes = "Reviewed manifest, generated import/export module boundaries and the complete random-u64 host import selected by getrandom's WASIp3 backend. That backend fills bounded caller buffers with scalar imports and avoids the allocating random-byte-vector import. Generated imports depend on the trusted component host ABI; other host-pointer/vector/HTTP APIs are outside this use. The target_arch=wasm32, target_os=wasi, target_env=p3 dependency is absent from both selected native public graphs and is not the browser wasm32-unknown-unknown route. This automated review admits the inactive target dependency only, not a full generated-bindings audit, WASI host/entropy qualification or browser execution."
+
+[[audits.windows-sys]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.60.2"
+notes = "Reviewed package/feature/dependency boundaries, the complete core types and string-literal helpers, and generated socket-FFI declarations. This crate supplies Windows constants, ABI layouts and unsafe foreign-function declarations rather than a Rust-owned network decoder. Literal conversion is used by compile-time string macros; it is not a Radroots network-text API. Actual macOS aarch64 and Linux x86_64 selected public feature graphs exclude this version. This automated review admits that inactive dependency in the current native composition; it does not audit every generated Windows API, grant raw pointer/buffer authority or qualify a Windows binary."
+
+[[audits.windows-targets]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.5"
+notes = "Reviewed the complete source and target manifest. The no_std link macro emits external declarations and chooses the matching Windows import-library target or raw-dylib helper; it parses no network data and starts no runtime work. The current macOS/Linux public feature graphs exclude this version. This automated source review does not qualify Windows FFI callers, import-library execution or a Windows artifact."
+
+[[audits.windows_aarch64_gnullvm]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.windows_aarch64_msvc]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.windows_i686_gnu]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.windows_i686_gnullvm]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.windows_i686_msvc]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.windows_x86_64_gnu]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.windows_x86_64_gnullvm]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.windows_x86_64_msvc]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+version = "0.53.1"
+notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."

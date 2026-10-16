@@ -1,8 +1,9 @@
 //! Exact retained EVENT framing and connection-local acknowledgement handling.
 
 use crate::{relay::MAX_WIRE_MESSAGE_BYTES, socket_write::WriterRegistry, status};
-use nostr_relay_pool::RelayNotification;
-use nostr_sdk::{EventId, RelayMessage};
+use futures::StreamExt;
+use nostr_sdk::prelude::{EventId, RelayMessage};
+use nostr_sdk::relay::{RelayNotification, RelayStatus};
 use radroots_transport::{DeliveryRequest, outcome::DeliveryOutcome};
 use std::sync::Arc;
 
@@ -16,22 +17,27 @@ impl ExactEvent {
     pub(crate) fn from_request(request: &DeliveryRequest) -> Option<Self> {
         let signed = request.payload().event();
         let raw = signed.raw_json();
-        let event = radroots_nostr::event::to_nostr(signed.envelope()).ok()?;
+        u16::try_from(signed.envelope().kind_u32()).ok()?;
+        let id = EventId::from_slice(signed.envelope().id().as_bytes()).ok()?;
         Some(Self {
-            id: event.id,
+            id,
             frame: frame(raw)?,
         })
     }
 
     pub(crate) async fn publish(
         &self,
-        client: &nostr_sdk::Client,
+        client: &nostr_sdk::client::Client,
         writers: &WriterRegistry,
         url: &str,
     ) -> Result<DeliveryOutcome, String> {
-        let relay = client.relay(url).await.map_err(|error| error.to_string())?;
+        let relay = client
+            .relay(url)
+            .await
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "configured relay is unavailable".to_owned())?;
         // Subscribe before sending on the same connection; no success from enqueue alone.
-        let mut notifications = relay.notifications();
+        let mut notifications = relay.notifications().with_gaps();
         let writer = writers.get(url).map_err(|error| error.to_string())?;
         writer
             .send(async_wsocket::Message::Text(self.frame.to_string()))
@@ -39,8 +45,9 @@ impl ExactEvent {
             .map_err(|error| error.to_string())?;
         loop {
             let notification = notifications
-                .recv()
+                .next()
                 .await
+                .ok_or_else(|| "relay acknowledgement unavailable".to_owned())?
                 .map_err(|_| "relay acknowledgement unavailable".to_owned())?;
             if let Some(outcome) = acknowledgement(self.id, notification) {
                 return Ok(outcome);
@@ -57,25 +64,24 @@ fn frame(raw: &str) -> Option<Arc<str>> {
 
 fn acknowledgement(id: EventId, notification: RelayNotification) -> Option<DeliveryOutcome> {
     match notification {
-        RelayNotification::Message {
-            message:
-                RelayMessage::Ok {
-                    event_id,
-                    status: accepted,
-                    message,
-                },
-        } if event_id == id => Some(if accepted {
-            DeliveryOutcome::accepted()
-        } else {
-            status::delivery_failure(&message)
-        }),
+        RelayNotification::Message { message } => match *message {
+            RelayMessage::Ok {
+                event_id,
+                status: accepted,
+                message,
+            } if event_id == id => Some(if accepted {
+                DeliveryOutcome::accepted()
+            } else {
+                status::delivery_failure(&message)
+            }),
+            _ => None,
+        },
         RelayNotification::RelayStatus {
-            status:
-                nostr_sdk::RelayStatus::Disconnected
-                | nostr_sdk::RelayStatus::Terminated
-                | nostr_sdk::RelayStatus::Banned,
+            status: RelayStatus::Disconnected | RelayStatus::Idle | RelayStatus::Banned,
         } => Some(status::delivery_failure("relay disconnected")),
-        RelayNotification::Shutdown => Some(status::delivery_failure("relay shutdown")),
+        RelayNotification::RelayStatus {
+            status: RelayStatus::Shutdown,
+        } => Some(status::delivery_failure("relay shutdown")),
         _ => None,
     }
 }
@@ -103,11 +109,11 @@ mod tests {
         let id = EventId::from_byte_array([1; 32]);
         let other = EventId::from_byte_array([2; 32]);
         let ok = |event_id, status, message: &'static str| RelayNotification::Message {
-            message: RelayMessage::Ok {
+            message: Box::new(RelayMessage::Ok {
                 event_id,
                 status,
                 message: message.into(),
-            },
+            }),
         };
         assert!(acknowledgement(id, ok(other, true, "")).is_none());
         assert_eq!(
@@ -129,9 +135,9 @@ mod tests {
             ));
         }
         for status in [
-            nostr_sdk::RelayStatus::Disconnected,
-            nostr_sdk::RelayStatus::Terminated,
-            nostr_sdk::RelayStatus::Banned,
+            nostr_sdk::relay::RelayStatus::Disconnected,
+            nostr_sdk::relay::RelayStatus::Idle,
+            nostr_sdk::relay::RelayStatus::Banned,
         ] {
             assert!(!super::status::delivery_succeeded(
                 &acknowledgement(id, RelayNotification::RelayStatus { status }).unwrap()
@@ -141,13 +147,19 @@ mod tests {
             acknowledgement(
                 id,
                 RelayNotification::RelayStatus {
-                    status: nostr_sdk::RelayStatus::Connected
+                    status: nostr_sdk::relay::RelayStatus::Connected
                 }
             )
             .is_none()
         );
         assert!(!status::delivery_succeeded(
-            &acknowledgement(id, RelayNotification::Shutdown).unwrap()
+            &acknowledgement(
+                id,
+                RelayNotification::RelayStatus {
+                    status: RelayStatus::Shutdown
+                }
+            )
+            .unwrap()
         ));
     }
 }

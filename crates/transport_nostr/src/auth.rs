@@ -34,11 +34,11 @@ pub(crate) trait AuthClient: Send + Sync {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LiveAuthClient {
-    client: nostr_sdk::Client,
+    client: nostr_sdk::client::Client,
 }
 
 impl LiveAuthClient {
-    pub(crate) const fn new(client: nostr_sdk::Client) -> Self {
+    pub(crate) const fn new(client: nostr_sdk::client::Client) -> Self {
         Self { client }
     }
 }
@@ -52,12 +52,13 @@ impl AuthClient for LiveAuthClient {
             let expected = relay.as_str().trim_end_matches('/');
             let output = self
                 .client
-                .send_msg_to([relay.as_str()], ClientMessage::auth(event))
+                .send_msg(ClientMessage::auth(event))
+                .to([relay.as_str()])
                 .await
                 .map_err(|_| Error::AuthTransport)?;
             if output
                 .success
-                .iter()
+                .keys()
                 .any(|url| url.to_string().trim_end_matches('/') == expected)
             {
                 Ok(())
@@ -83,8 +84,7 @@ impl AuthFlow {
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
-        let client = nostr_sdk::Client::default();
-        client.automatic_authentication(false);
+        let client = nostr_sdk::client::Client::default();
         Self::new(Arc::new(LiveAuthClient::new(client)))
     }
 
@@ -219,8 +219,8 @@ impl NostrTransport {
             {
                 return Err(Error::AuthResponseMismatch);
             }
-            let event = radroots_nostr::event::to_nostr(signed.envelope())
-                .map_err(|_| Error::AuthResponseInvalid)?;
+            let event =
+                Event::from_json(signed.raw_json()).map_err(|_| Error::AuthResponseInvalid)?;
             self.auth.client.submit(relay.clone(), event).await?;
             self.auth.remove(relay, challenge)
         })
@@ -266,9 +266,7 @@ fn has_exact_tag(tags: &[Vec<String>], name: &str, value: &str) -> bool {
 mod tests {
     use super::*;
     use crate::{Config, RelayUrlPolicy};
-    use nostr_sdk::prelude::{
-        EventBuilder, JsonUtil, Keys, RelayUrl as UpstreamRelayUrl, Timestamp,
-    };
+    use nostr_sdk::prelude::{EventBuilder, FinalizeEvent, Keys, Kind, Tag, Timestamp};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[derive(Debug)]
@@ -302,17 +300,15 @@ mod tests {
     }
 
     fn signed_response(relay: &RelayUrl, challenge: &str, created_at: u64) -> String {
-        EventBuilder::auth(
-            challenge,
-            relay
-                .as_str()
-                .parse::<UpstreamRelayUrl>()
-                .expect("upstream relay"),
-        )
-        .custom_created_at(Timestamp::from_secs(created_at))
-        .sign_with_keys(&Keys::generate())
-        .expect("signed auth event")
-        .as_json()
+        EventBuilder::new(Kind::Authentication, "")
+            .tags([
+                Tag::parse(["relay", relay.as_str()]).expect("relay tag"),
+                Tag::parse(["challenge", challenge]).expect("challenge tag"),
+            ])
+            .custom_created_at(Timestamp::from_secs(created_at))
+            .finalize(&Keys::generate())
+            .expect("signed auth event")
+            .as_json()
     }
 
     #[test]

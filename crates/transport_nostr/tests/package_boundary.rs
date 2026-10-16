@@ -321,6 +321,7 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
             "error.rs".to_owned(),
             "exact_delivery.rs".to_owned(),
             "lib.rs".to_owned(),
+            "native_backend_tests.rs".to_owned(),
             "profile.rs".to_owned(),
             "relay.rs".to_owned(),
             "sink.rs".to_owned(),

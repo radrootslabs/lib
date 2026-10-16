@@ -1,9 +1,10 @@
 //! Bounded Nostr live-subscription adapter.
 
 use crate::{NostrTransport, RelayCursor, RelayUrl};
+use futures::StreamExt;
 use nostr_sdk::prelude::{
-    ClientMessage, Filter, JsonUtil, Kind, RelayMessage, RelayPoolNotification, ReqExitPolicy,
-    SubscribeAutoCloseOptions, SubscribeOptions, SubscriptionId, Timestamp,
+    ClientMessage, ClientNotification, Filter, Kind, PublicKey, RelayMessage, ReqExitPolicy,
+    SubscribeAutoCloseOptions, SubscriptionId, Timestamp,
 };
 use radroots_transport::{
     BoxFuture, BoxSubscription, EventSubscriber, EventSubscription, SubscriptionEnd,
@@ -60,18 +61,17 @@ pub(crate) trait RelaySubscriptionClient: Send + Sync {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LiveRelaySubscriptionClient {
-    client: nostr_sdk::Client,
+    client: nostr_sdk::client::Client,
 }
 
 impl LiveRelaySubscriptionClient {
-    pub(crate) const fn new(client: nostr_sdk::Client) -> Self {
+    pub(crate) const fn new(client: nostr_sdk::client::Client) -> Self {
         Self { client }
     }
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
-        let client = nostr_sdk::Client::default();
-        client.automatic_authentication(false);
+        let client = nostr_sdk::client::Client::default();
         Self::new(client)
     }
 }
@@ -83,7 +83,7 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
         query: RelaySubscriptionQuery,
     ) -> BoxFuture<'_, Result<Box<dyn RelaySubscriptionSession>, ()>> {
         Box::pin(async move {
-            let notifications = self.client.notifications();
+            let notifications = self.client.notifications().with_gaps();
             let subscription_id = SubscriptionId::new(query.id);
             let mut targeted = Vec::with_capacity(query.targets.len());
             let mut relay_lookup = BTreeMap::new();
@@ -91,13 +91,16 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
             for target in query.targets {
                 let url = target.relay.as_str().to_owned();
                 let filter = subscription_filter(&query.selector, target.since_unix_seconds)?;
-                self.client.add_relay(url.as_str()).await.map_err(|_| ())?;
                 self.client
-                    .try_connect_relay(url.as_str(), query.connect_timeout)
+                    .add_relay(url.as_str())
+                    .connect_timeout(query.connect_timeout)
+                    .await
+                    .map_err(|_| ())?;
+                crate::client::connect_relay(&self.client, url.as_str(), query.connect_timeout)
                     .await
                     .map_err(|_| ())?;
                 relay_lookup.insert(url.clone(), target.relay);
-                targeted.push((url, filter));
+                targeted.push((url, vec![filter]));
             }
 
             let auto_close = SubscribeAutoCloseOptions::default()
@@ -105,22 +108,18 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
                 .timeout(Some(query.timeout));
             let output = self
                 .client
-                .subscribe_targeted(
-                    subscription_id.clone(),
-                    targeted,
-                    SubscribeOptions::default().close_on(Some(auto_close)),
-                )
+                .subscribe(targeted)
+                .with_id(subscription_id.clone())
+                .close_on(auto_close)
                 .await
                 .map_err(|_| ())?;
             if !output.failed.is_empty() || output.success.len() != relay_lookup.len() {
                 let _ = self
                     .client
-                    .send_msg_to(
-                        relay_lookup.keys().map(String::as_str),
-                        ClientMessage::close(subscription_id.clone()),
-                    )
+                    .send_msg(ClientMessage::close(subscription_id.clone()))
+                    .to(relay_lookup.keys().map(String::as_str))
                     .await;
-                self.client.unsubscribe(&subscription_id).await;
+                let _ = self.client.unsubscribe(&subscription_id).await;
                 return Err(());
             }
 
@@ -139,9 +138,9 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
 }
 
 struct LiveRelaySubscriptionSession {
-    client: nostr_sdk::Client,
+    client: nostr_sdk::client::Client,
     subscription_id: SubscriptionId,
-    notifications: Option<tokio::sync::broadcast::Receiver<RelayPoolNotification>>,
+    notifications: Option<nostr_sdk::stream::NotificationStreamWithGaps<ClientNotification>>,
     relay_lookup: BTreeMap<String, RelayUrl>,
     cancelled: bool,
 }
@@ -154,19 +153,19 @@ impl RelaySubscriptionSession for LiveRelaySubscriptionSession {
                 return Ok(RelaySubscriptionItem::Shutdown);
             };
             loop {
-                let notification = match notifications.recv().await {
-                    Ok(notification) => notification,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => return Err(()),
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                let notification = match notifications.next().await {
+                    Some(Ok(notification)) => notification,
+                    Some(Err(_)) => return Err(()),
+                    None => {
                         return Ok(RelaySubscriptionItem::Shutdown);
                     }
                 };
                 match notification {
-                    RelayPoolNotification::Message { relay_url, message } => {
+                    ClientNotification::Message { relay_url, message } => {
                         let Some(relay) = self.relay_lookup.get(relay_url.as_str()).cloned() else {
                             continue;
                         };
-                        match message {
+                        match *message {
                             RelayMessage::Event {
                                 subscription_id,
                                 event,
@@ -184,10 +183,10 @@ impl RelaySubscriptionSession for LiveRelaySubscriptionSession {
                             _ => {}
                         }
                     }
-                    RelayPoolNotification::Shutdown => {
+                    ClientNotification::Shutdown => {
                         return Ok(RelaySubscriptionItem::Shutdown);
                     }
-                    RelayPoolNotification::Event { .. } => {}
+                    ClientNotification::Event { .. } => {}
                 }
             }
         })
@@ -199,16 +198,21 @@ impl RelaySubscriptionSession for LiveRelaySubscriptionSession {
             if !self.cancelled {
                 let output = self
                     .client
-                    .send_msg_to(
-                        self.relay_lookup.keys().map(String::as_str),
-                        ClientMessage::close(self.subscription_id.clone()),
-                    )
+                    .send_msg(ClientMessage::close(self.subscription_id.clone()))
+                    .to(self.relay_lookup.keys().map(String::as_str))
                     .await
                     .map_err(|_| ())?;
                 if !output.failed.is_empty() || output.success.len() != self.relay_lookup.len() {
                     return Err(());
                 }
-                self.client.unsubscribe(&self.subscription_id).await;
+                let output = self
+                    .client
+                    .unsubscribe(&self.subscription_id)
+                    .await
+                    .map_err(|_| ())?;
+                if !output.failed.is_empty() {
+                    return Err(());
+                }
                 self.cancelled = true;
                 self.notifications = None;
             }
@@ -614,7 +618,7 @@ fn subscription_filter(
     let authors = selector
         .authors()
         .iter()
-        .map(|author| radroots_nostr::key::public_key_to_nostr(*author).map_err(|_| ()))
+        .map(|author| PublicKey::from_slice(author.as_bytes()).map_err(|_| ()))
         .collect::<Result<Vec<_>, _>>()?;
     let mut filter = Filter::new();
     if !kinds.is_empty() {
@@ -745,7 +749,7 @@ mod tests {
     use crate::{
         Config, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind, RelayUrlPolicy,
     };
-    use nostr_sdk::prelude::{EventBuilder, Keys};
+    use nostr_sdk::prelude::{EventBuilder, FinalizeEvent, Keys};
     use radroots_transport::{
         EventSubscriber, Target, TargetSet,
         source::{FetchSelector, SubscriptionBounds, SubscriptionCheckpoint},
@@ -868,9 +872,9 @@ mod tests {
     }
 
     fn signed_event(content: &str, created_at: u64) -> String {
-        EventBuilder::text_note(content)
+        EventBuilder::new(Kind::TextNote, content)
             .custom_created_at(Timestamp::from_secs(created_at))
-            .sign_with_keys(&Keys::parse(FIXTURE_SECRET_KEY).expect("fixture keys"))
+            .finalize(&Keys::parse(FIXTURE_SECRET_KEY).expect("fixture keys"))
             .expect("signed event")
             .as_json()
     }

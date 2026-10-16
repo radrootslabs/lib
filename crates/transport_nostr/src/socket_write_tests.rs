@@ -8,7 +8,7 @@ fn message(text: &str) -> Message {
 fn channel_writer() -> (Arc<SocketWriter>, mpsc::Receiver<Message>) {
     let (tx, rx) = mpsc::channel(0);
     (
-        SocketWriter::new(Box::new(tx.sink_map_err(TransportError::backend))),
+        SocketWriter::new(Box::pin(tx.sink_map_err(TransportError::transport))),
         rx,
     )
 }

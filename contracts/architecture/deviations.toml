@@ -2,6 +2,37 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-043"
+date = "2026-10-16"
+status = "closed"
+approval = "The user authorizes the complete shared SDK refactor, required supported dependency repairs, verified source commits and GitHub master integration."
+affected_steps = ["030", "040", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy"]
+source_evidence = [
+  "The current nostr-database 0.44.0 and nostr-relay-pool 0.44.3 manifests require lru 0.16. The current RustSec policy reports RUSTSEC-2026-0253 fixed at lru 0.18.2 or later; the published 0.44 family has no resolving patch.",
+  "Checksum-verified published nostr-sdk 0.45.4 integrates relay ownership and admits lru 0.18. Nostr 0.45.5 and nostr-database 0.45.2 are the selected supported family. The native upstream WebSocket SPI and futures remain Send, which supplies no browser-local portability proof.",
+  "The initial native compile proves that replacing the independently consumed pure nostr 0.44 protocol package also removes its current public constructors, signer and ancillary helpers. Those source bodies do not own lru. Preserve them exactly until the approved domain/protocol replacement; use the neutral event/wire boundary to the maintained private native SDK instead.",
+  "Published SDK 0.45.1 through 0.45.4 notification streams silently discard receiver overflow errors. Public upstream commit 1c687bb852eb6dc90cd5e05a9571d0b20becc4b8 adds receiver-local with_gaps reporting. Select exact published upstream de3031aa99986eb29b3f34580355f9a099e4c927, which retains that fix and corrects duplicate queued REQs on reconnect, and qualify the actual affected source delta.",
+  "The selected private protocol's fixed-array hex helper accepts a longer even-sized string and decodes only the expected prefix. Before upstream normalization, the bounded native WebSocket adapter must enforce canonical exact-length EVENT id/pubkey/signature and OK event-id fields. Prove malformed acknowledgment and inbound-event refusal against actual loopback sockets; retain unmodified valid wire bytes and the existing single client owner.",
+  "The selected SDK caches successful verification by event ID only and skips subsequent verification on a cache hit. Test repeated actual relay delivery with a changed signature under a previously accepted ID; require complete event verification before native admission even on cache hits. Keep verification private to the existing upstream client admission SPI, with constant errors and no second decoder or network owner."
+]
+replacement_action = "Adopt the exact maintained public upstream client commit in the concrete native transport and require with_gaps on correctness-sensitive notification consumers. Preserve the exact current pure protocol adapter source and cross the private SDK boundary through neutral event/wire values. Replace removed native client APIs directly while preserving public Nostr interoperability, exact signed-event and ACK identity, explicit authentication, hardened DNS/address/TLS/frame/ingress admission, configured deadlines, bounded per-relay effects and meaningful retained regressions. Refresh affected current source-policy and dependency evidence without rewriting history, adding policy exceptions, a generic relay pool, unsafe Send wrappers or package publication authority. The complete approved domain/protocol successor remains required."
+verification = [
+  "Validate this prospective record with the existing standalone architecture command before dependency or runtime edits.",
+  "Review the actual selected source/checksums and every resolved dependency delta; check and test the complete affected native models, signer and transport closure, including real loopback transport controls.",
+  "Run strict lint/docs, owning architecture/contracts, affected portable feature checks, public API freshness and routine advisory/license/source policy. Bind unsupported/deferred browser and final candidate scope explicitly; publish the provider before any exact consumer pin.",
+]
+unresolved_risk = "Only the current native private-client source repair is qualified. Supported caller and generated-input adoption, the complete shared SDK successor, bounded browser implementation, resource and diagnostic policy, actual host/device matrix and final release qualification remain required. Automated use-scoped reviews do not provide independent security acceptance or qualification of unused dependency APIs and platforms."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The selected immutable public SDK and utility source replace the lru 0.16 dependency closure without changing the current pure protocol adapter or introducing another relay pool. Actual fixed-output Nix fetches verify both upstream inputs.",
+  "Actual original-wire ACK/event identifier and cached-ID changed-signature regressions fail before correction. The hardened connector enforces original canonical identifier lengths, and private client admission verifies each complete event even when the upstream verification cache hits. Valid continuation and exact signed outbound wire behavior are retained.",
+  "All 163 current transport tests pass on macOS aarch64 and actual Linux x86_64 under Rust 1.99.0. Locked all-target/all-feature compilation, strict Clippy/Rustdoc and transport doctests pass. The actual pinned-nightly producer remains byte-identical to the existing 163-line public API baseline.",
+  "Strict frozen cargo-vet succeeds after automated source/use review without adding or modifying any exemption. The exact unchanged resolved public graph retains its executed advisory/license/ban/source result with zero errors and the existing exact spin yank and unused license allowances. Current architecture, contracts and API boundaries pass; unchanged tooling/pure package evidence retains only its original source scope."
+]
+
+[[deviation]]
 id = "RCRV1-DEV-042"
 date = "2026-10-16"
 status = "closed"

@@ -3,10 +3,10 @@
 use crate::{NostrTransport, RelayCursor, RelayUrl, status};
 use core::cmp::Ordering;
 use core::time::Duration;
-use futures::{StreamExt, stream};
+use futures::{Stream, StreamExt, stream};
 use nostr_sdk::prelude::{
-    Filter, JsonUtil, Kind, RelayMessage, RelayNotification, ReqExitPolicy, SingleLetterTag,
-    SubscribeAutoCloseOptions, SubscribeOptions, SubscriptionId, Timestamp,
+    Filter, Kind, PublicKey, RelayMessage, RelayNotification, ReqExitPolicy, SingleLetterTag,
+    SubscribeAutoCloseOptions, SubscriptionId, Timestamp,
 };
 use radroots_transport::{
     BoxFuture, EventSource, FetchPage, FetchRequest,
@@ -63,13 +63,13 @@ pub(crate) trait RelaySourceClient: Send + Sync {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LiveRelaySourceClient {
-    client: nostr_sdk::Client,
+    client: nostr_sdk::client::Client,
     ingress: crate::source_ingress::IngressRegistry,
 }
 
 impl LiveRelaySourceClient {
     pub(crate) const fn new(
-        client: nostr_sdk::Client,
+        client: nostr_sdk::client::Client,
         ingress: crate::source_ingress::IngressRegistry,
     ) -> Self {
         Self { client, ingress }
@@ -77,8 +77,7 @@ impl LiveRelaySourceClient {
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
-        let client = nostr_sdk::Client::default();
-        client.automatic_authentication(false);
+        let client = nostr_sdk::client::Client::default();
         Self::new(client, crate::source_ingress::IngressRegistry::default())
     }
 }
@@ -162,9 +161,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
                         let authors = selector
                             .authors()
                             .iter()
-                            .filter_map(|author| {
-                                radroots_nostr::key::public_key_to_nostr(*author).ok()
-                            })
+                            .filter_map(|author| PublicKey::from_slice(author.as_bytes()).ok())
                             .collect::<Vec<_>>();
                         if authors.len() != selector.authors().len() {
                             return Ok(RelayFetchResult::Complete(Vec::new()));
@@ -186,42 +183,40 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             filter = filter.until(Timestamp::from_secs(until));
                         }
                         let connected = tokio::time::timeout_at(deadline, async {
-                            self.client
-                                .try_connect_relay(
-                                    url.as_str(),
-                                    connect_timeout.min(
-                                        deadline
-                                            .saturating_duration_since(tokio::time::Instant::now()),
-                                    ),
-                                )
-                                .await
-                                .map_err(|error| error.to_string())
+                            crate::client::connect_relay(
+                                &self.client,
+                                url.as_str(),
+                                connect_timeout.min(
+                                    deadline.saturating_duration_since(tokio::time::Instant::now()),
+                                ),
+                            )
+                            .await
+                            .map_err(|error| error.to_string())
                         })
                         .await;
-                        match connected {
+                        let relay = match connected {
                             Ok(result) => result?,
                             Err(_) => return Ok(RelayFetchResult::Timeout(Vec::new())),
-                        }
-                        let relay = self
-                            .client
-                            .relay(url.as_str())
-                            .await
-                            .map_err(|error| error.to_string())?;
-                        let mut notifications = relay.notifications();
+                        };
+                        let mut notifications = relay
+                            .notifications()
+                            .with_gaps()
+                            .map(|item| item.map_err(|_| ()));
                         let subscription_id = SubscriptionId::generate();
                         let remaining =
                             deadline.saturating_duration_since(tokio::time::Instant::now());
                         if remaining.is_zero() {
                             return Ok(RelayFetchResult::Timeout(Vec::new()));
                         }
-                        let options = SubscribeOptions::default().close_on(Some(
-                            SubscribeAutoCloseOptions::default()
-                                .exit_policy(ReqExitPolicy::ExitOnEOSE)
-                                .timeout(Some(remaining)),
-                        ));
+                        let options = SubscribeAutoCloseOptions::default()
+                            .exit_policy(ReqExitPolicy::ExitOnEOSE)
+                            .timeout(Some(remaining));
                         match tokio::time::timeout_at(
                             deadline,
-                            relay.subscribe_with_id(subscription_id.clone(), filter, options),
+                            relay
+                                .subscribe(filter)
+                                .with_id(subscription_id.clone())
+                                .close_on(options),
                         )
                         .await
                         {
@@ -266,7 +261,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
 }
 
 async fn admit_fetch_connections(
-    client: &nostr_sdk::Client,
+    client: &nostr_sdk::client::Client,
     relays: &[RelayUrl],
     deadline: tokio::time::Instant,
 ) -> Result<FetchConnections, RelayFetchResult> {
@@ -288,7 +283,12 @@ async fn admit_fetch_connections(
                     client
                         .relay(relay.as_str())
                         .await
-                        .map_err(|error| RelayFetchResult::Failed(error.to_string()))?,
+                        .map_err(|error| RelayFetchResult::Failed(error.to_string()))?
+                        .ok_or_else(|| {
+                            RelayFetchResult::Failed(String::from(
+                                "configured relay is unavailable",
+                            ))
+                        })?,
                 )
                 .map_err(RelayFetchResult::Failed)?;
         }
@@ -332,10 +332,10 @@ fn finish_fetch(
 // The SDK owns its socket tasks. Its synchronous disconnect signal disables
 // reconnect and tears down those tasks, including when the fetch future drops.
 #[derive(Default)]
-struct FetchConnections(std::sync::Mutex<Vec<nostr_sdk::Relay>>);
+struct FetchConnections(std::sync::Mutex<Vec<nostr_sdk::relay::Relay>>);
 
 impl FetchConnections {
-    fn retain(&self, relay: nostr_sdk::Relay) -> Result<(), String> {
+    fn retain(&self, relay: nostr_sdk::relay::Relay) -> Result<(), String> {
         self.0
             .lock()
             .map_err(|_| String::from("fetch connection state unavailable"))?
@@ -363,7 +363,7 @@ impl Drop for FetchConnections {
 }
 
 async fn collect_until_eose(
-    notifications: &mut tokio::sync::broadcast::Receiver<RelayNotification>,
+    notifications: &mut (impl Stream<Item = Result<RelayNotification, ()>> + Unpin),
     subscription_id: &SubscriptionId,
     deadline: tokio::time::Instant,
     budget: &FetchBudget,
@@ -379,57 +379,59 @@ async fn collect_until_eose(
         let received = tokio::select! {
             biased;
             _ = budget.wait_exhausted() => return RelayFetchResult::ResourceLimit(events),
-            received = tokio::time::timeout_at(deadline, notifications.recv()) => received,
+            received = tokio::time::timeout_at(deadline, notifications.next()) => received,
         };
         let notification = match received {
-            Ok(Ok(notification)) => notification,
-            Ok(Err(error)) => return RelayFetchResult::Failed(error.to_string()),
+            Ok(Some(Ok(notification))) => notification,
+            Ok(Some(Err(()))) => {
+                return RelayFetchResult::Failed(String::from("relay notification gap"));
+            }
+            Ok(None) => {
+                return RelayFetchResult::Failed(String::from("relay notifications unavailable"));
+            }
             Err(_) => return RelayFetchResult::Timeout(events),
         };
         if !budget.notification() {
             return RelayFetchResult::ResourceLimit(events);
         }
         match notification {
-            RelayNotification::Message {
-                message:
-                    RelayMessage::Event {
-                        subscription_id: observed_subscription,
-                        event,
-                    },
-            } if observed_subscription.as_ref() == subscription_id => {
-                if events.len() >= UPSTREAM_FETCH_LIMIT {
-                    return RelayFetchResult::ResourceLimit(events);
+            RelayNotification::Message { message } => match *message {
+                RelayMessage::Event {
+                    subscription_id: observed_subscription,
+                    event,
+                } if observed_subscription.as_ref() == subscription_id => {
+                    if events.len() >= UPSTREAM_FETCH_LIMIT {
+                        return RelayFetchResult::ResourceLimit(events);
+                    }
+                    let raw = event.as_ref().as_json();
+                    if !budget.event(raw.len()) {
+                        return RelayFetchResult::ResourceLimit(events);
+                    }
+                    events.push(raw);
                 }
-                let raw = event.as_ref().as_json();
-                if !budget.event(raw.len()) {
-                    return RelayFetchResult::ResourceLimit(events);
+                RelayMessage::EndOfStoredEvents(observed_subscription)
+                    if observed_subscription.as_ref() == subscription_id =>
+                {
+                    return if budget.exhausted() {
+                        RelayFetchResult::ResourceLimit(events)
+                    } else if tokio::time::Instant::now() < deadline {
+                        RelayFetchResult::Complete(events)
+                    } else {
+                        RelayFetchResult::Timeout(events)
+                    };
                 }
-                events.push(raw);
-            }
-            RelayNotification::Message {
-                message: RelayMessage::EndOfStoredEvents(observed_subscription),
-            } if observed_subscription.as_ref() == subscription_id => {
-                return if budget.exhausted() {
-                    RelayFetchResult::ResourceLimit(events)
-                } else if tokio::time::Instant::now() < deadline {
-                    RelayFetchResult::Complete(events)
-                } else {
-                    RelayFetchResult::Timeout(events)
-                };
-            }
-            RelayNotification::Message {
-                message:
-                    RelayMessage::Closed {
-                        subscription_id: observed_subscription,
-                        message,
-                    },
-            } if observed_subscription.as_ref() == subscription_id => {
-                return RelayFetchResult::Failed(message.into_owned());
-            }
+                RelayMessage::Closed {
+                    subscription_id: observed_subscription,
+                    message,
+                } if observed_subscription.as_ref() == subscription_id => {
+                    return RelayFetchResult::Failed(message.into_owned());
+                }
+                _ => {}
+            },
             RelayNotification::RelayStatus {
                 status:
                     nostr_sdk::prelude::RelayStatus::Disconnected
-                    | nostr_sdk::prelude::RelayStatus::Terminated
+                    | nostr_sdk::prelude::RelayStatus::Idle
                     | nostr_sdk::prelude::RelayStatus::Banned,
             } => {
                 return RelayFetchResult::Failed(String::from("relay disconnected"));
@@ -437,7 +439,9 @@ async fn collect_until_eose(
             RelayNotification::AuthenticationFailed => {
                 return RelayFetchResult::Failed(String::from("relay authentication failed"));
             }
-            RelayNotification::Shutdown => {
+            RelayNotification::RelayStatus {
+                status: nostr_sdk::prelude::RelayStatus::Shutdown,
+            } => {
                 return RelayFetchResult::Failed(String::from("relay shutdown"));
             }
             _ => {}
@@ -1114,12 +1118,14 @@ mod tests {
         let (sender, mut receiver) = tokio::sync::broadcast::channel(2);
         sender
             .send(RelayNotification::Message {
-                message: RelayMessage::EndOfStoredEvents(Cow::Owned(subscription_id.clone())),
+                message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(
+                    subscription_id.clone(),
+                ))),
             })
             .expect("EOSE");
         assert_eq!(
             collect_until_eose(
-                &mut receiver,
+                &mut test_notifications(&mut receiver),
                 &subscription_id,
                 tokio::time::Instant::now() + Duration::from_secs(1),
                 &FetchBudget::default(),
@@ -1131,7 +1137,7 @@ mod tests {
         let (_sender, mut receiver) = tokio::sync::broadcast::channel(2);
         assert_eq!(
             collect_until_eose(
-                &mut receiver,
+                &mut test_notifications(&mut receiver),
                 &subscription_id,
                 tokio::time::Instant::now(),
                 &FetchBudget::default()
@@ -1147,20 +1153,48 @@ mod tests {
         let (sender, mut receiver) = tokio::sync::broadcast::channel(1);
         sender
             .send(RelayNotification::Message {
-                message: RelayMessage::EndOfStoredEvents(Cow::Owned(subscription_id.clone())),
+                message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(
+                    subscription_id.clone(),
+                ))),
             })
             .unwrap();
         let budget = FetchBudget::default();
         assert!(!budget.wire(budget::MAX_FETCH_BYTES + 1, 0, 0));
         assert_eq!(
             collect_until_eose(
-                &mut receiver,
+                &mut test_notifications(&mut receiver),
                 &subscription_id,
                 tokio::time::Instant::now() + Duration::from_secs(1),
                 &budget
             )
             .await,
             RelayFetchResult::ResourceLimit(Vec::new())
+        );
+    }
+
+    #[tokio::test]
+    async fn receiver_gap_cannot_turn_a_retained_eose_into_complete_evidence() {
+        let id = SubscriptionId::generate();
+        let (sender, mut receiver) = tokio::sync::broadcast::channel(1);
+        sender
+            .send(RelayNotification::RelayStatus {
+                status: nostr_sdk::prelude::RelayStatus::Connected,
+            })
+            .unwrap();
+        sender
+            .send(RelayNotification::Message {
+                message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone()))),
+            })
+            .unwrap();
+        assert_eq!(
+            collect_until_eose(
+                &mut test_notifications(&mut receiver),
+                &id,
+                tokio::time::Instant::now() + Duration::from_secs(1),
+                &FetchBudget::default(),
+            )
+            .await,
+            RelayFetchResult::Failed(String::from("relay notification gap"))
         );
     }
 
@@ -1180,21 +1214,21 @@ mod tests {
             let (sender, mut receiver) = tokio::sync::broadcast::channel(2);
             sender
                 .send(RelayNotification::Message {
-                    message: RelayMessage::Event {
+                    message: Box::new(RelayMessage::Event {
                         subscription_id: Cow::Owned(id.clone()),
                         event: Cow::Owned(nostr_sdk::prelude::Event::from_json(FIRST).unwrap()),
-                    },
+                    }),
                 })
                 .unwrap();
             sender
                 .send(RelayNotification::Message {
-                    message: RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone())),
+                    message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone()))),
                 })
                 .unwrap();
             batches.push(RelayFetchBatch {
                 relay: RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap(),
                 result: collect_until_eose(
-                    &mut receiver,
+                    &mut test_notifications(&mut receiver),
                     &id,
                     tokio::time::Instant::now() + Duration::from_secs(1),
                     &budget,
@@ -1278,9 +1312,9 @@ mod tests {
 
     #[tokio::test]
     async fn completed_connection_ownership_is_retained_until_the_whole_query_finishes() {
-        let client = nostr_sdk::Client::default();
+        let client = nostr_sdk::client::Client::default();
         client.add_relay("wss://one.example").await.unwrap();
-        let relay = client.relay("wss://one.example").await.unwrap();
+        let relay = client.relay("wss://one.example").await.unwrap().unwrap();
         let connections = FetchConnections::default();
         connections.retain(relay.clone()).unwrap();
         assert_eq!(connections.0.lock().unwrap().len(), 1);
@@ -1292,7 +1326,7 @@ mod tests {
 
     #[tokio::test]
     async fn complete_connection_inventory_is_inert_and_preserves_shared_sockets_on_success() {
-        let client = nostr_sdk::Client::default();
+        let client = nostr_sdk::client::Client::default();
         let relays = ["wss://one.example", "wss://two.example"]
             .map(|url| RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap());
         let connections = admit_fetch_connections(
@@ -1305,7 +1339,12 @@ mod tests {
         assert_eq!(connections.0.lock().unwrap().len(), 2);
         for relay in &relays {
             assert_eq!(
-                client.relay(relay.as_str()).await.unwrap().status(),
+                client
+                    .relay(relay.as_str())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .status(),
                 nostr_sdk::prelude::RelayStatus::Initialized
             );
         }
@@ -1313,7 +1352,12 @@ mod tests {
         drop(connections);
         for relay in &relays {
             assert_eq!(
-                client.relay(relay.as_str()).await.unwrap().status(),
+                client
+                    .relay(relay.as_str())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .status(),
                 nostr_sdk::prelude::RelayStatus::Initialized
             );
         }
@@ -1321,7 +1365,7 @@ mod tests {
 
     #[tokio::test]
     async fn expired_inventory_performs_no_sdk_admission() {
-        let client = nostr_sdk::Client::default();
+        let client = nostr_sdk::client::Client::default();
         let relay = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).unwrap();
         for relays in [vec![relay], Vec::new()] {
             assert!(matches!(
@@ -1334,11 +1378,8 @@ mod tests {
 
     #[tokio::test]
     async fn failed_inventory_releases_every_handle_already_admitted() {
-        let client = nostr_sdk::Client::builder()
-            .opts(
-                nostr_sdk::ClientOptions::default()
-                    .pool(nostr_sdk::prelude::RelayPoolOptions::default().max_relays(Some(1))),
-            )
+        let client = nostr_sdk::client::Client::builder()
+            .max_relays(std::num::NonZeroUsize::new(1))
             .build();
         let relays = ["wss://one.example", "wss://two.example"]
             .map(|url| RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap());
@@ -1353,8 +1394,13 @@ mod tests {
         ));
         assert_eq!(client.relays().await.len(), 1);
         assert_eq!(
-            client.relay(relays[0].as_str()).await.unwrap().status(),
-            nostr_sdk::prelude::RelayStatus::Terminated
+            client
+                .relay(relays[0].as_str())
+                .await
+                .unwrap()
+                .unwrap()
+                .status(),
+            nostr_sdk::prelude::RelayStatus::Idle
         );
     }
 
@@ -1381,12 +1427,12 @@ mod tests {
                     .unwrap()
             })
             .collect::<Vec<_>>();
-        let connector = crate::relay::HardenedWebsocketTransport::new(&endpoints);
+        let connector =
+            crate::relay::HardenedWebsocketTransport::new(&endpoints, Duration::from_secs(1));
         let ingress = connector.ingress.clone();
-        let client = nostr_sdk::Client::builder()
+        let client = nostr_sdk::client::Client::builder()
             .websocket_transport(connector)
             .build();
-        client.automatic_authentication(false);
         let (started, observed) = tokio::sync::oneshot::channel();
         let first_server = tokio::spawn(async move {
             let (tcp, _) = first.accept().await.unwrap();
@@ -1404,7 +1450,14 @@ mod tests {
                                 let malformed = serde_json::to_string(&(
                                     "EVENT",
                                     &value[1],
-                                    serde_json::json!({"invalid": "x".repeat(384 * 1024)}),
+                                    // Keep primitive wire identities admissible so missing
+                                    // event fields reach the aggregate raw-ingress budget.
+                                    serde_json::json!({
+                                        "id": "00".repeat(32),
+                                        "pubkey": "11".repeat(32),
+                                        "sig": "22".repeat(64),
+                                        "invalid": "x".repeat(384 * 1024),
+                                    }),
                                 ))
                                 .unwrap();
                                 for _ in 0..24 {
@@ -1453,11 +1506,10 @@ mod tests {
             let _ = closed.send(());
         });
         client.add_relay(urls[1].as_str()).await.unwrap();
-        client
-            .try_connect_relay(urls[1].as_str(), Duration::from_secs(1))
+        crate::client::connect_relay(&client, urls[1].as_str(), Duration::from_secs(1))
             .await
             .unwrap();
-        let queued = client.relay(urls[1].as_str()).await.unwrap();
+        let queued = client.relay(urls[1].as_str()).await.unwrap().unwrap();
         let source = LiveRelaySourceClient::new(client, ingress);
         let query = SourceQuery {
             relays: urls
@@ -1504,7 +1556,7 @@ mod tests {
         assert_eq!(queued_requests.load(AtomicOrdering::SeqCst), 0);
         assert_eq!(
             status,
-            nostr_sdk::prelude::RelayStatus::Terminated,
+            nostr_sdk::prelude::RelayStatus::Idle,
             "queued preexisting socket must lose automatic reconnect authority"
         );
         closed.unwrap().unwrap();
@@ -1709,7 +1761,7 @@ mod tests {
         }
         assert_eq!(
             collect_until_eose(
-                &mut receiver,
+                &mut test_notifications(&mut receiver),
                 &id,
                 tokio::time::Instant::now() + Duration::from_secs(10),
                 &FetchBudget::default()
@@ -1727,15 +1779,15 @@ mod tests {
         for _ in 0..=UPSTREAM_FETCH_LIMIT {
             sender
                 .send(RelayNotification::Message {
-                    message: RelayMessage::Event {
+                    message: Box::new(RelayMessage::Event {
                         subscription_id: Cow::Owned(id.clone()),
                         event: Cow::Owned(event.clone()),
-                    },
+                    }),
                 })
                 .unwrap();
         }
         let result = collect_until_eose(
-            &mut receiver,
+            &mut test_notifications(&mut receiver),
             &id,
             tokio::time::Instant::now() + Duration::from_secs(10),
             &FetchBudget::default(),
@@ -1799,20 +1851,20 @@ mod tests {
             for _ in 0..17 {
                 sender
                     .send(RelayNotification::Message {
-                        message: RelayMessage::Event {
+                        message: Box::new(RelayMessage::Event {
                             subscription_id: Cow::Owned(id.clone()),
                             event: Cow::Owned(event.clone()),
-                        },
+                        }),
                     })
                     .unwrap();
             }
             sender
                 .send(RelayNotification::Message {
-                    message: RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone())),
+                    message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone()))),
                 })
                 .unwrap();
             let result = collect_until_eose(
-                &mut receiver,
+                &mut test_notifications(&mut receiver),
                 &id,
                 tokio::time::Instant::now() + Duration::from_secs(10),
                 &shared,
@@ -1904,5 +1956,19 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    fn test_notifications(
+        receiver: &mut tokio::sync::broadcast::Receiver<RelayNotification>,
+    ) -> std::pin::Pin<Box<dyn Stream<Item = Result<RelayNotification, ()>> + Send + '_>> {
+        Box::pin(futures::stream::unfold(receiver, |receiver| async {
+            match receiver.recv().await {
+                Ok(value) => Some((Ok(value), receiver)),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    Some((Err(()), receiver))
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => None,
+            }
+        }))
     }
 }

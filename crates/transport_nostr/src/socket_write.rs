@@ -7,7 +7,7 @@ use core::{
     task::{Context, Poll},
 };
 use futures::{Sink, SinkExt, lock::Mutex};
-use nostr_relay_pool::transport::{error::TransportError, websocket::WebSocketSink};
+use nostr_sdk::{error::Error as TransportError, transport::websocket::WebSocketSink};
 use radroots_transport::BoxFuture;
 use std::{
     collections::BTreeMap,

@@ -6,9 +6,8 @@ use async_wsocket::futures_util::stream::SplitSink;
 use async_wsocket::futures_util::{Sink, SinkExt, StreamExt};
 use core::fmt;
 use core::pin::Pin;
-use nostr_relay_pool::ConnectionMode;
-use nostr_relay_pool::transport::error::TransportError;
-use nostr_relay_pool::transport::websocket::{WebSocketSink, WebSocketStream, WebSocketTransport};
+use nostr_sdk::error::Error as TransportError;
+use nostr_sdk::transport::websocket::{WebSocketSink, WebSocketStream, WebSocketTransport};
 use radroots_transport::{BoxFuture, Target, TargetNetworkPolicy, TransportId};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
@@ -99,13 +98,15 @@ impl fmt::Display for RelayUrl {
 #[derive(Clone, Debug)]
 pub(crate) struct HardenedWebsocketTransport {
     policies: Arc<BTreeMap<String, RelayUrlPolicy>>,
+    connect_timeout: Duration,
     pub(crate) writers: crate::socket_write::WriterRegistry,
     pub(crate) ingress: crate::source_ingress::IngressRegistry,
 }
 
 impl HardenedWebsocketTransport {
-    pub(crate) fn new(endpoints: &[RelayEndpoint]) -> Self {
+    pub(crate) fn new(endpoints: &[RelayEndpoint], connect_timeout: Duration) -> Self {
         Self {
+            connect_timeout,
             ingress: crate::source_ingress::IngressRegistry::new(
                 endpoints
                     .iter()
@@ -137,11 +138,10 @@ impl WebSocketTransport for HardenedWebsocketTransport {
     fn connect<'a>(
         &'a self,
         url: &'a Url,
-        mode: &'a ConnectionMode,
-        timeout: Duration,
+        proxy: Option<SocketAddr>,
     ) -> BoxFuture<'a, Result<(WebSocketSink, WebSocketStream), TransportError>> {
         Box::pin(async move {
-            if !matches!(mode, ConnectionMode::Direct) {
+            if proxy.is_some() {
                 return Err(policy_error(
                     "proxy and Tor connection modes are not configured",
                 ));
@@ -185,7 +185,7 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                     let tls = tokio_rustls::TlsConnector::from(Arc::new(tls_config))
                         .connect(server_name, tcp)
                         .await
-                        .map_err(TransportError::backend)?;
+                        .map_err(TransportError::transport)?;
                     MaybeTlsStream::Rustls(tls)
                 } else {
                     MaybeTlsStream::Plain(tcp)
@@ -200,20 +200,22 @@ impl WebSocketTransport for HardenedWebsocketTransport {
                     Some(config),
                 )
                 .await
-                .map_err(TransportError::backend)?;
+                .map_err(TransportError::transport)?;
                 let (tx, rx) = stream.split();
                 let writer =
-                    crate::socket_write::SocketWriter::new(Box::new(HardenedTransportSink(tx)));
+                    crate::socket_write::SocketWriter::new(Box::pin(HardenedTransportSink(tx)));
                 self.writers.install(relay.as_str(), &writer)?;
                 let sink: WebSocketSink =
-                    Box::new(crate::socket_write::SharedSocketSink::new(writer));
-                let stream: WebSocketStream = Box::pin(
-                    rx.map(|result| result.map_err(TransportError::backend).and_then(from_wire)),
-                );
+                    Box::pin(crate::socket_write::SharedSocketSink::new(writer));
+                let stream: WebSocketStream = Box::pin(rx.map(|result| {
+                    result
+                        .map_err(TransportError::transport)
+                        .and_then(from_wire)
+                }));
                 Ok((sink, stream))
             };
 
-            tokio::time::timeout(timeout, connect)
+            tokio::time::timeout(self.connect_timeout, connect)
                 .await
                 .map_err(|_| policy_error("relay connection deadline elapsed"))?
         })
@@ -270,7 +272,7 @@ impl fmt::Display for NetworkPolicyError {
 impl std::error::Error for NetworkPolicyError {}
 
 pub(crate) fn policy_error(message: &'static str) -> TransportError {
-    TransportError::backend(NetworkPolicyError(message))
+    TransportError::policy(NetworkPolicyError(message))
 }
 
 type MeteredSocket = TokioWebSocketStream<crate::source_wire::MeteredIo<MaybeTlsStream<TcpStream>>>;
@@ -279,13 +281,50 @@ struct HardenedTransportSink(SplitSink<MeteredSocket, WireMessage>);
 
 fn from_wire(message: WireMessage) -> Result<Message, TransportError> {
     Ok(match message {
-        WireMessage::Text(text) => Message::Text(text.to_string()),
+        WireMessage::Text(text) => {
+            validate_wire_identifiers(&text)?;
+            Message::Text(text.to_string())
+        }
         WireMessage::Binary(bytes) => Message::Binary(bytes.to_vec()),
         WireMessage::Ping(bytes) => Message::Ping(bytes.to_vec()),
         WireMessage::Pong(bytes) => Message::Pong(bytes.to_vec()),
         WireMessage::Close(frame) => Message::Close(frame.map(Into::into)),
         WireMessage::Frame(_) => return Err(policy_error("unexpected raw WebSocket frame")),
     })
+}
+
+fn validate_wire_identifiers(text: &str) -> Result<(), TransportError> {
+    if text.len() > MAX_WIRE_MESSAGE_BYTES {
+        return Err(policy_error("relay message exceeds the wire limit"));
+    }
+    // Enforce original wire identities before the upstream fixed-array decoder
+    // can truncate hex to its expected prefix. Leave other decoding to the SDK.
+    let Ok(serde_json::Value::Array(fields)) = serde_json::from_str(text) else {
+        return Ok(());
+    };
+    let canonical_hex = |value: Option<&serde_json::Value>, length| {
+        value
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| {
+                value.len() == length
+                    && value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+            })
+    };
+    let valid = match fields.first().and_then(serde_json::Value::as_str) {
+        Some("OK") => canonical_hex(fields.get(1), 64),
+        Some("EVENT") => fields.get(2).is_some_and(|event| {
+            canonical_hex(event.get("id"), 64)
+                && canonical_hex(event.get("pubkey"), 64)
+                && canonical_hex(event.get("sig"), 128)
+        }),
+        _ => true,
+    };
+    if !valid {
+        return Err(policy_error("relay message has a noncanonical identifier"));
+    }
+    Ok(())
 }
 
 impl Sink<Message> for HardenedTransportSink {
@@ -298,14 +337,14 @@ impl Sink<Message> for HardenedTransportSink {
     ) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.0)
             .poll_ready_unpin(context)
-            .map_err(TransportError::backend)
+            .map_err(TransportError::transport)
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
     fn start_send(mut self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
         Pin::new(&mut self.0)
             .start_send_unpin(item.into())
-            .map_err(TransportError::backend)
+            .map_err(TransportError::transport)
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
@@ -315,7 +354,7 @@ impl Sink<Message> for HardenedTransportSink {
     ) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.0)
             .poll_flush_unpin(context)
-            .map_err(TransportError::backend)
+            .map_err(TransportError::transport)
     }
 
     #[cfg_attr(coverage_nightly, coverage(off))]
@@ -325,7 +364,7 @@ impl Sink<Message> for HardenedTransportSink {
     ) -> Poll<Result<(), Self::Error>> {
         Pin::new(&mut self.0)
             .poll_close_unpin(context)
-            .map_err(TransportError::backend)
+            .map_err(TransportError::transport)
     }
 }
 
@@ -436,6 +475,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn original_wire_identifiers_are_exact_canonical_and_never_rewritten() {
+        use serde_json::json;
+        let event = json!({"id": "ab".repeat(32), "pubkey": "cd".repeat(32),
+                           "sig": "ef".repeat(64), "extension": true});
+        let text = format!(" \n{} \t", json!(["EVENT", "bounded", event]));
+        assert_eq!(
+            from_wire(WireMessage::Text(text.clone().into())).unwrap(),
+            Message::Text(text)
+        );
+        for field in ["id", "pubkey", "sig"] {
+            let original = event[field].as_str().unwrap();
+            for invalid in [
+                json!(format!("{original}00")),
+                json!(&original[2..]),
+                json!(original.to_ascii_uppercase()),
+                json!(format!("g{}", &original[1..])),
+                json!(null),
+                json!(32),
+            ] {
+                let mut malformed = event.clone();
+                malformed[field] = invalid;
+                let text = json!(["EVENT", "bounded", malformed]).to_string();
+                assert!(
+                    from_wire(WireMessage::Text(text.into())).is_err(),
+                    "{field}"
+                );
+            }
+        }
+        for id in [json!("aa".repeat(33)), json!("AA".repeat(32)), json!(null)] {
+            let text = json!(["OK", id, true, ""]).to_string();
+            assert!(from_wire(WireMessage::Text(text.into())).is_err());
+        }
+        for control in [
+            json!(["OK", "aa".repeat(32), true, ""]),
+            json!(["AUTH", "arbitrary challenge"]),
+            json!(["EOSE", "arbitrary subscription"]),
+            json!(["NOTICE", "arbitrary notice"]),
+        ] {
+            let text = control.to_string();
+            assert_eq!(
+                from_wire(WireMessage::Text(text.clone().into())).unwrap(),
+                Message::Text(text)
+            );
+        }
+        assert!(validate_wire_identifiers(&" ".repeat(MAX_WIRE_MESSAGE_BYTES + 1)).is_err());
+    }
+
+    #[test]
     fn metered_socket_conversion_preserves_data_control_and_close_messages() {
         for message in [
             WireMessage::Text("text".into()),
@@ -479,11 +566,10 @@ mod tests {
             [endpoint.as_str()],
         )
         .expect("local TLS profile");
-        let transport = HardenedWebsocketTransport::new(profile.endpoints());
+        let transport =
+            HardenedWebsocketTransport::new(profile.endpoints(), Duration::from_secs(5));
         let url = Url::parse(&endpoint).expect("URL");
-        let result = transport
-            .connect(&url, &ConnectionMode::Direct, Duration::from_secs(5))
-            .await;
+        let result = transport.connect(&url, None).await;
         assert!(
             result.is_err(),
             "plaintext peer must not complete a secure relay connection"
@@ -536,7 +622,10 @@ mod tests {
             ["wss://relay.example.com"],
         )
         .expect("profile");
-        assert!(HardenedWebsocketTransport::new(profile.endpoints()).support_ping());
+        assert!(
+            HardenedWebsocketTransport::new(profile.endpoints(), Duration::from_secs(5))
+                .support_ping()
+        );
         assert!(!policy_error("denied").to_string().is_empty());
 
         let root = Url::parse("wss://relay.example/").expect("root URL");
@@ -553,6 +642,49 @@ mod tests {
             configured_policy_key(&fragment),
             "wss://relay.example/#status"
         );
+    }
+
+    #[tokio::test]
+    async fn proxy_refusal_precedes_socket_effects() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let url = format!("ws://{address}");
+        let endpoint =
+            crate::RelayEndpoint::new(&url, RelayUrlPolicy::Local, crate::RelayAccess::ReadOnly)
+                .unwrap();
+        let transport = HardenedWebsocketTransport::new(&[endpoint], Duration::from_secs(1));
+        let url = Url::parse(&url).unwrap();
+        assert!(transport.connect(&url, Some(address)).await.is_err());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_connector_timeout_bounds_an_unfinished_websocket_handshake() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        let endpoint =
+            crate::RelayEndpoint::new(&url, RelayUrlPolicy::Local, crate::RelayAccess::ReadOnly)
+                .unwrap();
+        let transport = HardenedWebsocketTransport::new(&[endpoint], Duration::from_millis(50));
+        let (accepted, observed) = tokio::sync::oneshot::channel();
+        let (release, wait) = tokio::sync::oneshot::channel::<()>();
+        let peer = tokio::spawn(async move {
+            let (_socket, _) = listener.accept().await.unwrap();
+            accepted.send(()).unwrap();
+            wait.await.unwrap();
+        });
+        let url = Url::parse(&url).unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), transport.connect(&url, None))
+            .await
+            .expect("the configured connector deadline must expire");
+        assert!(result.is_err());
+        observed.await.unwrap();
+        release.send(()).unwrap();
+        peer.await.unwrap();
     }
 
     #[test]

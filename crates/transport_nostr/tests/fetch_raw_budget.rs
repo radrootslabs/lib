@@ -52,6 +52,19 @@ async fn listener() -> (TcpListener, String) {
     (listener, url)
 }
 
+fn malformed_event() -> Value {
+    // Canonical primitive fields pass wire admission, while absent event
+    // fields still exercise malformed traffic in the aggregate ingress budget.
+    let value = serde_json::json!({
+        "id": "00".repeat(32),
+        "pubkey": "11".repeat(32),
+        "sig": "22".repeat(64),
+        "invalid_event": "x".repeat(384 * 1024),
+    });
+    assert!(serde_json::from_value::<nostr_sdk::prelude::Event>(value.clone()).is_err());
+    value
+}
+
 // A WebSocket pong is produced only after the client's receive stream has
 // consumed all preceding messages. No scheduling sleep is an admission barrier.
 async fn barrier(socket: &mut WebSocketStream<TcpStream>, sequence: usize) -> bool {
@@ -93,12 +106,7 @@ async fn serve_malformed(listener: TcpListener, frames: usize) {
         if values[0] != "REQ" {
             continue;
         }
-        let malformed = serde_json::to_string(&(
-            "EVENT",
-            &values[1],
-            serde_json::json!({ "invalid_event": "x".repeat(384 * 1024) }),
-        ))
-        .unwrap();
+        let malformed = serde_json::to_string(&("EVENT", &values[1], malformed_event())).unwrap();
         assert!(malformed.len() < 512 * 1024);
         for sequence in 0..frames {
             if socket
@@ -194,12 +202,13 @@ async fn unsolicited_malformed_traffic_is_bounded_before_the_request() {
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let mut socket = accept_async(stream).await.unwrap();
+        let malformed =
+            serde_json::to_string(&("EVENT", "unsolicited", malformed_event())).unwrap();
         for sequence in 0..24 {
-            let malformed = format!(
-                "[\"EVENT\",\"unsolicited\",{{\"invalid\":\"{}\"}}]",
-                "x".repeat(384 * 1024)
-            );
-            if socket.send(Message::Text(malformed.into())).await.is_err()
+            if socket
+                .send(Message::Text(malformed.clone().into()))
+                .await
+                .is_err()
                 || !barrier(&mut socket, sequence).await
             {
                 return;

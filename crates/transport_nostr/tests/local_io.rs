@@ -103,11 +103,11 @@ async fn simulator_profile_proves_read_capability_against_a_real_loopback_socket
 
 #[tokio::test(flavor = "multi_thread")]
 async fn simulator_profile_streams_and_cancels_a_real_live_subscription() {
-    use nostr_sdk::prelude::{EventBuilder, JsonUtil, Keys, Timestamp};
+    use nostr_sdk::prelude::{EventBuilder, FinalizeEvent, Keys, Kind, Timestamp};
 
-    let event = EventBuilder::text_note("bounded live event")
+    let event = EventBuilder::new(Kind::TextNote, "bounded live event")
         .custom_created_at(Timestamp::from_secs(1_800_000_100))
-        .sign_with_keys(&Keys::parse(FIXTURE_SECRET_KEY).expect("fixture keys"))
+        .finalize(&Keys::parse(FIXTURE_SECRET_KEY).expect("fixture keys"))
         .expect("signed event");
     let expected_id = event.id.to_hex();
     let event: Value = serde_json::from_str(event.as_json().as_str()).expect("event JSON");

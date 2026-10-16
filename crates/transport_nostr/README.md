@@ -79,6 +79,14 @@ of message text, including `duplicate` or `already have`.
 Closed or replaced connections do not grant fresh send authority to a retained
 writer. Missing acknowledgements remain unknown or unavailable evidence.
 
+Inbound `EVENT` identifiers, public keys and signatures, and `OK` event IDs,
+must have their canonical lowercase hexadecimal lengths on the original wire.
+The hardened connector refuses invalid fields before the SDK can normalize
+them. A longer identifier sharing a valid prefix grants no acceptance.
+Every inbound event also passes complete ID and signature verification through
+the client's private admission policy, including repeated IDs already present
+in the upstream verification cache.
+
 Callers cannot forge or mutate prepared authority:
 
 ```compile_fail

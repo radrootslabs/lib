@@ -60,13 +60,13 @@ pub(crate) trait RelayClient: Send + Sync {
 
 #[derive(Clone, Debug)]
 pub(crate) struct LiveRelayClient {
-    client: nostr_sdk::Client,
+    client: nostr_sdk::client::Client,
     writers: crate::socket_write::WriterRegistry,
 }
 
 impl LiveRelayClient {
     pub(crate) const fn new(
-        client: nostr_sdk::Client,
+        client: nostr_sdk::client::Client,
         writers: crate::socket_write::WriterRegistry,
     ) -> Self {
         Self { client, writers }
@@ -74,8 +74,7 @@ impl LiveRelayClient {
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
-        let client = nostr_sdk::Client::default();
-        client.automatic_authentication(false);
+        let client = nostr_sdk::client::Client::default();
         Self::new(
             client,
             crate::socket_write::WriterRegistry::new(std::iter::empty()),
@@ -109,10 +108,10 @@ impl RelayClient for LiveRelayClient {
                         attempted = true;
                         self.client
                             .add_relay(url.as_str())
+                            .connect_timeout(connect_timeout)
                             .await
                             .map_err(|error| error.to_string())?;
-                        self.client
-                            .try_connect_relay(url.as_str(), connect_timeout)
+                        crate::client::connect_relay(&self.client, url.as_str(), connect_timeout)
                             .await
                             .map_err(|error| error.to_string())?;
                         event.publish(&self.client, &self.writers, &url).await

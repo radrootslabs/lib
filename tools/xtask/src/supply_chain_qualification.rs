@@ -127,16 +127,23 @@ fn validate(root: &Path, contract: &Contract, expected_packages: usize) -> Resul
         return Err("invalid supply-chain qualification contract".to_owned());
     }
 
-    if contract.git_source.len() != 1 {
-        return Err("supply-chain contract requires exactly one retained Git source".to_owned());
-    }
-    let source = &contract.git_source[0];
-    if source.url != "https://github.com/rust-nostr/nostr.git"
-        || source.revision != "5bba5163eb77107f82c4a8262cf29d7f33a73219"
-        || source.packages != ["nostr", "nostr-relay-builder", "nostr-sdk"]
-        || source.removal_when != "nostr 0.45 stable satisfies Studio compatibility tests"
-    {
-        return Err("retained Git source authority drifted".to_owned());
+    let mut sources = BTreeSet::new();
+    for source in &contract.git_source {
+        let packages = source.packages.iter().collect::<BTreeSet<_>>();
+        if !source.url.starts_with("https://github.com/")
+            || source.url.contains(['?', '#', '@'])
+            || source.revision.len() != 40
+            || !source.revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || source.removal_when.is_empty()
+            || packages.is_empty()
+            || packages.len() != source.packages.len()
+            || packages.iter().any(|name| name.is_empty())
+            || !sources.insert(&source.url)
+        {
+            return Err(
+                "Git source contract requires unique immutable sources and packages".to_owned(),
+            );
+        }
     }
 
     let names = contract
@@ -190,6 +197,12 @@ fn qualify_git_sources(root: &Path, contract: &Contract) -> Result<(), String> {
         .map(|source| (source.url.clone(), source.revision.clone()))
         .collect::<BTreeSet<_>>();
     let mut seen = BTreeSet::new();
+    let manifest = root.join("Cargo.toml");
+    let raw = fs::read_to_string(&manifest)
+        .map_err(|error| format!("failed to read {}: {error}", manifest.display()))?;
+    let value = toml::from_str(&raw)
+        .map_err(|error| format!("failed to parse {}: {error}", manifest.display()))?;
+    inspect_git_dependencies(&value, &manifest, &approved, &mut seen)?;
     for entry in walkdir::WalkDir::new(root.join("crates")) {
         let entry = entry.map_err(|error| format!("failed to walk manifests: {error}"))?;
         if entry.file_name() != "Cargo.toml" {
@@ -200,9 +213,6 @@ fn qualify_git_sources(root: &Path, contract: &Contract) -> Result<(), String> {
         let manifest: toml::Value = toml::from_str(&raw)
             .map_err(|error| format!("failed to parse {}: {error}", entry.path().display()))?;
         inspect_git_dependencies(&manifest, entry.path(), &approved, &mut seen)?;
-    }
-    if seen != approved {
-        return Err("approved Git source set is stale or incomplete".to_owned());
     }
     let deny_raw = fs::read_to_string(root.join(DENY_PATH))
         .map_err(|error| format!("failed to read {DENY_PATH}: {error}"))?;
@@ -226,14 +236,27 @@ fn qualify_git_sources(root: &Path, contract: &Contract) -> Result<(), String> {
             "cargo-deny Git source authority differs from the exact-revision policy".to_owned(),
         );
     }
-    let lock = fs::read_to_string(root.join("Cargo.lock"))
+    let raw = fs::read_to_string(root.join("Cargo.lock"))
         .map_err(|error| format!("failed to read Cargo.lock: {error}"))?;
-    for source in lock.lines().filter_map(|line| {
-        line.trim()
-            .strip_prefix("source = \"")
-            .and_then(|value| value.strip_suffix('"'))
+    qualify_locked_git_sources(&raw, &contract.git_source)
+}
+
+fn qualify_locked_git_sources(raw: &str, approved: &[GitSource]) -> Result<(), String> {
+    let lock: toml::Value =
+        toml::from_str(raw).map_err(|error| format!("failed to parse Cargo.lock: {error}"))?;
+    let packages = lock
+        .get("package")
+        .and_then(toml::Value::as_array)
+        .ok_or_else(|| "Cargo.lock contains no packages".to_owned())?;
+    let mut seen = BTreeMap::<&str, BTreeSet<&str>>::new();
+    for package in packages {
+        let Some(source) = package
+            .get("source")
+            .and_then(toml::Value::as_str)
             .filter(|value| value.starts_with("git+"))
-    }) {
+        else {
+            continue;
+        };
         let (url_and_query, commit) = source
             .rsplit_once('#')
             .ok_or_else(|| format!("Git lock source has no commit: {source}"))?;
@@ -241,9 +264,32 @@ fn qualify_git_sources(root: &Path, contract: &Contract) -> Result<(), String> {
             .strip_prefix("git+")
             .and_then(|value| value.split_once("?rev="))
             .ok_or_else(|| format!("Git lock source is not exact-rev pinned: {source}"))?;
-        if commit != revision || !approved.contains(&(url.to_owned(), revision.to_owned())) {
+        let authority = approved
+            .iter()
+            .find(|entry| entry.url == url && entry.revision == revision);
+        let name = package
+            .get("name")
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| "locked Git package has no name".to_owned())?;
+        if commit != revision
+            || authority.is_none_or(|entry| !entry.packages.iter().any(|p| p == name))
+        {
             return Err(format!(
                 "Git lock source is not approved and immutable: {source}"
+            ));
+        }
+        seen.entry(url).or_default().insert(name);
+    }
+    for source in approved {
+        let expected = source
+            .packages
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        if seen.get(source.url.as_str()) != Some(&expected) {
+            return Err(format!(
+                "approved Git package set is stale or incomplete: {}",
+                source.url
             ));
         }
     }
@@ -303,7 +349,6 @@ fn validate_exceptions(root: &Path, contract: &Contract) -> Result<(), String> {
         "CARGO-YANKED-SPIN-0.9.8".to_owned(),
         "RUSTSEC-2024-0384".to_owned(),
         "RUSTSEC-2024-0421".to_owned(),
-        "RUSTSEC-2026-0243".to_owned(),
     ]);
     let actual = contract
         .advisory_exception
@@ -334,12 +379,6 @@ fn validate_exceptions(root: &Path, contract: &Contract) -> Result<(), String> {
                 exception.package == "idna"
                     && exception.affected_version == "0.5.0"
                     && exception.classification == "vulnerability"
-                    && exception.remove_when == "nostr >=0.45.0 stable"
-            }
-            "RUSTSEC-2026-0243" => {
-                exception.package == "nostr-relay-pool"
-                    && exception.affected_version == "0.44.3"
-                    && exception.classification == "unmaintained"
                     && exception.remove_when == "nostr >=0.45.0 stable"
             }
             "CARGO-YANKED-SPIN-0.9.8" => {
@@ -835,6 +874,56 @@ mod tests {
         let root = root();
         let contract = load(&root).expect("contract");
         validate(&root, &contract, 19).expect("valid contract");
+        qualify_git_sources(&root, &contract).expect("exact direct and transitive Git sources");
+    }
+
+    #[test]
+    fn locked_git_sources_reject_substitution_unpinned_refs_and_missing_packages() {
+        let root = root();
+        let contract = load(&root).unwrap();
+        let raw = fs::read_to_string(root.join("Cargo.lock")).unwrap();
+        qualify_locked_git_sources(&raw, &contract.git_source).unwrap();
+        for replacement in [
+            "git+https://github.com/unapproved/nostr?rev=de3031aa99986eb29b3f34580355f9a099e4c927#de3031aa99986eb29b3f34580355f9a099e4c927",
+            "git+https://github.com/nostrdevkit/nostr.git?branch=master#de3031aa99986eb29b3f34580355f9a099e4c927",
+            "git+https://github.com/nostrdevkit/nostr.git?rev=de3031aa99986eb29b3f34580355f9a099e4c927#0000000000000000000000000000000000000000",
+        ] {
+            let mut lock: toml::Value = toml::from_str(&raw).unwrap();
+            let package = lock["package"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|p| p["name"].as_str() == Some("nostr-sdk"))
+                .unwrap();
+            package["source"] = replacement.into();
+            assert!(
+                qualify_locked_git_sources(&toml::to_string(&lock).unwrap(), &contract.git_source)
+                    .is_err()
+            );
+        }
+        for name in ["async-utility", "nostr-sdk"] {
+            let mut lock: toml::Value = toml::from_str(&raw).unwrap();
+            lock["package"]
+                .as_array_mut()
+                .unwrap()
+                .retain(|p| p["name"].as_str() != Some(name));
+            assert!(
+                qualify_locked_git_sources(&toml::to_string(&lock).unwrap(), &contract.git_source)
+                    .is_err()
+            );
+        }
+        let mut lock: toml::Value = toml::from_str(&raw).unwrap();
+        let package = lock["package"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|p| p["name"].as_str() == Some("async-utility"))
+            .unwrap();
+        package["name"] = "unapproved-package".into();
+        assert!(
+            qualify_locked_git_sources(&toml::to_string(&lock).unwrap(), &contract.git_source)
+                .is_err()
+        );
     }
 
     #[test]

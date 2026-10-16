@@ -1,5 +1,5 @@
 use futures::{FutureExt, SinkExt, StreamExt};
-use nostr_sdk::prelude::{EventBuilder, JsonUtil, Keys, Kind, Tag, Timestamp};
+use nostr_sdk::prelude::{EventBuilder, FinalizeEvent, Keys, Kind, Tag, Timestamp};
 use radroots_transport::{
     DeliveryRequest, EventSink, EventSource, FetchRequest, TargetSet,
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
@@ -27,9 +27,9 @@ fn now() -> u64 {
 }
 
 fn raw_event() -> String {
-    let event = EventBuilder::text_note("harvest café\n🌱")
+    let event = EventBuilder::new(Kind::TextNote, "harvest café\n🌱")
         .custom_created_at(Timestamp::from_secs(1_800_000_000))
-        .sign_with_keys(&Keys::parse(KEY).unwrap())
+        .finalize(&Keys::parse(KEY).unwrap())
         .unwrap();
     let mut value: Value = serde_json::from_str(&event.as_json()).unwrap();
     value["extension"] = json!({"retained": true});
@@ -203,7 +203,7 @@ async fn exact_signed_bytes_read_requests_and_auth_use_the_same_connection() {
             Tag::parse(["challenge", "challenge"]).unwrap(),
         ])
         .custom_created_at(Timestamp::from_secs(at / 1_000))
-        .sign_with_keys(&Keys::parse(KEY).unwrap())
+        .finalize(&Keys::parse(KEY).unwrap())
         .unwrap();
     transport
         .complete_authentication(relay, "challenge", Some(&auth.as_json()), at)
@@ -220,6 +220,63 @@ async fn exact_signed_bytes_read_requests_and_auth_use_the_same_connection() {
             .satisfies(SatisfactionClass::Accepted)
     );
     server.await.unwrap();
+}
+
+#[tokio::test]
+async fn an_overlong_ack_identifier_never_accepts_the_matching_prefix() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 250);
+    let raw = raw_event();
+    let (done, wait) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(tcp).await.unwrap();
+        let event: Value = serde_json::from_str(&text(&mut socket).await).unwrap();
+        let overlong = format!("{}00", event[1]["id"].as_str().unwrap());
+        reply(&mut socket, json!(["OK", overlong, true, ""])).await;
+        wait.await.unwrap();
+    });
+    let request = request(&config, &raw);
+    let receipt = tokio::time::timeout(
+        Duration::from_secs(5),
+        NostrTransport::new(config).deliver(request.clone()),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    done.send(()).unwrap();
+    server.await.unwrap();
+    assert!(!receipt.is_satisfied(&request).unwrap());
+}
+
+#[tokio::test]
+async fn relay_challenge_never_creates_an_implicit_authentication_response() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 2_000);
+    let raw = raw_event();
+    let expected = format!("[\"EVENT\",{raw}]");
+    let server = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(tcp).await.unwrap();
+        let wire = text(&mut socket).await;
+        assert_eq!(wire, expected);
+        let event: Value = serde_json::from_str(&wire).unwrap();
+        reply(&mut socket, json!(["AUTH", "explicit-signer-required"])).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), text(&mut socket))
+                .await
+                .is_err()
+        );
+        reply(&mut socket, json!(["OK", event[1]["id"], true, ""])).await;
+    });
+    let transport = NostrTransport::new(config.clone());
+    let request = request(&config, &raw);
+    let receipt = tokio::time::timeout(Duration::from_secs(5), transport.deliver(request.clone()))
+        .await
+        .unwrap()
+        .unwrap();
+    server.await.unwrap();
+    assert!(receipt.is_satisfied(&request).unwrap());
 }
 
 #[tokio::test]

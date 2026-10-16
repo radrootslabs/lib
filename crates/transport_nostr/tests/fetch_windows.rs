@@ -1,5 +1,5 @@
 use futures::{SinkExt, StreamExt};
-use nostr_sdk::prelude::{EventBuilder, JsonUtil, Keys, Timestamp};
+use nostr_sdk::prelude::{EventBuilder, FinalizeEvent, Keys, Kind, Timestamp};
 use radroots_transport::{
     EventSource, FetchRequest, TargetSet,
     outcome::FetchTargetState,
@@ -27,9 +27,9 @@ async fn real_capped_eose_preserves_received_ties_and_yields_explicit_older_hist
         Keys::parse("0000000000000000000000000000000000000000000000000000000000000001").unwrap();
     let mut history = (0..1001)
         .map(|index| {
-            let event = EventBuilder::text_note(format!("equal-time {index}"))
+            let event = EventBuilder::new(Kind::TextNote, format!("equal-time {index}"))
                 .custom_created_at(Timestamp::from_secs(100))
-                .sign_with_keys(&keys)
+                .finalize(&keys)
                 .unwrap();
             serde_json::from_str::<Value>(&event.as_json()).unwrap()
         })
@@ -39,9 +39,9 @@ async fn real_capped_eose_preserves_received_ties_and_yields_explicit_older_hist
         .iter()
         .map(|event| event["id"].as_str().unwrap().to_owned())
         .collect::<BTreeSet<_>>();
-    let older = EventBuilder::text_note("older")
+    let older = EventBuilder::new(Kind::TextNote, "older")
         .custom_created_at(Timestamp::from_secs(99))
-        .sign_with_keys(&keys)
+        .finalize(&keys)
         .unwrap();
     history.push(serde_json::from_str(&older.as_json()).unwrap());
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
