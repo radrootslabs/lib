@@ -17,4 +17,8 @@ implies = "safe-to-deploy"
 description = "The package's secret lifecycle, redaction, zeroization, persistence, keyring boundary, and error behavior were reviewed for the Radroots use case."
 implies = "safe-to-deploy"
 
-[audits]
+[[audits.negentropy]]
+who = "Codex (automated single-owner source review)"
+criteria = "network-parser-reviewed"
+delta = "0.5.0 -> 0.5.2"
+notes = "Reviewed only the published 0.5.0 -> 0.5.2 delta: count admission before allocation, equivalent accumulator carry and duplicate ordering, private helper visibility and const additions. Protocol 0x61 and MIT licensing remain. Existing upstream regression tests execute separately. This automated single-owner delta review inherits the existing 0.5.0 baseline exemption; it does not claim independent/full-crate audit, complete parser canonicality or release qualification."
