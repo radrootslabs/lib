@@ -1,0 +1,49 @@
+{
+  "schema": "radroots.shared_sdk.compiler_preparation.v1",
+  "contract_version": 1,
+  "state": "active_requirements_execution_unclaimed",
+  "stable": "1.99.0",
+  "msrv": "1.99.0",
+  "edition": "2024",
+  "source_inputs": [
+    {
+      "path": "contracts/architecture/decisions/shared_sdk_refactor.v1.json",
+      "sha256": "b4568699c2010c0574e4e32c68aca9f3ee16cb5e2f4a7e6553dc21d636e6cb58"
+    },
+    {
+      "path": "contracts/architecture/decisions/services_hardening_source_lock.v4.json",
+      "sha256": "133057de55c3691badcc3a29a9cc7009e1adb62564e4608b7441f6a2d42373bd"
+    },
+    {
+      "path": "contracts/architecture/decisions/services_hardening_release_artifacts.v5.json",
+      "sha256": "b535c9c891889681c07031a3a6e3d3f7372501f2a233e20eb2cb2d79c9101fee"
+    }
+  ],
+  "required_declared_components": [
+    "clippy",
+    "rust-analyzer",
+    "rust-src",
+    "rustfmt"
+  ],
+  "required_declared_targets": [
+    "wasm32-unknown-unknown"
+  ],
+  "native_targets": [
+    "aarch64-apple-darwin",
+    "x86_64-unknown-linux-gnu"
+  ],
+  "apple_artifact_targets": [
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim"
+  ],
+  "nix_systems": [
+    "aarch64-darwin",
+    "x86_64-linux"
+  ],
+  "dedicated_toolchains_separate": true,
+  "historical_receipts_immutable": true,
+  "declaration_validation_proves_execution": false,
+  "execution_evidence": "separate_source_scoped_receipts",
+  "publication_authorized": false,
+  "candidate_activation_authorized": false
+}

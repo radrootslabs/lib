@@ -19,6 +19,7 @@ mod build_control;
 mod build_output;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod catalog;
+mod compiler_preparation;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod consolidation;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -526,7 +527,9 @@ fn validate_contract() -> Result<(), String> {
     let root = workspace_root();
     artifact_admission::validate_contract(&root)?;
     service_source_lock::validate_contract(&root)?;
+    // Retain historical qualification integrity separately from current requirements.
     service_build_qualification::validate_contract(&root)?;
+    compiler_preparation::validate_contract(&root)?;
     service_release_artifacts::validate_contract(&root)?;
     service_repro_install::validate_contract(&root)?;
     dto_roots::check(&root)?;
@@ -552,6 +555,7 @@ fn release_preflight_at(root: &Path) -> Result<(), String> {
             LaneId::ServiceSourceLockContract => service_source_lock::validate_contract(root),
             LaneId::ServiceBuildQualificationContract => {
                 service_build_qualification::validate_contract(root)
+                    .and_then(|()| compiler_preparation::validate_contract(root))
             }
             LaneId::ServiceReleaseArtifactsContract => {
                 service_release_artifacts::validate_contract(root)

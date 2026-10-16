@@ -75,6 +75,10 @@ This file exists for compatibility with tools that look for AGENTS.md.
   archive, OCI/source metadata, CycloneDX SBOM, notices, manifest, unsigned
   provenance signing input, and checksums. Signing credentials and signatures
   remain external; generated artifacts must contain no protected material.
+- Current SDK compiler-preparation requirements are governed by
+  `contracts/architecture/decisions/shared_sdk_compiler_preparation.v1.json`.
+  Existing contract and preflight commands validate exact current inputs;
+  declaration validation supplies no execution or release qualification.
 - Historical shared-build qualification contracts V2 and V3 remain under
   `contracts/architecture/decisions/services_hardening_build_qualification.*.json`.
   Their fixed targets, fixtures and evidence do not qualify current compiler
