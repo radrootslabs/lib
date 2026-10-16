@@ -9,8 +9,7 @@
   buildInfo,
 }:
 assert lib.assertMsg pkgs.stdenv.isLinux "service OCI images require a Linux builder";
-assert lib.assertMsg (
-  pkgs.stdenv.hostPlatform.isx86_64
+assert lib.assertMsg (pkgs.stdenv.hostPlatform.isx86_64
 ) "service OCI images support only x86_64-linux";
 assert lib.assertMsg (
   builtins.isString serviceName
@@ -55,7 +54,7 @@ assert lib.assertMsg (
   && builtins.match "^[0-9a-f]{40}$" buildInfo.libRevision != null
 ) "buildInfo.libRevision must be a full lowercase Git revision";
 assert lib.assertMsg (
-  buildInfo.rustVersion == "1.97.1"
+  buildInfo.rustVersion == "1.99.0"
 ) "buildInfo.rustVersion must match the governed Rust toolchain";
 assert lib.assertMsg (
   buildInfo.target == pkgs.stdenv.hostPlatform.rust.rustcTarget

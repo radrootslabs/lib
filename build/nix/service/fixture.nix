@@ -45,7 +45,7 @@ let
     serviceVersion = "0.1.0-alpha";
     serviceCommit = "1111111111111111111111111111111111111111";
     libRevision = "2222222222222222222222222222222222222222";
-    rustVersion = "1.97.1";
+    rustVersion = "1.99.0";
     target = pkgs.stdenv.hostPlatform.rust.rustcTarget;
     featureProfile = "service-host";
     contractVersions = {
@@ -96,7 +96,7 @@ let
             .config.Labels == {
               "dev.radroots.build.feature-profile": "service-host",
               "dev.radroots.build.lib-revision": "2222222222222222222222222222222222222222",
-              "dev.radroots.build.rust-version": "1.97.1",
+              "dev.radroots.build.rust-version": "1.99.0",
               "dev.radroots.build.target": "${pkgs.stdenv.hostPlatform.rust.rustcTarget}",
               "dev.radroots.contract.admin-version": "3",
               "dev.radroots.contract.config-version": "1",
@@ -729,6 +729,16 @@ let
         // {
           buildInfo = fixtureBuildInfo // {
             rustVersion = "stable";
+          };
+        }
+      )).outPath
+    ))
+    (builtins.tryEval (
+      (service.mkServiceOciImage (
+        ociArgs
+        // {
+          buildInfo = fixtureBuildInfo // {
+            rustVersion = "1.97.1";
           };
         }
       )).outPath
