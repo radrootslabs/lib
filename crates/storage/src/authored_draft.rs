@@ -320,7 +320,7 @@ impl AuthoredDraft {
             || schema.chars().any(char::is_control)
             || self.payload.is_empty()
             || self.payload.len() > AUTHORED_DRAFT_PAYLOAD_MAX_BYTES
-            || Sha256::digest(self.payload.as_slice()).as_slice() != self.payload_sha256
+            || Sha256::digest(self.payload.as_slice())[..] != self.payload_sha256
             || self.created_at_unix_ms == 0
             || self.updated_at_unix_ms < self.created_at_unix_ms
             || (requires_operation && self.operation_id.is_none())
