@@ -1,9 +1,9 @@
 schema = "radroots.workspace.platform-inventory.v1"
-catalog_sha256 = "f6f0d6af573b28e5b5bf7c6862d26ba6a5583d5674149fb4e96f8a6630b51735"
+catalog_sha256 = "dd9492323450398c9c7eb2e9880cdd595a950bde24d03060c3c957f7530cad61"
 
 [[platform]]
 id = "any"
-packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_event", "radroots_event_codec", "radroots_identity", "radroots_mesh_agent_proto", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_replica_schema", "radroots_sdk", "radroots_signing", "radroots_simplex_agent_proto", "radroots_simplex_chat_proto", "radroots_simplex_smp_crypto", "radroots_simplex_smp_proto", "radroots_test_fixtures", "radroots_trade", "radroots_transport"]
+packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_domain", "radroots_event", "radroots_event_codec", "radroots_identity", "radroots_mesh_agent_proto", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_replica_schema", "radroots_sdk", "radroots_signing", "radroots_simplex_agent_proto", "radroots_simplex_chat_proto", "radroots_simplex_smp_crypto", "radroots_simplex_smp_proto", "radroots_test_fixtures", "radroots_trade", "radroots_transport"]
 
 [[platform]]
 id = "native"

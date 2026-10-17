@@ -2,6 +2,32 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-044"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete shared SDK successor, required breaking changes, verified source commits and master integration."
+affected_steps = ["040", "050", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_core"]
+source_evidence = [
+  "The approved shared SDK decision assigns exact values to crates/domain. The current core decimal admits negative amounts, scale 28 and floating conversion, which cannot supply the bounded nonnegative successor boundary.",
+  "The new value prerequisite needs only the already executed native Rust 1.99 compiler and approved ownership/value contracts. Actual pending Linux and unavailable Darwin Nix qualification remain separate obligations; no platform or runtime result follows from source preparation.",
+]
+replacement_action = "Independently implement bounded nonnegative decimal and positive-amount values in the approved domain owner, using the existing active unpublished native catalog introduction-tree mechanism. Preserve the nineteen-package current public release closure and all original core source/tests until actual caller replacement. Do not introduce legacy aliases, float conversion, rounding, guessed currencies or product qualification claims."
+verification = [
+  "Validate this prospective deviation before implementation; stage the complete new package before owning catalog generation and bind its exact introduction tree.",
+  "Run exact stable formatting, focused native/default and no-default/serde checking/tests, warning-denied lint/docs and actual WASM compilation. Prove bounds, canonical string encoding, normalization, positive amounts, ordering/hash, bounded admission and exact checked arithmetic.",
+  "Run current catalog, architecture and contract checks and inspect generated projections and complete lock records. Preserve all prior immutable evidence and report unfinished facade, execution, registry, platform and caller migration explicitly.",
+]
+unresolved_risk = "This bounded value implementation does not qualify the public facade, currency/economics, retained operation execution, native/browser ports, generated bindings, supported consumers, final platform matrix or package publication. Existing core APIs remain pending direct caller replacement."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The independently authored domain value package enforces coefficient 999999999999, scale six, canonical string admission/serialization, positive-amount construction, numeric ordering/hash and exact checked addition/subtraction without floating conversion or rounding. No existing source or test is removed and no facade or operation is qualified.",
+  "Fourteen default cases pass; the same twelve non-serde cases pass without default features and all fourteen pass with serde alone. Exact stable format, native/profile checks, strict lint/docs and actual wasm32-unknown-unknown compilation pass. The preserved coverage nightly measures all 111 executable lines, all functions/regions and all 32 recorded branches covered; the unchanged ninety-percent gate passes.",
+  "Owning catalog generation/check, architecture and full contract validation pass after applying the existing explicit package-version convention. The native introduction tree is staged and digest-bound, all 600 prior complete lock records remain unchanged, and the current nineteen-package public release closure remains unchanged. Linux/Darwin Nix and successor execution/binding/consumer acceptance are not inferred.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-043"
 date = "2026-10-16"
 status = "closed"

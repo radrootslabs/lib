@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/core",
+  "crates/domain",
   "crates/event",
   "crates/event_codec",
   "crates/blossom",
@@ -111,6 +112,7 @@ dto_bindgen_core = { version = "0.1.0" }
 radroots = { path = "crates/radroots", version = "=0.1.0-alpha" }
 radroots_core_bindings = { path = "crates/core_bindings", version = "=0.1.0-alpha" }
 radroots_core = { package = "radroots_core", path = "crates/core", version = "=0.1.0-alpha", default-features = false }
+radroots_domain = { path = "crates/domain", version = "=0.1.0-alpha", default-features = false }
 radroots_event = { package = "radroots_event", path = "crates/event", version = "=0.1.0-alpha", default-features = false }
 radroots_event_codec = { package = "radroots_event_codec", path = "crates/event_codec", version = "=0.1.0-alpha", default-features = false }
 radroots_event_bindings = { path = "crates/event_bindings", version = "=0.1.0-alpha" }

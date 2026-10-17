@@ -56,6 +56,7 @@ crates = [
   "radroots_blossom",
   "radroots_core",
   "radroots_core_bindings",
+  "radroots_domain",
   "radroots_event",
   "radroots_event_bindings",
   "radroots_event_codec",

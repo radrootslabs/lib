@@ -3083,6 +3083,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_domain"
+version = "0.1.0-alpha"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "radroots_event"
 version = "0.1.0-alpha"
 dependencies = [
