@@ -1,0 +1,28 @@
+{
+  "schema": "radroots.execution.signer_session.v1",
+  "state": "component_qualified_native_and_compile_only_wasm",
+  "feature": "signer_session",
+  "construction": "Own provider and its exact host callback scope without invoking either",
+  "first_observation": "Owning Client retains the scope before awaiting actual provider identity observation",
+  "identity": "First successful key is frozen; identity drift is latched until explicit replacement, even if the original key returns",
+  "capabilities": "Method observations may change for the same key; cached values grant no command, stock, replay or qualification authority",
+  "concurrent_observations": 1,
+  "close": [
+    "Stop new resource admission",
+    "Quiesce host dispatch and unblock pending identity observations safely",
+    "Drain admitted Rust observations",
+    "Await resumable callback disposal",
+    "Release owned provider and callback roots outside bookkeeping locks"
+  ],
+  "lifecycle_owner": "Existing execution Session coordinator; no second engine, hidden runtime or Drop completion claim",
+  "host_contract": "Callback quiesce/close must own actual platform dispatch, retain partial progress and handle callbacks whose Rust observer was dropped",
+  "native": "Thread-safe handles and Send futures",
+  "browser": "Local Rc handles and futures; compile checks do not qualify browser runtime behavior",
+  "remaining": [
+    "Actual NativeConfig Client resource opening and attachment composition",
+    "Authenticated workspace and captured command context",
+    "Durable commands and obtained-result retention",
+    "Concrete platform/browser callback host qualification",
+    "Generated bindings and final acceptance"
+  ]
+}

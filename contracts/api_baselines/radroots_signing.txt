@@ -189,6 +189,10 @@ pub const fn radroots_signing::provider::ProviderState::encryption(self) -> radr
 pub const fn radroots_signing::provider::ProviderState::identity(self) -> radroots_identity::key::PublicKey
 pub const fn radroots_signing::provider::ProviderState::new(radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::recovery::ReplayCapability) -> Self
 pub const fn radroots_signing::provider::ProviderState::signing_replay(self) -> radroots_signing::recovery::ReplayCapability
+pub struct radroots_signing::provider::SignerHandle
+impl radroots_signing::provider::SignerHandle
+pub fn radroots_signing::provider::SignerHandle::into_parts(self) -> (radroots_signing::host::Shared<dyn radroots_signing::provider::ParticipantProvider>, radroots_signing::host::Shared<dyn radroots_signing::provider::SignerCallbacks>)
+pub fn radroots_signing::provider::SignerHandle::new(radroots_signing::host::Shared<dyn radroots_signing::provider::ParticipantProvider>, radroots_signing::host::Shared<dyn radroots_signing::provider::SignerCallbacks>) -> Self
 pub const radroots_signing::provider::PRIVATE_CRYPTO_MAX_BYTES: usize
 pub trait radroots_signing::provider::NonceSource: radroots_signing::host::HostBound
 pub fn radroots_signing::provider::NonceSource::next_nonce(&self) -> core::result::Result<[u8; 32], radroots_signing::provider::ProviderError>
@@ -196,6 +200,9 @@ pub trait radroots_signing::provider::ParticipantProvider: radroots_signing::sig
 pub fn radroots_signing::provider::ParticipantProvider::decrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCiphertext) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateText, radroots_signing::provider::ProviderError>>
 pub fn radroots_signing::provider::ParticipantProvider::encrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateText) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateCiphertext, radroots_signing::provider::ProviderError>>
 pub fn radroots_signing::provider::ParticipantProvider::provider_state(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>>
+pub trait radroots_signing::provider::SignerCallbacks: radroots_signing::host::HostBound
+pub fn radroots_signing::provider::SignerCallbacks::close(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<(), radroots_signing::provider::ProviderError>>
+pub fn radroots_signing::provider::SignerCallbacks::quiesce(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<(), radroots_signing::provider::ProviderError>>
 pub mod radroots_signing::receipt
 #[non_exhaustive] pub struct radroots_signing::receipt::AuthoredSignEvidence
 impl radroots_signing::receipt::AuthoredSignEvidence

@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-050"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete approved shared SDK refactor and verified source checkpoints with necessary breaking changes and source publication."
+affected_steps = ["040", "060", "110", "120", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_signing"]
+source_evidence = [
+  "Client.attach_signer requires an identity observation bound to a revocable host handle. The current participant provider performs identity/private-crypto effects but has no session-owned callback teardown boundary.",
+  "The existing execution session already qualifies bounded resource admission, pending-start interruption, draining and resumable ordered callback disposal. Reuse that owner for signer attachment instead of implementing a second lifecycle engine or treating identity as workspace authorization.",
+]
+replacement_action = "Implement an owned opaque signer handle and scoped signer session using the existing execution session. Freeze the first observed key, reject later identity drift, retain provider/callback roots during admitted observations, stop new admission before disposal and resume interrupted or failed callback closure. Keep the actual NativeConfig Client, authenticated workspace/context and durable commands as distinct obligations; no observed key grants a role or stock authority."
+verification = [
+  "Validate the prospective deviation before implementation. Prove construction is inert, actual provider observation is invoked, identity drift is rejected, callback close waits for admitted observations, and interrupted or failed disposal resumes without releasing roots early.",
+  "Prove native thread bounds and WASM local host composition, generated API freshness, unchanged measured coverage policy and owning catalog/architecture/contracts. Bind actual native-provider integration when consumed by the facade.",
+]
+unresolved_risk = "This component alone does not open a native Client, authenticate a workspace, qualify external callback hosts or execute durable listing/chat work. Concrete host, browser/binding and complete operation qualification remain required."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Six native callback-scope cases execute inert construction, actual observation, latched identity drift, bounded concurrent observation, root retention/release, failed/cancelled disposal and lost-observer cleanup. The existing session coordinator remains the lifecycle owner.",
+  "Native all-feature caller compilation, signing/execution tests and doctests pass. Strict lint exposed an equivalent nested comparison; the preserved failure is corrected with a Rust2024 let-chain and the affected execution check/tests/lint pass.",
+  "Rc-local WASM all-target composition, signing WASM and execution no_std bare-metal compilation pass. Owner-generated signing/execution public API baselines and catalog/architecture/contract/API/dependency boundaries pass.",
+  "Actual session-enabled execution and signing coverage pass the unchanged ninety-percent line/function/region/branch policy. Concrete NativeConfig Client/provider composition, platform/browser runtime hosts, authenticated context, durable jobs, bindings and final acceptance remain separate obligations.",
+]
+
+
+[[deviation]]
 id = "RCRV1-DEV-049"
 date = "2026-10-17"
 status = "closed"

@@ -15,6 +15,16 @@ pub async fn radroots_execution::session::Session<H>::start(&self) -> radroots_e
 pub fn radroots_execution::session::Session<H>::state(&self) -> radroots_execution::session::SessionState
 impl<H: radroots_execution::session::SessionHost> core::clone::Clone for radroots_execution::session::Session<H>
 pub fn radroots_execution::session::Session<H>::clone(&self) -> Self
+pub struct radroots_execution::session::SignerSession
+impl radroots_execution::session::SignerSession
+pub async fn radroots_execution::session::SignerSession::close(&self) -> radroots_execution::Result<()>
+pub fn radroots_execution::session::SignerSession::identity_changed(&self) -> bool
+pub fn radroots_execution::session::SignerSession::new(radroots_signing::provider::SignerHandle) -> Self
+pub async fn radroots_execution::session::SignerSession::observe(&self) -> core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>
+pub fn radroots_execution::session::SignerSession::observed(&self) -> core::option::Option<radroots_signing::provider::ProviderState>
+pub fn radroots_execution::session::SignerSession::state(&self) -> radroots_execution::session::SessionState
+impl core::clone::Clone for radroots_execution::session::SignerSession
+pub fn radroots_execution::session::SignerSession::clone(&self) -> Self
 pub struct radroots_execution::session::WorkPermit<H: radroots_execution::session::SessionHost>
 impl<H: radroots_execution::session::SessionHost> core::ops::drop::Drop for radroots_execution::session::WorkPermit<H>
 pub fn radroots_execution::session::WorkPermit<H>::drop(&mut self)

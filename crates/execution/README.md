@@ -8,6 +8,14 @@ The optional `session` feature adds host resource ownership without creating
 an async runtime or detached tasks. Native handles and futures are thread safe;
 WASM handles use `Rc` and accept thread-local host futures.
 
+The optional `signer_session` feature owns a provider together with its scoped
+host callbacks. Construction is inert. Explicit observation freezes the first
+participant key and rejects later identity drift; cached capabilities supply
+no workspace grant or stock authority. Close stops admission, quiesces callback
+dispatch, drains observations, awaits host disposal and releases roots. Failed
+or cancelled disposal must be resumed. The Client must retain this scope before
+awaiting first observation, including when attachment fails or loses its waiter.
+
 A proposed operation ID is not durable admission. Unknown signing or commit
 outcomes keep the original identity and require exact-operation continuation
 or manual reconciliation. Uncertain initial admission remains explicitly

@@ -13,7 +13,12 @@ use radroots_identity::PublicKey;
 use std::string::String;
 use zeroize::Zeroizing;
 
-use crate::{Signer, host::HostBound, request::CancellationSignal, signer::BoxFuture};
+use crate::{
+    Signer,
+    host::{HostBound, Shared},
+    request::CancellationSignal,
+    signer::BoxFuture,
+};
 
 /// Maximum bytes in one crypto boundary input or output. Profile budgets are
 /// independently enforced before invoking this lower-level capability.
@@ -272,4 +277,46 @@ pub trait ParticipantProvider: Signer {
         sender: PublicKey,
         ciphertext: PrivateCiphertext,
     ) -> BoxFuture<'_, Result<PrivateText, ProviderError>>;
+}
+
+/// Host callback roots belonging to one scoped participant-provider handle.
+/// Host implementations must dispatch on their required thread and retain
+/// partial progress across cancellation and known failure. These methods do
+/// not revoke another session or erase already obtained signing evidence.
+pub trait SignerCallbacks: HostBound {
+    /// Stops new dispatch and safely unblocks pending identity observations.
+    /// Keep roots and every already obtained signing result until retained.
+    fn quiesce(&self) -> BoxFuture<'_, Result<(), ProviderError>>;
+
+    /// Drains dispatched callbacks, including callbacks whose Rust observer
+    /// was dropped. Success permits releasing this scope's callback roots.
+    fn close(&self) -> BoxFuture<'_, Result<(), ProviderError>>;
+}
+
+/// Owned provider and its exact host callback scope. Construction invokes
+/// neither object and grants no workspace, command or stock authority.
+/// The host must pair these capabilities from the same actual dispatch scope.
+pub struct SignerHandle {
+    provider: Shared<dyn ParticipantProvider>,
+    callbacks: Shared<dyn SignerCallbacks>,
+}
+
+impl SignerHandle {
+    /// Takes ownership of one explicitly constructed provider scope.
+    pub fn new(
+        provider: Shared<dyn ParticipantProvider>,
+        callbacks: Shared<dyn SignerCallbacks>,
+    ) -> Self {
+        Self {
+            provider,
+            callbacks,
+        }
+    }
+
+    /// Transfers both owned capabilities to the composing lifecycle owner.
+    /// This exposes no private key and supplies no authorization or proof of
+    /// provider qualification. The owner must retain roots through closure.
+    pub fn into_parts(self) -> (Shared<dyn ParticipantProvider>, Shared<dyn SignerCallbacks>) {
+        (self.provider, self.callbacks)
+    }
 }

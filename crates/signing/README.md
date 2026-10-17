@@ -98,6 +98,12 @@ chat, record, rumor and complete-event limits before using these primitives.
 Capability and replay observations do not replace actual provider qualification
 or permit reissue of retained uncertain work.
 
+`SignerHandle` pairs a provider with its exact `SignerCallbacks` host scope.
+The lower signing port owns this contract so adapters do not depend on an
+executor. A composing lifecycle owner must quiesce dispatch, drain observers,
+await callback closure and release roots on the required host thread. Neither
+construction nor an identity observation grants a workspace or command role.
+
 ```compile_fail
 use radroots_signing::provider::PrivateText;
 let text = PrivateText::new("private inquiry").unwrap();

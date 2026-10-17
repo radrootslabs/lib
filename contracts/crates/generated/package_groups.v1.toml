@@ -1,5 +1,5 @@
 schema = "radroots.workspace.package-groups.v1"
-catalog_sha256 = "9c347e831bada40bd91e691aad9df2ba2573dc0ed1c76083939f47863f286d2c"
+catalog_sha256 = "b405314962f9fe5212288580d6376d4af51af0d731f90ae417576a9e8b55c4e3"
 
 [[group]]
 id = "boundaries"

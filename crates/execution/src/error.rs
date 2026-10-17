@@ -191,6 +191,19 @@ pub struct Error {
 }
 
 impl Error {
+    #[cfg(feature = "signer_session")]
+    pub(crate) const fn signer_unavailable() -> Self {
+        Self {
+            code: Code::SignerUnavailable,
+            context: OperationContext::proposed(None),
+            retry: RetryClass::Never,
+            detail: Some(Detail::new(
+                crate::Field::Signer,
+                crate::Reason::Unavailable,
+            )),
+        }
+    }
+
     #[cfg(feature = "session")]
     pub(crate) const fn session_unavailable(reason: crate::Reason) -> Self {
         Self {

@@ -6,6 +6,12 @@
 
 mod host;
 
+#[cfg(feature = "signer_session")]
+mod signer;
+
+#[cfg(feature = "signer_session")]
+pub use signer::SignerSession;
+
 pub use host::{HostBound, HostFuture, SessionHost};
 
 use core::{
