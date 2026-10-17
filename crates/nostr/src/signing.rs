@@ -21,6 +21,9 @@ use radroots_signing::{
 
 use crate::{Error as NostrError, key::SecretKey};
 
+mod private;
+pub use private::OsNonceSource;
+
 type Clock = fn() -> Result<u64, SigningError>;
 
 /// A local Nostr key-backed signer adapter.
@@ -28,6 +31,8 @@ pub struct LocalSigner {
     keys: nostr::Keys,
     public_key: PublicKey,
     clock: Clock,
+    nonce_source:
+        Option<radroots_signing::host::Shared<dyn radroots_signing::provider::NonceSource>>,
 }
 
 impl LocalSigner {
@@ -44,13 +49,25 @@ impl LocalSigner {
         self.public_key
     }
 
-    fn with_clock(secret_key: SecretKey, clock: Clock) -> Result<Self, crate::Error> {
+    /// Constructs the adapter with an explicit host clock.
+    pub fn with_clock(secret_key: SecretKey, clock: Clock) -> Result<Self, crate::Error> {
         let public_key = secret_key.public_key()?;
         Ok(Self {
             keys: secret_key.into_keys(),
             public_key,
             clock,
+            nonce_source: None,
         })
+    }
+
+    /// Enables private encryption with explicitly injected nonce entropy.
+    /// Identity observation and decryption never export this provider's key.
+    pub fn with_nonce_source(
+        mut self,
+        source: radroots_signing::host::Shared<dyn radroots_signing::provider::NonceSource>,
+    ) -> Self {
+        self.nonce_source = Some(source);
+        self
     }
 }
 

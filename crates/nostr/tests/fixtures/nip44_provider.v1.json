@@ -1,0 +1,14 @@
+{
+  "schema": "radroots.signing.nip44_provider_vector.v1",
+  "owning_package": "radroots_nostr",
+  "provenance": {
+    "source": "https://github.com/nostr-protocol/nips/blob/master/44.md#tests-and-code",
+    "classification": "Published synthetic interoperability vector; never a runtime identity or credential",
+    "purpose": "Independent exact ciphertext oracle for the source-owned local provider"
+  },
+  "secret_a": "0000000000000000000000000000000000000000000000000000000000000001",
+  "secret_b": "0000000000000000000000000000000000000000000000000000000000000002",
+  "nonce": "0000000000000000000000000000000000000000000000000000000000000001",
+  "plaintext": "a",
+  "ciphertext": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABee0G5VSK0/9YypIObAtDKfYEAjD35uVkHyB0F4DwrcNaCXlCWZKaArsGrY6M9wnuTMxWfp1RTN9Xga8no+kF5Vsb"
+}

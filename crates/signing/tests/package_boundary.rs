@@ -44,6 +44,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
             "radroots_protocol",
             "serde",
             "sha2",
+            "zeroize",
         ])
     );
     assert_eq!(
@@ -76,6 +77,7 @@ fn crate_root_declares_the_approved_module_skeleton() {
         "error",
         "host",
         "identity",
+        "provider",
         "recovery",
         "request",
         "receipt",
@@ -97,6 +99,7 @@ fn crate_root_declares_the_approved_module_skeleton() {
             "error",
             "host",
             "identity",
+            "provider",
             "receipt",
             "recovery",
             "request",
@@ -195,6 +198,7 @@ fn every_public_module_has_crate_level_documentation() {
         "error",
         "host",
         "identity",
+        "provider",
         "recovery",
         "request",
         "receipt",
@@ -255,6 +259,8 @@ fn production_sources_publish_only_the_approved_traits_and_no_host_stack() {
         [
             "CurrentAuthoringAuthority",
             "HostBound",
+            "NonceSource",
+            "ParticipantProvider",
             "ProgressObserver",
             "Signer"
         ]

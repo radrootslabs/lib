@@ -395,7 +395,7 @@ fn local_signer_consumes_only_the_opaque_secret_boundary() {
 fn focused_nip_and_blossom_features_own_no_network_operations() {
     for required in [
         "blossom = [\"events\", \"dep:base64\", \"dep:radroots_blossom\"]",
-        "nip17 = [\"events\", \"nostr/nip44\", \"nostr/nip59\"]",
+        "nip17 = [\"events\", \"nostr/nip44\", \"nostr/nip59\", \"dep:base64\"]",
     ] {
         assert!(
             MANIFEST.contains(required),

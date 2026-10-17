@@ -11,6 +11,7 @@ pub mod capability;
 pub mod error;
 pub mod host;
 pub mod identity;
+pub mod provider;
 pub mod receipt;
 pub mod recovery;
 pub mod request;

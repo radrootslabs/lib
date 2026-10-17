@@ -269,11 +269,20 @@ impl radroots_nostr::signing::LocalSigner
 pub fn radroots_nostr::signing::LocalSigner::generate() -> core::result::Result<Self, radroots_nostr::Error>
 pub fn radroots_nostr::signing::LocalSigner::new(radroots_nostr::key::SecretKey) -> core::result::Result<Self, radroots_nostr::Error>
 pub const fn radroots_nostr::signing::LocalSigner::public_key(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_nostr::signing::LocalSigner::with_clock(radroots_nostr::key::SecretKey, fn() -> core::result::Result<u64, radroots_signing::error::Error>) -> core::result::Result<Self, radroots_nostr::Error>
+pub fn radroots_nostr::signing::LocalSigner::with_nonce_source(self, radroots_signing::host::Shared<dyn radroots_signing::provider::NonceSource>) -> Self
 impl core::fmt::Debug for radroots_nostr::signing::LocalSigner
 pub fn radroots_nostr::signing::LocalSigner::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl radroots_signing::provider::ParticipantProvider for radroots_nostr::signing::LocalSigner
+pub fn radroots_nostr::signing::LocalSigner::decrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCiphertext) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateText, radroots_signing::provider::ProviderError>>
+pub fn radroots_nostr::signing::LocalSigner::encrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateText) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateCiphertext, radroots_signing::provider::ProviderError>>
+pub fn radroots_nostr::signing::LocalSigner::provider_state(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>>
 impl radroots_signing::signer::Signer for radroots_nostr::signing::LocalSigner
 pub fn radroots_nostr::signing::LocalSigner::sign(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>>
 pub fn radroots_nostr::signing::LocalSigner::status(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>>
+pub struct radroots_nostr::signing::OsNonceSource
+impl radroots_signing::provider::NonceSource for radroots_nostr::signing::OsNonceSource
+pub fn radroots_nostr::signing::OsNonceSource::next_nonce(&self) -> core::result::Result<[u8; 32], radroots_signing::provider::ProviderError>
 pub mod radroots_nostr::tag
 pub enum radroots_nostr::tag::ResolveError
 pub radroots_nostr::tag::ResolveError::DecryptionError(alloc::string::String)

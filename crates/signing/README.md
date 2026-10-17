@@ -88,6 +88,28 @@ The complete externally implementable SPI example is
 
 ## Host SPI contract
 
+The `provider` module adds a participant identity observation and separate
+NIP-44 encryption/decryption capabilities. `ParticipantProvider` retains key
+custody and exposes no secret key. `ProviderCall` freezes the observed key,
+deadline and cancellation input without claiming authenticated command admission.
+Private text is bounded before copying, zeroized when dropped and redacted in
+diagnostics. The caller authenticates message carriers and applies the stricter
+chat, record, rumor and complete-event limits before using these primitives.
+Capability and replay observations do not replace actual provider qualification
+or permit reissue of retained uncertain work.
+
+```compile_fail
+use radroots_signing::provider::PrivateText;
+let text = PrivateText::new("private inquiry").unwrap();
+let duplicate = text.clone();
+```
+
+```compile_fail
+use radroots_signing::provider::PrivateText;
+let text = PrivateText::new("private inquiry").unwrap();
+let wire = serde_json::to_string(&text);
+```
+
 `Signer` is externally implementable and object-safe. Native hosts retain
 `Send + Sync` and boxed `Future + Send`; WASM hosts and futures may remain local.
 `host::Shared` selects native `Arc` or browser `Rc` for signer and progress

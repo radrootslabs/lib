@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 [workspace]
 
 [dependencies]
+radroots_identity = { path = "../../../../identity", version = "=0.1.0-alpha", default-features = false }
 radroots_sync = { path = "../../..", version = "=0.1.0-alpha", default-features = false }
 radroots_signing = { path = "../../../../signing", version = "=0.1.0-alpha", default-features = false }
 radroots_storage = { path = "../../../../storage", version = "=0.1.0-alpha", default-features = false }

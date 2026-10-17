@@ -1,0 +1,25 @@
+{
+  "schema": "radroots.signing.participant_provider.v1",
+  "state": "native_local_implementation_in_qualification",
+  "identity": "Observed participant public key; neither an authenticated grant nor stock authority",
+  "crypto": "Bounded NIP-44 v2 primitives; executor authenticates carriers and applies stricter profile budgets",
+  "primitive_input_output_bytes": 65536,
+  "chat_and_record_limits_overridden": false,
+  "plaintext_ownership": "Bounded before copying; owned buffers zeroized on drop; no Clone or serialization; constant redacted Debug",
+  "nonce_entropy": "Explicit injected CSPRNG capability; trait and returned array supply no entropy qualification",
+  "native_nonce_transcription": "Exactly one 32-byte request into pinned codec RngCore; no CryptoRng claim; changed consumption refused before output",
+  "native_backend": {
+    "package": "nostr",
+    "version": "0.44.7",
+    "source": "crates.io",
+    "archive_sha256": "c7d3d987ea7078dc36947cde532637c472a229426702e4331dd7667325378bd9",
+    "scope": "Existing original-length codec within smaller Radroots profile limits; no extended-length capability claim"
+  },
+  "admission": "Freeze expected provider identity and explicit deadline; reject cancelled/expired/mismatched calls before effects",
+  "obtained_results": "No post-effect deadline/cancellation check discards a returned result; executor retains preimages before signing",
+  "signing_replay": "Identity-scoped observation; never overrides retained unknown state or permits blind reissue",
+  "private_key_export": false,
+  "runtime_created": false,
+  "implicit_publication": false,
+  "remaining": ["Authenticated session attachment", "Durable command and obtained-result ownership", "Remote/platform/browser provider qualification", "Complete private chat and binding workflows"]
+}

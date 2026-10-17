@@ -8,6 +8,8 @@ fn every_native_port_retains_its_thread_guarantees() {
     fn send_sync<T: Send + Sync + ?Sized>() {}
     fn send<T: Send + ?Sized>() {}
     send_sync::<dyn radroots_signing::Signer>();
+    send_sync::<dyn radroots_signing::provider::ParticipantProvider>();
+    send_sync::<dyn radroots_signing::provider::NonceSource>();
     send_sync::<dyn radroots_signing::CurrentAuthoringAuthority>();
     send_sync::<dyn radroots_signing::request::ProgressObserver>();
     send_sync::<dyn radroots_transport::EventSource>();
@@ -63,6 +65,44 @@ mod browser {
             _: signing::SignRequest,
         ) -> signing::signer::BoxFuture<'_, Result<signing::SignReceipt, signing::Error>> {
             self.failed(signing::Error::new(signing::error::Kind::SignerUnavailable))
+        }
+    }
+    impl signing::provider::NonceSource for Local {
+        fn next_nonce(&self) -> Result<[u8; 32], signing::provider::ProviderError> {
+            self.0.set(self.0.get() + 1);
+            Err(signing::provider::ProviderError::CapabilityUnavailable)
+        }
+    }
+    impl signing::provider::ParticipantProvider for Local {
+        fn provider_state(
+            &self,
+        ) -> signing::signer::BoxFuture<
+            '_,
+            Result<signing::provider::ProviderState, signing::provider::ProviderError>,
+        > {
+            self.failed(signing::provider::ProviderError::CapabilityUnavailable)
+        }
+        fn encrypt_private(
+            &self,
+            _: signing::provider::ProviderCall,
+            _: radroots_identity::PublicKey,
+            _: signing::provider::PrivateText,
+        ) -> signing::signer::BoxFuture<
+            '_,
+            Result<signing::provider::PrivateCiphertext, signing::provider::ProviderError>,
+        > {
+            self.failed(signing::provider::ProviderError::CapabilityUnavailable)
+        }
+        fn decrypt_private(
+            &self,
+            _: signing::provider::ProviderCall,
+            _: radroots_identity::PublicKey,
+            _: signing::provider::PrivateCiphertext,
+        ) -> signing::signer::BoxFuture<
+            '_,
+            Result<signing::provider::PrivateText, signing::provider::ProviderError>,
+        > {
+            self.failed(signing::provider::ProviderError::CapabilityUnavailable)
         }
     }
     impl signing::request::ProgressObserver for Local {
@@ -190,6 +230,10 @@ mod browser {
     fn browser_ports_accept_real_local_callback_and_future_state() {
         let state = Rc::new(Cell::new(0));
         let signer: signing::signer::DynSigner = SignerHandle::new(Local(state.clone()));
+        let participant: SignerHandle<dyn signing::provider::ParticipantProvider> =
+            SignerHandle::new(Local(state.clone()));
+        let nonces: SignerHandle<dyn signing::provider::NonceSource> =
+            SignerHandle::new(Local(state.clone()));
         let source: transport::host::Shared<dyn EventSource> = Rc::new(Local(state.clone()));
         let sink: transport::host::Shared<dyn EventSink> = Rc::new(Local(state.clone()));
         let subscriber: transport::host::Shared<dyn EventSubscriber> =
@@ -200,13 +244,14 @@ mod browser {
         let authority: Rc<dyn signing::CurrentAuthoringAuthority> = Rc::new(Local(state.clone()));
         let clock: transport::host::Shared<dyn Clock> = Rc::new(Local(state.clone()));
         let ids: transport::host::Shared<dyn IdSource> = Rc::new(Local(state.clone()));
-        drop((sink, subscriber, observer, authority, clock, ids));
+        drop((sink, subscriber, observer, authority, clock, ids, nonces));
         futures::executor::block_on(async {
             assert!(signer.status().await.is_err());
+            assert!(participant.provider_state().await.is_err());
             assert!(source.status().await.is_err());
             assert!(store.status().await.is_err());
         });
-        assert_eq!(state.get(), 3);
+        assert_eq!(state.get(), 4);
         fn owned_subscription(
             request: transport::SubscriptionRequest,
             state: Rc<Cell<usize>>,

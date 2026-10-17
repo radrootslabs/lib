@@ -5,6 +5,21 @@ converts between canonical Radroots identity/event values and Nostr protocol
 values, provides typed NIP helpers, and supplies an optional concrete local
 implementation of the `radroots_signing` SPI.
 
+With `signing`, `LocalSigner` also reports its actual participant identity.
+With `nip17`, it decrypts bounded NIP-44 v2 payloads and can encrypt after
+explicit nonce-source injection through `with_nonce_source`. Native hosts may
+choose `OsNonceSource`; deterministic sources belong only in controlled tests.
+Call identity/deadline/cancellation checks precede effects. Private text is
+owned and redacted, and obtained outputs are not discarded by a later clock
+or cancellation check. These are crypto primitives: the composing executor
+authenticates carriers, enforces profile budgets and retains preimages before
+signing or transport. No private key is exported or message published.
+
+Run `cargo extbuild run -- cargo run -p radroots_nostr --example
+participant_private --features signing,nip17 --locked` for the native OS-entropy
+smoke. It uses published synthetic vector identities, encrypts twice and
+decrypts both results without persistence or network effects.
+
 This crate owns no relay client. It owns no sockets, HTTP client, relay pool,
 database, account store, retry loop, scheduler, executor, or process-global
 state. Live Nostr transport belongs in `radroots_transport_nostr`; application

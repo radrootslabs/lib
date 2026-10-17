@@ -145,6 +145,57 @@ pub fn radroots_signing::identity::SigningOperationId::new([u8; 16]) -> core::re
 pub fn radroots_signing::identity::SigningOperationId::to_hex(self) -> alloc::string::String
 impl core::fmt::Debug for radroots_signing::identity::SigningOperationId
 pub fn radroots_signing::identity::SigningOperationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_signing::provider
+pub enum radroots_signing::provider::PrivateCryptoCapability
+pub radroots_signing::provider::PrivateCryptoCapability::Nip44V2
+pub radroots_signing::provider::PrivateCryptoCapability::Unavailable
+#[non_exhaustive] pub enum radroots_signing::provider::ProviderError
+pub radroots_signing::provider::ProviderError::AuthenticationFailed
+pub radroots_signing::provider::ProviderError::Cancelled
+pub radroots_signing::provider::ProviderError::CapabilityUnavailable
+pub radroots_signing::provider::ProviderError::DeadlineExceeded
+pub radroots_signing::provider::ProviderError::IdentityChanged
+pub radroots_signing::provider::ProviderError::InvalidInput
+pub radroots_signing::provider::ProviderError::LimitExceeded
+pub radroots_signing::provider::ProviderError::ProviderFailure
+pub radroots_signing::provider::ProviderError::UnsupportedVersion
+impl radroots_signing::provider::ProviderError
+pub const fn radroots_signing::provider::ProviderError::as_str(self) -> &'static str
+impl core::error::Error for radroots_signing::provider::ProviderError
+impl core::fmt::Display for radroots_signing::provider::ProviderError
+pub fn radroots_signing::provider::ProviderError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_signing::provider::PrivateCiphertext(_)
+impl radroots_signing::provider::PrivateCiphertext
+pub fn radroots_signing::provider::PrivateCiphertext::as_str(&self) -> &str
+pub fn radroots_signing::provider::PrivateCiphertext::parse(&str) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+impl core::fmt::Debug for radroots_signing::provider::PrivateCiphertext
+pub fn radroots_signing::provider::PrivateCiphertext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_signing::provider::PrivateText(_)
+impl radroots_signing::provider::PrivateText
+pub fn radroots_signing::provider::PrivateText::expose(&self) -> &str
+pub fn radroots_signing::provider::PrivateText::from_owned(alloc::string::String) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+pub fn radroots_signing::provider::PrivateText::new(&str) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+impl core::fmt::Debug for radroots_signing::provider::PrivateText
+pub fn radroots_signing::provider::PrivateText::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_signing::provider::ProviderCall
+impl radroots_signing::provider::ProviderCall
+pub fn radroots_signing::provider::ProviderCall::check_before_effect(&self, radroots_identity::key::PublicKey, u64) -> core::result::Result<(), radroots_signing::provider::ProviderError>
+pub const fn radroots_signing::provider::ProviderCall::identity(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_signing::provider::ProviderCall::new(radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64, radroots_signing::request::CancellationSignal) -> Self
+pub struct radroots_signing::provider::ProviderState
+impl radroots_signing::provider::ProviderState
+pub const fn radroots_signing::provider::ProviderState::decryption(self) -> radroots_signing::provider::PrivateCryptoCapability
+pub const fn radroots_signing::provider::ProviderState::encryption(self) -> radroots_signing::provider::PrivateCryptoCapability
+pub const fn radroots_signing::provider::ProviderState::identity(self) -> radroots_identity::key::PublicKey
+pub const fn radroots_signing::provider::ProviderState::new(radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::recovery::ReplayCapability) -> Self
+pub const fn radroots_signing::provider::ProviderState::signing_replay(self) -> radroots_signing::recovery::ReplayCapability
+pub const radroots_signing::provider::PRIVATE_CRYPTO_MAX_BYTES: usize
+pub trait radroots_signing::provider::NonceSource: radroots_signing::host::HostBound
+pub fn radroots_signing::provider::NonceSource::next_nonce(&self) -> core::result::Result<[u8; 32], radroots_signing::provider::ProviderError>
+pub trait radroots_signing::provider::ParticipantProvider: radroots_signing::signer::Signer
+pub fn radroots_signing::provider::ParticipantProvider::decrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCiphertext) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateText, radroots_signing::provider::ProviderError>>
+pub fn radroots_signing::provider::ParticipantProvider::encrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateText) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateCiphertext, radroots_signing::provider::ProviderError>>
+pub fn radroots_signing::provider::ParticipantProvider::provider_state(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>>
 pub mod radroots_signing::receipt
 #[non_exhaustive] pub struct radroots_signing::receipt::AuthoredSignEvidence
 impl radroots_signing::receipt::AuthoredSignEvidence

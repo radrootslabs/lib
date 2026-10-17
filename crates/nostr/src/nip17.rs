@@ -387,6 +387,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sender_recovery_uses_one_wrap_even_when_already_a_recipient() {
+        let sender = sender_keys();
+        let receiver = receiver_keys();
+        for already_included in [false, true] {
+            let mut recipients = vec![MessageRecipient {
+                public_key: receiver.public_key().to_string(),
+                relay_url: None,
+            }];
+            if already_included {
+                recipients.push(MessageRecipient {
+                    public_key: sender.public_key().to_string(),
+                    relay_url: None,
+                });
+            }
+            let message = Message {
+                recipients,
+                content: "synthetic sender recovery inquiry".to_owned(),
+                reply_to: None,
+                subject: None,
+            };
+            let options = WrapOptions::default()
+                .with_rumor_created_at(1_700_000_002)
+                .with_gift_wrap_tags(vec![Vec::new(), vec!["client".into(), "fixture".into()]]);
+            assert!(options.includes_sender());
+            assert_eq!(options.rumor_created_at(), Some(1_700_000_002));
+            assert_eq!(options.gift_wrap_tags().len(), 2);
+            let events = wrap_message(&sender, &message, options).await.unwrap();
+            assert_eq!(events.len(), 2);
+            for participant in [&sender, &receiver] {
+                let recipient = participant.public_key().to_string();
+                let addressed: Vec<_> = events
+                    .iter()
+                    .filter(|event| {
+                        event
+                            .tags
+                            .iter()
+                            .any(|tag| tag.as_slice() == ["p".to_owned(), recipient.clone()])
+                    })
+                    .collect();
+                assert_eq!(addressed.len(), 1);
+                match unwrap_gift_wrap(participant, addressed[0]).await.unwrap() {
+                    Rumor::Message(metadata) => assert_eq!(metadata.data.content, message.content),
+                    other => panic!("expected recovered message, got {other:?}"),
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn wrap_and_unwrap_message() {
         let sender = sender_keys();
         let receiver = receiver_keys();

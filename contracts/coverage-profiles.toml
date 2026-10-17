@@ -20,7 +20,7 @@ test_threads = 1
 
 [profiles.crates."radroots_nostr"]
 no_default_features = false
-features = ["blossom"]
+features = ["blossom", "signing", "nip17"]
 test_threads = 1
 
 [profiles.crates."radroots_replica_sync"]
