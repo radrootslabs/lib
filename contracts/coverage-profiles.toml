@@ -3,6 +3,11 @@ no_default_features = false
 features = []
 test_threads = 1
 
+[profiles.crates."radroots_execution"]
+no_default_features = false
+features = ["session"]
+test_threads = 1
+
 [profiles.crates."radroots_log"]
 no_default_features = true
 features = []

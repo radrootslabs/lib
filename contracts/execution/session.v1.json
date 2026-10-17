@@ -12,6 +12,7 @@
   "cancellation": "Retain successful stages; resume only the unfinished hook. Hosts retain hook progress and obtained results across cancellation or failure",
   "permit_ownership": "Executor retains permit through its safe journal boundary independently of caller observation; permit retains session resources and is not a durable receipt",
   "drop_completion_claim": false,
+  "waker_callbacks_and_destructors": "Run outside the synchronous admission gate, including replacement, clearing and wake",
   "native": {"shared_handle": "Arc", "host_bounds": "Send + Sync", "future_bound": "Send"},
   "wasm32": {"shared_handle": "Rc", "host_bounds": "local", "future_bound": "local"},
   "remaining_qualification": ["Concrete native and browser resource hosts", "Owned durable command workers and result retention", "Authenticated attachment", "Ordinary facade and generated bindings"]

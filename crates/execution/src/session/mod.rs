@@ -60,8 +60,8 @@ struct Inner<H> {
 
 impl<H> Inner<H> {
     fn gate(&self) -> MutexGuard<'_, Gate> {
-        // No user code or await runs while holding the gate. Recovery retains
-        // the closed-admission state if an observer panics during unwinding.
+        // Keep bookkeeping short. Waker callbacks and destructors must run
+        // outside the gate, including when a pending observer is replaced.
         self.gate
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -120,7 +120,8 @@ impl<H: SessionHost> Session<H> {
         }
         let mut startup = self.inner.host.start();
         let result = poll_fn(|context| {
-            {
+            let replacement = context.waker().clone();
+            let previous = {
                 let mut gate = self.inner.gate();
                 if gate.state == SessionState::Closing {
                     return Poll::Ready(Err(unavailable()));
@@ -130,15 +131,19 @@ impl<H: SessionHost> Session<H> {
                     .as_ref()
                     .is_some_and(|w| w.will_wake(context.waker()))
                 {
-                    gate.starting = Some(context.waker().clone());
+                    gate.starting.replace(replacement)
+                } else {
+                    None
                 }
-            }
+            };
+            drop(previous);
             startup.as_mut().poll(context)
         })
         .await;
-        let mut gate = self.inner.gate();
-        gate.starting = None;
+        let previous = { self.inner.gate().starting.take() };
+        drop(previous);
         result?;
+        let mut gate = self.inner.gate();
         if gate.state == SessionState::Closing {
             return Err(unavailable());
         }
@@ -190,17 +195,23 @@ impl<H: SessionHost> Session<H> {
                 }
                 CloseStage::Drain => {
                     poll_fn(|context| {
-                        let mut gate = self.inner.gate();
-                        if gate.active == 0 {
-                            return Poll::Ready(());
-                        }
-                        if !gate
-                            .drained
-                            .as_ref()
-                            .is_some_and(|w| w.will_wake(context.waker()))
-                        {
-                            gate.drained = Some(context.waker().clone());
-                        }
+                        let replacement = context.waker().clone();
+                        let previous = {
+                            let mut gate = self.inner.gate();
+                            if gate.active == 0 {
+                                return Poll::Ready(());
+                            }
+                            if !gate
+                                .drained
+                                .as_ref()
+                                .is_some_and(|w| w.will_wake(context.waker()))
+                            {
+                                gate.drained.replace(replacement)
+                            } else {
+                                None
+                            }
+                        };
+                        drop(previous);
                         Poll::Pending
                     })
                     .await;

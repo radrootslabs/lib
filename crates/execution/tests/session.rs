@@ -6,7 +6,7 @@ use std::{
     pin::pin,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     task::{Context, Poll},
 };
@@ -37,6 +37,7 @@ struct Observations {
     completed: AtomicUsize,
     blocked: AtomicUsize,
     fail: AtomicUsize,
+    passive: AtomicBool,
     waker: AtomicWaker,
 }
 
@@ -48,7 +49,9 @@ impl Host {
             self.0.calls.lock().unwrap().push(hook);
             let bit = 1 << hook as usize;
             poll_fn(|context| {
-                self.0.waker.register(context.waker());
+                if !self.0.passive.load(Ordering::SeqCst) {
+                    self.0.waker.register(context.waker());
+                }
                 if self.0.blocked.load(Ordering::SeqCst) & bit != 0 {
                     return Poll::Pending;
                 }
@@ -331,6 +334,164 @@ fn permit_completion_and_close_wake_their_pending_observers() {
     assert!(counter.0.load(Ordering::SeqCst) > before);
     assert!(matches!(poll(start.as_mut()), Poll::Ready(Err(_))));
     assert_eq!(poll(close.as_mut()), Poll::Ready(Ok(())));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn replacing_or_clearing_wakers_allows_reentrant_resource_observation() {
+    use std::{sync::mpsc, task::Wake, time::Duration};
+
+    struct InspectOnDrop {
+        session: Session<Host>,
+        drops: Arc<AtomicUsize>,
+        close: bool,
+    }
+    impl Wake for InspectOnDrop {
+        fn wake(self: Arc<Self>) {
+            let _state = self.session.state();
+        }
+    }
+    impl Drop for InspectOnDrop {
+        fn drop(&mut self) {
+            let _state = self.session.state();
+            if self.close {
+                let mut closing = Box::pin(self.session.close());
+                assert!(poll(closing.as_mut()).is_pending());
+            }
+            self.drops.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    let (done, result) = mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let (session, observed) = fixture(1);
+        let drops = Arc::new(AtomicUsize::new(0));
+        observed.passive.store(true, Ordering::SeqCst);
+        observed.blocked.store(1, Ordering::SeqCst);
+        let mut start = Box::pin(session.start());
+        {
+            let waker = Arc::new(InspectOnDrop {
+                session: session.clone(),
+                drops: drops.clone(),
+                close: false,
+            })
+            .into();
+            assert!(
+                start
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending()
+            );
+        }
+        // Replacing the last reference to this waker runs its destructor.
+        assert!(poll(start.as_mut()).is_pending());
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+        assert!(poll(start.as_mut()).is_pending());
+        {
+            let waker = Arc::new(InspectOnDrop {
+                session: session.clone(),
+                drops: drops.clone(),
+                close: false,
+            })
+            .into();
+            assert!(
+                start
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending()
+            );
+        }
+        observed.blocked.store(0, Ordering::SeqCst);
+        let waker = Arc::new(InspectOnDrop {
+            session: session.clone(),
+            drops: drops.clone(),
+            close: false,
+        })
+        .into();
+        assert_eq!(
+            start.as_mut().poll(&mut Context::from_waker(&waker)),
+            Poll::Ready(Ok(()))
+        );
+        drop(waker);
+        assert_eq!(drops.load(Ordering::SeqCst), 3);
+        drop(start);
+
+        let work = session.admit().unwrap();
+        let mut close = Box::pin(session.close());
+        {
+            let waker = Arc::new(InspectOnDrop {
+                session: session.clone(),
+                drops: drops.clone(),
+                close: false,
+            })
+            .into();
+            assert!(
+                close
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending()
+            );
+        }
+        assert!(poll(close.as_mut()).is_pending());
+        assert_eq!(drops.load(Ordering::SeqCst), 4);
+        drop(work);
+        assert_eq!(poll(close.as_mut()), Poll::Ready(Ok(())));
+
+        let (session, observed) = fixture(1);
+        observed.passive.store(true, Ordering::SeqCst);
+        observed.blocked.store(1, Ordering::SeqCst);
+        let mut start = Box::pin(session.start());
+        {
+            let waker = Arc::new(InspectOnDrop {
+                session: session.clone(),
+                drops: drops.clone(),
+                close: true,
+            })
+            .into();
+            assert!(
+                start
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending()
+            );
+        }
+        observed.blocked.store(0, Ordering::SeqCst);
+        // Reentrant close races with a successful host startup result.
+        assert!(matches!(poll(start.as_mut()), Poll::Ready(Err(_))));
+        assert_eq!(session.state(), SessionState::Closing);
+        assert!(session.admit().is_err());
+        block_on(session.close()).unwrap();
+
+        let (session, observed) = fixture(1);
+        observed.passive.store(true, Ordering::SeqCst);
+        observed.blocked.store(1, Ordering::SeqCst);
+        let mut start = Box::pin(session.start());
+        {
+            let waker = Arc::new(InspectOnDrop {
+                session: session.clone(),
+                drops: drops.clone(),
+                close: false,
+            })
+            .into();
+            assert!(
+                start
+                    .as_mut()
+                    .poll(&mut Context::from_waker(&waker))
+                    .is_pending()
+            );
+        }
+        let mut close = Box::pin(session.close());
+        // Both wake and final destructor may observe the session reentrantly.
+        assert!(poll(close.as_mut()).is_pending());
+        assert!(matches!(poll(start.as_mut()), Poll::Ready(Err(_))));
+        assert_eq!(poll(close.as_mut()), Poll::Ready(Ok(())));
+        done.send(()).unwrap();
+    });
+    // A regression must fail within a bound rather than hang the test process.
+    result
+        .recv_timeout(Duration::from_secs(5))
+        .expect("waker destructor deadlocked session bookkeeping");
+    worker.join().unwrap();
 }
 
 #[cfg(not(target_arch = "wasm32"))]
