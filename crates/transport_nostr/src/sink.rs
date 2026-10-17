@@ -62,14 +62,20 @@ pub(crate) trait RelayClient: Send + Sync {
 pub(crate) struct LiveRelayClient {
     client: nostr_sdk::client::Client,
     writers: crate::socket_write::WriterRegistry,
+    connections: std::sync::Arc<crate::connections::Connections>,
 }
 
 impl LiveRelayClient {
     pub(crate) const fn new(
         client: nostr_sdk::client::Client,
         writers: crate::socket_write::WriterRegistry,
+        connections: std::sync::Arc<crate::connections::Connections>,
     ) -> Self {
-        Self { client, writers }
+        Self {
+            client,
+            writers,
+            connections,
+        }
     }
 
     #[cfg(test)]
@@ -78,6 +84,9 @@ impl LiveRelayClient {
         Self::new(
             client,
             crate::socket_write::WriterRegistry::new(std::iter::empty()),
+            std::sync::Arc::new(crate::connections::Connections::new(
+                crate::client::MAX_RELAYS,
+            )),
         )
     }
 }
@@ -111,9 +120,14 @@ impl RelayClient for LiveRelayClient {
                             .connect_timeout(connect_timeout)
                             .await
                             .map_err(|error| error.to_string())?;
-                        crate::client::connect_relay(&self.client, url.as_str(), connect_timeout)
-                            .await
-                            .map_err(|error| error.to_string())?;
+                        crate::client::connect_tracked(
+                            &self.client,
+                            &self.connections,
+                            url.as_str(),
+                            connect_timeout,
+                        )
+                        .await
+                        .map_err(|error| error.to_string())?;
                         event.publish(&self.client, &self.writers, &url).await
                     };
                     let outcome = match tokio::time::timeout_at(deadline, attempt).await {
@@ -219,9 +233,12 @@ impl NostrTransport {
                 authorized,
                 mut skipped,
             } = prepared;
-            if self.admission_is_closed() {
-                return Err(SinkFailure::transport_closed(&request));
-            }
+            let _operation = self.connections.begin().map_err(|error| match error {
+                radroots_transport::Error::TransportClosed => {
+                    SinkFailure::transport_closed(&request)
+                }
+                _ => SinkFailure::transport_unavailable(&request),
+            })?;
             if config != *self.config() {
                 return Err(SinkFailure::invalid_contract(&request));
             }

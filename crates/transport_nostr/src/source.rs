@@ -65,20 +65,32 @@ pub(crate) trait RelaySourceClient: Send + Sync {
 pub(crate) struct LiveRelaySourceClient {
     client: nostr_sdk::client::Client,
     ingress: crate::source_ingress::IngressRegistry,
+    connections: Arc<crate::connections::Connections>,
 }
 
 impl LiveRelaySourceClient {
     pub(crate) const fn new(
         client: nostr_sdk::client::Client,
         ingress: crate::source_ingress::IngressRegistry,
+        connections: Arc<crate::connections::Connections>,
     ) -> Self {
-        Self { client, ingress }
+        Self {
+            client,
+            ingress,
+            connections,
+        }
     }
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
         let client = nostr_sdk::client::Client::default();
-        Self::new(client, crate::source_ingress::IngressRegistry::default())
+        Self::new(
+            client,
+            crate::source_ingress::IngressRegistry::default(),
+            Arc::new(crate::connections::Connections::new(
+                crate::client::MAX_RELAYS,
+            )),
+        )
     }
 }
 
@@ -183,8 +195,9 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             filter = filter.until(Timestamp::from_secs(until));
                         }
                         let connected = tokio::time::timeout_at(deadline, async {
-                            crate::client::connect_relay(
+                            crate::client::connect_tracked(
                                 &self.client,
+                                &self.connections,
                                 url.as_str(),
                                 connect_timeout.min(
                                     deadline.saturating_duration_since(tokio::time::Instant::now()),
@@ -470,7 +483,7 @@ impl EventSource for NostrTransport {
         request: FetchRequest,
     ) -> BoxFuture<'_, Result<FetchPage, radroots_transport::Error>> {
         Box::pin(async move {
-            self.require_open()?;
+            let _operation = self.connections.begin()?;
             let cursor_scope = request_scope(&request);
             let cursor = request
                 .cursor()
@@ -1514,7 +1527,11 @@ mod tests {
             .await
             .unwrap();
         let queued = client.relay(urls[1].as_str()).await.unwrap().unwrap();
-        let source = LiveRelaySourceClient::new(client, ingress);
+        let source = LiveRelaySourceClient::new(
+            client,
+            ingress,
+            Arc::new(crate::connections::Connections::new(2)),
+        );
         let query = SourceQuery {
             relays: urls
                 .iter()

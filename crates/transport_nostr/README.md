@@ -67,6 +67,15 @@ results. Upstream pool shutdown signals its relay tasks; it does not itself
 establish that every internal task joined. [`NostrTransport::admission_is_closed`]
 reports admission, rather than complete session cleanup or business rollback.
 
+Owners replacing a profile may call [`NostrTransport::close_admission`] while
+retaining the pool for already-started calls. Their registered relay handles
+disconnect synchronously when the last call completes or is cancelled, so
+idle reconnect work does not survive retirement. The owner must still await
+explicit pool shutdown. [`NostrTransport::has_in_flight_operations`] reports
+source, delivery, subscription-setup and AUTH calls; it does not count passive
+status inspection or represent live subscription handles or complete session
+worker joining. No cleanup worker or post-observation await is introduced.
+
 ## Prepared delivery boundary
 
 [`NostrTransport::prepare_delivery`] validates the exact request, writable

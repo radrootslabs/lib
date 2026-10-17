@@ -4,7 +4,7 @@ use crate::{Error, RelayEndpoint, RelayProfile, RelayProfileKind, RelayStatusRep
 use core::fmt;
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicU64, Ordering},
 };
 
 /// Maximum relay targets accepted by one transport instance.
@@ -228,6 +228,22 @@ pub(crate) async fn connect_relay(
     Ok(relay)
 }
 
+pub(crate) async fn connect_tracked(
+    client: &nostr_sdk::client::Client,
+    connections: &crate::connections::Connections,
+    url: &str,
+    timeout: std::time::Duration,
+) -> Result<nostr_sdk::relay::Relay, nostr_sdk::error::Error> {
+    let relay = client.relay(url).await?.ok_or_else(|| {
+        nostr_sdk::error::Error::with_static_message(
+            nostr_sdk::error::ErrorKind::NotFound,
+            "configured relay is unavailable",
+        )
+    })?;
+    connections.register(relay)?;
+    connect_relay(client, url, timeout).await
+}
+
 #[derive(Debug)]
 struct VerifiedEventAdmission;
 
@@ -257,7 +273,7 @@ impl nostr_sdk::policy::AdmitPolicy for VerifiedEventAdmission {
 pub struct NostrTransport {
     config: Config,
     session_client: nostr_sdk::client::Client,
-    admission_closed: Arc<AtomicBool>,
+    pub(crate) connections: Arc<crate::connections::Connections>,
     pub(crate) client: Arc<dyn crate::sink::RelayClient>,
     pub(crate) source_client: Arc<dyn crate::source::RelaySourceClient>,
     pub(crate) subscription_client: Arc<dyn crate::subscription::RelaySubscriptionClient>,
@@ -284,17 +300,26 @@ impl NostrTransport {
             ))
             .build();
         let status = Arc::new(crate::status::StatusTracker::new(&config));
+        let connections = Arc::new(crate::connections::Connections::new(
+            config.endpoints().len(),
+        ));
         Self {
             config,
             session_client: client.clone(),
-            admission_closed: Arc::new(AtomicBool::new(false)),
-            client: Arc::new(crate::sink::LiveRelayClient::new(client.clone(), writers)),
+            connections: Arc::clone(&connections),
+            client: Arc::new(crate::sink::LiveRelayClient::new(
+                client.clone(),
+                writers,
+                Arc::clone(&connections),
+            )),
             source_client: Arc::new(crate::source::LiveRelaySourceClient::new(
                 client.clone(),
                 ingress,
+                Arc::clone(&connections),
             )),
             subscription_client: Arc::new(crate::subscription::LiveRelaySubscriptionClient::new(
                 client.clone(),
+                connections,
             )),
             auth: Arc::new(crate::auth::AuthFlow::new(Arc::new(
                 crate::auth::LiveAuthClient::new(client),
@@ -323,14 +348,28 @@ impl NostrTransport {
     /// Upstream pool shutdown signals its relay tasks; this method does not
     /// claim to join every upstream internal task.
     pub async fn shutdown(&self) {
-        self.admission_closed.store(true, Ordering::Release);
-        self.auth.close();
+        self.close_admission();
         self.session_client.shutdown().await;
+    }
+
+    /// Refuses new calls while already-started calls retain their exact observations.
+    ///
+    /// When the last active call completes or is cancelled, its registered
+    /// relays disconnect synchronously. The owner must still await pool
+    /// shutdown; this method claims neither task joining nor durable completion.
+    pub fn close_admission(&self) {
+        self.connections.close();
+        self.auth.close();
+    }
+
+    /// Reports active transport calls, excluding passive status and live subscription handles.
+    pub fn has_in_flight_operations(&self) -> bool {
+        self.connections.has_active_calls()
     }
 
     /// Reports closed admission, including interrupted shutdown, without claiming task joining.
     pub fn admission_is_closed(&self) -> bool {
-        self.admission_closed.load(Ordering::Acquire)
+        self.connections.is_closed()
     }
 
     pub(crate) fn require_open(&self) -> Result<(), radroots_transport::Error> {
@@ -347,7 +386,7 @@ impl NostrTransport {
         Self {
             config,
             session_client: nostr_sdk::client::Client::default(),
-            admission_closed: Arc::new(AtomicBool::new(false)),
+            connections: Arc::new(crate::connections::Connections::new(MAX_RELAYS)),
             client,
             source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
             subscription_client: Arc::new(
@@ -368,7 +407,7 @@ impl NostrTransport {
         Self {
             config,
             session_client: nostr_sdk::client::Client::default(),
-            admission_closed: Arc::new(AtomicBool::new(false)),
+            connections: Arc::new(crate::connections::Connections::new(MAX_RELAYS)),
             client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client,
             subscription_client: Arc::new(
@@ -389,7 +428,7 @@ impl NostrTransport {
         Self {
             config,
             session_client: nostr_sdk::client::Client::default(),
-            admission_closed: Arc::new(AtomicBool::new(false)),
+            connections: Arc::new(crate::connections::Connections::new(MAX_RELAYS)),
             client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
             subscription_client,

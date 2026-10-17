@@ -2,6 +2,32 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-047"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete shared SDK refactor, preservation of retained behavior, verified source checkpoints and master publication."
+affected_steps = ["040", "070", "110", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk"]
+source_evidence = [
+  "The actual Tera retained late-ACK configuration test fails against published Lib ac314b50: replacement closes an already-issued EVENT socket, causing BrokenPipe before its accepted observation can be retained. The same unfiltered run passes both ten-thousand-item cases, 488 core cases, and retains three existing child-only ignores.",
+  "The native slot owns private Arc-backed adapter selections that remain borrowed throughout its admitted source/sink futures. New configuration must close admission while preserving already-started attempt observations, and all current and retained pools must remain owned and bounded until explicit cleanup.",
+]
+replacement_action = "Separate concrete admission closure from pool shutdown. Count source/delivery/subscription-setup/AUTH calls, register actual relay handles before connecting, and disconnect synchronously after the last closed-admission call completes or is cancelled. Retain old private adapter selections for already-started calls. Reclaim idle retired pools before installation, enforce sixteen relay reservations across current and retained pools, refuse over-budget transitions explicitly, and preserve owned state across cleanup cancellation. Full explicit close disposes every owned pool before storage. Add no detached worker, synchronous alias, unbounded retirement list or post-observation await."
+verification = [
+  "Bind exact clean provider source, all601 unchanged lock records and the failed actual consumer source/test result before implementation; validate this prospective record first.",
+  "Prove native retirement, admission refusal, aggregate resource bounds, idle reclamation, interrupted cleanup and full disposal. Keep obtained observations and every original test assertion intact.",
+  "Pass the unchanged real Tera late-ACK case against the primary candidate with any temporary verification patch explicit and removed, then qualify the exact published successor source through its actual consumer pins and owning artifacts. Require native/Linux retained tests, strict lint/docs, owner-produced API freshness, unchanged coverage policy and current contracts before source publication.",
+]
+unresolved_risk = "Retained pools are bounded session-owned resources, not proof of complete worker joining or durable operation-result supervision. Those later obligations and final browser/binding/device qualification remain open. Published ac314b50 history is preserved; its consumer candidate is unqualified until this repair passes."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "Closed admission retains already-started source/delivery/subscription-setup/AUTH calls. Actual relay handles are registered before connection and disconnect synchronously on last completion or cancellation. The slot keeps strong ownership of busy old pools and enforces sixteen relay reservations across replacement and retained selections; explicit close disposes all pools before storage. No worker, synchronous alias or result-losing cleanup await is introduced.",
+  "The unchanged actual Tera late-ACK regression passes all six memory/SQLite configuration-removal variants against this primary local candidate through an explicit temporary provider patch that is removed afterwards. Four new connection and four new SDK retirement cases prove admission, bounded/poisoned registration, resource refusal, idle reclamation, interrupted cleanup, socket disposal and retry. The retained native and Linux suites include every prior case and doctest.",
+  "Strict lint/docs, current facade/native binding compilation, all four generated public API baselines, freshly measured unchanged Nostr/SDK coverage gates, architecture, catalog, contracts and local preflight pass. Generic portable checks and other preflight payloads retain their exact earlier scope. Actual published Git consumer adoption and artifacts, complete worker joining, durable operation supervision, browser/bindings and final qualification remain open.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-046"
 date = "2026-10-17"
 status = "closed"

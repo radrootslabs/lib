@@ -1875,15 +1875,25 @@ impl Default for Profile {
 
 /// Host-configured, client-shareable Nostr transport slot.
 ///
-/// Reconfiguration validates the complete relay set before atomically
-/// replacing the active adapter. Construction, clearing, and target
-/// inspection perform no network I/O.
+/// Reconfiguration closes prior admission and retains already-started calls
+/// within a sixteen-relay aggregate budget. Construction and target inspection
+/// perform no network I/O; explicit cleanup awaits owned pool disposal.
 #[cfg(feature = "nostr")]
 #[derive(Clone)]
 pub struct NostrSlot {
-    state: Arc<RwLock<Option<NostrState>>>,
+    state: Arc<RwLock<NostrSlotState>>,
     transition: Arc<tokio::sync::Mutex<()>>,
     admission_closed: Arc<AtomicBool>,
+}
+
+#[cfg(feature = "nostr")]
+const NOSTR_SESSION_RELAY_LIMIT: usize = 16;
+
+#[cfg(feature = "nostr")]
+#[derive(Default)]
+struct NostrSlotState {
+    current: Option<NostrState>,
+    retired: Vec<NostrState>,
 }
 
 #[cfg(feature = "nostr")]
@@ -1926,22 +1936,28 @@ impl NostrSlot {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            state: Arc::new(RwLock::new(None)),
+            state: Arc::new(RwLock::new(NostrSlotState::default())),
             transition: Arc::new(tokio::sync::Mutex::new(())),
             admission_closed: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    /// Validates a profile, shuts down its predecessor and installs the new inert adapter.
+    /// Validates a profile and installs it while preserving already-started prior calls.
     ///
-    /// Cancellation during predecessor cleanup retains that selection for a
-    /// later retry, with its admission closed. No replacement is installed
-    /// after permanent shutdown begins.
+    /// Idle prior pools are disposed before installation. Busy prior pools have
+    /// closed admission and remain owned until later cleanup. Their last call
+    /// disconnects registered relays without an extra result-losing await.
+    /// The new and retained pools together may reserve at most sixteen relays.
+    /// Interrupted or over-budget cleanup leaves prior admission closed for an
+    /// explicit retry. Permanent shutdown always prevents a new installation.
     pub async fn configure(&self, profile: RelayProfile) -> crate::Result<()> {
         if self.admission_closed.load(Ordering::Acquire) {
             return Err(crate::Error::client_closed());
         }
         let config = radroots_transport_nostr::Config::from_profile(profile);
+        if config.endpoints().len() > NOSTR_SESSION_RELAY_LIMIT {
+            return Err(crate::Error::invalid_host_configuration_without_source());
+        }
         let read_targets = TargetSet::new(
             config
                 .read_relays()
@@ -1969,7 +1985,38 @@ impl NostrSlot {
         if self.admission_closed.load(Ordering::Acquire) {
             return Err(crate::Error::client_closed());
         }
-        if let Some(previous) = self.cleanup_snapshot() {
+        self.cleanup_idle_retired().await?;
+        let previous = {
+            let mut state = self
+                .state
+                .write()
+                .map_err(|_| crate::Error::shared_operation_unavailable())?;
+            if let Some(previous) = &state.current {
+                previous.transport.close_admission();
+            }
+            let retained = state
+                .retired
+                .iter()
+                .map(|previous| previous.transport.config().endpoints().len())
+                .sum::<usize>();
+            let busy = state
+                .current
+                .as_ref()
+                .filter(|previous| previous.transport.has_in_flight_operations())
+                .map_or(0, |previous| previous.transport.config().endpoints().len());
+            if retained + busy + config.endpoints().len() > NOSTR_SESSION_RELAY_LIMIT {
+                return Err(crate::Error::shared_operation_unavailable());
+            }
+            if busy != 0 {
+                if let Some(previous) = state.current.take() {
+                    state.retired.push(previous);
+                }
+                None
+            } else {
+                state.current.clone()
+            }
+        };
+        if let Some(previous) = previous {
             previous.transport.shutdown().await;
         }
         let mut current = self
@@ -1979,7 +2026,7 @@ impl NostrSlot {
         if self.admission_closed.load(Ordering::Acquire) {
             return Err(crate::Error::client_closed());
         }
-        *current = Some(NostrState {
+        current.current = Some(NostrState {
             transport: Arc::new(radroots_transport_nostr::NostrTransport::new(config)),
             read_targets,
             write_targets,
@@ -1987,20 +2034,61 @@ impl NostrSlot {
         Ok(())
     }
 
+    async fn cleanup_idle_retired(&self) -> crate::Result<()> {
+        loop {
+            let idle = self
+                .state
+                .read()
+                .map_err(|_| crate::Error::shared_operation_unavailable())?
+                .retired
+                .iter()
+                .find(|previous| !previous.transport.has_in_flight_operations())
+                .map(|previous| Arc::clone(&previous.transport));
+            let Some(idle) = idle else { return Ok(()) };
+            idle.shutdown().await;
+            let mut state = self
+                .state
+                .write()
+                .map_err(|_| crate::Error::shared_operation_unavailable())?;
+            if let Some(index) = state
+                .retired
+                .iter()
+                .position(|previous| Arc::ptr_eq(&previous.transport, &idle))
+            {
+                state.retired.remove(index);
+            }
+        }
+    }
+
     /// Shuts down the selected pool before removing its profile.
     ///
     /// Cancellation retains the selected pool so cleanup can be awaited again.
     pub async fn clear(&self) {
         let _transition = self.transition.lock().await;
-        if let Some(previous) = self.cleanup_snapshot() {
-            previous.transport.shutdown().await;
+        let pools = {
+            let state = self
+                .state
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state
+                .current
+                .iter()
+                .chain(state.retired.iter())
+                .map(|previous| Arc::clone(&previous.transport))
+                .collect::<Vec<_>>()
+        };
+        for pool in &pools {
+            pool.close_admission();
+        }
+        for pool in pools {
+            pool.shutdown().await;
         }
         // Poisoned state cannot authorize work, but its owned resources still
         // require disposal. Never reuse the recovered selection for admission.
         *self
             .state
             .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = NostrSlotState::default();
     }
 
     /// Permanently closes admission and shuts down the selected pool across all clones.
@@ -2035,10 +2123,12 @@ impl NostrSlot {
         self.operation_snapshot().ok().flatten()
     }
 
+    #[cfg(test)]
     fn cleanup_snapshot(&self) -> Option<NostrState> {
         self.state
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .current
             .clone()
     }
 
@@ -2053,11 +2143,14 @@ impl NostrSlot {
         if self.admission_closed.load(Ordering::Acquire) {
             return Err(NostrSlotAccessError::Closed);
         }
-        let selected = self
+        let state = self
             .state
             .read()
-            .map_err(|_| NostrSlotAccessError::Unavailable)?
-            .clone();
+            .map_err(|_| NostrSlotAccessError::Unavailable)?;
+        if state.current.is_none() && !state.retired.is_empty() {
+            return Err(NostrSlotAccessError::Unavailable);
+        }
+        let selected = state.current.clone();
         if selected
             .as_ref()
             .is_some_and(|state| state.transport.admission_is_closed())
@@ -2404,6 +2497,10 @@ impl DaemonDelivery {
             .map_err(DaemonError::from_private)
     }
 }
+
+#[cfg(all(test, feature = "nostr"))]
+#[path = "transport/nostr_retirement_tests.rs"]
+mod nostr_retirement_tests;
 
 #[cfg(test)]
 mod tests {

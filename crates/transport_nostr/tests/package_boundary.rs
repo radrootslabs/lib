@@ -41,6 +41,7 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
         BTreeSet::from([
             "auth",
             "client",
+            "connections",
             "cursor",
             "error",
             "exact_delivery",
@@ -317,6 +318,7 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
         BTreeSet::from([
             "auth.rs".to_owned(),
             "client.rs".to_owned(),
+            "connections.rs".to_owned(),
             "cursor.rs".to_owned(),
             "error.rs".to_owned(),
             "exact_delivery.rs".to_owned(),

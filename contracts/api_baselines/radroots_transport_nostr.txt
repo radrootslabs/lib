@@ -83,7 +83,9 @@ pub fn radroots_transport_nostr::Config::write_relays(&self) -> impl core::iter:
 pub struct radroots_transport_nostr::NostrTransport
 impl radroots_transport_nostr::NostrTransport
 pub fn radroots_transport_nostr::NostrTransport::admission_is_closed(&self) -> bool
+pub fn radroots_transport_nostr::NostrTransport::close_admission(&self)
 pub const fn radroots_transport_nostr::NostrTransport::config(&self) -> &radroots_transport_nostr::Config
+pub fn radroots_transport_nostr::NostrTransport::has_in_flight_operations(&self) -> bool
 pub fn radroots_transport_nostr::NostrTransport::new(radroots_transport_nostr::Config) -> Self
 pub fn radroots_transport_nostr::NostrTransport::relay_status(&self) -> radroots_transport_nostr::RelayStatusReport
 pub async fn radroots_transport_nostr::NostrTransport::shutdown(&self)

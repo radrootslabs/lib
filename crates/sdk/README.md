@@ -125,11 +125,18 @@ Native mobile hosts can retain one client while changing host-owned identity
 and relay selection. The host injects one opaque implementation of the
 canonical `radroots_signing::Signer` SPI; the SDK has no mutable secret slot and
 accepts no secret string. Await `transport::NostrSlot::configure` or
-`Client::configure_nostr` to validate a relay set, shut down its predecessor,
+`Client::configure_nostr` to validate a relay set, close prior admission,
 and install the replacement without opening a new connection. Transitions
-are serialized. During cleanup, capability observations report unavailable;
-interrupted cleanup retains the old selection for an explicit retry.
-`NostrSlot::clear` also awaits pool disposal. `NostrSlot::shutdown` permanently
+are serialized. Already-started calls retain their original pool and exact
+observations; their last completion or cancellation disconnects its registered
+relays synchronously. The slot owns retired pools until explicit cleanup.
+The new and retained pools together reserve at most sixteen relays, counting
+the same endpoint in separate pools twice. A larger new profile is invalid;
+a busy aggregate budget is temporarily unavailable and requires an explicit
+retry. Idle retired pools are disposed before the next installation.
+During cleanup, capability observations report unavailable; interrupted
+cleanup retains its owned resources for an explicit retry.
+`NostrSlot::clear` also awaits current and retired pool disposal. `NostrSlot::shutdown` permanently
 closes admission across clones, so a retained handle cannot install another
 pool after client close. `Client::close` requests that shutdown before closing
 storage; failed storage close remains unavailable and retryable. Already

@@ -178,6 +178,7 @@ fn package_contains_only_reachable_sources_and_registered_targets() {
             "sync/tests/selected.rs".to_owned(),
             "trade.rs".to_owned(),
             "transport.rs".to_owned(),
+            "transport/nostr_retirement_tests.rs".to_owned(),
         ])
     );
     assert_eq!(

@@ -62,17 +62,29 @@ pub(crate) trait RelaySubscriptionClient: Send + Sync {
 #[derive(Clone, Debug)]
 pub(crate) struct LiveRelaySubscriptionClient {
     client: nostr_sdk::client::Client,
+    connections: std::sync::Arc<crate::connections::Connections>,
 }
 
 impl LiveRelaySubscriptionClient {
-    pub(crate) const fn new(client: nostr_sdk::client::Client) -> Self {
-        Self { client }
+    pub(crate) const fn new(
+        client: nostr_sdk::client::Client,
+        connections: std::sync::Arc<crate::connections::Connections>,
+    ) -> Self {
+        Self {
+            client,
+            connections,
+        }
     }
 
     #[cfg(test)]
     pub(crate) fn isolated() -> Self {
         let client = nostr_sdk::client::Client::default();
-        Self::new(client)
+        Self::new(
+            client,
+            std::sync::Arc::new(crate::connections::Connections::new(
+                crate::client::MAX_RELAYS,
+            )),
+        )
     }
 }
 
@@ -96,9 +108,14 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
                     .connect_timeout(query.connect_timeout)
                     .await
                     .map_err(|_| ())?;
-                crate::client::connect_relay(&self.client, url.as_str(), query.connect_timeout)
-                    .await
-                    .map_err(|_| ())?;
+                crate::client::connect_tracked(
+                    &self.client,
+                    &self.connections,
+                    url.as_str(),
+                    query.connect_timeout,
+                )
+                .await
+                .map_err(|_| ())?;
                 relay_lookup.insert(url.clone(), target.relay);
                 targeted.push((url, vec![filter]));
             }
@@ -462,7 +479,7 @@ impl EventSubscriber for NostrTransport {
         request: SubscriptionRequest,
     ) -> BoxFuture<'_, Result<BoxSubscription, radroots_transport::Error>> {
         Box::pin(async move {
-            self.require_open()?;
+            let _operation = self.connections.begin()?;
             let remaining = remaining_duration(request.bounds().deadline_unix_ms());
             if remaining.is_zero() {
                 return RelayEventSubscription::ended(

@@ -218,9 +218,10 @@ impl NostrTransport {
         now_unix_ms: u64,
     ) -> BoxFuture<'a, Result<(), Error>> {
         Box::pin(async move {
-            if self.admission_is_closed() {
-                return Err(Error::TransportClosed);
-            }
+            let _operation = self.connections.begin().map_err(|error| match error {
+                radroots_transport::Error::TransportClosed => Error::TransportClosed,
+                _ => Error::AuthStateUnavailable,
+            })?;
             let pending = self.auth.pending(relay, challenge)?;
             if now_unix_ms > pending.expires_at_unix_ms {
                 self.auth.remove(relay, challenge, false)?;

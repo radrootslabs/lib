@@ -4,6 +4,7 @@
 
 mod auth;
 mod client;
+mod connections;
 mod cursor;
 mod error;
 mod exact_delivery;
