@@ -8,6 +8,7 @@ extern crate alloc;
 pub mod capability;
 pub mod endpoint;
 pub mod error;
+pub mod host;
 mod id;
 pub mod outcome;
 pub mod policy;

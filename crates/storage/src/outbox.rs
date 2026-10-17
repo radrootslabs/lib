@@ -806,7 +806,7 @@ impl OutboxStatus {
 }
 
 /// Backend-neutral durable delivery-plan SPI.
-pub trait Outbox: Send + Sync {
+pub trait Outbox: radroots_transport::host::HostBound {
     fn enqueue(&self, item: EnqueueOutboxItem) -> BoxFuture<'_, Result<EnqueueReceipt, Error>>;
     fn item(&self, item_id: OutboxItemId) -> BoxFuture<'_, Result<Option<OutboxRecord>, Error>>;
     fn claim(

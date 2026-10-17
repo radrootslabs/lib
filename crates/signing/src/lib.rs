@@ -9,6 +9,7 @@ pub mod actor;
 pub mod authorization;
 pub mod capability;
 pub mod error;
+pub mod host;
 pub mod identity;
 pub mod receipt;
 pub mod recovery;

@@ -74,6 +74,7 @@ fn crate_root_declares_the_approved_module_skeleton() {
         "authorization",
         "capability",
         "error",
+        "host",
         "identity",
         "recovery",
         "request",
@@ -94,6 +95,7 @@ fn crate_root_declares_the_approved_module_skeleton() {
             "authorization",
             "capability",
             "error",
+            "host",
             "identity",
             "receipt",
             "recovery",
@@ -191,6 +193,7 @@ fn every_public_module_has_crate_level_documentation() {
         "authorization",
         "capability",
         "error",
+        "host",
         "identity",
         "recovery",
         "request",
@@ -249,10 +252,15 @@ fn production_sources_publish_only_the_approved_traits_and_no_host_stack() {
 
     assert_eq!(
         public_traits,
-        ["CurrentAuthoringAuthority", "ProgressObserver", "Signer"]
-            .into_iter()
-            .map(str::to_owned)
-            .collect()
+        [
+            "CurrentAuthoringAuthority",
+            "HostBound",
+            "ProgressObserver",
+            "Signer"
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
     );
 }
 

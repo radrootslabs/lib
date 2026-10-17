@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use radroots_transport::host::Shared;
 
 use radroots_signing::Signer;
 use radroots_transport::{EventSink, EventSource};
@@ -8,21 +8,21 @@ use crate::policy::{Clock, DeadlinePolicy, EngineBuilder, IdSource, SyncStorage}
 /// Injected, executor-neutral synchronization composition boundary.
 #[derive(Clone)]
 pub struct Engine {
-    pub(crate) storage: Arc<dyn SyncStorage>,
-    pub(crate) source: Option<Arc<dyn EventSource>>,
-    pub(crate) sink: Option<Arc<dyn EventSink>>,
-    pub(crate) signer: Option<Arc<dyn Signer>>,
-    pub(crate) clock: Arc<dyn Clock>,
-    pub(crate) ids: Arc<dyn IdSource>,
+    pub(crate) storage: Shared<dyn SyncStorage>,
+    pub(crate) source: Option<Shared<dyn EventSource>>,
+    pub(crate) sink: Option<Shared<dyn EventSink>>,
+    pub(crate) signer: Option<Shared<dyn Signer>>,
+    pub(crate) clock: Shared<dyn Clock>,
+    pub(crate) ids: Shared<dyn IdSource>,
     pub(crate) deadlines: DeadlinePolicy,
 }
 
 impl Engine {
     /// Starts an explicit capability builder around required host policies.
     pub fn builder(
-        storage: Arc<dyn SyncStorage>,
-        clock: Arc<dyn Clock>,
-        ids: Arc<dyn IdSource>,
+        storage: Shared<dyn SyncStorage>,
+        clock: Shared<dyn Clock>,
+        ids: Shared<dyn IdSource>,
         deadlines: DeadlinePolicy,
     ) -> EngineBuilder {
         EngineBuilder::new(storage, clock, ids, deadlines)

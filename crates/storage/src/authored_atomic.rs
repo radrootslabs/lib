@@ -786,7 +786,7 @@ impl AuthoredAtomicOutcome {
     }
 }
 
-pub trait AuthoredAtomicStorage: Send + Sync {
+pub trait AuthoredAtomicStorage: radroots_transport::host::HostBound {
     /// Read exact issued-claim provenance; unsupported backends fail closed.
     fn authored_delivery_history(
         &self,

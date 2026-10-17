@@ -3,16 +3,23 @@
 use core::{future::Future, pin::Pin};
 
 #[cfg(not(feature = "std"))]
-use alloc::{boxed::Box, sync::Arc};
+use alloc::boxed::Box;
 #[cfg(feature = "std")]
-use std::{boxed::Box, sync::Arc};
+use std::boxed::Box;
 
 use crate::{
-    AuthoredSignEvidence, Error, SignReceipt, SignRequest, SignerStatus, error::Kind,
+    AuthoredSignEvidence, Error, SignReceipt, SignRequest, SignerStatus,
+    error::Kind,
+    host::{HostBound, Shared},
     receipt::verify_identity,
 };
 
+/// A native Send future or a browser-local signer future.
+#[cfg(not(target_arch = "wasm32"))]
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+/// A native Send future or a browser-local signer future.
+#[cfg(target_arch = "wasm32")]
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Protocol-neutral, caller-driven signing service-provider interface.
 ///
@@ -20,7 +27,7 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// a future after that point does not imply rollback. Replay behavior is
 /// advertised through signer status and every successful result must use a
 /// verified receipt or authored-evidence constructor.
-pub trait Signer: Send + Sync {
+pub trait Signer: HostBound {
     fn status(&self) -> BoxFuture<'_, Result<SignerStatus, Error>>;
 
     /// Signs one already-authorized exact plan.
@@ -69,7 +76,7 @@ pub trait Signer: Send + Sync {
 }
 
 /// Shared signer handle used by composing hosts without selecting a runtime.
-pub type DynSigner = Arc<dyn Signer>;
+pub type DynSigner = Shared<dyn Signer>;
 
 #[cfg(test)]
 mod tests {
@@ -87,6 +94,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn signer_remains_dyn_send_and_sync() {
         fn assert_dyn(_: &dyn Signer) {}

@@ -5,7 +5,7 @@ use radroots_transport::BoxFuture;
 use crate::{Error, event::SourceGeneration};
 
 /// Passive backend-level status capability independent of backup workflows.
-pub trait StorageStatusProvider: Send + Sync {
+pub trait StorageStatusProvider: radroots_transport::host::HostBound {
     fn storage_status(&self) -> BoxFuture<'_, Result<StorageStatus, Error>>;
 }
 

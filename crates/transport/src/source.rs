@@ -49,7 +49,11 @@ pub const SUBSCRIPTION_REQUEST_ID_MAX_BYTES: usize = 256;
 pub const SUBSCRIPTION_MAX_EVENTS: u16 = 1_000;
 
 /// Heap-backed future returned by transport SPIs.
+#[cfg(not(target_arch = "wasm32"))]
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+/// Heap-backed future local to a browser main thread or worker.
+#[cfg(target_arch = "wasm32")]
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Validated caller identity for one fetch operation.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -970,7 +974,7 @@ fn target_position(target_set: &TargetSet, fingerprint: &TargetFingerprint) -> O
 /// Host SPI for inbound event retrieval.
 ///
 /// This trait supports external implementations and is dyn-compatible. Its
-/// futures are `Send`; implementations must not borrow request data after a
+/// futures are native `Send` or browser-local; implementations must not borrow request data after a
 /// future completes. `status` observes source state and does not initiate a
 /// fetch. `fetch` performs at most the work bounded by its request and owns no
 /// hidden retry loop.
@@ -980,7 +984,7 @@ fn target_position(target_set: &TargetSet, fingerprint: &TargetFingerprint) -> O
 /// operation behind. Once publication may have occurred, cancellation cannot
 /// claim rollback; a later observation may report the remote outcome. The
 /// explicit request deadline bounds work independently of future cancellation.
-pub trait EventSource: Send + Sync {
+pub trait EventSource: crate::host::HostBound {
     /// Returns the source's current runtime status.
     fn status(&self) -> BoxFuture<'_, Result<SourceStatus, Error>>;
 
@@ -995,7 +999,7 @@ pub trait EventSource: Send + Sync {
 /// returned, every later `next` or `cancel` call must return the exact same
 /// terminal result. Dropping a pending future requests cancellation but does
 /// not claim that an already-observed remote event was rolled back.
-pub trait EventSubscription: Send {
+pub trait EventSubscription: crate::host::MoveBound {
     /// Returns the exact request governing this operation.
     fn request(&self) -> &SubscriptionRequest;
 
@@ -1013,7 +1017,7 @@ pub type BoxSubscription = Box<dyn EventSubscription>;
 ///
 /// This is separate from [`EventSource`] so existing bounded-fetch producers
 /// remain source-compatible until they explicitly adopt live delivery.
-pub trait EventSubscriber: Send + Sync {
+pub trait EventSubscriber: crate::host::HostBound {
     /// Begins one exact bounded live-subscription request.
     fn subscribe(
         &self,

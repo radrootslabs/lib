@@ -59,9 +59,11 @@ The complete externally implementable SPI example is
 ## Host SPI contract
 
 `EventSource`, `EventSubscriber`, and `EventSink` are independent, externally
-implementable, dyn-compatible `Send + Sync` traits. An adapter may implement
-any subset. Their methods return boxed `Future + Send` values so this package
-does not select an async runtime or require an async-trait macro.
+implementable, dyn-compatible traits. Native hosts remain `Send + Sync`, with
+movable subscriptions and boxed `Future + Send`. Browser hosts, subscriptions
+and futures may remain local. `host::Shared` selects native `Arc` or browser
+`Rc`. An adapter may implement any subset. This package does not select an
+async runtime or require an async-trait macro.
 
 - `status` is observational and must not begin fetch or delivery work.
 - `fetch` returns one bounded page plus per-target outcomes and explicit

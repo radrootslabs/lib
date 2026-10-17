@@ -1,0 +1,18 @@
+[package]
+name = "radroots_browser_host_fixture"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99.0"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[workspace]
+
+[dependencies]
+radroots_sync = { path = "../../..", version = "=0.1.0-alpha", default-features = false }
+radroots_signing = { path = "../../../../signing", version = "=0.1.0-alpha", default-features = false }
+radroots_storage = { path = "../../../../storage", version = "=0.1.0-alpha", default-features = false }
+radroots_transport = { path = "../../../../transport", version = "=0.1.0-alpha", default-features = false }
+radroots_event = { path = "../../../../event", version = "=0.1.0-alpha", default-features = false }
+radroots_event_codec = { path = "../../../../event_codec", version = "=0.1.0-alpha", default-features = false }
+futures = "=0.3.32"

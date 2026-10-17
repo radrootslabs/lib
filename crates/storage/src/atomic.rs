@@ -224,7 +224,7 @@ impl AtomicCommitReceipt {
 }
 
 /// Backend-neutral all-or-nothing workflow commit SPI.
-pub trait AtomicStorage: Send + Sync {
+pub trait AtomicStorage: radroots_transport::host::HostBound {
     /// Commits every mutation in the workflow or none of them. Exact replay
     /// returns the original outcome; identity reuse with another digest or kind
     /// is [`Error::AtomicCommitConflict`].

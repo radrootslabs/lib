@@ -1,6 +1,6 @@
 //! Explicit clocks, identifiers, deadlines, and retry decisions.
 
-use std::sync::Arc;
+use radroots_transport::host::Shared;
 
 use radroots_signing::Signer;
 use radroots_storage::{
@@ -72,12 +72,12 @@ impl SyncId {
 }
 
 /// Host clock used instead of reading ambient time inside orchestration.
-pub trait Clock: Send + Sync {
+pub trait Clock: radroots_transport::host::HostBound {
     fn now_unix_ms(&self) -> Result<u64, Error>;
 }
 
 /// Host identity source used instead of ambient randomness or global counters.
-pub trait IdSource: Send + Sync {
+pub trait IdSource: radroots_transport::host::HostBound {
     fn next_id(&self, operation: OperationKind) -> Result<SyncId, Error>;
 }
 
@@ -141,20 +141,20 @@ const fn valid_timeout(value: u64) -> bool {
 
 /// Builder for an [`Engine`] with explicit optional transport capabilities.
 pub struct EngineBuilder {
-    storage: Arc<dyn SyncStorage>,
-    source: Option<Arc<dyn EventSource>>,
-    sink: Option<Arc<dyn EventSink>>,
-    signer: Option<Arc<dyn Signer>>,
-    clock: Arc<dyn Clock>,
-    ids: Arc<dyn IdSource>,
+    storage: Shared<dyn SyncStorage>,
+    source: Option<Shared<dyn EventSource>>,
+    sink: Option<Shared<dyn EventSink>>,
+    signer: Option<Shared<dyn Signer>>,
+    clock: Shared<dyn Clock>,
+    ids: Shared<dyn IdSource>,
     deadlines: DeadlinePolicy,
 }
 
 impl EngineBuilder {
     pub(crate) fn new(
-        storage: Arc<dyn SyncStorage>,
-        clock: Arc<dyn Clock>,
-        ids: Arc<dyn IdSource>,
+        storage: Shared<dyn SyncStorage>,
+        clock: Shared<dyn Clock>,
+        ids: Shared<dyn IdSource>,
         deadlines: DeadlinePolicy,
     ) -> Self {
         Self {
@@ -169,19 +169,19 @@ impl EngineBuilder {
     }
 
     #[must_use]
-    pub fn source(mut self, source: Arc<dyn EventSource>) -> Self {
+    pub fn source(mut self, source: Shared<dyn EventSource>) -> Self {
         self.source = Some(source);
         self
     }
 
     #[must_use]
-    pub fn sink(mut self, sink: Arc<dyn EventSink>) -> Self {
+    pub fn sink(mut self, sink: Shared<dyn EventSink>) -> Self {
         self.sink = Some(sink);
         self
     }
 
     #[must_use]
-    pub fn signer(mut self, signer: Arc<dyn Signer>) -> Self {
+    pub fn signer(mut self, signer: Shared<dyn Signer>) -> Self {
         self.signer = Some(signer);
         self
     }

@@ -625,11 +625,11 @@ impl StoredEventProvenance {
 
 /// Backend-neutral canonical event storage SPI.
 ///
-/// Implementations are dyn-compatible and return `Send` futures. They may not
+/// Implementations are dyn-compatible and return native `Send` or browser-local futures. They may not
 /// expose backend transactions, handles, SQL, or filesystem paths. Admission is
 /// idempotent for an identical event and provenance observation; a stage may
 /// advance but never regress. Query cursors are bound to one source generation.
-pub trait EventStore: Send + Sync {
+pub trait EventStore: radroots_transport::host::HostBound {
     /// Prepares one bounded, transactionally resumable canonical index chunk.
     ///
     /// Completion refers to canonical metadata at the returned source token,

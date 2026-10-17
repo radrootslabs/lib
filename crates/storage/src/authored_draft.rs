@@ -461,7 +461,7 @@ impl DraftAppendReceipt {
     }
 }
 
-pub trait AuthoredDraftStore: Send + Sync {
+pub trait AuthoredDraftStore: radroots_transport::host::HostBound {
     /// Atomically appends two opaque revisions or replays both exact snapshots.
     ///
     /// Unsupported backends fail closed; sequential single-row calls are not an

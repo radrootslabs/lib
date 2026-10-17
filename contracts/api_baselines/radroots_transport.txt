@@ -166,6 +166,12 @@ pub radroots_transport::error::Error::UnexpectedSubscriptionEvent
 pub radroots_transport::error::Error::UnsupportedOperation
 impl core::fmt::Display for radroots_transport::error::Error
 pub fn radroots_transport::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_transport::host
+pub trait radroots_transport::host::HostBound: core::marker::Send + core::marker::Sync
+impl<T: core::marker::Send + core::marker::Sync + ?core::marker::Sized> radroots_transport::host::HostBound for T
+pub trait radroots_transport::host::MoveBound: core::marker::Send
+impl<T: core::marker::Send + ?core::marker::Sized> radroots_transport::host::MoveBound for T
+pub type radroots_transport::host::Shared<T> = alloc::sync::Arc<T>
 pub mod radroots_transport::outcome
 pub enum radroots_transport::outcome::DeliveryOutcomeKind
 pub radroots_transport::outcome::DeliveryOutcomeKind::Accepted
@@ -308,7 +314,7 @@ pub fn radroots_transport::SinkStatus::message(&self) -> &str
 pub fn radroots_transport::SinkStatus::new(radroots_transport::TransportId, bool, radroots_transport::capability::Maturity, radroots_transport::capability::Availability, radroots_transport::capability::SinkCapabilities, impl core::convert::Into<alloc::string::String>) -> Self
 pub const fn radroots_transport::SinkStatus::transport_id(&self) -> radroots_transport::TransportId
 pub const radroots_transport::sink::DELIVERY_REQUEST_ID_MAX_BYTES: usize
-pub trait radroots_transport::sink::EventSink: core::marker::Send + core::marker::Sync
+pub trait radroots_transport::sink::EventSink: radroots_transport::host::HostBound
 pub fn radroots_transport::sink::EventSink::deliver(&self, radroots_transport::sink::DeliveryRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_transport::sink::EventSink::deliver_selected(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_transport::sink::EventSink::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SinkStatus, radroots_transport::error::Error>>
@@ -481,12 +487,12 @@ pub const radroots_transport::source::FETCH_SELECTOR_MAX_TAG_VALUES: usize
 pub const radroots_transport::source::FETCH_SELECTOR_TAG_VALUE_MAX_BYTES: usize
 pub const radroots_transport::source::SUBSCRIPTION_MAX_EVENTS: u16
 pub const radroots_transport::source::SUBSCRIPTION_REQUEST_ID_MAX_BYTES: usize
-pub trait radroots_transport::source::EventSource: core::marker::Send + core::marker::Sync
+pub trait radroots_transport::source::EventSource: radroots_transport::host::HostBound
 pub fn radroots_transport::source::EventSource::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
 pub fn radroots_transport::source::EventSource::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SourceStatus, radroots_transport::error::Error>>
-pub trait radroots_transport::source::EventSubscriber: core::marker::Send + core::marker::Sync
+pub trait radroots_transport::source::EventSubscriber: radroots_transport::host::HostBound
 pub fn radroots_transport::source::EventSubscriber::subscribe(&self, radroots_transport::source::SubscriptionRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::BoxSubscription, radroots_transport::error::Error>>
-pub trait radroots_transport::source::EventSubscription: core::marker::Send
+pub trait radroots_transport::source::EventSubscription: radroots_transport::host::MoveBound
 pub fn radroots_transport::source::EventSubscription::cancel(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionEnd, radroots_transport::error::Error>>
 pub fn radroots_transport::source::EventSubscription::next(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionNext, radroots_transport::error::Error>>
 pub fn radroots_transport::source::EventSubscription::request(&self) -> &radroots_transport::source::SubscriptionRequest
@@ -843,16 +849,16 @@ impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::TransportId
 pub fn radroots_transport::TransportId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub const radroots_transport::TARGET_SET_MAX_ITEMS: usize
 pub const radroots_transport::TRANSPORT_ID_MAX_BYTES: usize
-pub trait radroots_transport::EventSink: core::marker::Send + core::marker::Sync
+pub trait radroots_transport::EventSink: radroots_transport::host::HostBound
 pub fn radroots_transport::EventSink::deliver(&self, radroots_transport::sink::DeliveryRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_transport::EventSink::deliver_selected(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_transport::EventSink::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SinkStatus, radroots_transport::error::Error>>
-pub trait radroots_transport::EventSource: core::marker::Send + core::marker::Sync
+pub trait radroots_transport::EventSource: radroots_transport::host::HostBound
 pub fn radroots_transport::EventSource::fetch(&self, radroots_transport::source::FetchRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::FetchPage, radroots_transport::error::Error>>
 pub fn radroots_transport::EventSource::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::SourceStatus, radroots_transport::error::Error>>
-pub trait radroots_transport::EventSubscriber: core::marker::Send + core::marker::Sync
+pub trait radroots_transport::EventSubscriber: radroots_transport::host::HostBound
 pub fn radroots_transport::EventSubscriber::subscribe(&self, radroots_transport::source::SubscriptionRequest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::BoxSubscription, radroots_transport::error::Error>>
-pub trait radroots_transport::EventSubscription: core::marker::Send
+pub trait radroots_transport::EventSubscription: radroots_transport::host::MoveBound
 pub fn radroots_transport::EventSubscription::cancel(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionEnd, radroots_transport::error::Error>>
 pub fn radroots_transport::EventSubscription::next(&mut self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::source::SubscriptionNext, radroots_transport::error::Error>>
 pub fn radroots_transport::EventSubscription::request(&self) -> &radroots_transport::source::SubscriptionRequest

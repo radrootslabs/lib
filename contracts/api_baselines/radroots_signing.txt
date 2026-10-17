@@ -48,7 +48,7 @@ pub const fn radroots_signing::authorization::ManagedSigningPolicy::permits(self
 pub struct radroots_signing::authorization::CurrentRegistryAuthority
 impl radroots_signing::authorization::CurrentAuthoringAuthority for radroots_signing::authorization::CurrentRegistryAuthority
 pub fn radroots_signing::authorization::CurrentRegistryAuthority::evaluate(&self, &radroots_event_codec::authoring::AuthoredEventPlan) -> radroots_signing::authorization::CurrentAuthoringDecision
-pub trait radroots_signing::authorization::CurrentAuthoringAuthority: core::marker::Send + core::marker::Sync
+pub trait radroots_signing::authorization::CurrentAuthoringAuthority: radroots_signing::host::HostBound
 pub fn radroots_signing::authorization::CurrentAuthoringAuthority::evaluate(&self, &radroots_event_codec::authoring::AuthoredEventPlan) -> radroots_signing::authorization::CurrentAuthoringDecision
 impl radroots_signing::authorization::CurrentAuthoringAuthority for radroots_signing::authorization::CurrentRegistryAuthority
 pub fn radroots_signing::authorization::CurrentRegistryAuthority::evaluate(&self, &radroots_event_codec::authoring::AuthoredEventPlan) -> radroots_signing::authorization::CurrentAuthoringDecision
@@ -114,6 +114,10 @@ pub fn radroots_signing::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>)
 impl core::fmt::Display for radroots_signing::error::Error
 pub fn radroots_signing::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_signing::error::CATALOG: &[radroots_signing::error::Descriptor]
+pub mod radroots_signing::host
+pub trait radroots_signing::host::HostBound: core::marker::Send + core::marker::Sync
+impl<T: core::marker::Send + core::marker::Sync + ?core::marker::Sized> radroots_signing::host::HostBound for T
+pub type radroots_signing::host::Shared<T> = alloc::sync::Arc<T>
 pub mod radroots_signing::identity
 pub struct radroots_signing::identity::AuthoredArtifactId(_)
 impl radroots_signing::identity::AuthoredArtifactId
@@ -225,18 +229,18 @@ pub fn radroots_signing::request::SignRequest::report_progress(&self, &radroots_
 pub const fn radroots_signing::request::SignRequest::signer_request_id(&self) -> radroots_signing::identity::SignerRequestId
 pub fn radroots_signing::request::SignRequest::tags(&self) -> &[alloc::vec::Vec<alloc::string::String>]
 pub fn radroots_signing::request::SignRequest::with_cancellation_signal(self, radroots_signing::request::CancellationSignal) -> Self
-pub fn radroots_signing::request::SignRequest::with_progress_observer(self, alloc::sync::Arc<dyn radroots_signing::request::ProgressObserver>) -> Self
+pub fn radroots_signing::request::SignRequest::with_progress_observer(self, radroots_signing::host::Shared<dyn radroots_signing::request::ProgressObserver>) -> Self
 impl core::fmt::Debug for radroots_signing::request::SignRequest
 pub fn radroots_signing::request::SignRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub trait radroots_signing::request::ProgressObserver: core::marker::Send + core::marker::Sync
+pub trait radroots_signing::request::ProgressObserver: radroots_signing::host::HostBound
 pub fn radroots_signing::request::ProgressObserver::on_progress(&self, &radroots_signing::status::SignProgress)
 pub mod radroots_signing::signer
-pub trait radroots_signing::signer::Signer: core::marker::Send + core::marker::Sync
+pub trait radroots_signing::signer::Signer: radroots_signing::host::HostBound
 pub fn radroots_signing::signer::Signer::sign(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>>
 pub fn radroots_signing::signer::Signer::sign_authored_evidence(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::AuthoredSignEvidence, radroots_signing::error::Error>>
 pub fn radroots_signing::signer::Signer::status(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>>
 pub type radroots_signing::signer::BoxFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
-pub type radroots_signing::signer::DynSigner = alloc::sync::Arc<dyn radroots_signing::signer::Signer>
+pub type radroots_signing::signer::DynSigner = radroots_signing::host::Shared<dyn radroots_signing::signer::Signer>
 pub mod radroots_signing::status
 #[non_exhaustive] pub enum radroots_signing::status::SignProgressStage
 pub radroots_signing::status::SignProgressStage::AwaitingAuthentication
@@ -370,7 +374,7 @@ pub fn radroots_signing::request::SignRequest::report_progress(&self, &radroots_
 pub const fn radroots_signing::request::SignRequest::signer_request_id(&self) -> radroots_signing::identity::SignerRequestId
 pub fn radroots_signing::request::SignRequest::tags(&self) -> &[alloc::vec::Vec<alloc::string::String>]
 pub fn radroots_signing::request::SignRequest::with_cancellation_signal(self, radroots_signing::request::CancellationSignal) -> Self
-pub fn radroots_signing::request::SignRequest::with_progress_observer(self, alloc::sync::Arc<dyn radroots_signing::request::ProgressObserver>) -> Self
+pub fn radroots_signing::request::SignRequest::with_progress_observer(self, radroots_signing::host::Shared<dyn radroots_signing::request::ProgressObserver>) -> Self
 impl core::fmt::Debug for radroots_signing::request::SignRequest
 pub fn radroots_signing::request::SignRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_signing::SignerRequestId(_)
@@ -399,11 +403,11 @@ pub fn radroots_signing::identity::SigningOperationId::new([u8; 16]) -> core::re
 pub fn radroots_signing::identity::SigningOperationId::to_hex(self) -> alloc::string::String
 impl core::fmt::Debug for radroots_signing::identity::SigningOperationId
 pub fn radroots_signing::identity::SigningOperationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub trait radroots_signing::CurrentAuthoringAuthority: core::marker::Send + core::marker::Sync
+pub trait radroots_signing::CurrentAuthoringAuthority: radroots_signing::host::HostBound
 pub fn radroots_signing::CurrentAuthoringAuthority::evaluate(&self, &radroots_event_codec::authoring::AuthoredEventPlan) -> radroots_signing::authorization::CurrentAuthoringDecision
 impl radroots_signing::authorization::CurrentAuthoringAuthority for radroots_signing::authorization::CurrentRegistryAuthority
 pub fn radroots_signing::authorization::CurrentRegistryAuthority::evaluate(&self, &radroots_event_codec::authoring::AuthoredEventPlan) -> radroots_signing::authorization::CurrentAuthoringDecision
-pub trait radroots_signing::Signer: core::marker::Send + core::marker::Sync
+pub trait radroots_signing::Signer: radroots_signing::host::HostBound
 pub fn radroots_signing::Signer::sign(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::SignReceipt, radroots_signing::error::Error>>
 pub fn radroots_signing::Signer::sign_authored_evidence(&self, radroots_signing::request::SignRequest) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::receipt::AuthoredSignEvidence, radroots_signing::error::Error>>
 pub fn radroots_signing::Signer::status(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::status::SignerStatus, radroots_signing::error::Error>>

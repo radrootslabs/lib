@@ -1,0 +1,12 @@
+{
+  "schema": "radroots.execution.host_ports.v1",
+  "scope": ["signer", "authoring_authority", "progress_observer", "event_source", "event_sink", "event_subscriber", "event_subscription", "all_storage_spis", "sync_clock", "sync_id_source", "sync_composition"],
+  "native": {"hosts": "Send + Sync", "subscriptions": "Send", "futures": "Send", "shared_handles": "Arc"},
+  "wasm32": {"hosts": "local", "subscriptions": "local", "futures": "local", "shared_handles": "Rc"},
+  "pure_cancellation_signal": "An Arc<AtomicBool> remains a portable value without local host state",
+  "unsafe_send_bridge": false,
+  "runtime_created": false,
+  "native_proof": "All port trait objects, sync engine and future aliases retain their thread guarantees",
+  "wasm_proof": "Compile representative Rc<Cell> signer/progress/authority, source/sink/subscription, event-store/status and clock/id implementations and local futures through a separate consumer manifest",
+  "qualification_limit": "Compilation is not concrete IndexedDB/network/signing/replay qualification or a packed complete browser SDK consumer"
+}

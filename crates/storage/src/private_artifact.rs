@@ -823,7 +823,7 @@ impl PrivateArtifactStatus {
 }
 
 /// Backend-neutral metadata-only private-artifact SPI.
-pub trait PrivateArtifactStore: Send + Sync {
+pub trait PrivateArtifactStore: radroots_transport::host::HostBound {
     fn put_metadata(
         &self,
         metadata: PrivateArtifactMetadata,

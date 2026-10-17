@@ -18,7 +18,7 @@ pub enum CurrentAuthoringDecision {
 }
 
 /// Host or registry authority for current signing policy.
-pub trait CurrentAuthoringAuthority: Send + Sync {
+pub trait CurrentAuthoringAuthority: crate::host::HostBound {
     fn evaluate(&self, plan: &AuthoredEventPlan) -> CurrentAuthoringDecision;
 }
 

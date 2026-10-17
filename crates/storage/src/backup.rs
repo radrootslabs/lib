@@ -689,7 +689,7 @@ pub enum RestoreTransition {
 
 /// Backend-neutral reliability operations. Implementations own staging and
 /// atomic filesystem replacement; callers receive only typed state.
-pub trait StorageReliability: Send + Sync {
+pub trait StorageReliability: radroots_transport::host::HostBound {
     /// Settles writes already admitted by this owner, including work whose
     /// caller was cancelled. The host must exclude new writes before calling
     /// this and retain that exclusion through related inventory and capture.

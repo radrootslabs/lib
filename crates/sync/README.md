@@ -6,6 +6,13 @@ The package owns the shared ingest, pull, projection, push, policy, and status
 boundaries. It does not create an executor, spawn workers, install timers, own
 process lifecycle, store UI state, or branch on concrete transport adapters.
 
+Host composition uses target-aware shared ownership for storage, signer,
+transport, clock and identity sources. Native handles retain `Arc` and
+`Send + Sync`; WASM handles use `Rc` and permit local futures and callbacks.
+This is a composition contract, not qualification of a browser store/network
+adapter. The isolated browser-host fixture compiles local interfaces without
+pulling native SQLite test dependencies into the browser target.
+
 `StorageSpaceInsufficient` preserves the storage owner's typed capacity failure.
 It does not establish rollback or absence of signer or remote effects. Retain
 the original requests, signed bytes and unresolved receipts, then reconcile

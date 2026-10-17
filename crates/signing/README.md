@@ -88,9 +88,11 @@ The complete externally implementable SPI example is
 
 ## Host SPI contract
 
-`Signer` is intentionally externally implementable, object-safe, `Send`, and
-`Sync`. Its methods return boxed `Future + Send` values so the SPI does not
-select an async runtime or require an async-trait macro.
+`Signer` is externally implementable and object-safe. Native hosts retain
+`Send + Sync` and boxed `Future + Send`; WASM hosts and futures may remain local.
+`host::Shared` selects native `Arc` or browser `Rc` for signer and progress
+callback ownership. These target bounds let the host choose its executor;
+the SPI does not select an async runtime or require an async-trait macro.
 
 - `status` is observational and must not create a signing request or another
   durable side effect.

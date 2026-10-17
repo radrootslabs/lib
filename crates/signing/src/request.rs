@@ -139,7 +139,7 @@ impl<'de> serde::Deserialize<'de> for SignPolicy {
 }
 
 /// Runtime-local observer for signing progress.
-pub trait ProgressObserver: Send + Sync {
+pub trait ProgressObserver: crate::host::HostBound {
     fn on_progress(&self, progress: &SignProgress);
 }
 
@@ -239,7 +239,7 @@ pub struct SignRequest {
     authorization: Option<CurrentAuthoringDecision>,
     policy: SignPolicy,
     cancellation_signal: CancellationSignal,
-    progress_observer: Option<Arc<dyn ProgressObserver>>,
+    progress_observer: Option<crate::host::Shared<dyn ProgressObserver>>,
 }
 
 impl SignRequest {
@@ -318,7 +318,10 @@ impl SignRequest {
     }
 
     #[must_use]
-    pub fn with_progress_observer(mut self, observer: Arc<dyn ProgressObserver>) -> Self {
+    pub fn with_progress_observer(
+        mut self,
+        observer: crate::host::Shared<dyn ProgressObserver>,
+    ) -> Self {
         self.progress_observer = Some(observer);
         self
     }

@@ -70,9 +70,11 @@ The crate root exposes the ordinary aggregate [`Storage`] capability plus
 modules so ordinary consumers do not accidentally depend on workflow or
 protected-record internals.
 
-All SPIs are externally implementable, dyn-compatible `Send + Sync` traits.
-Their methods return boxed `Future + Send` values, allowing the host to choose
-the async executor. Implementations must not install an executor, spawn hidden
+All SPIs are externally implementable and dyn-compatible. Native traits retain
+`Send + Sync` and boxed `Future + Send`; browser traits and futures may stay
+local. Every SPI uses the same target-aware transport host bounds and future
+alias, allowing the host to choose the async executor. Implementations must not
+install an executor, spawn hidden
 workers, read a clock, generate identities, or perform implicit retries.
 
 `BackupSource::settle_backup_writes` waits for earlier owner writes, including

@@ -1028,7 +1028,7 @@ impl ProjectionStatus {
 }
 
 /// Backend-neutral projection coordination SPI.
-pub trait ProjectionStore: Send + Sync {
+pub trait ProjectionStore: radroots_transport::host::HostBound {
     /// Registers one exact derived-cache identity under an immutable store budget.
     /// Configured identities cannot create new legacy whole-view snapshots.
     fn configure_projection_cache(

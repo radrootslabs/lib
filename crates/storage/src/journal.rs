@@ -673,7 +673,7 @@ impl JournalTransition {
 }
 
 /// Backend-neutral durable operation journal SPI.
-pub trait Journal: Send + Sync {
+pub trait Journal: radroots_transport::host::HostBound {
     /// Creates a record or replays the exact existing operation. A reused key
     /// with a different operation kind, instance, or digest is a conflict.
     fn prepare(&self, operation: PrepareOperation) -> BoxFuture<'_, Result<PrepareReceipt, Error>>;

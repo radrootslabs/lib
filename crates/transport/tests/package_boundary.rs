@@ -61,6 +61,7 @@ fn crate_root_declares_the_approved_public_module_skeleton() {
             "capability",
             "endpoint",
             "error",
+            "host",
             "outcome",
             "policy",
             "sink",
@@ -160,6 +161,7 @@ fn every_public_module_has_crate_level_documentation() {
         "capability",
         "endpoint",
         "error",
+        "host",
         "outcome",
         "policy",
         "sink",
@@ -178,7 +180,7 @@ fn every_public_module_has_crate_level_documentation() {
 #[test]
 fn source_subscription_and_sink_are_independent_dyn_compatible_host_spis() {
     for required in [
-        "pub trait EventSource: Send + Sync",
+        "pub trait EventSource: crate::host::HostBound",
         "fn status(&self)",
         "fn fetch(",
         "Dropping a returned future requests cancellation.",
@@ -192,8 +194,8 @@ fn source_subscription_and_sink_are_independent_dyn_compatible_host_spis() {
     assert!(!SOURCE.contains("fn deliver("));
 
     for required in [
-        "pub trait EventSubscriber: Send + Sync",
-        "pub trait EventSubscription: Send",
+        "pub trait EventSubscriber: crate::host::HostBound",
+        "pub trait EventSubscription: crate::host::MoveBound",
         "fn subscribe(",
         "fn next(&mut self)",
         "fn cancel(&mut self)",
@@ -207,7 +209,7 @@ fn source_subscription_and_sink_are_independent_dyn_compatible_host_spis() {
     }
 
     for required in [
-        "pub trait EventSink: Send + Sync",
+        "pub trait EventSink: crate::host::HostBound",
         "fn status(&self)",
         "fn deliver(",
         "Dropping a returned future requests cancellation.",

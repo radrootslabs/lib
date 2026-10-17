@@ -90,18 +90,18 @@ pub fn radroots_sync::policy::DeadlinePolicy::deserialize<D>(D) -> core::result:
 pub struct radroots_sync::policy::EngineBuilder
 impl radroots_sync::policy::EngineBuilder
 pub fn radroots_sync::policy::EngineBuilder::build(self) -> core::result::Result<radroots_sync::Engine, radroots_sync::policy::Error>
-pub fn radroots_sync::policy::EngineBuilder::signer(self, alloc::sync::Arc<dyn radroots_signing::signer::Signer>) -> Self
-pub fn radroots_sync::policy::EngineBuilder::sink(self, alloc::sync::Arc<dyn radroots_transport::sink::EventSink>) -> Self
-pub fn radroots_sync::policy::EngineBuilder::source(self, alloc::sync::Arc<dyn radroots_transport::source::EventSource>) -> Self
+pub fn radroots_sync::policy::EngineBuilder::signer(self, radroots_transport::host::Shared<dyn radroots_signing::signer::Signer>) -> Self
+pub fn radroots_sync::policy::EngineBuilder::sink(self, radroots_transport::host::Shared<dyn radroots_transport::sink::EventSink>) -> Self
+pub fn radroots_sync::policy::EngineBuilder::source(self, radroots_transport::host::Shared<dyn radroots_transport::source::EventSource>) -> Self
 pub struct radroots_sync::policy::SyncId(_)
 impl radroots_sync::policy::SyncId
 pub const fn radroots_sync::policy::SyncId::as_bytes(&self) -> &[u8; 16]
 pub const fn radroots_sync::policy::SyncId::new([u8; 16]) -> core::result::Result<Self, radroots_sync::policy::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::policy::SyncId
 pub fn radroots_sync::policy::SyncId::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
-pub trait radroots_sync::policy::Clock: core::marker::Send + core::marker::Sync
+pub trait radroots_sync::policy::Clock: radroots_transport::host::HostBound
 pub fn radroots_sync::policy::Clock::now_unix_ms(&self) -> core::result::Result<u64, radroots_sync::policy::Error>
-pub trait radroots_sync::policy::IdSource: core::marker::Send + core::marker::Sync
+pub trait radroots_sync::policy::IdSource: radroots_transport::host::HostBound
 pub fn radroots_sync::policy::IdSource::next_id(&self, radroots_sync::policy::OperationKind) -> core::result::Result<radroots_sync::policy::SyncId, radroots_sync::policy::Error>
 pub trait radroots_sync::policy::SyncStorage: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage + radroots_storage::status::StorageStatusProvider
 impl<T> radroots_sync::policy::SyncStorage for T where T: radroots_storage::event::EventStore + radroots_storage::journal::Journal + radroots_storage::outbox::Outbox + radroots_storage::projection::ProjectionStore + radroots_storage::atomic::AtomicStorage + radroots_storage::authored_atomic::AuthoredAtomicStorage + radroots_storage::status::StorageStatusProvider
@@ -129,6 +129,8 @@ pub const fn radroots_sync::projection::RefreshRequest::generation(&self) -> rad
 pub const fn radroots_sync::projection::RefreshRequest::max_batches(&self) -> u16
 pub fn radroots_sync::projection::RefreshRequest::new(radroots_storage::projection::ProjectionId, radroots_storage::projection::ProjectionGeneration, u16, u16) -> core::result::Result<Self, radroots_sync::policy::Error>
 pub const fn radroots_sync::projection::RefreshRequest::projection_id(&self) -> &radroots_storage::projection::ProjectionId
+impl<'de> serde_core::de::Deserialize<'de> for radroots_sync::projection::RefreshRequest
+pub fn radroots_sync::projection::RefreshRequest::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub const radroots_sync::projection::PROJECTION_RAW_SOURCE_MAX_EVENTS: u64
 pub const radroots_sync::projection::PROJECTION_REFRESH_MAX_BATCHES: u16
 pub trait radroots_sync::projection::Reducer: core::marker::Send + core::marker::Sync
@@ -296,7 +298,7 @@ pub async fn radroots_sync::Engine::prepare_push(&self, radroots_sync::push::Pus
 pub async fn radroots_sync::Engine::push_status(&self, radroots_sync::policy::SyncId) -> core::result::Result<core::option::Option<radroots_sync::push::PushStatus>, radroots_sync::policy::Error>
 pub async fn radroots_sync::Engine::sign_prepared(&self, radroots_sync::push::PushRequest) -> core::result::Result<radroots_sync::push::SigningRunReceipt, radroots_sync::policy::Error>
 impl radroots_sync::Engine
-pub fn radroots_sync::Engine::builder(alloc::sync::Arc<dyn radroots_sync::policy::SyncStorage>, alloc::sync::Arc<dyn radroots_sync::policy::Clock>, alloc::sync::Arc<dyn radroots_sync::policy::IdSource>, radroots_sync::policy::DeadlinePolicy) -> radroots_sync::policy::EngineBuilder
+pub fn radroots_sync::Engine::builder(radroots_transport::host::Shared<dyn radroots_sync::policy::SyncStorage>, radroots_transport::host::Shared<dyn radroots_sync::policy::Clock>, radroots_transport::host::Shared<dyn radroots_sync::policy::IdSource>, radroots_sync::policy::DeadlinePolicy) -> radroots_sync::policy::EngineBuilder
 pub fn radroots_sync::Engine::clock(&self) -> &dyn radroots_sync::policy::Clock
 pub const fn radroots_sync::Engine::deadlines(&self) -> radroots_sync::policy::DeadlinePolicy
 pub fn radroots_sync::Engine::ids(&self) -> &dyn radroots_sync::policy::IdSource
