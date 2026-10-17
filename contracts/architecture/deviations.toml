@@ -2,6 +2,32 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-045"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete shared SDK refactor, verified checkpoints, source publication and master integration."
+affected_steps = ["040", "050", "060", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy"]
+source_evidence = [
+  "The approved shared SDK contract requires durable operation, order, thread, workspace and executor identities as distinct typed namespaces, with 32-byte or canonical lowercase hex64 representations. Command names, local row keys and host handles do not supply those identities.",
+  "The native domain amount prerequisite is already implemented and verified. Its validated value owner can implement identifier representation without I/O or unavailable Nix execution. Representation admission does not prove randomness, authority, signing, persistence or operation admission.",
+]
+replacement_action = "Independently implement five distinct opaque identifier types with fixed-width bytes, strict canonical string admission and serde, private fields and typed input-free errors. Keep generation in the later qualified entropy/execution owner, omit Default and cross-namespace aliases/conversions, and preserve existing source/tests until actual caller replacement. Keep the package unpublished and preserve its original introduction-tree identity."
+verification = [
+  "Validate this prospective record before source changes. Bind exact original domain source, unchanged package/catalog/lock inputs and retained amount tests.",
+  "Prove independent byte/hex vectors, all five namespaces, malformed/oversized/Unicode input, exact equality/hash, lossless string-only serde and compile-time namespace/width separation under native/default, no-default and serde-only profiles; compile actual WASM.",
+  "Run strict lint/docs, actual pinned-nightly coverage with the unchanged gate, catalog/native provenance, architecture, contracts and preflight. Preserve prior evidence scope and leave CSPRNG, actual execution, generated bindings, caller integration and platform/final acceptance open.",
+]
+unresolved_risk = "Only validated identifier representations are implemented here. Qualified random generation, authenticated contexts, retained receipt/admission, native/browser effects, generated calls, namespace/caller cutover and final platform acceptance remain separate obligations. Parsing an ID grants no authority."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "All five namespaces store exact private 32-byte values and admit only canonical lowercase hex64 strings. Independent byte vectors, every ASCII character at all 64 positions, malformed widths/Unicode, numeric-input refusal, equality/hash and all five serde paths pass. Separate compile-failure examples prove namespace and byte-width distinctions without an unused binding.",
+  "The complete domain package passes 22 default and serde-only cases, the same 18 non-serde cases without default features, and two compile-failure doctests in every tested profile. Stable native/WASM checking, warnings-denied Clippy/Rustdoc, catalog, architecture and contracts pass. The initial Clippy finding is retained and corrected with fixed-size array chunks; no lint exception was added.",
+  "Actual preserved coverage-nightly execution measures all 148 executable lines, every function/region and all 34 recorded branches covered under unchanged thresholds. Cargo, dependency locks, catalog/publication policy, original introduction provenance and all earlier amount test bodies remain unchanged. Generation, execution, bindings, consumers and final platform acceptance remain required.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-044"
 date = "2026-10-17"
 status = "closed"

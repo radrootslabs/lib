@@ -4,5 +4,7 @@
 #![warn(missing_docs)]
 
 mod amount;
+mod identifier;
 
 pub use amount::{AmountError, Decimal, PositiveDecimal};
+pub use identifier::{ExecutorId, IdentifierError, OperationId, OrderId, ThreadId, WorkspaceId};

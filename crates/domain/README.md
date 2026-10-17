@@ -16,4 +16,24 @@ The package supports `no_std`; `serde` and `std` are independent features.
 It performs no I/O, clock, randomness, storage or network work. Currency and
 economic rules remain separate implementation requirements.
 
+Order, thread, workspace, executor and operation IDs have distinct Rust types.
+Each stores 32 bytes and uses exactly 64 lowercase hexadecimal characters in
+strings and JSON. Byte/string construction validates representation; generation
+belongs to the execution owner's qualified CSPRNG boundary.
+
+Namespaces remain separate across native calls:
+
+```compile_fail
+use radroots_domain::{OperationId, WorkspaceId};
+let operation = OperationId::from_bytes([0; 32]);
+let _: WorkspaceId = operation;
+```
+
+Byte inputs have a fixed width:
+
+```compile_fail
+use radroots_domain::OperationId;
+let _ = OperationId::from_bytes([0; 31]);
+```
+
 Licensed under MIT OR Apache-2.0; see LICENSE-MIT and LICENSE-APACHE.
