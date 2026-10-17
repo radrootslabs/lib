@@ -16,5 +16,8 @@ pub mod sync;
 pub mod trade;
 pub mod transport;
 
+#[cfg(feature = "native")]
+pub use client::NativeConfig;
+pub use client::{Client, CloseReceipt, SessionStatus, StartMode};
 pub use radroots_domain::OperationId;
-pub use radroots_sdk::{Client, ClientBuilder, Error, Result};
+pub use radroots_execution::{Error, Result};

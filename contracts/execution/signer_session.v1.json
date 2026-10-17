@@ -3,7 +3,7 @@
   "state": "component_qualified_native_and_compile_only_wasm",
   "feature": "signer_session",
   "construction": "Own provider and its exact host callback scope without invoking either",
-  "first_observation": "Owning Client retains the scope before awaiting actual provider identity observation",
+  "first_observation": "ClientSession retains the scope before awaiting actual provider identity observation, including failed or cancelled attachment",
   "identity": "First successful key is frozen; identity drift is latched until explicit replacement, even if the original key returns",
   "capabilities": "Method observations may change for the same key; cached values grant no command, stock, replay or qualification authority",
   "concurrent_observations": 1,
@@ -24,5 +24,6 @@
     "Durable commands and obtained-result retention",
     "Concrete platform/browser callback host qualification",
     "Generated bindings and final acceptance"
-  ]
+  ],
+  "composed_quiesce": "Quiesce leaves callback roots owned; ClientSession drains its admitted attachment work and disconnects transports before final signer close/disposal."
 }

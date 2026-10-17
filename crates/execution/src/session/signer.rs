@@ -195,4 +195,11 @@ impl SignerSession {
     pub async fn close(&self) -> crate::Result<()> {
         self.session.close().await
     }
+
+    /// Stops observation admission and host dispatch without releasing roots.
+    /// The composing Client drains its work and transports before awaiting
+    /// close, which disposes these callbacks. Cancellation is resumable.
+    pub async fn quiesce(&self) -> crate::Result<()> {
+        self.session.quiesce().await
+    }
 }

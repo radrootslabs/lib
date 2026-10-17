@@ -15,8 +15,12 @@ fn package_has_final_identity_and_exact_dependencies() {
             "radroots_core",
             "radroots_domain",
             "radroots_event",
+            "radroots_execution",
             "radroots_identity",
             "radroots_sdk",
+            "radroots_signing",
+            "radroots_storage",
+            "radroots_storage_sqlite",
             "radroots_trade",
             "radroots_transport",
         ])
@@ -30,14 +34,14 @@ fn package_has_final_identity_and_exact_dependencies() {
 fn features_forward_the_exact_user_oriented_graph() {
     for forwarding in [
         "default = [\"client\"]",
-        "client = [\"radroots_sdk/default\"]",
-        "native = [\"client\", \"radroots_sdk/native\"]",
+        "client = [\"radroots_sdk/default\", \"radroots_storage/memory\"]",
+        "native = [\"client\", \"radroots_sdk/native\", \"dep:radroots_storage_sqlite\"]",
         "nostr = [\"client\", \"radroots_sdk/nostr\"]",
         "nip46 = [\"nostr\", \"radroots_sdk/nip46\"]",
         "radrootsd = [\"client\", \"radroots_sdk/radrootsd\"]",
         "geonames = [\"client\", \"radroots_sdk/geonames\"]",
         "knowledge = [\"client\", \"radroots_sdk/knowledge\"]",
-        "full = [\"radroots_sdk/full\"]",
+        "full = [\"native\", \"radroots_sdk/full\"]",
     ] {
         assert!(MANIFEST.contains(forwarding), "missing `{forwarding}`");
     }
@@ -46,11 +50,14 @@ fn features_forward_the_exact_user_oriented_graph() {
 
 #[test]
 fn root_has_exact_exports_and_no_sdk_namespace() {
-    assert!(ROOT.contains("pub use radroots_sdk::{Client, ClientBuilder, Error, Result};"));
+    assert!(ROOT.contains("pub use client::{Client, CloseReceipt, SessionStatus, StartMode};"));
+    assert!(ROOT.contains("pub use radroots_execution::{Error, Result};"));
+    assert!(!ROOT.contains("ClientBuilder"));
+    assert!(!ROOT.contains("pub use radroots_sdk::{Client"));
     assert!(!ROOT.contains("pub mod sdk"));
     assert!(!ROOT.contains("pub use radroots_sdk::*"));
     assert!(ROOT.contains("pub use radroots_domain::OperationId;"));
-    assert_eq!(ROOT.matches("pub use ").count(), 2);
+    assert_eq!(ROOT.matches("pub use ").count(), 4);
     assert!(README.contains("```compile_fail\nuse radroots::sdk;\n```"));
 }
 

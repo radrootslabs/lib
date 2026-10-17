@@ -6,6 +6,12 @@
 
 mod host;
 
+#[cfg(feature = "client_session")]
+mod client;
+
+#[cfg(feature = "client_session")]
+pub use client::ClientSession;
+
 #[cfg(feature = "signer_session")]
 mod signer;
 
@@ -163,8 +169,21 @@ impl<H: SessionHost> Session<H> {
     /// of caller observation, and retain it through result/uncertainty storage.
     /// This call performs no journal write, authorization or signing.
     pub fn admit(&self) -> Result<WorkPermit<H>> {
+        self.reserve(false)
+    }
+
+    // Attachment is resource ownership before worker startup, never command
+    // admission. It shares the same fixed bound and permanent close gate.
+    #[cfg(feature = "client_session")]
+    fn retain_resource(&self) -> Result<WorkPermit<H>> {
+        self.reserve(true)
+    }
+
+    fn reserve(&self, before_start: bool) -> Result<WorkPermit<H>> {
         let mut gate = self.inner.gate();
-        if gate.state != SessionState::Running {
+        if matches!(gate.state, SessionState::Closing | SessionState::Closed)
+            || (!before_start && gate.state != SessionState::Running)
+        {
             return Err(unavailable());
         }
         if gate.active == self.inner.limit.get() {
@@ -176,21 +195,43 @@ impl<H: SessionHost> Session<H> {
         })
     }
 
-    /// Permanently closes admission on first poll, then shuts down in order.
-    ///
-    /// Cancelling this future retains its last completed stage. Awaiting close
-    /// again resumes the unfinished hook. No Drop implementation claims close.
-    pub async fn close(&self) -> Result<()> {
+    fn stop_admission(&self) -> bool {
         let starting = {
             let mut gate = self.inner.gate();
             if gate.state == SessionState::Closed {
-                return Ok(());
+                return false;
             }
             gate.state = SessionState::Closing;
             gate.starting.take()
         };
         if let Some(waker) = starting {
             waker.wake();
+        }
+        true
+    }
+
+    /// Permanently stops admission and quiesces the host without draining or
+    /// disposing resources. Composing owners must subsequently await close.
+    /// Cancellation resumes the same unfinished hook; completion is shared.
+    pub async fn quiesce(&self) -> Result<()> {
+        if !self.stop_admission() {
+            return Ok(());
+        }
+        let mut stage = self.inner.control.lock().await;
+        if matches!(*stage, CloseStage::Quiesce) {
+            self.inner.host.quiesce().await?;
+            *stage = CloseStage::Drain;
+        }
+        Ok(())
+    }
+
+    /// Permanently closes admission on first poll, then shuts down in order.
+    ///
+    /// Cancelling this future retains its last completed stage. Awaiting close
+    /// again resumes the unfinished hook. No Drop implementation claims close.
+    pub async fn close(&self) -> Result<()> {
+        if !self.stop_admission() {
+            return Ok(());
         }
         let mut stage = self.inner.control.lock().await;
         loop {

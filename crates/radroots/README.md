@@ -1,100 +1,78 @@
 # radroots
 
-`radroots` is the canonical ordinary-user Rust package for Radroots. It offers
-safe local construction, deliberate domain paths, and the common client
-boundary without exposing every lower crate or duplicating the advanced SDK
-engine.
+`radroots` is the ordinary Rust entry to shared Radroots values and execution.
+The Client owns one coherent execution session and its actual store. Clones
+share admission and shutdown. Source is in refactor; package release remains
+separately governed.
 
-The package is enabled for validation-only release qualification. After the
-separately approved publication gate, the onboarding command is:
+## Explicit preview
 
-```sh
-cargo add radroots
-```
-
-## Start locally
-
-The default `client` feature enables deterministic in-process memory storage.
-Construction creates no file, contacts no network or daemon, reads no keyring,
-installs no runtime or subscriber, and starts no worker. The initial transport
-profile is explicitly local-only.
+The default `client` feature enables an in-memory preview. Construction opens
+no file, network, keyring, runtime or worker. Its deterministic cache generation
+is not an operation ID or stock authority.
 
 ```rust
 # async fn run() -> radroots::Result<()> {
-let client = radroots::client::memory().build()?;
-let profile = radroots::client::local_only();
-assert!(profile.is_local_only());
-
-// Clone handles share lifecycle state; shutdown is explicit and asynchronous.
+use radroots::{Client, StartMode};
+let client = Client::preview();
+client.start(StartMode::LocalOnly).await?;
 client.close().await?;
 # Ok(())
 # }
 ```
 
-The default memory generation is process-local and deterministic. Hosts that
-persist cursors or compose their own storage generation should use
-`radroots_sdk::ClientBuilder` directly.
+With `native`, `Client::open(NativeConfig::public_read(options)).await` opens
+the actual SQLite cache from explicit validated host paths, mode and source
+generation. It performs no networking or automatic command replay. This public
+cache scope does not open an authenticated participant workspace or create
+seller stock authority. Protected workspace/authority opening, network workers,
+complete command receipts and durable listing/chat operations remain separate
+unfinished implementation requirements.
 
-## Product operations
+`attach_signer` observes the concrete provider only after retaining its callback
+scope. The first successful key freezes and later drift invalidates that scope.
+Observation grants no workspace, command or stock authority. Failed/cancelled
+attachment remains reachable through `signer_session` for explicit cleanup.
 
-Farm, listing, and trade writes follow one reliability boundary:
+Close permanently stops admission, quiesces callback dispatch, drains work,
+disconnects owned transports, disposes callbacks and closes storage last. Failed
+or cancelled close retains its unfinished stage; await close again. An unpolled
+future has no shutdown effect, and Drop supplies no completion receipt.
+`CloseReceipt` reports actual resource closure, never business installation.
+Native handles/futures retain thread guarantees; shared browser resource code
+uses local handles/futures. Compilation does not qualify browser runtime hosts.
 
-1. `prepare` validates and freezes a side-effect-free plan.
-2. The configured signer authorizes and signs that plan.
-3. Enqueue durably accepts it under an operation ID and idempotency key.
-4. Delivery runs only for an explicitly selected transport profile.
+Errors come from `radroots_execution`: fixed codes, bounded redacted details,
+explicit admission/retry disposition and optional exact operation identity.
+Backend prose, private payloads and paths are not retained in the error.
 
-Cancellation before durable acceptance makes no commit claim. Cancellation
-after acceptance cannot roll back the accepted event; resume with the same
-idempotency identity and inspect the canonical receipt. Public event models do
-not contain exact farm coordinates, private trade terms, credentials, or key
-material.
+## Values and retained capabilities
 
-Errors expose stable classifications and recovery metadata while retaining
-their lower source chain for local diagnostics. Display, debug, diagnostics,
-and protocol reports redact bearer credentials and signer material. Canonical
-lower crates own serialization and versioned wire contracts; facade aliases
-are Rust paths, not a second persistence format.
+`radroots::domain` provides exact decimals and distinct order, thread, workspace,
+executor and operation identities. `radroots::OperationId` is the 256-bit
+retained identity. These values alone perform no authorization or transaction.
 
-## Features
+Farm, listing, trade, event, identity, transport, geographic and knowledge
+modules retain their source-owned values/planners and advanced capability
+paths. The advanced `radroots_sdk` still owns its existing explicit transport
+composition while concrete ordinary network integration is unfinished; the
+new Client does not wrap that engine or report its writes as new durable
+commerce. Optional capabilities remain governed by their actual host/target
+qualification and do not become available because a feature compiles.
 
-| Feature | Behavior |
-| --- | --- |
-| `client` | safe memory-backed client; the default |
-| `native` | explicit SQLite, sync, and local-signing SDK capabilities |
-| `blossom` | HTTP-only BUD-11 upload authorization through an opaque host signer |
-| `nostr` | explicit Nostr source/sink composition |
-| `nip46` | host-owned NIP-46 signer composition; implies `nostr` |
-| `radrootsd` | explicitly invoked daemon delivery |
-| `geonames` | concrete GeoNames provider capability |
-| `knowledge` | canonical knowledge event contracts |
-| `full` | the governed complete SDK capability bundle |
-
-Enabling a feature compiles capability; it never performs I/O. Native storage
-opens only through `client::native`, transport is caller-injected, and daemon
-delivery happens only when its `deliver` method is invoked.
-
-## When to use radroots_sdk
-
-`radroots::domain` exposes exact decimal values and separate order, thread,
-workspace, executor and operation identities. `radroots::OperationId` is the
-retained operation identity, not an operation-kind enum. These validated values
-do not authenticate a participant or establish durable command admission.
-
-Use `radroots` for ordinary applications and the primary farm, listing, trade,
-identity, event, and transport paths. Use `radroots_sdk` directly when the host
-must own source-generation identity, inject arbitrary storage/signing/sync
-implementations, coordinate FFI/mobile lifecycle, or inspect advanced
-capability and diagnostics contracts. There is intentionally no
-`radroots::sdk` namespace or wildcard SDK reexport.
-
-The namespace separation is a compiled contract:
+The former root `ClientBuilder` and builder-returning memory/native helpers
+are replaced by explicit Client preview/open methods. Advanced SDK callers
+remain at their owning package. No wildcard or SDK namespace is exposed:
 
 ```compile_fail
 use radroots::sdk;
 ```
 
-The normative package charter is the [`radroots` release-v1
-specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
-The reviewed pre-release public API is recorded in the
-[`radroots` baseline](../../contracts/api_baselines/radroots.txt).
+```compile_fail
+use radroots::ClientBuilder;
+```
+
+The reviewed Rust API lives in
+[`contracts/api_baselines/radroots.txt`](../../contracts/api_baselines/radroots.txt).
+The approved successor ownership and host contracts live in
+[`shared_sdk_refactor.v1.json`](../../contracts/architecture/decisions/shared_sdk_refactor.v1.json).

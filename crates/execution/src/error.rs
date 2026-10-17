@@ -191,6 +191,16 @@ pub struct Error {
 }
 
 impl Error {
+    #[cfg(feature = "client_session")]
+    pub(crate) const fn identity_changed() -> Self {
+        Self {
+            code: Code::IdentityChanged,
+            context: OperationContext::proposed(None),
+            retry: RetryClass::Never,
+            detail: Some(Detail::new(crate::Field::Signer, crate::Reason::Conflict)),
+        }
+    }
+
     #[cfg(feature = "signer_session")]
     pub(crate) const fn signer_unavailable() -> Self {
         Self {

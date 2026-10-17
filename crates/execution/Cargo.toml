@@ -16,6 +16,7 @@ include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "L
 default = []
 session = ["dep:futures"]
 signer_session = ["session", "dep:radroots_signing"]
+client_session = ["signer_session"]
 
 [dependencies]
 radroots_domain = { workspace = true, default-features = false }

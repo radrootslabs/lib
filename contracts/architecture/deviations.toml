@@ -2,6 +2,35 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-051"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete approved shared SDK refactor, necessary breaking source changes, verified commits and ordinary source publication."
+affected_steps = ["040", "060", "110", "120", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_storage_sqlite"]
+source_evidence = [
+  "The ordinary facade still aliases the prior SDK Client/ClientBuilder. It cannot own the qualified execution session or retain scoped attachment before its first awaited observation.",
+  "Native SQLite already owns real pools and process writer exclusion. Compose those resources with the shared session and the actual participant provider, rather than introducing a parallel lifecycle or claiming a source-generation token establishes stock authority.",
+]
+replacement_action = "Replace the ordinary root Client with shared execution-session composition and explicit native public-cache opening or memory preview. Retain attachment before observation, quiesce it before draining and dispose callbacks before the actual store. Preserve advanced retained capabilities and test purposes at their existing owner while authenticated participant-workspace opening, network workers, complete receipts and durable known-kind commands continue as distinct unfinished obligations."
+verification = [
+  "Validate this prospective record before implementation. Prove actual SQLite opening, shared start/close state, real process-writer retention until callback disposal, concrete LocalSigner attachment before start and cancellation/resumption of actual Client closure.",
+  "Prove pending/failed attachment ownership and the insertion-versus-close race with controlled host callbacks. Construction and unpolled close remain inert; native thread bounds and browser-local composition remain intact.",
+  "Run affected native checks/tests/docs/strict lint, meaningful portable checks, owner-generated public APIs and source boundaries, and unchanged actual coverage gates. Preserve every removed facade test purpose at its actual successor or retained advanced owner before deletion.",
+]
+unresolved_risk = "This bounded native public-cache/preview milestone does not authenticate a participant workspace or stock authority, provide network workers, execute a durable command, qualify browser runtime or complete the remaining facade/receipt/binding and acceptance requirements."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The ordinary root Client now composes shared execution resource ownership with actual native SQLite public-cache opening or explicit memory preview. Start is explicitly local-only; signer observation before start is retained before its first await. No participant workspace or network worker is claimed.",
+  "Actual LocalSigner/SQLite tests verify observed identity, process writer exclusion during callback disposal, close/reopen, cancelled-close resumption and bounded redacted open errors. Controlled composition tests cover lost/failed observation, explicit replacement, pending attachment during close, completed-hook retention and thirty-two overlapping admissions/closures.",
+  "All affected native checks/tests/doctests and strict lint pass. Execution/facade WASM, Rc-local host/provider composition, no_std execution and the actually executed default preview example pass. Two generated public API baselines are fresh. Existing advanced transport and ancillary test purposes remain at their current owner while concrete ordinary integration continues.",
+  "The preserved initial facade coverage failure measured fifty-percent branches. The actual open memory store now exercises rejection by the private confirmed-close receipt constructor, preserving the original closed-state guard. Facade line/function/region/branch coverage is one hundred percent; execution passes the unchanged ninety-percent policy. The obsolete facade no-branches exception is removed, and two active documentation counts match the twenty-one-package allocation.",
+  "Concrete browser/platform callbacks, protected authenticated workspace/context, complete operation receipts, actual durable listing/chat workers, generated consumer bindings and coherent downstream adoption remain required. This checkpoint supplies no stock, network, release or final acceptance authority.",
+]
+
+
+[[deviation]]
 id = "RCRV1-DEV-050"
 date = "2026-10-17"
 status = "closed"

@@ -38,26 +38,34 @@ path = "src/lib.rs"
 [dependencies]
 radroots_core = { workspace = true }
 radroots_domain = { workspace = true, features = ["std", "serde"] }
+radroots_execution = { workspace = true, features = ["client_session"] }
 radroots_event = { workspace = true }
 radroots_identity = { workspace = true, features = ["std"] }
 radroots_sdk = { workspace = true }
+radroots_signing = { workspace = true }
+radroots_storage = { workspace = true }
+radroots_storage_sqlite = { workspace = true, optional = true }
 radroots_trade = { workspace = true, features = ["json", "std"] }
 radroots_transport = { workspace = true }
 
 [features]
 default = ["client"]
-client = ["radroots_sdk/default"]
-native = ["client", "radroots_sdk/native"]
+client = ["radroots_sdk/default", "radroots_storage/memory"]
+native = ["client", "radroots_sdk/native", "dep:radroots_storage_sqlite"]
 nostr = ["client", "radroots_sdk/nostr"]
 blossom = ["client", "radroots_sdk/blossom"]
 nip46 = ["nostr", "radroots_sdk/nip46"]
 radrootsd = ["client", "radroots_sdk/radrootsd"]
 geonames = ["client", "radroots_sdk/geonames"]
 knowledge = ["client", "radroots_sdk/knowledge"]
-full = ["radroots_sdk/full"]
+full = ["native", "radroots_sdk/full"]
 
 [dev-dependencies]
+futures = { workspace = true }
+radroots_nostr = { workspace = true, features = ["signing"] }
 serde_json = { workspace = true, features = ["std"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt"] }
 toml = { workspace = true }
 
 [[example]]

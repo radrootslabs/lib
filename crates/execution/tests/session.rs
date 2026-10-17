@@ -547,3 +547,37 @@ fn browser_host_futures_accept_thread_local_callback_state() {
     assert_eq!(calls.get(), 1);
     block_on(client.close()).unwrap();
 }
+
+#[test]
+fn explicit_quiesce_stops_admission_without_draining_or_disposing_resources() {
+    let (session, observed) = fixture(1);
+    block_on(session.start()).unwrap();
+    let permit = session.admit().unwrap();
+    drop(session.quiesce());
+    assert_eq!(session.state(), SessionState::Running);
+    block_on(session.quiesce()).unwrap();
+    assert_eq!(session.state(), SessionState::Closing);
+    assert!(session.admit().is_err());
+    assert_eq!(
+        *observed.calls.lock().unwrap(),
+        [Hook::Start, Hook::Quiesce]
+    );
+    block_on(session.quiesce()).unwrap();
+    assert_eq!(
+        *observed.calls.lock().unwrap(),
+        [Hook::Start, Hook::Quiesce]
+    );
+    drop(permit);
+    block_on(session.close()).unwrap();
+    block_on(session.quiesce()).unwrap();
+    assert_eq!(
+        *observed.calls.lock().unwrap(),
+        [
+            Hook::Start,
+            Hook::Quiesce,
+            Hook::Disconnect,
+            Hook::Callbacks,
+            Hook::Storage
+        ]
+    );
+}

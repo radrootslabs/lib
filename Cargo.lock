@@ -3040,14 +3040,22 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 name = "radroots"
 version = "0.1.0-alpha"
 dependencies = [
+ "futures",
  "radroots_core",
  "radroots_domain",
  "radroots_event",
+ "radroots_execution",
  "radroots_identity",
+ "radroots_nostr",
  "radroots_sdk",
+ "radroots_signing",
+ "radroots_storage",
+ "radroots_storage_sqlite",
  "radroots_trade",
  "radroots_transport",
  "serde_json",
+ "tempfile",
+ "tokio",
  "toml 0.8.23",
 ]
 

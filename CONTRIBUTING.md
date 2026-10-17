@@ -10,7 +10,7 @@ reviewable. Before editing, read these files in order:
    crate-surface work
 5. the affected manifests, implementation, contracts, and tests
 
-Release V2 records the nineteen current public Lib packages, including
+Release V2 records the twenty-one current public Lib packages, including
 `radroots_sdk` and `radroots`. The earlier `radroots.crates.release.v1`
 repository split remains immutable history. The approved successor is
 `contracts/architecture/decisions/shared_sdk_refactor.v1.json`: Lib owns shared

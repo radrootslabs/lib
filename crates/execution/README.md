@@ -16,6 +16,13 @@ dispatch, drains observations, awaits host disposal and releases roots. Failed
 or cancelled disposal must be resumed. The Client must retain this scope before
 awaiting first observation, including when attachment fails or loses its waiter.
 
+The optional `client_session` feature composes this scope with an actual
+`SessionHost`. Attachment is retained before its first await, including before
+worker startup. Quiesce permanently stops admission and host callback dispatch;
+the owner then drains work, disconnects transports, disposes callbacks and closes
+storage. A failed or cancelled attachment remains reachable for explicit cleanup.
+No lifecycle observation authenticates a workspace or admits a command.
+
 A proposed operation ID is not durable admission. Unknown signing or commit
 outcomes keep the original identity and require exact-operation continuation
 or manual reconciliation. Uncertain initial admission remains explicitly

@@ -18,35 +18,25 @@ Build local food networks that help farms and communities organize and communica
 - Local couriers carry orders from farms to homes, businesses and pickup points
 
 ### How to use
+
+The current ordinary Client supports explicit in-memory preview and native
+public-cache resource ownership. Authenticated workspace commands and the full
+durable commerce workflow remain in implementation.
+
 ```rust
-use radroots::prelude::*;
+use radroots::{Client, StartMode};
 
-let client = Client::builder()
-    .signer(signer)
-    .transport(Nostr::relays(["wss://radroots.org"])?)
-    .build()
-    .await?;
-
-let farm = client
-    .seller(seller_account)?
-    .farm(farm_id)?;
-
-// Farmer creates a listing for freshly picked tomatoes
-let receipt = farm
-    .listings()
-    .publish("Heirloom tomatoes")
-    .id("fresh-tomatoes")
-    .description("Locally grown and picked this morning.")
-    .price(Price::cad_per_kg(4)?)
-    .available(Quantity::kg(20)?)
-    .pickup_in(Locality::city("Victoria", "BC", "CA")?)
-    .send() // Validates, signs, saves locally, and attempts publication
-    .await?;
-
-// Log the published event address
-println!("Published: {}", receipt.address());
-…
+async fn preview() -> radroots::Result<()> {
+    let client = Client::preview();
+    client.start(StartMode::LocalOnly).await?;
+    client.close().await?;
+    Ok(())
+}
 ```
+
+See [the ordinary package](crates/radroots/README.md) for current implemented
+boundaries and explicit native opening. Construction does not start networking,
+restore authority or replay business writes.
 
 ### Getting started
 

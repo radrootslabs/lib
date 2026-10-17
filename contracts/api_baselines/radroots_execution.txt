@@ -6,11 +6,22 @@ pub radroots_execution::session::SessionState::Closing
 pub radroots_execution::session::SessionState::Ready
 pub radroots_execution::session::SessionState::Running
 pub radroots_execution::session::SessionState::Starting
+pub struct radroots_execution::session::ClientSession<H: radroots_execution::session::SessionHost>
+impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
+pub async fn radroots_execution::session::ClientSession<H>::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::SignerSession>
+pub async fn radroots_execution::session::ClientSession<H>::close(&self) -> radroots_execution::Result<()>
+pub fn radroots_execution::session::ClientSession<H>::new(H, core::num::nonzero::NonZeroU16) -> Self
+pub fn radroots_execution::session::ClientSession<H>::signer_session(&self) -> core::option::Option<radroots_execution::session::SignerSession>
+pub async fn radroots_execution::session::ClientSession<H>::start(&self) -> radroots_execution::Result<()>
+pub fn radroots_execution::session::ClientSession<H>::state(&self) -> radroots_execution::session::SessionState
+impl<H: radroots_execution::session::SessionHost> core::clone::Clone for radroots_execution::session::ClientSession<H>
+pub fn radroots_execution::session::ClientSession<H>::clone(&self) -> Self
 pub struct radroots_execution::session::Session<H: radroots_execution::session::SessionHost>
 impl<H: radroots_execution::session::SessionHost> radroots_execution::session::Session<H>
 pub fn radroots_execution::session::Session<H>::admit(&self) -> radroots_execution::Result<radroots_execution::session::WorkPermit<H>>
 pub async fn radroots_execution::session::Session<H>::close(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::Session<H>::new(H, core::num::nonzero::NonZeroU16) -> Self
+pub async fn radroots_execution::session::Session<H>::quiesce(&self) -> radroots_execution::Result<()>
 pub async fn radroots_execution::session::Session<H>::start(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::Session<H>::state(&self) -> radroots_execution::session::SessionState
 impl<H: radroots_execution::session::SessionHost> core::clone::Clone for radroots_execution::session::Session<H>
@@ -22,6 +33,7 @@ pub fn radroots_execution::session::SignerSession::identity_changed(&self) -> bo
 pub fn radroots_execution::session::SignerSession::new(radroots_signing::provider::SignerHandle) -> Self
 pub async fn radroots_execution::session::SignerSession::observe(&self) -> core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>
 pub fn radroots_execution::session::SignerSession::observed(&self) -> core::option::Option<radroots_signing::provider::ProviderState>
+pub async fn radroots_execution::session::SignerSession::quiesce(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::SignerSession::state(&self) -> radroots_execution::session::SessionState
 impl core::clone::Clone for radroots_execution::session::SignerSession
 pub fn radroots_execution::session::SignerSession::clone(&self) -> Self

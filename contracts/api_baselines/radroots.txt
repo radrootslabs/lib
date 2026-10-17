@@ -1,17 +1,32 @@
 pub mod radroots
-pub use radroots::Client
-pub use radroots::ClientBuilder
 pub use radroots::Error
 pub use radroots::OperationId
 pub use radroots::Result
 pub mod radroots::client
+#[non_exhaustive] pub enum radroots::client::StartMode
+pub radroots::client::StartMode::LocalOnly
+pub struct radroots::client::Client
+impl radroots::client::Client
+pub async fn radroots::client::Client::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::signer::SignerSession>
+pub async fn radroots::client::Client::close(&self) -> radroots_execution::Result<radroots::client::CloseReceipt>
+pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
+pub fn radroots::client::Client::preview() -> Self
+pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
+pub async fn radroots::client::Client::start(&self, radroots::client::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
+pub fn radroots::client::Client::state(&self) -> radroots_execution::session::SessionState
+pub async fn radroots::client::Client::storage_status(&self) -> radroots_execution::Result<radroots_storage::status::StorageStatus>
+pub struct radroots::client::CloseReceipt
+impl radroots::client::CloseReceipt
+pub const fn radroots::client::CloseReceipt::storage(self) -> radroots_storage::status::StorageStatus
+pub struct radroots::client::NativeConfig
+impl radroots::client::NativeConfig
+pub fn radroots::client::NativeConfig::public_read(radroots_storage_sqlite::config::OpenOptions) -> Self
+pub struct radroots::client::SessionStatus
+impl radroots::client::SessionStatus
+pub const fn radroots::client::SessionStatus::state(self) -> radroots_execution::session::SessionState
 pub const fn radroots::client::geonames_enabled() -> bool
 pub const fn radroots::client::knowledge_enabled() -> bool
 pub const fn radroots::client::local_only() -> radroots_sdk::transport::Profile
-pub fn radroots::client::memory() -> radroots_sdk::client::ClientBuilder
-pub async fn radroots::client::native(radroots_sdk::storage::SqliteOptions) -> radroots_sdk::error::Result<radroots_sdk::client::ClientBuilder>
-pub fn radroots::client::with_nip46_signer(radroots_sdk::client::ClientBuilder, radroots_sdk::signing::Provider) -> radroots_sdk::client::ClientBuilder
-pub fn radroots::client::with_transport(radroots_sdk::client::ClientBuilder, alloc::sync::Arc<dyn radroots_transport::source::EventSource>, alloc::sync::Arc<dyn radroots_transport::sink::EventSink>) -> radroots_sdk::client::ClientBuilder
 pub mod radroots::domain
 pub use radroots::domain::AmountError
 pub use radroots::domain::Decimal
@@ -90,10 +105,13 @@ pub use radroots::signing::blossom_upload_request
 pub mod radroots::storage
 pub use radroots::storage::IntegrityStatus
 pub use radroots::storage::Operations
+pub use radroots::storage::ShutdownState
+pub use radroots::storage::SourceGeneration
 pub use radroots::storage::SqliteOpenMode
 pub use radroots::storage::SqliteOptions
 pub use radroots::storage::SqlitePaths
 pub use radroots::storage::Status
+pub use radroots::storage::StorageBackend
 pub mod radroots::sync
 pub mod radroots::trade
 pub use radroots::trade::Currency
@@ -140,3 +158,24 @@ pub use radroots::transport::Target
 pub use radroots::transport::TargetPolicy
 pub use radroots::transport::TargetSet
 pub use radroots::transport::TransportId
+#[non_exhaustive] pub enum radroots::StartMode
+pub radroots::StartMode::LocalOnly
+pub struct radroots::Client
+impl radroots::client::Client
+pub async fn radroots::client::Client::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::signer::SignerSession>
+pub async fn radroots::client::Client::close(&self) -> radroots_execution::Result<radroots::client::CloseReceipt>
+pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
+pub fn radroots::client::Client::preview() -> Self
+pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
+pub async fn radroots::client::Client::start(&self, radroots::client::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
+pub fn radroots::client::Client::state(&self) -> radroots_execution::session::SessionState
+pub async fn radroots::client::Client::storage_status(&self) -> radroots_execution::Result<radroots_storage::status::StorageStatus>
+pub struct radroots::CloseReceipt
+impl radroots::client::CloseReceipt
+pub const fn radroots::client::CloseReceipt::storage(self) -> radroots_storage::status::StorageStatus
+pub struct radroots::NativeConfig
+impl radroots::client::NativeConfig
+pub fn radroots::client::NativeConfig::public_read(radroots_storage_sqlite::config::OpenOptions) -> Self
+pub struct radroots::SessionStatus
+impl radroots::client::SessionStatus
+pub const fn radroots::client::SessionStatus::state(self) -> radroots_execution::session::SessionState

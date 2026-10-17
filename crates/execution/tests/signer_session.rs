@@ -372,4 +372,49 @@ fn browser_scope_accepts_rc_local_provider_and_callbacks() {
     ));
     assert_eq!(block_on(session.observe()).unwrap().identity(), key(false));
     block_on(session.close()).unwrap();
+    assert_eq!(session.state(), SessionState::Closed);
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "client_session"))]
+#[test]
+fn browser_client_composes_local_host_and_retained_callback_scope() {
+    use radroots_execution::session::{ClientSession, HostFuture, SessionHost};
+    struct LocalHost(std::rc::Rc<std::cell::Cell<u8>>);
+    impl LocalHost {
+        fn run(&self) -> HostFuture<'_, radroots_execution::Result<()>> {
+            Box::pin(async move {
+                self.0.set(self.0.get() + 1);
+                Ok(())
+            })
+        }
+    }
+    impl SessionHost for LocalHost {
+        fn start(&self) -> HostFuture<'_, radroots_execution::Result<()>> {
+            self.run()
+        }
+        fn quiesce(&self) -> HostFuture<'_, radroots_execution::Result<()>> {
+            self.run()
+        }
+        fn disconnect(&self) -> HostFuture<'_, radroots_execution::Result<()>> {
+            self.run()
+        }
+        fn dispose_callbacks(&self) -> HostFuture<'_, radroots_execution::Result<()>> {
+            self.run()
+        }
+        fn close_storage(&self) -> HostFuture<'_, radroots_execution::Result<()>> {
+            self.run()
+        }
+    }
+    let observations = std::rc::Rc::new(std::cell::Cell::new(0));
+    let client = ClientSession::new(LocalHost(observations.clone()), core::num::NonZeroU16::MIN);
+    let control = control();
+    block_on(client.attach_signer(SignerHandle::new(
+        Shared::new(Provider(control.clone())),
+        Shared::new(Callbacks(control)),
+    )))
+    .unwrap();
+    assert_eq!(observations.get(), 0);
+    block_on(client.start()).unwrap();
+    block_on(client.close()).unwrap();
+    assert_eq!(observations.get(), 5);
 }
