@@ -53,6 +53,7 @@ external_packages = []
 [workspace_classification]
 private = [
   "radroots_domain",
+  "radroots_execution",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",

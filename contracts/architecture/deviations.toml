@@ -2,6 +2,32 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-048"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete shared SDK refactor, necessary breaking changes, verified source checkpoints and master integration."
+affected_steps = ["040", "060", "100", "110", "120", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy"]
+source_evidence = [
+  "The approved shared SDK target assigns execution to crates/execution and requires typed stable errors, bounded redacted details, four explicit retry classes and an operation identity that does not imply durable admission.",
+  "The existing SDK errors describe the current composed client and transport. The successor execution error boundary must distinguish an unadmitted proposed operation from a retained operation and must not retain arbitrary backend messages or private payloads.",
+]
+replacement_action = "Independently implement the allocation-free typed execution error boundary in an active unpublished native package. Use the existing validated domain operation ID, fixed diagnostic enums and checked operation/retry combinations. Preserve current executable sources and every retained test until actual facade/caller replacement; introduce no compatibility alias or claimed command implementation."
+verification = [
+  "Validate this prospective record before implementation and bind the exact original source, package/catalog/lock and compiler inputs. Stage the complete new package before deriving its native introduction-tree digest and generating catalog projections.",
+  "Prove proposed IDs remain explicitly unadmitted, unknown signing/commit states require retained identity, safe-same-operation retry requires retained state, and owned error output contains only bounded fixed diagnostics. Check canonical code uniqueness, error-source redaction, malformed API use and independent operation IDs.",
+  "Run focused native/no-default and actual WASM checks and tests, strict lint/docs, the unchanged measured coverage gate and owning catalog/architecture/contract/preflight checks. Preserve all prior report scope and keep actual execution, bindings, caller adoption and final acceptance open.",
+]
+unresolved_risk = "This typed value boundary does not prove durable admission, signing, storage effects or the public facade. Only the actual executor may report retained state after its durable store confirms it. Full known-kind native/browser operations and final qualification remain required."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The execution package independently implements allocation-free typed errors, fixed diagnostic enums and four canonical retry strings. Proposed IDs remain NotAdmitted. An uncertain initial admission preserves its original ID as Unknown; it does not claim confirmed storage. Signing/delivery observations require confirmed preparation, and unknown outcomes require exact-operation or manual reconciliation. Conflicting command inputs cannot resume an existing different command.",
+  "Seven focused native cases pass under default and no-default commands, plus three documentation cases including two compile failures. Strict lint/docs, actual wasm32-unknown-unknown compilation and owning catalog/architecture/contracts pass. The unchanged measured gate records 84/84 executable lines and 6/6 recorded branches covered, with all functions and regions covered.",
+  "All 601 original complete dependency records and 52 earlier catalog entries remain unchanged. The new package is active and unpublished with staged native introduction provenance; the nineteen-package public release closure is preserved. These are value-boundary checks, not actual durable admission, signer/store faults, facade operations, binding calls, consumer adoption or final platform qualification.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-047"
 date = "2026-10-17"
 status = "closed"

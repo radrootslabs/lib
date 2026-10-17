@@ -1,0 +1,18 @@
+[package]
+name = "radroots_execution"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Typed Radroots command execution and recovery boundaries"
+readme = "README.md"
+
+[dependencies]
+radroots_domain = { workspace = true, default-features = false }
+
+[lints]
+workspace = true

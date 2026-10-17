@@ -7,7 +7,7 @@ rust_version = "1.99.0"
 edition = "2024"
 resolver = "3"
 public_package_count = 19
-package_count = 52
+package_count = 53
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
 native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
@@ -75,6 +75,24 @@ owners = ["domain"]
 permitted_dependency_tiers = ["foundation"]
 provenance_kind = "native"
 introduction_tree_sha256 = "30a184507a178e87c4077506757fd6fa314594e17baf40679805a859f45fae1f"
+compatibility = ["package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_execution"
+path = "crates/execution"
+state = "active"
+tier = "orchestration"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["any"]
+groups = ["coverage_required", "preview"]
+owners = ["execution"]
+permitted_dependency_tiers = ["domain"]
+provenance_kind = "native"
+introduction_tree_sha256 = "c3513293d70957c4ee2c93a722549573a8dc1bc9e893873a4f3e2dfdaa2881da"
 compatibility = ["package_private"]
 replaces = []
 
