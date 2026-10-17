@@ -19,6 +19,7 @@ pub mod outbox;
 pub mod private_artifact;
 pub mod projection;
 pub mod status;
+pub mod workspace;
 
 pub use backup::StorageReliability as BackupSource;
 pub use error::Error;

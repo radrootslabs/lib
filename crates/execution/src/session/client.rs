@@ -9,8 +9,14 @@ use std::{
 struct Resources<H> {
     host: H,
     signer: Shared<Mutex<Option<SignerSession>>>,
+    #[cfg(feature = "workspace_session")]
+    workspaces: WorkspaceScopes,
     host_quiesced: Mutex<bool>,
 }
+#[cfg(feature = "workspace_session")]
+type WorkspaceScopes = Shared<Mutex<std::vec::Vec<crate::workspace::WorkspaceSession>>>;
+#[cfg(feature = "workspace_session")]
+const MAX_WORKSPACE_SCOPES: usize = 16;
 fn signer_lock(value: &Mutex<Option<SignerSession>>) -> MutexGuard<'_, Option<SignerSession>> {
     value
         .lock()
@@ -22,6 +28,16 @@ impl<H: SessionHost> SessionHost for Resources<H> {
     }
     fn quiesce(&self) -> HostFuture<'_, crate::Result<()>> {
         Box::pin(async move {
+            #[cfg(feature = "workspace_session")]
+            {
+                let scopes = self
+                    .workspaces
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                for scope in scopes.iter() {
+                    scope.close();
+                }
+            }
             let quiesced = *self
                 .host_quiesced
                 .lock()
@@ -64,12 +80,16 @@ impl<H: SessionHost> SessionHost for Resources<H> {
 pub struct ClientSession<H: SessionHost> {
     session: Session<Resources<H>>,
     signer: Shared<Mutex<Option<SignerSession>>>,
+    #[cfg(feature = "workspace_session")]
+    workspaces: WorkspaceScopes,
 }
 impl<H: SessionHost> Clone for ClientSession<H> {
     fn clone(&self) -> Self {
         Self {
             session: self.session.clone(),
             signer: self.signer.clone(),
+            #[cfg(feature = "workspace_session")]
+            workspaces: self.workspaces.clone(),
         }
     }
 }
@@ -77,16 +97,22 @@ impl<H: SessionHost> ClientSession<H> {
     /// Owns resources without starting workers, observing a signer or networking.
     pub fn new(host: H, maximum_in_flight: NonZeroU16) -> Self {
         let signer = Shared::new(Mutex::new(None));
+        #[cfg(feature = "workspace_session")]
+        let workspaces = Shared::new(Mutex::new(std::vec::Vec::new()));
         Self {
             session: Session::new(
                 Resources {
                     host,
                     signer: signer.clone(),
+                    #[cfg(feature = "workspace_session")]
+                    workspaces: workspaces.clone(),
                     host_quiesced: Mutex::new(false),
                 },
                 maximum_in_flight,
             ),
             signer,
+            #[cfg(feature = "workspace_session")]
+            workspaces,
         }
     }
     /// Reports resource lifecycle independently of business authority.
@@ -133,6 +159,41 @@ impl<H: SessionHost> ClientSession<H> {
     /// It grants no workspace access and cannot reopen closed admission.
     pub fn signer_session(&self) -> Option<SignerSession> {
         signer_lock(&self.signer).clone()
+    }
+    /// Authenticates attachment while sharing the client's permanent resource
+    /// admission gate. The concrete client owns the store through actual close.
+    #[cfg(feature = "workspace_session")]
+    pub async fn attach_workspace(
+        &self,
+        store: Shared<dyn radroots_storage::workspace::WorkspaceStore>,
+        input: radroots_storage::workspace::AttachmentInput,
+        proof: radroots_storage::workspace::AttachmentProof,
+    ) -> crate::Result<crate::workspace::WorkspaceSession> {
+        let _permit = self.session.retain_resource()?;
+        let scope = crate::workspace::WorkspaceSession::attach(store, input, proof).await?;
+        // Retired adapter roots may run host Drop code. Keep them alive until
+        // after the registry guard is released, including every error return.
+        let mut retired = std::vec::Vec::new();
+        let mut scopes = self
+            .workspaces
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        retired.extend(scopes.extract_if(.., |scope| scope.is_closed()));
+        if matches!(self.state(), SessionState::Closing | SessionState::Closed) {
+            scope.close();
+            return Err(crate::Error::workspace(
+                radroots_storage::workspace::WorkspaceError::Closed,
+                None,
+            ));
+        }
+        if scopes.len() >= MAX_WORKSPACE_SCOPES {
+            scope.close();
+            return Err(crate::Error::session_unavailable(crate::Reason::OutOfRange));
+        }
+        scopes.push(scope.clone());
+        drop(scopes);
+        drop(retired);
+        Ok(scope)
     }
     /// Stops admission, quiesces callbacks, drains work, disconnects transports,
     /// disposes callbacks and closes storage last. Cancellation is resumable.

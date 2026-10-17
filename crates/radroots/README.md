@@ -25,9 +25,14 @@ With `native`, `Client::open(NativeConfig::public_read(options)).await` opens
 the actual SQLite cache from explicit validated host paths, mode and source
 generation. It performs no networking or automatic command replay. This public
 cache scope does not open an authenticated participant workspace or create
-seller stock authority. Protected workspace/authority opening, network workers,
-complete command receipts and durable listing/chat operations remain separate
-unfinished implementation requirements.
+seller stock authority. On Unix, explicitly adding an opened protected
+`NativeWorkspace` with `NativeConfig::with_workspace` enables `Client::attach`.
+Attachment verifies its persisted credential and exact selection before returning
+`WorkspaceSession`. That session constructs opaque, immutable command contexts
+without I/O or a clock read; admission must recheck current rights and expiry.
+A context does not submit a command or prove
+user consent; network pairing, seller authority, complete command receipts and
+durable listing/chat operations remain separate implementation requirements.
 
 `attach_signer` observes the concrete provider only after retaining its callback
 scope. The first successful key freezes and later drift invalidates that scope.

@@ -3049,6 +3049,7 @@ dependencies = [
  "radroots_identity",
  "radroots_nostr",
  "radroots_sdk",
+ "radroots_secrets",
  "radroots_signing",
  "radroots_storage",
  "radroots_storage_sqlite",
@@ -3096,6 +3097,7 @@ dependencies = [
 name = "radroots_domain"
 version = "0.1.0-alpha"
 dependencies = [
+ "radroots_identity",
  "serde",
  "serde_json",
 ]
@@ -3170,6 +3172,7 @@ dependencies = [
  "radroots_event_codec",
  "radroots_identity",
  "radroots_signing",
+ "radroots_storage",
 ]
 
 [[package]]
@@ -3620,6 +3623,7 @@ name = "radroots_storage"
 version = "0.1.0-alpha"
 dependencies = [
  "futures-executor",
+ "radroots_domain",
  "radroots_event",
  "radroots_event_codec",
  "radroots_protocol",
@@ -3628,6 +3632,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "zeroize",
 ]
 
 [[package]]
@@ -3635,19 +3640,25 @@ name = "radroots_storage_sqlite"
 version = "0.1.0-alpha"
 dependencies = [
  "fs2",
+ "futures",
+ "getrandom 0.2.17",
  "hex",
+ "radroots_domain",
  "radroots_event",
  "radroots_event_codec",
  "radroots_secrets",
  "radroots_storage",
  "radroots_transport",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "sha2",
  "sqlx",
+ "subtle",
  "tempfile",
  "tokio",
  "toml 0.8.23",
+ "zeroize",
 ]
 
 [[package]]

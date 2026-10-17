@@ -36,4 +36,12 @@ use radroots_domain::OperationId;
 let _ = OperationId::from_bytes([0; 31]);
 ```
 
+Actor, authority, checkpoint, approval, expected-order and complete captured
+context descriptors validate their representations without authenticating a
+principal. Sequence, generation and wall time use exact canonical decimal
+strings. Required nullable fields remain explicit JSON nulls. Checkpoint missing
+sources retain full digests independently of structured-record identity.
+`CommandContextData` is untrusted data; only an authenticated execution session
+can construct the opaque executable context.
+
 Licensed under MIT OR Apache-2.0; see LICENSE-MIT and LICENSE-APACHE.

@@ -5,7 +5,7 @@ test_threads = 1
 
 [profiles.crates."radroots_execution"]
 no_default_features = false
-features = ["session", "signer_session", "client_session"]
+features = ["session", "signer_session", "client_session", "workspace_session"]
 test_threads = 1
 
 [profiles.crates."radroots"]

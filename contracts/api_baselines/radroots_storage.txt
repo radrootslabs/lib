@@ -1820,6 +1820,64 @@ pub trait radroots_storage::status::StorageStatusProvider: radroots_transport::h
 pub fn radroots_storage::status::StorageStatusProvider::storage_status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 impl radroots_storage::status::StorageStatusProvider for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::storage_status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
+pub mod radroots_storage::workspace
+#[non_exhaustive] pub enum radroots_storage::workspace::WorkspaceError
+pub radroots_storage::workspace::WorkspaceError::Closed
+pub radroots_storage::workspace::WorkspaceError::CommitUnknown
+pub radroots_storage::workspace::WorkspaceError::GrantExpired
+pub radroots_storage::workspace::WorkspaceError::GrantRevoked
+pub radroots_storage::workspace::WorkspaceError::InvalidInput
+pub radroots_storage::workspace::WorkspaceError::NamespaceUnavailable
+pub radroots_storage::workspace::WorkspaceError::RecoveryRequired
+pub radroots_storage::workspace::WorkspaceError::StaleAuthority
+pub radroots_storage::workspace::WorkspaceError::StaleCheckpoint
+pub radroots_storage::workspace::WorkspaceError::StorageFailure
+pub radroots_storage::workspace::WorkspaceError::Unauthorized
+pub radroots_storage::workspace::WorkspaceError::Unavailable
+pub radroots_storage::workspace::WorkspaceError::WriterActive
+pub radroots_storage::workspace::WorkspaceError::WrongNamespace
+impl radroots_storage::workspace::WorkspaceError
+pub const fn radroots_storage::workspace::WorkspaceError::code(self) -> &'static str
+impl core::error::Error for radroots_storage::workspace::WorkspaceError
+impl core::fmt::Display for radroots_storage::workspace::WorkspaceError
+pub fn radroots_storage::workspace::WorkspaceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::workspace::AttachmentInput
+impl radroots_storage::workspace::AttachmentInput
+pub const fn radroots_storage::workspace::AttachmentInput::authority(&self) -> radroots_domain::context::AuthorityRef
+pub const fn radroots_storage::workspace::AttachmentInput::checkpoint(&self) -> &radroots_domain::context::CheckpointRef
+pub fn radroots_storage::workspace::AttachmentInput::endpoint(&self) -> &str
+pub const fn radroots_storage::workspace::AttachmentInput::endpoint_identity(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage::workspace::AttachmentInput::grant_id(&self) -> radroots_domain::identifier::GrantId
+pub fn radroots_storage::workspace::AttachmentInput::new(radroots_domain::identifier::WorkspaceId, radroots_domain::context::AuthorityRef, radroots_identity::key::PublicKey, impl core::convert::Into<alloc::string::String>, radroots_identity::key::PublicKey, radroots_domain::identifier::GrantId, radroots_domain::context::CheckpointRef, radroots_domain::identifier::RouteDigest) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub const fn radroots_storage::workspace::AttachmentInput::participant(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage::workspace::AttachmentInput::route_digest(&self) -> radroots_domain::identifier::RouteDigest
+pub const fn radroots_storage::workspace::AttachmentInput::workspace_id(&self) -> radroots_domain::identifier::WorkspaceId
+impl core::fmt::Debug for radroots_storage::workspace::AttachmentInput
+pub fn radroots_storage::workspace::AttachmentInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::AttachmentInput
+pub fn radroots_storage::workspace::AttachmentInput::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_storage::workspace::AttachmentProof(_)
+impl radroots_storage::workspace::AttachmentProof
+pub fn radroots_storage::workspace::AttachmentProof::from_protected_input(&[u8]) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::AttachmentProof::with_secret<T>(&self, impl core::ops::function::FnOnce(&[u8; 32]) -> T) -> T
+impl core::fmt::Debug for radroots_storage::workspace::AttachmentProof
+pub fn radroots_storage::workspace::AttachmentProof::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::workspace::WorkspaceBinding
+impl radroots_storage::workspace::WorkspaceBinding
+pub const fn radroots_storage::workspace::WorkspaceBinding::actor(&self) -> radroots_domain::context::ActorRef
+pub const fn radroots_storage::workspace::WorkspaceBinding::expires_at(&self) -> radroots_domain::context::UnixSeconds
+pub fn radroots_storage::workspace::WorkspaceBinding::from_authenticated_host(radroots_storage::workspace::AttachmentInput, radroots_domain::context::ActorRef, impl core::convert::Into<alloc::string::String>, radroots_domain::context::Sequence, radroots_domain::context::UnixSeconds, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub const fn radroots_storage::workspace::WorkspaceBinding::grant_revision(&self) -> radroots_domain::context::Sequence
+pub const fn radroots_storage::workspace::WorkspaceBinding::input(&self) -> &radroots_storage::workspace::AttachmentInput
+pub const fn radroots_storage::workspace::WorkspaceBinding::observed_at(&self) -> radroots_domain::context::UnixSeconds
+pub fn radroots_storage::workspace::WorkspaceBinding::principal_id(&self) -> &str
+impl core::fmt::Debug for radroots_storage::workspace::WorkspaceBinding
+pub fn radroots_storage::workspace::WorkspaceBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait radroots_storage::workspace::WorkspaceClock: radroots_transport::host::HostBound
+pub fn radroots_storage::workspace::WorkspaceClock::now(&self) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::workspace::WorkspaceError>
+pub trait radroots_storage::workspace::WorkspaceStore: radroots_transport::host::HostBound
+pub fn radroots_storage::workspace::WorkspaceStore::authenticate(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::WorkspaceError>>
+pub fn radroots_storage::workspace::WorkspaceStore::close_workspace(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::workspace::WorkspaceError>>
 #[non_exhaustive] pub enum radroots_storage::Error
 pub radroots_storage::Error::AdmissionEventMismatch
 pub radroots_storage::Error::AdmissionRegression

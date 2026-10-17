@@ -14,10 +14,11 @@ include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "L
 
 [features]
 default = ["std", "serde"]
-std = []
-serde = ["dep:serde"]
+std = ["radroots_identity/std"]
+serde = ["dep:serde", "radroots_identity/serde"]
 
 [dependencies]
+radroots_identity = { workspace = true, default-features = false }
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]

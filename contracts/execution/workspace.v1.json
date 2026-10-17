@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots.execution.workspace.v1",
+  "state": "native_buyer_attachment_component_implemented",
+  "ownership": {
+    "domain": "Validated actor, authority, checkpoint and captured-context descriptors; descriptors grant no rights",
+    "execution": "Owned authenticated workspace session and opaque captured command context",
+    "storage_sqlite": "Concrete protected native namespace and current grant/authority verification",
+    "facade": "Explicit local attachment and shared execution entry points"
+  },
+  "identity": {
+    "workspace_executor_operation_grant_bytes": 32,
+    "integer_wire": "canonical decimal strings bounded by signed 64-bit maximum",
+    "generation": "positive; distinct from a public cache generation",
+    "participant": "validated Nostr x-only key; distinct from the authenticated device/principal"
+  },
+  "native_scope": {
+    "namespace": "explicit new execution namespace; existing opens never create or infer authority",
+    "authentication": "protected high-entropy credential checked against persisted scoped grant and authority state",
+    "credential_bytes": 32,
+    "credential_persistence": "verifier only, under protected handling; no plaintext credential in SQL, diagnostics or arguments",
+    "private_payload_max_bytes": 16384,
+    "private_codec": "existing context-bound authenticated envelope v2 with explicit qualified provider, key material and unique nonce",
+    "transactions": "Grant creation and revocation observe actual SQLite commit completion. Transaction-time business admission/revalidation remains unimplemented.",
+    "initialization": "explicit fresh local outbox enrollment; no automatic stock ledger or restore from a key/public cache",
+    "remote_attachment_qualified": false,
+    "firm_stock_qualified": false
+  },
+  "context": {
+    "constructor": "pure synchronous authenticated workspace-session method; no clock, storage, signer or network effects; arbitrary JSON yields descriptors, never a trusted context",
+    "fields": [
+      "operation_id",
+      "actor",
+      "workspace_id",
+      "authority",
+      "route_digest",
+      "approval",
+      "expected",
+      "not_after",
+      "correlation_id"
+    ],
+    "nullable_fields_required": true,
+    "approval": "descriptor alone is not consent; authoritative admission validates protected origin, exact intent, scope and expiry",
+    "idempotency": "captured semantic input is immutable; correlation is diagnostic only",
+    "revocation": "attachment observation does not replace current transaction-time grant checks"
+  },
+  "lifecycle": "attach work and callbacks remain owned across observer loss; close stops admission and drains work before credentials/callbacks and storage are released",
+  "resource_bounds": {
+    "native_queued_requests": 32,
+    "native_in_flight_requests": 1,
+    "client_workspace_scopes": 16,
+    "credentials": "zeroizing roots are released at scope/client quiesce; admitted authentication owns its request credential through safe completion"
+  },
+  "qualification_required": [
+    "Actual protected native store and correct credential attachment",
+    "Wrong credential, participant, workspace, executor, generation, route, grant and checkpoint refusal",
+    "Revoked/expired grant refusal and persisted reopen behavior",
+    "No context authority from signer observation, public cache or caller-provided descriptors",
+    "Full captured context fields, exact strings, explicit null, bounded redacted diagnostics and local/native lifetime checks",
+    "Owning native/portable/API/contract checks and unchanged coverage policy"
+  ],
+  "remaining": [
+    "Complete operation receipts and actual known-kind T0/T1/S/T2/D execution",
+    "Owned durable workers, per-target delivery and process-fault recovery",
+    "Full stock executor, remote pairing/transfer and restore/fencing",
+    "Actual browser/platform providers, generated bindings, coherent consumers and final acceptance"
+  ],
+  "implementation_claimed": true,
+  "implementation_scope": "Fresh unrelated protected local buyer attachment and pure captured context only; no durable business command, selected seller stock, remote pairing or recovery qualification.",
+  "package_publication_authorized": false
+}

@@ -3,8 +3,21 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+extern crate alloc;
+
 mod amount;
+mod context;
 mod identifier;
 
+/// The identity-owned validated participant key; no second key type is defined.
+pub use radroots_identity::PublicKey;
+
 pub use amount::{AmountError, Decimal, PositiveDecimal};
-pub use identifier::{ExecutorId, IdentifierError, OperationId, OrderId, ThreadId, WorkspaceId};
+pub use context::{
+    ActorRef, ActorRole, Approval, AuthorityRef, CheckpointRef, CommandContextData, ContextError,
+    CorrelationId, Coverage, ExpectedOrder, Generation, Sequence, UnixSeconds,
+};
+pub use identifier::{
+    ApprovalIntentDigest, CheckpointDigest, CommandDigest, ExecutorId, GrantId, IdentifierError,
+    OperationId, OrderId, RecordId, RouteDigest, SourceId, ThreadId, WorkspaceId,
+};

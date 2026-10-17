@@ -38,7 +38,7 @@ path = "src/lib.rs"
 [dependencies]
 radroots_core = { workspace = true }
 radroots_domain = { workspace = true, features = ["std", "serde"] }
-radroots_execution = { workspace = true, features = ["client_session"] }
+radroots_execution = { workspace = true, features = ["client_session", "workspace_session"] }
 radroots_event = { workspace = true }
 radroots_identity = { workspace = true, features = ["std"] }
 radroots_sdk = { workspace = true }
@@ -61,6 +61,7 @@ knowledge = ["client", "radroots_sdk/knowledge"]
 full = ["native", "radroots_sdk/full"]
 
 [dev-dependencies]
+radroots_secrets = { workspace = true, features = ["file"] }
 futures = { workspace = true }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, features = ["signing"] }

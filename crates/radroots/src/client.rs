@@ -21,6 +21,15 @@ const STORAGE_FAILURE: Error = match Error::new(
     Ok(error) => error,
     Err(_) => panic!("invalid constant pre-admission storage error"),
 };
+const MISSING_WORKSPACE: Error = match Error::new(
+    Code::MissingAuthority,
+    OperationContext::proposed(None),
+    RetryClass::AfterStateRefresh,
+    None,
+) {
+    Ok(error) => error,
+    Err(_) => panic!("invalid constant pre-admission workspace error"),
+};
 
 /// Explicit task admission for a local resource session. No network is selected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -65,18 +74,33 @@ impl CloseReceipt {
 #[cfg(feature = "native")]
 pub struct NativeConfig {
     options: radroots_storage_sqlite::OpenOptions,
+    workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
 }
 #[cfg(feature = "native")]
 impl NativeConfig {
     /// Uses the host's validated paths/mode and explicit source generation for
     /// a public cache. Construction opens no file and starts no worker/network.
     pub fn public_read(options: radroots_storage_sqlite::OpenOptions) -> Self {
-        Self { options }
+        Self {
+            options,
+            workspace: None,
+        }
+    }
+    /// Adds an explicitly opened protected local outbox. A public cache alone
+    /// cannot create this resource or establish a workspace grant.
+    #[cfg(unix)]
+    pub fn with_workspace(
+        mut self,
+        workspace: radroots_storage_sqlite::workspace::NativeWorkspace,
+    ) -> Self {
+        self.workspace = Some(Shared::new(workspace));
+        self
     }
 }
 
 struct StoreHost {
     store: Shared<dyn Storage>,
+    workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
 }
 impl SessionHost for StoreHost {
@@ -94,6 +118,12 @@ impl SessionHost for StoreHost {
     }
     fn close_storage(&self) -> HostFuture<'_, crate::Result<()>> {
         Box::pin(async move {
+            if let Some(workspace) = &self.workspace {
+                workspace
+                    .close_workspace()
+                    .await
+                    .map_err(|_| STORAGE_FAILURE)?;
+            }
             let status = self.store.close().await.map_err(|_| STORAGE_FAILURE)?;
             let receipt = CloseReceipt::confirmed(status)?;
             *self
@@ -113,15 +143,20 @@ impl SessionHost for StoreHost {
 pub struct Client {
     session: ClientSession<StoreHost>,
     store: Shared<dyn Storage>,
+    workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
 }
 impl Client {
     #[cfg(any(feature = "client", feature = "native"))]
-    fn from_store(store: Shared<dyn Storage>) -> Self {
+    fn from_store(
+        store: Shared<dyn Storage>,
+        workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
+    ) -> Self {
         let closed = Shared::new(Mutex::new(None));
         let session = ClientSession::new(
             StoreHost {
                 store: store.clone(),
+                workspace: workspace.clone(),
                 closed: closed.clone(),
             },
             NonZeroU16::MIN,
@@ -129,6 +164,7 @@ impl Client {
         Self {
             session,
             store,
+            workspace,
             closed,
         }
     }
@@ -141,9 +177,10 @@ impl Client {
                 Ok(generation) => generation,
                 Err(_) => panic!("invalid constant preview generation"),
             };
-        Self::from_store(Shared::new(radroots_storage::memory::MemoryStorage::new(
-            GENERATION,
-        )))
+        Self::from_store(
+            Shared::new(radroots_storage::memory::MemoryStorage::new(GENERATION)),
+            None,
+        )
     }
     /// Opens the actual native SQLite cache using explicit host options. This
     /// reads no participant key and performs no network or automatic replay.
@@ -152,7 +189,7 @@ impl Client {
         let store = radroots_storage_sqlite::SqliteStorage::open(config.options)
             .await
             .map_err(|_| STORAGE_FAILURE)?;
-        Ok(Self::from_store(Shared::new(store)))
+        Ok(Self::from_store(Shared::new(store), config.workspace))
     }
     /// Observes resource lifecycle without probing signer, store or network.
     pub fn state(&self) -> SessionState {
@@ -183,6 +220,16 @@ impl Client {
     /// observer. Explicit close/replacement never erases retained work.
     pub fn signer_session(&self) -> Option<SignerSession> {
         self.session.signer_session()
+    }
+    /// Authenticates a protected grant in the explicitly configured workspace.
+    /// Signer observations and arbitrary descriptors cannot supply this grant.
+    pub async fn attach(
+        &self,
+        input: radroots_storage::workspace::AttachmentInput,
+        proof: radroots_storage::workspace::AttachmentProof,
+    ) -> crate::Result<radroots_execution::workspace::WorkspaceSession> {
+        let workspace = self.workspace.clone().ok_or(MISSING_WORKSPACE)?;
+        self.session.attach_workspace(workspace, input, proof).await
     }
     /// Permanently stops admission, drains resources and scoped callbacks, then
     /// closes the actual store last. Failed/cancelled closure must be resumed.

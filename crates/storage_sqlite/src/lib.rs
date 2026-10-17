@@ -24,3 +24,5 @@ mod projection;
 pub use config::OpenOptions;
 pub use event::SqliteStorage;
 pub use open::{Error, OpenMode, Paths};
+#[cfg(unix)]
+pub mod workspace;

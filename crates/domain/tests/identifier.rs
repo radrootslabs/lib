@@ -7,6 +7,37 @@ use std::{
 const SEQUENTIAL: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
 #[test]
+fn captured_context_identities_preserve_full_width_and_canonical_encoding() {
+    macro_rules! check {
+        ($t:ty) => {{
+            let bytes = core::array::from_fn(|i| i as u8);
+            let id = <$t>::from_bytes(bytes);
+            assert_eq!(id.as_bytes(), &bytes);
+            assert_eq!(id.into_bytes(), bytes);
+            assert_eq!(id.to_string(), SEQUENTIAL);
+            assert_eq!(SEQUENTIAL.parse::<$t>().unwrap(), id);
+            assert!("A".repeat(64).parse::<$t>().is_err());
+            assert!("0".repeat(63).parse::<$t>().is_err());
+            #[cfg(feature = "serde")]
+            {
+                let encoded = format!("\"{SEQUENTIAL}\"");
+                assert_eq!(serde_json::to_string(&id).unwrap(), encoded);
+                assert_eq!(serde_json::from_str::<$t>(&encoded).unwrap(), id);
+                assert!(serde_json::from_str::<$t>("1").is_err());
+                assert!(serde_json::from_str::<$t>("\"x\"").is_err());
+            }
+        }};
+    }
+    check!(radroots_domain::GrantId);
+    check!(radroots_domain::RecordId);
+    check!(radroots_domain::SourceId);
+    check!(radroots_domain::CommandDigest);
+    check!(radroots_domain::RouteDigest);
+    check!(radroots_domain::CheckpointDigest);
+    check!(radroots_domain::ApprovalIntentDigest);
+}
+
+#[test]
 fn all_namespaces_match_independent_byte_and_hex_vectors() {
     let bytes = core::array::from_fn(|i| i as u8);
     macro_rules! check {

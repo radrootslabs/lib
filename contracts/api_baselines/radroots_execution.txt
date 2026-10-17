@@ -9,6 +9,7 @@ pub radroots_execution::session::SessionState::Starting
 pub struct radroots_execution::session::ClientSession<H: radroots_execution::session::SessionHost>
 impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
 pub async fn radroots_execution::session::ClientSession<H>::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::SignerSession>
+pub async fn radroots_execution::session::ClientSession<H>::attach_workspace(&self, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceStore>, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
 pub async fn radroots_execution::session::ClientSession<H>::close(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::ClientSession<H>::new(H, core::num::nonzero::NonZeroU16) -> Self
 pub fn radroots_execution::session::ClientSession<H>::signer_session(&self) -> core::option::Option<radroots_execution::session::SignerSession>
@@ -50,6 +51,22 @@ pub fn radroots_execution::session::SessionHost::dispose_callbacks(&self) -> rad
 pub fn radroots_execution::session::SessionHost::quiesce(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
 pub fn radroots_execution::session::SessionHost::start(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
 pub type radroots_execution::session::HostFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
+pub mod radroots_execution::workspace
+pub struct radroots_execution::workspace::CommandContext
+impl radroots_execution::workspace::CommandContext
+pub const fn radroots_execution::workspace::CommandContext::data(&self) -> &radroots_domain::context::CommandContextData
+pub async fn radroots_execution::workspace::CommandContext::revalidate(&self) -> radroots_execution::Result<radroots_storage::workspace::WorkspaceBinding>
+impl core::fmt::Debug for radroots_execution::workspace::CommandContext
+pub fn radroots_execution::workspace::CommandContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_execution::workspace::WorkspaceSession
+impl radroots_execution::workspace::WorkspaceSession
+pub async fn radroots_execution::workspace::WorkspaceSession::attach(alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceStore>, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<Self>
+pub fn radroots_execution::workspace::WorkspaceSession::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
+pub fn radroots_execution::workspace::WorkspaceSession::close(&self)
+pub fn radroots_execution::workspace::WorkspaceSession::command_context(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::context::ExpectedOrder>, core::option::Option<radroots_domain::context::Approval>, radroots_domain::context::UnixSeconds) -> radroots_execution::Result<radroots_execution::workspace::CommandContext>
+pub fn radroots_execution::workspace::WorkspaceSession::command_context_with_correlation(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::context::ExpectedOrder>, core::option::Option<radroots_domain::context::Approval>, radroots_domain::context::UnixSeconds, core::option::Option<radroots_domain::context::CorrelationId>) -> radroots_execution::Result<radroots_execution::workspace::CommandContext>
+impl core::fmt::Debug for radroots_execution::workspace::WorkspaceSession
+pub fn radroots_execution::workspace::WorkspaceSession::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_execution::Admission
 pub radroots_execution::Admission::Confirmed
 pub radroots_execution::Admission::NotAdmitted

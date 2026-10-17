@@ -122,3 +122,31 @@ identifier!(
     OperationId,
     "An exact 256-bit retained operation identifier."
 );
+identifier!(
+    GrantId,
+    "An exact 256-bit scoped grant identifier; not a credential."
+);
+identifier!(
+    RecordId,
+    "A structured record content digest, distinct from rumor and envelope identities."
+);
+identifier!(
+    SourceId,
+    "A missing authenticated-source digest; provenance identifies its event or record family."
+);
+identifier!(
+    CommandDigest,
+    "A domain-separated exact command commitment."
+);
+identifier!(
+    RouteDigest,
+    "A commitment to one explicitly selected execution route."
+);
+identifier!(
+    CheckpointDigest,
+    "A checkpoint commitment; its bytes alone establish no coverage."
+);
+identifier!(
+    ApprovalIntentDigest,
+    "A commitment to the exact intent presented for approval."
+);

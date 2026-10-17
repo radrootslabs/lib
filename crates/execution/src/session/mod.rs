@@ -4,7 +4,7 @@
 //! caller's observation future, retains each work permit until its safe boundary.
 //! A permit is resource ownership, never proof of durable command admission.
 
-mod host;
+pub(crate) mod host;
 
 #[cfg(feature = "client_session")]
 mod client;

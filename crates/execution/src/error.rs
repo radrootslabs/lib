@@ -191,6 +191,108 @@ pub struct Error {
 }
 
 impl Error {
+    #[cfg(feature = "workspace_session")]
+    pub(crate) const fn workspace(
+        error: radroots_storage::workspace::WorkspaceError,
+        operation: Option<OperationId>,
+    ) -> Self {
+        use crate::{Field as F, Reason as R};
+        use radroots_storage::workspace::WorkspaceError as W;
+        let (code, retry, field, reason) = match error {
+            W::InvalidInput => (
+                Code::InvalidInput,
+                RetryClass::Never,
+                F::Input,
+                R::OutOfRange,
+            ),
+            W::Unauthorized => (
+                Code::Unauthorized,
+                RetryClass::Never,
+                F::Authority,
+                R::Missing,
+            ),
+            W::GrantExpired => (
+                Code::Unauthorized,
+                RetryClass::AfterStateRefresh,
+                F::Authority,
+                R::OutOfRange,
+            ),
+            W::GrantRevoked => (
+                Code::GrantRevoked,
+                RetryClass::AfterStateRefresh,
+                F::Authority,
+                R::Conflict,
+            ),
+            W::WriterActive => (
+                Code::MissingAuthority,
+                RetryClass::AfterStateRefresh,
+                F::Authority,
+                R::Conflict,
+            ),
+            W::WrongNamespace => (
+                Code::Unauthorized,
+                RetryClass::Never,
+                F::Authority,
+                R::Conflict,
+            ),
+            W::StaleAuthority => (
+                Code::StaleState,
+                RetryClass::AfterStateRefresh,
+                F::Authority,
+                R::Conflict,
+            ),
+            W::StaleCheckpoint => (
+                Code::StaleState,
+                RetryClass::AfterStateRefresh,
+                F::History,
+                R::Conflict,
+            ),
+            W::Unavailable => (
+                Code::CapabilityUnavailable,
+                RetryClass::Never,
+                F::Authority,
+                R::Unavailable,
+            ),
+            W::Closed => (
+                Code::CapabilityUnavailable,
+                RetryClass::Never,
+                F::Operation,
+                R::Unavailable,
+            ),
+            W::StorageFailure => (
+                Code::StorageFailure,
+                RetryClass::Never,
+                F::Storage,
+                R::Unavailable,
+            ),
+            W::NamespaceUnavailable => (
+                Code::RecoveryRequired,
+                RetryClass::ManualReconciliation,
+                F::Storage,
+                R::Unavailable,
+            ),
+            // Attachment/context are pre-admission. An adapter's uncertain
+            // mutation cannot be reported as this command's confirmed admission.
+            W::RecoveryRequired | W::CommitUnknown => (
+                Code::RecoveryRequired,
+                RetryClass::ManualReconciliation,
+                F::Storage,
+                R::Unknown,
+            ),
+            _ => (
+                Code::RecoveryRequired,
+                RetryClass::ManualReconciliation,
+                F::Authority,
+                R::Unknown,
+            ),
+        };
+        Self {
+            code,
+            context: OperationContext::proposed(operation),
+            retry,
+            detail: Some(Detail::new(field, reason)),
+        }
+    }
     #[cfg(feature = "client_session")]
     pub(crate) const fn identity_changed() -> Self {
         Self {

@@ -24,6 +24,8 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
         dependency_keys(MANIFEST),
         BTreeSet::from([
             "fs2",
+            "getrandom",
+            "radroots_domain",
             "radroots_event",
             "radroots_event_codec",
             "radroots_secrets",
@@ -32,7 +34,11 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "serde",
             "serde_json",
             "sha2",
+            "rustix",
+            "subtle",
             "sqlx",
+            "tokio",
+            "zeroize",
         ])
     );
     assert!(!ROOT.contains("SqlitePool"));
@@ -60,6 +66,7 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "migration",
             "open",
             "status",
+            "workspace",
         ])
     );
 }

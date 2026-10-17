@@ -188,3 +188,20 @@ incompatible source generation therefore leaves both original files intact. Each
 rechecks metadata and applies its pending suffix atomically in its own database;
 this does not claim a cross-database atomic commit. An interrupted compatible
 upgrade resumes from its committed version on the next open.
+
+On Unix, `workspace::NativeWorkspace` owns an explicit separate local buyer
+outbox namespace. Initialization generates random workspace/executor/grant
+identities and a protected 32-byte credential; it cannot restore an existing
+order or create seller stock authority. Existing open requires the independently
+retained selection and never enrolls a new grant. The grant and credential
+verifier use the existing context-bound authenticated envelope and an explicitly
+selected persistent secret provider. Plaintext credentials are not stored.
+
+One bounded native worker owns the SQLite connection and persistent namespace
+lock. Dropped authentication observers cannot cancel its work or release writer
+authority. Close permanently stops admission, drains admitted requests, checks
+the WAL checkpoint and awaits connection closure before releasing the lock.
+Cancelled close can be awaited again. Dropping the handle is not close evidence.
+Revocation commits a protected grant revision and survives reopening. This
+attachment boundary supplies no command journal, network pairing, firm stock,
+transfer, restore or browser qualification.

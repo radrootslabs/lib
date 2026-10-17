@@ -1,4 +1,9 @@
 pub mod radroots_domain
+pub use radroots_domain::PublicKey
+#[non_exhaustive] pub enum radroots_domain::ActorRole
+pub radroots_domain::ActorRole::Buyer
+pub radroots_domain::ActorRole::Coordinator
+pub radroots_domain::ActorRole::Seller
 #[non_exhaustive] pub enum radroots_domain::AmountError
 pub radroots_domain::AmountError::CoefficientOutOfRange
 pub radroots_domain::AmountError::InvalidFormat
@@ -9,12 +14,125 @@ pub radroots_domain::AmountError::ScaleOutOfRange
 impl core::error::Error for radroots_domain::AmountError
 impl core::fmt::Display for radroots_domain::AmountError
 pub fn radroots_domain::AmountError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::ContextError
+pub radroots_domain::ContextError::InconsistentCoverage
+pub radroots_domain::ContextError::InvalidInteger
+pub radroots_domain::ContextError::InvalidText
+pub radroots_domain::ContextError::OutOfRange
+pub radroots_domain::ContextError::TooManyReferences
+impl core::error::Error for radroots_domain::ContextError
+impl core::fmt::Display for radroots_domain::ContextError
+pub fn radroots_domain::ContextError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::Coverage
+pub radroots_domain::Coverage::Partial
+pub radroots_domain::Coverage::ScopeSatisfied
 #[non_exhaustive] pub enum radroots_domain::IdentifierError
 pub radroots_domain::IdentifierError::InvalidEncoding
 pub radroots_domain::IdentifierError::InvalidLength
 impl core::error::Error for radroots_domain::IdentifierError
 impl core::fmt::Display for radroots_domain::IdentifierError
 pub fn radroots_domain::IdentifierError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::ActorRef
+impl radroots_domain::ActorRef
+pub const fn radroots_domain::ActorRef::grant_id(self) -> core::option::Option<radroots_domain::GrantId>
+pub const fn radroots_domain::ActorRef::new(radroots_identity::key::PublicKey, radroots_domain::ActorRole, core::option::Option<radroots_identity::key::PublicKey>, core::option::Option<radroots_domain::GrantId>) -> Self
+pub const fn radroots_domain::ActorRef::organization(self) -> core::option::Option<radroots_identity::key::PublicKey>
+pub const fn radroots_domain::ActorRef::participant(self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::ActorRef::role(self) -> radroots_domain::ActorRole
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ActorRef
+pub fn radroots_domain::ActorRef::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::Approval
+impl radroots_domain::Approval
+pub const fn radroots_domain::Approval::expires_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::Approval::intent_digest(&self) -> radroots_domain::ApprovalIntentDigest
+pub fn radroots_domain::Approval::new(radroots_domain::ApprovalIntentDigest, impl core::convert::Into<alloc::string::String>, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::ContextError>
+pub fn radroots_domain::Approval::scope(&self) -> &str
+impl core::fmt::Debug for radroots_domain::Approval
+pub fn radroots_domain::Approval::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Approval
+pub fn radroots_domain::Approval::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::ApprovalIntentDigest(_)
+impl radroots_domain::ApprovalIntentDigest
+pub const fn radroots_domain::ApprovalIntentDigest::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::ApprovalIntentDigest::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::ApprovalIntentDigest::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::ApprovalIntentDigest
+pub fn radroots_domain::ApprovalIntentDigest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::ApprovalIntentDigest
+pub type radroots_domain::ApprovalIntentDigest::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::ApprovalIntentDigest::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::ApprovalIntentDigest
+pub fn radroots_domain::ApprovalIntentDigest::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ApprovalIntentDigest
+pub fn radroots_domain::ApprovalIntentDigest::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::AuthorityRef
+impl radroots_domain::AuthorityRef
+pub const fn radroots_domain::AuthorityRef::executor_id(self) -> radroots_domain::ExecutorId
+pub const fn radroots_domain::AuthorityRef::generation(self) -> radroots_domain::Generation
+pub const fn radroots_domain::AuthorityRef::new(radroots_domain::ExecutorId, radroots_domain::Generation) -> Self
+pub struct radroots_domain::CheckpointDigest(_)
+impl radroots_domain::CheckpointDigest
+pub const fn radroots_domain::CheckpointDigest::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::CheckpointDigest::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::CheckpointDigest::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::CheckpointDigest
+pub fn radroots_domain::CheckpointDigest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::CheckpointDigest
+pub type radroots_domain::CheckpointDigest::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::CheckpointDigest::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::CheckpointDigest
+pub fn radroots_domain::CheckpointDigest::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::CheckpointDigest
+pub fn radroots_domain::CheckpointDigest::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::CheckpointRef
+impl radroots_domain::CheckpointRef
+pub const fn radroots_domain::CheckpointRef::coverage(&self) -> radroots_domain::Coverage
+pub const fn radroots_domain::CheckpointRef::digest(&self) -> radroots_domain::CheckpointDigest
+pub fn radroots_domain::CheckpointRef::missing(&self) -> &[radroots_domain::SourceId]
+pub fn radroots_domain::CheckpointRef::new(radroots_domain::CheckpointDigest, radroots_domain::Sequence, radroots_domain::Coverage, alloc::vec::Vec<radroots_domain::SourceId>) -> core::result::Result<Self, radroots_domain::ContextError>
+pub const fn radroots_domain::CheckpointRef::sequence(&self) -> radroots_domain::Sequence
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::CheckpointRef
+pub fn radroots_domain::CheckpointRef::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::CommandContextData
+impl radroots_domain::CommandContextData
+pub const fn radroots_domain::CommandContextData::actor(&self) -> radroots_domain::ActorRef
+pub const fn radroots_domain::CommandContextData::approval(&self) -> core::option::Option<&radroots_domain::Approval>
+pub const fn radroots_domain::CommandContextData::authority(&self) -> radroots_domain::AuthorityRef
+pub const fn radroots_domain::CommandContextData::correlation_id(&self) -> core::option::Option<&radroots_domain::CorrelationId>
+pub const fn radroots_domain::CommandContextData::expected(&self) -> core::option::Option<&radroots_domain::ExpectedOrder>
+pub fn radroots_domain::CommandContextData::new(radroots_domain::OperationId, radroots_domain::ActorRef, radroots_domain::WorkspaceId, radroots_domain::AuthorityRef, radroots_domain::RouteDigest, core::option::Option<radroots_domain::Approval>, core::option::Option<radroots_domain::ExpectedOrder>, radroots_domain::UnixSeconds, core::option::Option<radroots_domain::CorrelationId>) -> core::result::Result<Self, radroots_domain::ContextError>
+pub const fn radroots_domain::CommandContextData::not_after(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::CommandContextData::operation_id(&self) -> radroots_domain::OperationId
+pub const fn radroots_domain::CommandContextData::route_digest(&self) -> radroots_domain::RouteDigest
+pub const fn radroots_domain::CommandContextData::workspace_id(&self) -> radroots_domain::WorkspaceId
+impl core::fmt::Debug for radroots_domain::CommandContextData
+pub fn radroots_domain::CommandContextData::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::CommandContextData
+pub fn radroots_domain::CommandContextData::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::CommandDigest(_)
+impl radroots_domain::CommandDigest
+pub const fn radroots_domain::CommandDigest::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::CommandDigest::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::CommandDigest::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::CommandDigest
+pub fn radroots_domain::CommandDigest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::CommandDigest
+pub type radroots_domain::CommandDigest::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::CommandDigest::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::CommandDigest
+pub fn radroots_domain::CommandDigest::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::CommandDigest
+pub fn radroots_domain::CommandDigest::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::CorrelationId(_)
+impl radroots_domain::CorrelationId
+pub fn radroots_domain::CorrelationId::as_str(&self) -> &str
+pub fn radroots_domain::CorrelationId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_domain::ContextError>
+impl core::fmt::Debug for radroots_domain::CorrelationId
+pub fn radroots_domain::CorrelationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_domain::CorrelationId
+pub fn radroots_domain::CorrelationId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::CorrelationId
+pub fn radroots_domain::CorrelationId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::Decimal
 impl radroots_domain::Decimal
 pub const radroots_domain::Decimal::MAX: Self
@@ -61,6 +179,43 @@ impl serde_core::ser::Serialize for radroots_domain::ExecutorId
 pub fn radroots_domain::ExecutorId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ExecutorId
 pub fn radroots_domain::ExecutorId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::ExpectedOrder
+impl radroots_domain::ExpectedOrder
+pub const fn radroots_domain::ExpectedOrder::agreement(&self) -> core::option::Option<radroots_domain::RecordId>
+pub const fn radroots_domain::ExpectedOrder::buyer_head(&self) -> core::option::Option<radroots_domain::RecordId>
+pub const fn radroots_domain::ExpectedOrder::checkpoint(&self) -> &radroots_domain::CheckpointRef
+pub const fn radroots_domain::ExpectedOrder::new(radroots_domain::OrderId, core::option::Option<radroots_domain::RecordId>, radroots_domain::Sequence, core::option::Option<radroots_domain::RecordId>, radroots_domain::CheckpointRef) -> Self
+pub const fn radroots_domain::ExpectedOrder::order_id(&self) -> radroots_domain::OrderId
+pub const fn radroots_domain::ExpectedOrder::seller_sequence(&self) -> radroots_domain::Sequence
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ExpectedOrder
+pub fn radroots_domain::ExpectedOrder::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::Generation(_)
+impl radroots_domain::Generation
+pub const fn radroots_domain::Generation::get(self) -> u64
+pub const fn radroots_domain::Generation::new(u64) -> core::result::Result<Self, radroots_domain::ContextError>
+impl core::fmt::Display for radroots_domain::Generation
+pub fn radroots_domain::Generation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::Generation
+pub type radroots_domain::Generation::Err = radroots_domain::ContextError
+pub fn radroots_domain::Generation::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::Generation
+pub fn radroots_domain::Generation::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Generation
+pub fn radroots_domain::Generation::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::GrantId(_)
+impl radroots_domain::GrantId
+pub const fn radroots_domain::GrantId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::GrantId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::GrantId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::GrantId
+pub fn radroots_domain::GrantId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::GrantId
+pub type radroots_domain::GrantId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::GrantId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::GrantId
+pub fn radroots_domain::GrantId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::GrantId
+pub fn radroots_domain::GrantId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::OperationId(_)
 impl radroots_domain::OperationId
 pub const fn radroots_domain::OperationId::as_bytes(&self) -> &[u8; 32]
@@ -107,6 +262,61 @@ impl serde_core::ser::Serialize for radroots_domain::PositiveDecimal
 pub fn radroots_domain::PositiveDecimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::PositiveDecimal
 pub fn radroots_domain::PositiveDecimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::RecordId(_)
+impl radroots_domain::RecordId
+pub const fn radroots_domain::RecordId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::RecordId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::RecordId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::RecordId
+pub fn radroots_domain::RecordId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::RecordId
+pub type radroots_domain::RecordId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::RecordId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::RecordId
+pub fn radroots_domain::RecordId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::RecordId
+pub fn radroots_domain::RecordId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::RouteDigest(_)
+impl radroots_domain::RouteDigest
+pub const fn radroots_domain::RouteDigest::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::RouteDigest::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::RouteDigest::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::RouteDigest
+pub fn radroots_domain::RouteDigest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::RouteDigest
+pub type radroots_domain::RouteDigest::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::RouteDigest::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::RouteDigest
+pub fn radroots_domain::RouteDigest::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::RouteDigest
+pub fn radroots_domain::RouteDigest::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::Sequence(_)
+impl radroots_domain::Sequence
+pub const fn radroots_domain::Sequence::get(self) -> u64
+pub const fn radroots_domain::Sequence::new(u64) -> core::result::Result<Self, radroots_domain::ContextError>
+impl core::fmt::Display for radroots_domain::Sequence
+pub fn radroots_domain::Sequence::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::Sequence
+pub type radroots_domain::Sequence::Err = radroots_domain::ContextError
+pub fn radroots_domain::Sequence::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::Sequence
+pub fn radroots_domain::Sequence::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Sequence
+pub fn radroots_domain::Sequence::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::SourceId(_)
+impl radroots_domain::SourceId
+pub const fn radroots_domain::SourceId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::SourceId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::SourceId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::SourceId
+pub fn radroots_domain::SourceId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::SourceId
+pub type radroots_domain::SourceId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::SourceId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::SourceId
+pub fn radroots_domain::SourceId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::SourceId
+pub fn radroots_domain::SourceId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::ThreadId(_)
 impl radroots_domain::ThreadId
 pub const fn radroots_domain::ThreadId::as_bytes(&self) -> &[u8; 32]
@@ -121,6 +331,19 @@ impl serde_core::ser::Serialize for radroots_domain::ThreadId
 pub fn radroots_domain::ThreadId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ThreadId
 pub fn radroots_domain::ThreadId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::UnixSeconds(_)
+impl radroots_domain::UnixSeconds
+pub const fn radroots_domain::UnixSeconds::get(self) -> u64
+pub const fn radroots_domain::UnixSeconds::new(u64) -> core::result::Result<Self, radroots_domain::ContextError>
+impl core::fmt::Display for radroots_domain::UnixSeconds
+pub fn radroots_domain::UnixSeconds::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::UnixSeconds
+pub type radroots_domain::UnixSeconds::Err = radroots_domain::ContextError
+pub fn radroots_domain::UnixSeconds::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::UnixSeconds
+pub fn radroots_domain::UnixSeconds::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::UnixSeconds
+pub fn radroots_domain::UnixSeconds::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::WorkspaceId(_)
 impl radroots_domain::WorkspaceId
 pub const fn radroots_domain::WorkspaceId::as_bytes(&self) -> &[u8; 32]

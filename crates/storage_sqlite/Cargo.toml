@@ -31,6 +31,8 @@ name = "radroots_storage_sqlite"
 
 [dependencies]
 fs2 = { workspace = true }
+getrandom = { workspace = true }
+radroots_domain = { workspace = true, features = ["std", "serde"] }
 radroots_event = { workspace = true, default-features = false, features = [
   "serde",
   "std",
@@ -50,10 +52,16 @@ radroots_transport = { workspace = true, default-features = false, features = [
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 sha2 = { workspace = true, features = ["std"] }
+rustix = { workspace = true }
+subtle = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync"] }
+zeroize = { workspace = true, features = ["alloc"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
 
 [dev-dependencies]
+futures = { workspace = true }
 hex = { workspace = true }
+radroots_secrets = { workspace = true, features = ["file", "memory"] }
 radroots_storage = { workspace = true, default-features = false, features = ["memory", "serde"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

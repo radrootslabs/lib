@@ -37,6 +37,7 @@ default = ["memory", "serde"]
 memory = []
 serde = [
   "dep:serde",
+  "radroots_domain/serde",
   "radroots_event/serde",
   "radroots_protocol/serde",
   "radroots_trade/serde",
@@ -44,6 +45,7 @@ serde = [
 ]
 
 [dependencies]
+radroots_domain = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false, features = [
   "json",
@@ -56,6 +58,7 @@ serde = { workspace = true, default-features = false, features = [
   "derive",
 ], optional = true }
 sha2 = { workspace = true, default-features = false }
+zeroize = { workspace = true, default-features = false }
 
 [dev-dependencies]
 futures-executor = { workspace = true }

@@ -85,8 +85,16 @@ unfinished host hook. Hosts must independently preserve their own partial hook
 progress and obtained results. Dropping an unpolled close performs no shutdown;
 dropping handles or permits never claims durable completion.
 
-The package is unpublished while the shared facade is migrated. The session
-coordinator is tested with controlled hosts; concrete journal/network/browser
-hosts still require qualification. It does not yet implement durable commands,
-signing, outbox workers, inventory authority, public listing/private chat
-execution, participant attachment or bindings.
+With `workspace_session`, explicit attachment authenticates a protected
+credential through the selected host. `WorkspaceSession::command_context`
+purely freezes the captured attachment and all explicit context fields without
+I/O or a clock read. Current grant, revision and expiry require revalidation.
+The opaque `CommandContext` has no public field constructor or JSON deserializer.
+Closing the attachment invalidates its contexts. A custom adapter is an explicit
+host trust boundary and requires its own qualification; its observation cannot
+establish native SQL authority. An approval descriptor is not consent proof.
+
+Package upload is not authorized. Actual durable command transactions, outbox
+workers, inventory authority, public listing/private chat execution, browser
+attachment and new bindings remain separate requirements. Revalidating a context
+is not durable admission; the authoritative transaction must recheck its scope.

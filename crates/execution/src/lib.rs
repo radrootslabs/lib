@@ -12,6 +12,9 @@ extern crate std;
 #[cfg(feature = "session")]
 pub mod session;
 
+#[cfg(feature = "workspace_session")]
+pub mod workspace;
+
 pub use diagnostic::{Detail, Field, Reason};
 pub use error::{Admission, Code, Error, InvalidErrorContext, OperationContext, RetryClass};
 
