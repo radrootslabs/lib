@@ -10,6 +10,8 @@ pub mod authored_draft_pair;
 pub mod authored_draft_query;
 pub mod authored_draft_submission;
 pub mod backup;
+#[cfg(feature = "command_journal")]
+pub mod command;
 mod error;
 pub mod event;
 pub mod journal;

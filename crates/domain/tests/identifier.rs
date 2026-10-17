@@ -35,6 +35,9 @@ fn captured_context_identities_preserve_full_width_and_canonical_encoding() {
     check!(radroots_domain::RouteDigest);
     check!(radroots_domain::CheckpointDigest);
     check!(radroots_domain::ApprovalIntentDigest);
+    check!(radroots_domain::TransactionId);
+    check!(radroots_domain::MessageId);
+    check!(radroots_domain::EnvelopeEventId);
 }
 
 #[test]

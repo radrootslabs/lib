@@ -756,6 +756,57 @@ pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transp
 pub fn radroots_storage::memory::MemoryStorage::transition_backup(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::BackupTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::BackupOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::verify_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
+pub mod radroots_storage::command
+pub enum radroots_storage::command::AdmissionOutcome
+pub radroots_storage::command::AdmissionOutcome::Committed(radroots_storage::command::PreparedOperation)
+pub radroots_storage::command::AdmissionOutcome::Unknown(radroots_storage::command::CommitAttempt)
+impl core::fmt::Debug for radroots_storage::command::AdmissionOutcome
+pub fn radroots_storage::command::AdmissionOutcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_storage::command::OperationError
+pub radroots_storage::command::OperationError::DeadlineExceeded
+pub radroots_storage::command::OperationError::IdempotencyConflict
+pub radroots_storage::command::OperationError::InvalidCommand
+pub radroots_storage::command::OperationError::MissingHistory
+pub radroots_storage::command::OperationError::RecoveryRequired
+pub radroots_storage::command::OperationError::StorageFailure
+pub radroots_storage::command::OperationError::Unauthorized
+pub radroots_storage::command::OperationError::UnverifiedApproval
+pub radroots_storage::command::OperationError::Workspace(radroots_storage::workspace::WorkspaceError)
+impl radroots_storage::command::OperationError
+pub const fn radroots_storage::command::OperationError::code(self) -> &'static str
+impl core::convert::From<radroots_storage::workspace::WorkspaceError> for radroots_storage::command::OperationError
+pub fn radroots_storage::command::OperationError::from(radroots_storage::workspace::WorkspaceError) -> Self
+impl core::error::Error for radroots_storage::command::OperationError
+impl core::fmt::Display for radroots_storage::command::OperationError
+pub fn radroots_storage::command::OperationError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::command::AdmissionRequest
+impl radroots_storage::command::AdmissionRequest
+pub const fn radroots_storage::command::AdmissionRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
+pub const fn radroots_storage::command::AdmissionRequest::command(&self) -> &radroots_protocol::command::CapturedChatCommand
+pub fn radroots_storage::command::AdmissionRequest::from_protected_wire(radroots_storage::workspace::WorkspaceBinding, &[u8]) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::AdmissionRequest::into_parts(self) -> (radroots_storage::workspace::WorkspaceBinding, radroots_protocol::command::CapturedChatCommand)
+pub fn radroots_storage::command::AdmissionRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_protocol::command::CapturedChatCommand) -> core::result::Result<Self, radroots_storage::command::OperationError>
+impl core::fmt::Debug for radroots_storage::command::AdmissionRequest
+pub fn radroots_storage::command::AdmissionRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::command::CommitAttempt
+impl radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::command::CommitAttempt::command_digest(self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_storage::command::CommitAttempt::new(radroots_domain::identifier::WorkspaceId, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, core::option::Option<radroots_domain::identifier::TransactionId>) -> Self
+pub const fn radroots_storage::command::CommitAttempt::operation_id(self) -> radroots_domain::identifier::OperationId
+pub const fn radroots_storage::command::CommitAttempt::transaction_id(self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub const fn radroots_storage::command::CommitAttempt::workspace_id(self) -> radroots_domain::identifier::WorkspaceId
+pub struct radroots_storage::command::PreparedOperation
+impl radroots_storage::command::PreparedOperation
+pub fn radroots_storage::command::PreparedOperation::from_committed_store(radroots_storage::command::AdmissionRequest, radroots_domain::identifier::TransactionId, radroots_domain::context::Sequence) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::PreparedOperation::identity(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::command::PreparedOperation::request(&self) -> &radroots_storage::command::AdmissionRequest
+pub const fn radroots_storage::command::PreparedOperation::revision(&self) -> radroots_domain::context::Sequence
+pub const fn radroots_storage::command::PreparedOperation::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+impl core::fmt::Debug for radroots_storage::command::PreparedOperation
+pub fn radroots_storage::command::PreparedOperation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait radroots_storage::command::OperationJournal: radroots_storage::workspace::WorkspaceStore
+pub fn radroots_storage::command::OperationJournal::admit_command_and_hold(&self, radroots_storage::command::AdmissionRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::AdmissionOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::command::OperationJournal::operation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::PreparedOperation>, radroots_storage::command::OperationError>>
 pub mod radroots_storage::event
 pub use radroots_storage::event::BoxFuture
 pub use radroots_storage::event::EventId
@@ -1838,6 +1889,8 @@ pub radroots_storage::workspace::WorkspaceError::WriterActive
 pub radroots_storage::workspace::WorkspaceError::WrongNamespace
 impl radroots_storage::workspace::WorkspaceError
 pub const fn radroots_storage::workspace::WorkspaceError::code(self) -> &'static str
+impl core::convert::From<radroots_storage::workspace::WorkspaceError> for radroots_storage::command::OperationError
+pub fn radroots_storage::command::OperationError::from(radroots_storage::workspace::WorkspaceError) -> Self
 impl core::error::Error for radroots_storage::workspace::WorkspaceError
 impl core::fmt::Display for radroots_storage::workspace::WorkspaceError
 pub fn radroots_storage::workspace::WorkspaceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

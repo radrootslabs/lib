@@ -18,6 +18,7 @@ pub use context::{
     CorrelationId, Coverage, ExpectedOrder, Generation, Sequence, UnixSeconds,
 };
 pub use identifier::{
-    ApprovalIntentDigest, CheckpointDigest, CommandDigest, ExecutorId, GrantId, IdentifierError,
-    OperationId, OrderId, RecordId, RouteDigest, SourceId, ThreadId, WorkspaceId,
+    ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId, ExecutorId, GrantId,
+    IdentifierError, MessageId, OperationId, OrderId, RecordId, RouteDigest, SourceId, ThreadId,
+    TransactionId, WorkspaceId,
 };

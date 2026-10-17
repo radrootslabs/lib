@@ -5,8 +5,10 @@
 //! single connection and persistent writer lock belong to one bounded worker.
 //! Losing an observer never drops that lock ahead of the SQLite connection.
 
+mod admission;
 mod crypto;
 mod fs;
+mod operation;
 mod record;
 mod worker;
 
@@ -208,6 +210,36 @@ impl WorkspaceStore for NativeWorkspace {
     }
     fn close_workspace(&self) -> BoxFuture<'_, Result<(), WorkspaceError>> {
         Box::pin(self.close())
+    }
+}
+impl radroots_storage::command::OperationJournal for NativeWorkspace {
+    fn admit_command_and_hold(
+        &self,
+        request: radroots_storage::command::AdmissionRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            radroots_storage::command::AdmissionOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.admit(request, proof))
+    }
+    fn operation(
+        &self,
+        binding: WorkspaceBinding,
+        operation_id: radroots_domain::OperationId,
+        digest: Option<radroots_domain::CommandDigest>,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::command::PreparedOperation>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.operation(binding, operation_id, digest, proof))
     }
 }
 fn random() -> Result<[u8; 32], WorkspaceError> {

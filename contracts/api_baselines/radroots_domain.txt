@@ -165,6 +165,20 @@ impl serde_core::ser::Serialize for radroots_domain::Decimal
 pub fn radroots_domain::Decimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Decimal
 pub fn radroots_domain::Decimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::EnvelopeEventId(_)
+impl radroots_domain::EnvelopeEventId
+pub const fn radroots_domain::EnvelopeEventId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::EnvelopeEventId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::EnvelopeEventId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::EnvelopeEventId
+pub fn radroots_domain::EnvelopeEventId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::EnvelopeEventId
+pub type radroots_domain::EnvelopeEventId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::EnvelopeEventId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::EnvelopeEventId
+pub fn radroots_domain::EnvelopeEventId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::EnvelopeEventId
+pub fn radroots_domain::EnvelopeEventId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::ExecutorId(_)
 impl radroots_domain::ExecutorId
 pub const fn radroots_domain::ExecutorId::as_bytes(&self) -> &[u8; 32]
@@ -216,6 +230,20 @@ impl serde_core::ser::Serialize for radroots_domain::GrantId
 pub fn radroots_domain::GrantId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::GrantId
 pub fn radroots_domain::GrantId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::MessageId(_)
+impl radroots_domain::MessageId
+pub const fn radroots_domain::MessageId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::MessageId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::MessageId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::MessageId
+pub fn radroots_domain::MessageId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::MessageId
+pub type radroots_domain::MessageId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::MessageId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::MessageId
+pub fn radroots_domain::MessageId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::MessageId
+pub fn radroots_domain::MessageId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::OperationId(_)
 impl radroots_domain::OperationId
 pub const fn radroots_domain::OperationId::as_bytes(&self) -> &[u8; 32]
@@ -331,6 +359,20 @@ impl serde_core::ser::Serialize for radroots_domain::ThreadId
 pub fn radroots_domain::ThreadId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ThreadId
 pub fn radroots_domain::ThreadId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::TransactionId(_)
+impl radroots_domain::TransactionId
+pub const fn radroots_domain::TransactionId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::TransactionId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::TransactionId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::TransactionId
+pub fn radroots_domain::TransactionId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::TransactionId
+pub type radroots_domain::TransactionId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::TransactionId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::TransactionId
+pub fn radroots_domain::TransactionId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::TransactionId
+pub fn radroots_domain::TransactionId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::UnixSeconds(_)
 impl radroots_domain::UnixSeconds
 pub const fn radroots_domain::UnixSeconds::get(self) -> u64

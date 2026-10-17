@@ -35,6 +35,7 @@ name = "radroots_storage"
 [features]
 default = ["memory", "serde"]
 memory = []
+command_journal = ["radroots_protocol/commands"]
 serde = [
   "dep:serde",
   "radroots_domain/serde",

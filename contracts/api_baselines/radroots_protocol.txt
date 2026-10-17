@@ -62,6 +62,66 @@ pub const radroots_protocol::capability::v1::MAX_TRANSPORT_KIND_BYTES: usize
 pub const radroots_protocol::capability::v1::SCHEMAS: &[radroots_protocol::schema::Metadata]
 pub fn radroots_protocol::capability::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
 pub fn radroots_protocol::capability::v1::validate_catalog(&[radroots_protocol::capability::v1::TransportDescriptor]) -> core::result::Result<(), radroots_protocol::capability::v1::Error>
+pub mod radroots_protocol::command
+pub enum radroots_protocol::command::ChatKind
+pub radroots_protocol::command::ChatKind::Inquire
+pub radroots_protocol::command::ChatKind::Reply
+impl radroots_protocol::command::ChatKind
+pub const fn radroots_protocol::command::ChatKind::as_str(self) -> &'static str
+#[non_exhaustive] pub enum radroots_protocol::command::CommandError
+pub radroots_protocol::command::CommandError::InvalidInput
+pub radroots_protocol::command::CommandError::LimitExceeded
+pub radroots_protocol::command::CommandError::UnsupportedCommand
+impl core::error::Error for radroots_protocol::command::CommandError
+impl core::fmt::Display for radroots_protocol::command::CommandError
+pub fn radroots_protocol::command::CommandError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::CapturedChatCommand
+impl radroots_protocol::command::CapturedChatCommand
+pub const fn radroots_protocol::command::CapturedChatCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedChatCommand::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedChatCommand::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub fn radroots_protocol::command::CapturedChatCommand::inquire(radroots_domain::context::CommandContextData, radroots_protocol::command::InquireInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::CapturedChatCommand::kind(&self) -> radroots_protocol::command::ChatKind
+pub const fn radroots_protocol::command::CapturedChatCommand::parent(&self) -> core::option::Option<radroots_domain::identifier::MessageId>
+pub fn radroots_protocol::command::CapturedChatCommand::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::CapturedChatCommand::peer(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_protocol::command::CapturedChatCommand::protected_wire(&self) -> &[u8]
+pub fn radroots_protocol::command::CapturedChatCommand::reply(radroots_domain::context::CommandContextData, radroots_protocol::command::ReplyInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedChatCommand::source(&self) -> core::option::Option<&radroots_protocol::command::ListingRevisionRef>
+pub fn radroots_protocol::command::CapturedChatCommand::text(&self) -> &str
+pub const fn radroots_protocol::command::CapturedChatCommand::thread_id(&self) -> radroots_domain::identifier::ThreadId
+impl core::fmt::Debug for radroots_protocol::command::CapturedChatCommand
+pub fn radroots_protocol::command::CapturedChatCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::InquireInput
+impl radroots_protocol::command::InquireInput
+pub fn radroots_protocol::command::InquireInput::new(radroots_domain::identifier::ThreadId, radroots_identity::key::PublicKey, core::option::Option<radroots_protocol::command::ListingRevisionRef>, &str) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::InquireInput::peer(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_protocol::command::InquireInput::source(&self) -> core::option::Option<&radroots_protocol::command::ListingRevisionRef>
+pub fn radroots_protocol::command::InquireInput::text(&self) -> &str
+pub const fn radroots_protocol::command::InquireInput::thread_id(&self) -> radroots_domain::identifier::ThreadId
+impl core::fmt::Debug for radroots_protocol::command::InquireInput
+pub fn radroots_protocol::command::InquireInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::ListingRevisionRef
+impl radroots_protocol::command::ListingRevisionRef
+pub const fn radroots_protocol::command::ListingRevisionRef::author(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_protocol::command::ListingRevisionRef::d(&self) -> &str
+pub const fn radroots_protocol::command::ListingRevisionRef::event_id(&self) -> radroots_domain::identifier::SourceId
+pub fn radroots_protocol::command::ListingRevisionRef::new(radroots_identity::key::PublicKey, &str, radroots_domain::identifier::SourceId) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+impl core::fmt::Debug for radroots_protocol::command::ListingRevisionRef
+pub fn radroots_protocol::command::ListingRevisionRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_protocol::command::ListingRevisionRef
+pub fn radroots_protocol::command::ListingRevisionRef::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+pub struct radroots_protocol::command::ReplyInput
+impl radroots_protocol::command::ReplyInput
+pub fn radroots_protocol::command::ReplyInput::new(radroots_domain::identifier::ThreadId, radroots_identity::key::PublicKey, radroots_domain::identifier::MessageId, &str) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::ReplyInput::parent(&self) -> radroots_domain::identifier::MessageId
+pub const fn radroots_protocol::command::ReplyInput::peer(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_protocol::command::ReplyInput::text(&self) -> &str
+pub const fn radroots_protocol::command::ReplyInput::thread_id(&self) -> radroots_domain::identifier::ThreadId
+impl core::fmt::Debug for radroots_protocol::command::ReplyInput
+pub fn radroots_protocol::command::ReplyInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_protocol::command::CHAT_MAX_BYTES: usize
+pub const radroots_protocol::command::COMMAND_MAX_BYTES: usize
 pub mod radroots_protocol::error
 pub mod radroots_protocol::error::v1
 pub enum radroots_protocol::error::v1::Class

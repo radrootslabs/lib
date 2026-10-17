@@ -1,4 +1,5 @@
 use super::*;
+mod operation_records;
 use radroots_domain::{ActorRef, SourceId};
 use radroots_secrets::{
     EncryptedEnvelope, SecretId, SecretRef,
@@ -555,7 +556,7 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             .await
             .unwrap();
         let statement = match fault {
-            0 => "PRAGMA user_version=2",
+            0 => "PRAGMA user_version=3",
             1 => "DELETE FROM workspace_grant",
             2 => "UPDATE workspace_grant SET grant_id=zeroblob(31)",
             3 => "UPDATE workspace_grant SET protected=zeroblob(0)",
@@ -601,7 +602,7 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             .fetch_one(&mut connection)
             .await
             .unwrap();
-        assert_eq!(version, if fault == 0 { 2 } else { 1 });
+        assert_eq!(version, if fault == 0 { 3 } else { 2 });
         assert_eq!(rows, if fault == 1 { 0 } else { 1 });
         if (3..=5).contains(&fault) {
             let size: i64 = sqlx::query_scalar("SELECT length(protected) FROM workspace_grant")

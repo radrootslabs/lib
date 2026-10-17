@@ -3288,8 +3288,11 @@ dependencies = [
 name = "radroots_protocol"
 version = "0.1.0-alpha"
 dependencies = [
+ "radroots_domain",
  "serde",
  "serde_json",
+ "sha2",
+ "zeroize",
 ]
 
 [[package]]

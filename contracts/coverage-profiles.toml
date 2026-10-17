@@ -8,6 +8,9 @@ no_default_features = false
 features = ["session", "signer_session", "client_session", "workspace_session"]
 test_threads = 1
 
+[profiles.crates."radroots_protocol"]
+features = ["commands"]
+
 [profiles.crates."radroots"]
 no_default_features = false
 features = ["native"]
@@ -39,4 +42,5 @@ features = ["full"]
 test_threads = 1
 
 [profiles.crates."radroots_storage"]
+features = ["command_journal"]
 test_packages = ["radroots_storage_sqlite"]

@@ -14,10 +14,11 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/radrootsd/transport_publish/v5.rs"),
     include_str!("../src/runtime/v1.rs"),
     include_str!("../src/schema.rs"),
+    include_str!("../src/command.rs"),
 ];
 
 #[test]
-fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
+fn manifest_has_approved_data_only_features_and_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots_protocol\""));
     assert!(MANIFEST.contains("version = \"0.1.0-alpha\""));
     assert!(MANIFEST.contains("publish = [\"crates-io\"]"));
@@ -25,11 +26,11 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
     assert!(MANIFEST.contains("default = [\"std\", \"serde\"]"));
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
-        BTreeSet::from(["default", "serde", "std"])
+        BTreeSet::from(["commands", "default", "serde", "std"])
     );
     assert_eq!(
         table_keys(MANIFEST, "[dependencies]"),
-        BTreeSet::from(["serde"])
+        BTreeSet::from(["radroots_domain", "serde", "serde_json", "sha2", "zeroize"])
     );
     assert_eq!(
         table_keys(MANIFEST, "[dev-dependencies]"),
@@ -44,6 +45,7 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
         root_declarations("pub mod "),
         BTreeSet::from([
             "capability",
+            "command",
             "error",
             "event",
             "radrootsd",

@@ -268,7 +268,7 @@ impl CheckpointRef {
 }
 /// A bounded diagnostic reference excluded from semantic idempotency.
 #[derive(Clone, Eq, PartialEq)]
-pub struct CorrelationId(String);
+pub struct CorrelationId(Box<str>);
 impl CorrelationId {
     /// Retains at most 128 UTF-8 bytes, with no terminal/control characters.
     pub fn new(value: impl Into<String>) -> Result<Self, ContextError> {
@@ -276,7 +276,7 @@ impl CorrelationId {
         if value.len() > 128 || value.chars().any(char::is_control) {
             return Err(ContextError::InvalidText);
         }
-        Ok(Self(value))
+        Ok(Self(value.into_boxed_str()))
     }
     /// Borrows the explicit diagnostic value for an authorized presentation.
     pub fn as_str(&self) -> &str {
@@ -293,7 +293,7 @@ impl fmt::Debug for CorrelationId {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct Approval {
     intent_digest: ApprovalIntentDigest,
-    scope: String,
+    scope: Box<str>,
     expires_at: UnixSeconds,
 }
 impl Approval {
@@ -312,7 +312,7 @@ impl Approval {
         }
         Ok(Self {
             intent_digest,
-            scope,
+            scope: scope.into_boxed_str(),
             expires_at,
         })
     }

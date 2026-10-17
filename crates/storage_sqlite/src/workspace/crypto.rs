@@ -1,5 +1,5 @@
 use super::WorkspaceError;
-use radroots_domain::{GrantId, WorkspaceId};
+use radroots_domain::{GrantId, OperationId, WorkspaceId};
 use radroots_secrets::{
     EncryptedEnvelope, SecretRef,
     context::{EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId},
@@ -48,7 +48,29 @@ impl WorkspaceCrypto {
         grant: GrantId,
         plaintext: &[u8],
     ) -> Result<Vec<u8>, WorkspaceError> {
-        if plaintext.len() > PRIVATE_PAYLOAD_MAX_BYTES {
+        self.seal_bound(
+            context(workspace, grant)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            plaintext,
+        )
+        .await
+    }
+    pub(super) async fn seal_operation(
+        &self,
+        workspace: WorkspaceId,
+        operation: OperationId,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(operation_context(workspace, operation)?, 65_536, plaintext)
+            .await
+    }
+    async fn seal_bound(
+        &self,
+        context: EnvelopeContext,
+        max_bytes: usize,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        if plaintext.len() > max_bytes {
             return Err(WorkspaceError::InvalidInput);
         }
         let plaintext =
@@ -67,7 +89,7 @@ impl WorkspaceCrypto {
                     self.reference.backend(),
                     self.reference.key_version(),
                 ),
-                context(workspace, grant)?,
+                context,
                 &plaintext,
                 SealMaterial::new(key, Nonce::new(nonce)),
             ),
@@ -84,6 +106,28 @@ impl WorkspaceCrypto {
         grant: GrantId,
         protected: &[u8],
     ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            context(workspace, grant)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
+    pub(super) async fn open_operation(
+        &self,
+        workspace: WorkspaceId,
+        operation: OperationId,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(operation_context(workspace, operation)?, 65_536, protected)
+            .await
+    }
+    async fn open_bound(
+        &self,
+        context: EnvelopeContext,
+        max_bytes: usize,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
         if protected.len() > PROTECTED_MAX_BYTES {
             return Err(WorkspaceError::RecoveryRequired);
         }
@@ -92,7 +136,7 @@ impl WorkspaceCrypto {
         self.provider
             .wrap(radroots_secrets::wrapping::WrapRequest::new(
                 &self.reference,
-                &context(workspace, grant)?,
+                &context,
                 &self.key,
             ))
             .await
@@ -106,10 +150,10 @@ impl WorkspaceCrypto {
             return Err(WorkspaceError::RecoveryRequired);
         }
         let plaintext = envelope
-            .open(self.provider.as_ref(), &context(workspace, grant)?)
+            .open(self.provider.as_ref(), &context)
             .await
             .map_err(|_| WorkspaceError::RecoveryRequired)?;
-        if plaintext.len() > PRIVATE_PAYLOAD_MAX_BYTES {
+        if plaintext.len() > max_bytes {
             return Err(WorkspaceError::RecoveryRequired);
         }
         Ok(plaintext)
@@ -130,6 +174,20 @@ fn context(workspace: WorkspaceId, grant: GrantId) -> Result<EnvelopeContext, Wo
         EnvelopeSubject::parse("workspace_grant", format!("{workspace}{grant}"))
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse("radroots.workspace.grant.v1")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+fn operation_context(
+    workspace: WorkspaceId,
+    operation: OperationId,
+) -> Result<EnvelopeContext, WorkspaceError> {
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.workspace.operation")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("workspace_operation", format!("{workspace}{operation}"))
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse("radroots.workspace.operation.v1")
             .map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }

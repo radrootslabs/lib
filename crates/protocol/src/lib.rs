@@ -4,6 +4,11 @@
 
 extern crate alloc;
 
+/// Closed known-kind chat command data and canonical digest input. These
+/// values authenticate no principal and perform no command admission.
+#[cfg(feature = "commands")]
+pub mod command;
+
 #[cfg(all(test, not(feature = "std")))]
 extern crate std;
 

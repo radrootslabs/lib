@@ -1,6 +1,10 @@
 use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
-    WorkspaceError, fs::Namespace, record::GrantRecord,
+    WorkspaceError, admission::Journal, fs::Namespace, operation, record::GrantRecord,
+};
+use radroots_domain::{CommandDigest, OperationId};
+use radroots_storage::command::{
+    AdmissionOutcome, AdmissionRequest, CommitAttempt, OperationError, PreparedOperation,
 };
 use sqlx::{
     Connection, Row, SqliteConnection,
@@ -19,13 +23,26 @@ use tokio::sync::{oneshot, watch};
 
 // Each request holds bounded descriptors and one 32-byte proof. With 32
 // queued requests and a single in-flight request this is below the 4 MiB
-// contract. No raw event/command/SQL or unbounded payload enters this queue.
+// contract. Command data has a 64 KiB canonical bound, 4 KiB decoded text and
+// bounded exact-sized descriptors; no unbounded event/SQL enters this queue.
 const QUEUE_CAPACITY: usize = 32;
 const TABLE: &str = "CREATE TABLE workspace_grant (singleton INTEGER PRIMARY KEY CHECK(singleton=1), workspace BLOB NOT NULL CHECK(length(workspace)=32), grant_id BLOB NOT NULL CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
-type Reply<T> = oneshot::Sender<Result<T, WorkspaceError>>;
+type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
     Authenticate(AttachmentInput, AttachmentProof, Reply<WorkspaceBinding>),
     Revoke(AttachmentInput, AttachmentProof, Reply<()>),
+    Admit(
+        Box<AdmissionRequest>,
+        AttachmentProof,
+        Reply<AdmissionOutcome, OperationError>,
+    ),
+    Operation(
+        Box<WorkspaceBinding>,
+        OperationId,
+        Option<CommandDigest>,
+        AttachmentProof,
+        Reply<Option<PreparedOperation>, OperationError>,
+    ),
 }
 pub(super) struct Handle {
     sender: Mutex<Option<SyncSender<Job>>>,
@@ -98,6 +115,7 @@ impl Handle {
                         let _ = connection.close().await;
                         return Err(error);
                     }
+                    let mut uncertain = false;
                     if ready.send(Ok(())).is_ok() {
                         while let Ok(job) = requests.recv() {
                             match job {
@@ -125,6 +143,32 @@ impl Handle {
                                         &selected,
                                         &proof,
                                     )
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
+                                Job::Admit(request, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .admit(*request, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
+                                Job::Operation(binding, operation_id, digest, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .query(*binding, operation_id, digest, proof)
                                     .await;
                                     let _ = reply.send(result);
                                 }
@@ -196,6 +240,42 @@ impl Handle {
         let (reply, result) = oneshot::channel();
         self.send(Job::Revoke(input, proof, reply))?;
         result.await.map_err(|_| WorkspaceError::CommitUnknown)?
+    }
+    pub(super) async fn admit(
+        &self,
+        request: AdmissionRequest,
+        proof: AttachmentProof,
+    ) -> Result<AdmissionOutcome, OperationError> {
+        let context = request.command().context();
+        let anchor = CommitAttempt::new(
+            context.workspace_id(),
+            context.operation_id(),
+            request.command().digest(),
+            None,
+        );
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Admit(Box::new(request), proof, reply))?;
+        match result.await {
+            Ok(result) => result,
+            Err(_) => Ok(AdmissionOutcome::Unknown(anchor)),
+        }
+    }
+    pub(super) async fn operation(
+        &self,
+        binding: WorkspaceBinding,
+        operation_id: OperationId,
+        digest: Option<CommandDigest>,
+        proof: AttachmentProof,
+    ) -> Result<Option<PreparedOperation>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Operation(
+            Box::new(binding),
+            operation_id,
+            digest,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
     pub(super) async fn close(&self) -> Result<(), WorkspaceError> {
         self.sender
@@ -269,7 +349,15 @@ async fn initialize(
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
-        sqlx::query("PRAGMA user_version=1")
+        sqlx::raw_sql(operation::TABLE)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| WorkspaceError::StorageFailure)?;
+        sqlx::raw_sql(operation::INDEX)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| WorkspaceError::StorageFailure)?;
+        sqlx::query("PRAGMA user_version=2")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -291,11 +379,11 @@ async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if version != 1 {
+    if version != 2 {
         return Err(WorkspaceError::RecoveryRequired);
     }
-    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=1 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 ELSE 0 END)=1 THEN 1 ELSE 0 END FROM sqlite_schema")
-        .bind(TABLE).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=3 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 ELSE 0 END)=3 THEN 1 ELSE 0 END FROM sqlite_schema")
+        .bind(TABLE).bind(operation::TABLE).bind(operation::INDEX).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
     if catalog_matches != 1 {
         return Err(WorkspaceError::RecoveryRequired);
     }
@@ -313,7 +401,7 @@ async fn initialize(
     plaintext.expose_secret(GrantRecord::decode)?;
     namespace.validate()
 }
-async fn read(
+pub(super) async fn read(
     connection: &mut SqliteConnection,
     expected: &AttachmentInput,
 ) -> Result<Vec<u8>, WorkspaceError> {

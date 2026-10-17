@@ -10,13 +10,12 @@ packages = [
   "radroots_core",
   "radroots_identity",
   "radroots_blossom",
-  "radroots_protocol",
 ]
 
 [[tier]]
 id = "domain"
 rank = 1
-packages = ["radroots_domain", "radroots_event", "radroots_event_codec", "radroots_trade"]
+packages = ["radroots_domain", "radroots_protocol", "radroots_event", "radroots_event_codec", "radroots_trade"]
 
 [[tier]]
 id = "spi"

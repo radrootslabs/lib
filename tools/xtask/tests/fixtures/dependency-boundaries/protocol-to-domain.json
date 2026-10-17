@@ -1,0 +1,40 @@
+{
+  "packages": [
+    {
+      "id": "path+file:///workspace/crates/protocol#radroots_protocol@0.1.0-alpha",
+      "name": "radroots_protocol",
+      "dependencies": [
+        {
+          "name": "radroots_domain",
+          "kind": null,
+          "features": ["serde"],
+          "target": null,
+          "uses_default_features": false
+        }
+      ]
+    },
+    {
+      "id": "path+file:///workspace/crates/domain#radroots_domain@0.1.0-alpha",
+      "name": "radroots_domain",
+      "dependencies": []
+    }
+  ],
+  "resolve": {
+    "nodes": [
+      {
+        "id": "path+file:///workspace/crates/protocol#radroots_protocol@0.1.0-alpha",
+        "deps": [
+          {
+            "name": "radroots_domain",
+            "pkg": "path+file:///workspace/crates/domain#radroots_domain@0.1.0-alpha",
+            "dep_kinds": [{"kind": null, "target": null}]
+          }
+        ]
+      },
+      {
+        "id": "path+file:///workspace/crates/domain#radroots_domain@0.1.0-alpha",
+        "deps": []
+      }
+    ]
+  }
+}

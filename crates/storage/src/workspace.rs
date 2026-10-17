@@ -208,7 +208,7 @@ impl<'de> serde::Deserialize<'de> for AttachmentInput {
 pub struct WorkspaceBinding {
     input: AttachmentInput,
     actor: ActorRef,
-    principal_id: String,
+    principal_id: Box<str>,
     grant_revision: Sequence,
     expires_at: UnixSeconds,
     observed_at: UnixSeconds,
@@ -241,7 +241,7 @@ impl WorkspaceBinding {
         Ok(Self {
             input,
             actor,
-            principal_id,
+            principal_id: principal_id.into_boxed_str(),
             grant_revision,
             expires_at,
             observed_at,

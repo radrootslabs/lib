@@ -19,8 +19,12 @@ numbers embedded in wire and schema contracts.
 | `runtime::v1` | operation descriptors, risk, approval, idempotency, and effects |
 | `radrootsd::transport_publish::v5` | daemon transport-publish request, job, outcome, and capability DTOs |
 | `schema` | schema IDs, module generations, descriptors, and aggregate registries |
+| `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
 
-All serialized DTOs live below an explicit generation module. The crate root
+Versioned DTOs live below an explicit generation module. The command codec
+implements its fixed v1 profile without exposing automatic serialization of
+captured private commands. Parsed command data supplies no authority or consent.
+The crate root
 does not reexport individual DTOs, so consumers must name the contract version
 they use.
 
@@ -30,6 +34,7 @@ they use.
 | --- | --- | --- |
 | `std` | yes | implements standard-library error integration and enables `serde?/std` |
 | `serde` | yes | derives serialization and deserialization for wire-contract types |
+| `commands` | no | enables the portable closed chat codec, domain values, SHA-256 and zeroizing private command buffers |
 
 Disabling default features leaves the catalog and structural validation APIs
 available with `alloc` only. Enable `serde` without `std` for portable encoded

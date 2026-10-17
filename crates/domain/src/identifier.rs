@@ -123,6 +123,18 @@ identifier!(
     "An exact 256-bit retained operation identifier."
 );
 identifier!(
+    TransactionId,
+    "An exact 256-bit retained transaction identity."
+);
+identifier!(
+    MessageId,
+    "An unsigned NIP-17 rumor identity, distinct from its signed carriers."
+);
+identifier!(
+    EnvelopeEventId,
+    "A signed NIP-01 artifact identity, distinct from a logical record or rumor."
+);
+identifier!(
     GrantId,
     "An exact 256-bit scoped grant identifier; not a credential."
 );

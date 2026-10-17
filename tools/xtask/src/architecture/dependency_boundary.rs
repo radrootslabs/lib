@@ -578,6 +578,8 @@ mod tests {
         include_str!("../../tests/fixtures/dependency-boundaries/service-to-sdk.json");
     const VALID_DOWNWARD: &str =
         include_str!("../../tests/fixtures/dependency-boundaries/valid-downward.json");
+    const PROTOCOL_TO_DOMAIN: &str =
+        include_str!("../../tests/fixtures/dependency-boundaries/protocol-to-domain.json");
 
     #[derive(Deserialize)]
     struct ArchitectureCatalog {
@@ -609,6 +611,33 @@ mod tests {
         let policy = policy();
         let placements = placements(&policy);
         assert_eq!(placements.len(), 21);
+    }
+
+    #[test]
+    fn approved_passive_protocol_domain_edge_matches_current_placement() {
+        let policy = policy();
+        validate_metadata(&policy, &placements(&policy), &metadata(PROTOCOL_TO_DOMAIN))
+            .expect("approved protocol data edge must use canonical domain values");
+    }
+
+    #[test]
+    fn protocol_data_placement_does_not_allow_storage() {
+        let policy = policy();
+        let changed = PROTOCOL_TO_DOMAIN.replace("radroots_domain", "radroots_storage");
+        let error = validate_metadata(&policy, &placements(&policy), &metadata(&changed))
+            .expect_err("passive protocol cannot import storage");
+        assert!(error.contains("radroots_protocol (tier=domain rank=1)"));
+        assert!(error.contains("radroots_storage (tier=spi rank=2)"));
+    }
+
+    #[test]
+    fn foundation_identity_does_not_gain_an_upward_domain_edge() {
+        let policy = policy();
+        let changed = PROTOCOL_TO_DOMAIN.replace("radroots_protocol", "radroots_identity");
+        let error = validate_metadata(&policy, &placements(&policy), &metadata(&changed))
+            .expect_err("identity remains below domain");
+        assert!(error.contains("radroots_identity (tier=foundation rank=0)"));
+        assert!(error.contains("radroots_domain (tier=domain rank=1)"));
     }
 
     #[test]

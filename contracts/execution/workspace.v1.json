@@ -1,12 +1,13 @@
 {
   "schema_version": 1,
   "contract_id": "radroots.execution.workspace.v1",
-  "state": "native_buyer_attachment_component_implemented",
+  "state": "native_buyer_chat_preparation_component_implemented",
   "ownership": {
     "domain": "Validated actor, authority, checkpoint and captured-context descriptors; descriptors grant no rights",
     "execution": "Owned authenticated workspace session and opaque captured command context",
     "storage_sqlite": "Concrete protected native namespace and current grant/authority verification",
-    "facade": "Explicit local attachment and shared execution entry points"
+    "facade": "Explicit local attachment and shared execution entry points",
+    "protocol": "Closed v1 inquiry/reply command data codec, canonical command/approval-intent hashes; parsing grants no authority"
   },
   "identity": {
     "workspace_executor_operation_grant_bytes": 32,
@@ -21,10 +22,11 @@
     "credential_persistence": "verifier only, under protected handling; no plaintext credential in SQL, diagnostics or arguments",
     "private_payload_max_bytes": 16384,
     "private_codec": "existing context-bound authenticated envelope v2 with explicit qualified provider, key material and unique nonce",
-    "transactions": "Grant creation and revocation observe actual SQLite commit completion. Transaction-time business admission/revalidation remains unimplemented.",
+    "transactions": "Grant creation/revocation and buyer inquiry preparation observe actual SQLite completion. T0 uses BEGIN IMMEDIATE and exact protected grant-row comparison before current proof/generation/route/deadline checks. Provider work finishes before the transaction. Prepared state does not install a message or invoke signing/delivery.",
     "initialization": "explicit fresh local outbox enrollment; no automatic stock ledger or restore from a key/public cache",
     "remote_attachment_qualified": false,
-    "firm_stock_qualified": false
+    "firm_stock_qualified": false,
+    "private_payload_scope": "Protected grant plaintext and protocol private-record limits remain distinct from the internal retained command journal."
   },
   "context": {
     "constructor": "pure synchronous authenticated workspace-session method; no clock, storage, signer or network effects; arbitrary JSON yields descriptors, never a trusted context",
@@ -57,15 +59,52 @@
     "Revoked/expired grant refusal and persisted reopen behavior",
     "No context authority from signer observation, public cache or caller-provided descriptors",
     "Full captured context fields, exact strings, explicit null, bounded redacted diagnostics and local/native lifetime checks",
-    "Owning native/portable/API/contract checks and unchanged coverage policy"
+    "Owning native/portable/API/contract checks and unchanged coverage policy",
+    "Independent canonical command and approval-intent vectors and closed shape/byte/depth refusals",
+    "Actual inquiry commit/reopen/replay, original correlation, digest conflict, proof/revocation/deadline and transaction-time grant checks",
+    "Actual SQLite statement failure/confirmed rollback, deferred-constraint commit failure/unknown latch, lost observer and bounded queue/drain",
+    "Protected operation-context substitution refusal and predecessor-schema byte preservation"
   ],
   "remaining": [
-    "Complete operation receipts and actual known-kind T0/T1/S/T2/D execution",
+    "Complete operation receipts, authenticated reply/history and actual known-kind listing/chat T1/S/T2/D execution",
     "Owned durable workers, per-target delivery and process-fault recovery",
     "Full stock executor, remote pairing/transfer and restore/fencing",
     "Actual browser/platform providers, generated bindings, coherent consumers and final acceptance"
   ],
   "implementation_claimed": true,
-  "implementation_scope": "Fresh unrelated protected local buyer attachment and pure captured context only; no durable business command, selected seller stock, remote pairing or recovery qualification.",
-  "package_publication_authorized": false
+  "implementation_scope": "Fresh protected local buyer attachment/context and actual inquiry Prepared admission/query only; no installed message, issuance/delivery, complete receipt, seller stock, remote pairing or general recovery qualification.",
+  "package_publication_authorized": false,
+  "command_data": {
+    "types": [
+      "inbox.inquire",
+      "inbox.reply"
+    ],
+    "raw_and_canonical_max_bytes": 65536,
+    "chat_utf8_max_bytes": 4096,
+    "maximum_json_depth": 16,
+    "canonicalization": "Closed ASCII-key RFC 8785 subset with preserved Unicode, fixed numeric kind 30402, canonical decimal-string exact values and explicit required nulls; not a general-purpose JCS implementation",
+    "command_digest": "SHA-256(radroots.command.v1 NUL || canonical command excluding context.correlation_id)",
+    "approval_intent_digest": "SHA-256(radroots.approval.v1 NUL || canonical command excluding context.approval and context.correlation_id)",
+    "private_buffers": "Zeroizing retained canonical command and decoded private text; borrowed raw private JSON during parsing"
+  },
+  "prepared_journal": {
+    "schema_user_version": 2,
+    "catalog": [
+      "workspace_grant",
+      "operations",
+      "operation_transaction_identity"
+    ],
+    "single_participant_scope": "One protected fresh local buyer grant per namespace; operations unique by complete workspace and operation ID",
+    "admitted_effect": "Protected authorized inquiry preparation only; no stock effect, installed chat, signature or publication",
+    "retained_identity": "Full operation and command digest plus original 32-byte transaction ID and positive revision",
+    "internal_plaintext_max_bytes": 65536,
+    "protected_envelope_max_bytes": 262144,
+    "replay": "Current access and the original digest are verified before fresh planning, deadline or entropy; original correlation is retained",
+    "unknown": "Original operation/digest and observed nullable transaction identity are retained; uncertain owner blocks business admission/query until safe close/reopen and exact original-row reconciliation",
+    "known_failure": "No write was attempted, or actual rollback completed; commit/rollback uncertainty never becomes a known failure",
+    "unavailable_history": "Reply parents and order expectations are refused until authenticated history is implemented",
+    "approval": "Caller-provided approval descriptors are refused without a qualified protected consent origin",
+    "predecessor_schema": "Preserve and refuse the prior grant-only namespace; no implicit rewrite, deletion, re-enrollment or import",
+    "transaction_recheck": "The short transaction matches complete workspace/operation, participant/grant, command type/digest, original transaction, prepared phase/revision and exact retained protected bytes; matching ciphertext alone cannot hide changed indexed facts."
+  }
 }

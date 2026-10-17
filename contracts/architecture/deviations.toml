@@ -2,6 +2,33 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-053"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete approved shared SDK refactor, its required breaking dependency closure, verified source checkpoints and master publication."
+affected_steps = ["040", "050", "060", "110", "120", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_protocol"]
+source_evidence = [
+  "The approved shared_sdk_refactor.v1 machine decision requires protocol to import canonical domain values. The closed chat codec now uses that exact edge rather than duplicating IDs, context or exact-value models.",
+  "The actual dependency guard rejects protocol (foundation rank 0) importing domain (domain rank 1). Current catalog placement and the checked-in current dependency-tier policy still encode the predecessor graph.",
+]
+replacement_action = "Activate the already-approved protocol-to-domain direction by placing protocol in the current catalog and dependency policy's domain tier and permitting only foundation/domain dependencies. Regenerate catalog projections through catalog write. Preserve the historical Release V1 artifacts, immutable provenance and the unchanged all-kind same-or-lower dependency guard; add no exception or guard bypass. Protocol remains passive portable data/encoding and owns no domain reducer, storage, signer, network or executor."
+verification = [
+  "Preserve the original real upward-edge failure. Actual architecture preflight passes the prospective deviation and policy/catalog structure before placement correction; the separate actual Cargo dependency guard remains red until the current placement is reconciled.",
+  "Run catalog generation/freshness, unchanged dependency/API guards, architecture and contract validation against the actual Cargo graph. Execute the retained dependency-boundary negative controls for domain-to-storage, SPI-to-adapter and orchestration-to-SDK directions.",
+  "Retain source-bound codec/native admission checks, reviewed APIs, portable composition and unchanged coverage gates. Classification supplies no runtime, full-receipt, consumer or release qualification.",
+]
+unresolved_risk = "The current classification activates one already-approved dependency edge only. Complete receipts, known-kind T1/S/T2/D, browser/bindings, supported consumer adoption and every final acceptance gate remain unfinished."
+normative_architecture_change = true
+adr_required = true
+closure_evidence = [
+  "Protocol now occupies the current domain tier in both catalog and dependency policy. Catalog projections are fresh; immutable provenance and every frozen Release V1 artifact remain unchanged. No dependency exception or production guard change was added.",
+  "All ten dependency-boundary cases pass, including the approved Protocol-to-Domain edge, retained upward-direction controls and new Protocol-to-Storage/Identity-to-Domain refusals. Tooling strict lint and actual API/dependency/architecture/catalog/contracts pass.",
+  "Closed command vectors, protected actual buyer preparation/reopen/replay, transaction-time authority/deadline and cancellation/unknown completion execute. The original indexed-shadow regression fails on unchanged production and passes after the private full-snapshot recheck correction. The original fixture compile, lint, interrupted run and coverage failures remain preserved.",
+  "All four owning unchanged ninety-percent coverage gates pass. SQLite branches measure 1207/1336 after the added actual corruption/captured-binding refusals and complete retained-fact recheck. Reviewed public APIs and portable codec/facade composition are retained at their exact source scope. Complete receipts, T1/S/T2/D, browser/bindings, supported consumer adoption and final acceptance remain unfinished.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-052"
 date = "2026-10-17"
 status = "closed"
