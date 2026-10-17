@@ -13,6 +13,7 @@ fn package_has_final_identity_and_exact_dependencies() {
         dependency_names(MANIFEST),
         BTreeSet::from([
             "radroots_core",
+            "radroots_domain",
             "radroots_event",
             "radroots_identity",
             "radroots_sdk",
@@ -48,7 +49,8 @@ fn root_has_exact_exports_and_no_sdk_namespace() {
     assert!(ROOT.contains("pub use radroots_sdk::{Client, ClientBuilder, Error, Result};"));
     assert!(!ROOT.contains("pub mod sdk"));
     assert!(!ROOT.contains("pub use radroots_sdk::*"));
-    assert_eq!(ROOT.matches("pub use ").count(), 1);
+    assert!(ROOT.contains("pub use radroots_domain::OperationId;"));
+    assert_eq!(ROOT.matches("pub use ").count(), 2);
     assert!(README.contains("```compile_fail\nuse radroots::sdk;\n```"));
 }
 

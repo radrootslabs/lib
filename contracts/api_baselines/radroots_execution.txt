@@ -1,0 +1,136 @@
+pub mod radroots_execution
+pub mod radroots_execution::session
+pub enum radroots_execution::session::SessionState
+pub radroots_execution::session::SessionState::Closed
+pub radroots_execution::session::SessionState::Closing
+pub radroots_execution::session::SessionState::Ready
+pub radroots_execution::session::SessionState::Running
+pub radroots_execution::session::SessionState::Starting
+pub struct radroots_execution::session::Session<H: radroots_execution::session::SessionHost>
+impl<H: radroots_execution::session::SessionHost> radroots_execution::session::Session<H>
+pub fn radroots_execution::session::Session<H>::admit(&self) -> radroots_execution::Result<radroots_execution::session::WorkPermit<H>>
+pub async fn radroots_execution::session::Session<H>::close(&self) -> radroots_execution::Result<()>
+pub fn radroots_execution::session::Session<H>::new(H, core::num::nonzero::NonZeroU16) -> Self
+pub async fn radroots_execution::session::Session<H>::start(&self) -> radroots_execution::Result<()>
+pub fn radroots_execution::session::Session<H>::state(&self) -> radroots_execution::session::SessionState
+impl<H: radroots_execution::session::SessionHost> core::clone::Clone for radroots_execution::session::Session<H>
+pub fn radroots_execution::session::Session<H>::clone(&self) -> Self
+pub struct radroots_execution::session::WorkPermit<H: radroots_execution::session::SessionHost>
+impl<H: radroots_execution::session::SessionHost> core::ops::drop::Drop for radroots_execution::session::WorkPermit<H>
+pub fn radroots_execution::session::WorkPermit<H>::drop(&mut self)
+pub trait radroots_execution::session::HostBound: core::marker::Send + core::marker::Sync
+impl<T: core::marker::Send + core::marker::Sync + ?core::marker::Sized> radroots_execution::session::HostBound for T
+pub trait radroots_execution::session::SessionHost: radroots_execution::session::HostBound
+pub fn radroots_execution::session::SessionHost::close_storage(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
+pub fn radroots_execution::session::SessionHost::disconnect(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
+pub fn radroots_execution::session::SessionHost::dispose_callbacks(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
+pub fn radroots_execution::session::SessionHost::quiesce(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
+pub fn radroots_execution::session::SessionHost::start(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
+pub type radroots_execution::session::HostFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
+#[non_exhaustive] pub enum radroots_execution::Admission
+pub radroots_execution::Admission::Confirmed
+pub radroots_execution::Admission::NotAdmitted
+pub radroots_execution::Admission::Unknown
+#[non_exhaustive] pub enum radroots_execution::Code
+pub radroots_execution::Code::AuthorityConflict
+pub radroots_execution::Code::CapabilityUnavailable
+pub radroots_execution::Code::CommitUnknown
+pub radroots_execution::Code::Deficit
+pub radroots_execution::Code::DeliveryPending
+pub radroots_execution::Code::GrantRevoked
+pub radroots_execution::Code::IdempotencyConflict
+pub radroots_execution::Code::IdentityChanged
+pub radroots_execution::Code::InsufficientStock
+pub radroots_execution::Code::InvalidInput
+pub radroots_execution::Code::MissingAuthority
+pub radroots_execution::Code::MissingHistory
+pub radroots_execution::Code::MissingSource
+pub radroots_execution::Code::RecordFork
+pub radroots_execution::Code::RecoveryRequired
+pub radroots_execution::Code::RetentionExhausted
+pub radroots_execution::Code::SignerRefused
+pub radroots_execution::Code::SignerTampering
+pub radroots_execution::Code::SignerUnavailable
+pub radroots_execution::Code::SigningPending
+pub radroots_execution::Code::SigningUnknown
+pub radroots_execution::Code::StaleState
+pub radroots_execution::Code::StorageFailure
+pub radroots_execution::Code::Unauthenticated
+pub radroots_execution::Code::Unauthorized
+pub radroots_execution::Code::UnsupportedProfile
+pub radroots_execution::Code::UnsupportedVersion
+impl radroots_execution::Code
+pub const radroots_execution::Code::ALL: &'static [Self]
+pub const fn radroots_execution::Code::as_str(self) -> &'static str
+pub const fn radroots_execution::Code::message(self) -> &'static str
+#[non_exhaustive] pub enum radroots_execution::Field
+pub radroots_execution::Field::Approval
+pub radroots_execution::Field::Authority
+pub radroots_execution::Field::Currency
+pub radroots_execution::Field::Delivery
+pub radroots_execution::Field::History
+pub radroots_execution::Field::Input
+pub radroots_execution::Field::Operation
+pub radroots_execution::Field::Retention
+pub radroots_execution::Field::Signer
+pub radroots_execution::Field::Source
+pub radroots_execution::Field::Stock
+pub radroots_execution::Field::Storage
+pub radroots_execution::Field::Unit
+impl radroots_execution::Field
+pub const radroots_execution::Field::ALL: &'static [Self]
+pub const fn radroots_execution::Field::as_str(self) -> &'static str
+impl core::fmt::Display for radroots_execution::Field
+pub fn radroots_execution::Field::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_execution::InvalidErrorContext
+pub radroots_execution::InvalidErrorContext::ConfirmedAdmissionRequired
+pub radroots_execution::InvalidErrorContext::ConflictingRetry
+pub radroots_execution::InvalidErrorContext::OperationIdentityRequired
+pub radroots_execution::InvalidErrorContext::ReconciliationRequired
+pub radroots_execution::InvalidErrorContext::RetainedRetryRequired
+impl core::error::Error for radroots_execution::InvalidErrorContext
+impl core::fmt::Display for radroots_execution::InvalidErrorContext
+pub fn radroots_execution::InvalidErrorContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_execution::Reason
+pub radroots_execution::Reason::Conflict
+pub radroots_execution::Reason::InvalidEncoding
+pub radroots_execution::Reason::Missing
+pub radroots_execution::Reason::OutOfRange
+pub radroots_execution::Reason::Unavailable
+pub radroots_execution::Reason::Unknown
+pub radroots_execution::Reason::Unsupported
+impl radroots_execution::Reason
+pub const radroots_execution::Reason::ALL: &'static [Self]
+pub const fn radroots_execution::Reason::as_str(self) -> &'static str
+impl core::fmt::Display for radroots_execution::Reason
+pub fn radroots_execution::Reason::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_execution::RetryClass
+pub radroots_execution::RetryClass::AfterStateRefresh
+pub radroots_execution::RetryClass::ManualReconciliation
+pub radroots_execution::RetryClass::Never
+pub radroots_execution::RetryClass::SafeSameOperation
+impl radroots_execution::RetryClass
+pub const fn radroots_execution::RetryClass::as_str(self) -> &'static str
+pub struct radroots_execution::Detail
+impl radroots_execution::Detail
+pub const fn radroots_execution::Detail::field(self) -> radroots_execution::Field
+pub const fn radroots_execution::Detail::new(radroots_execution::Field, radroots_execution::Reason) -> Self
+pub const fn radroots_execution::Detail::reason(self) -> radroots_execution::Reason
+pub struct radroots_execution::Error
+impl radroots_execution::Error
+pub const fn radroots_execution::Error::code(self) -> radroots_execution::Code
+pub const fn radroots_execution::Error::context(self) -> radroots_execution::OperationContext
+pub const fn radroots_execution::Error::detail(self) -> core::option::Option<radroots_execution::Detail>
+pub const fn radroots_execution::Error::new(radroots_execution::Code, radroots_execution::OperationContext, radroots_execution::RetryClass, core::option::Option<radroots_execution::Detail>) -> core::result::Result<Self, radroots_execution::InvalidErrorContext>
+pub const fn radroots_execution::Error::retry(self) -> radroots_execution::RetryClass
+impl core::error::Error for radroots_execution::Error
+impl core::fmt::Display for radroots_execution::Error
+pub fn radroots_execution::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_execution::OperationContext
+impl radroots_execution::OperationContext
+pub const fn radroots_execution::OperationContext::admission(self) -> radroots_execution::Admission
+pub const fn radroots_execution::OperationContext::admission_unknown(radroots_domain::identifier::OperationId) -> Self
+pub const fn radroots_execution::OperationContext::operation_id(self) -> core::option::Option<radroots_domain::identifier::OperationId>
+pub const fn radroots_execution::OperationContext::proposed(core::option::Option<radroots_domain::identifier::OperationId>) -> Self
+pub const fn radroots_execution::OperationContext::retained(radroots_domain::identifier::OperationId) -> Self
+pub type radroots_execution::Result<T> = core::result::Result<T, radroots_execution::Error>

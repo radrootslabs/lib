@@ -1,5 +1,5 @@
 schema_version = 1
-spec_id = "radroots.crates.release.v1"
+spec_id = "radroots.crates.release.v2"
 direction = "same_or_lower"
 enforced_dependency_kinds = ["normal", "dev", "build"]
 
@@ -16,7 +16,7 @@ packages = [
 [[tier]]
 id = "domain"
 rank = 1
-packages = ["radroots_event", "radroots_event_codec", "radroots_trade"]
+packages = ["radroots_domain", "radroots_event", "radroots_event_codec", "radroots_trade"]
 
 [[tier]]
 id = "spi"
@@ -42,7 +42,7 @@ packages = [
 [[tier]]
 id = "orchestration"
 rank = 4
-packages = ["radroots_sync"]
+packages = ["radroots_execution", "radroots_sync"]
 
 [[tier]]
 id = "sdk"

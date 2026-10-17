@@ -4,6 +4,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod client;
+pub mod domain;
 pub mod event;
 pub mod farm;
 pub mod identity;
@@ -15,4 +16,5 @@ pub mod sync;
 pub mod trade;
 pub mod transport;
 
+pub use radroots_domain::OperationId;
 pub use radroots_sdk::{Client, ClientBuilder, Error, Result};

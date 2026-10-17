@@ -5,6 +5,14 @@ no_std_cross_cflags = "-target thumb-freestanding-eabihf -mcpu=cortex_m4"
 wasm_target = "wasm32-unknown-unknown"
 
 [[package]]
+name = "radroots_domain"
+wasm = true
+
+[[package]]
+name = "radroots_execution"
+wasm = true
+
+[[package]]
 name = "radroots_core"
 wasm = true
 

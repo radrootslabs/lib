@@ -8,7 +8,7 @@ use std::{
 use serde::Deserialize;
 
 const PACKAGE_TIERS_RELATIVE: &str = "contracts/releases/package_tiers.toml";
-const SPEC_ID: &str = "radroots.crates.release.v1";
+const SPEC_ID: &str = "radroots.crates.release.v2";
 const DIRECTION: &str = "same_or_lower";
 const POLICY_SCHEMA_VERSION: u16 = 1;
 const CURRENT_STEP: u16 = 24;
@@ -569,8 +569,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     const POLICY: &str = include_str!("../../../../contracts/releases/package_tiers.toml");
-    const ARCHITECTURE: &str =
-        include_str!("../../../../contracts/crates/release_v1/radroots_crates_release_v1.toml");
+    const ARCHITECTURE: &str = include_str!("../../../../contracts/crates/release.v2.toml");
     const DOMAIN_TO_STORAGE: &str =
         include_str!("../../tests/fixtures/dependency-boundaries/domain-to-storage.json");
     const SPI_TO_ADAPTER: &str =
@@ -582,12 +581,7 @@ mod tests {
 
     #[derive(Deserialize)]
     struct ArchitectureCatalog {
-        package: Vec<ArchitecturePackage>,
-    }
-
-    #[derive(Deserialize)]
-    struct ArchitecturePackage {
-        name: String,
+        public_packages: Vec<String>,
     }
 
     fn policy() -> DependencyBoundaryPolicy {
@@ -604,9 +598,8 @@ mod tests {
         let architecture =
             toml::from_str::<ArchitectureCatalog>(ARCHITECTURE).expect("architecture catalog");
         let expected = architecture
-            .package
+            .public_packages
             .into_iter()
-            .map(|package| package.name)
             .collect::<BTreeSet<_>>();
         validate_policy(policy, &expected).expect("valid package tier policy")
     }
@@ -615,7 +608,7 @@ mod tests {
     fn policy_covers_the_exact_architecture_catalog() {
         let policy = policy();
         let placements = placements(&policy);
-        assert_eq!(placements.len(), 19);
+        assert_eq!(placements.len(), 21);
     }
 
     #[test]

@@ -171,7 +171,8 @@ The package authority is `contracts/crates/catalog.v2.toml`. Imported entries
 retain their exact immutable source repository, full revision, source path, and
 source-tree digest. A newly created repository-native package instead uses
 `provenance_kind = "native"` and records only its
-`introduction_tree_sha256`; native entries are active and unpublished. Stage
+`introduction_tree_sha256`. Native entries begin active and private; a later
+approved public allocation preserves that immutable provenance. Stage
 the complete new package path before running `cargo xtask catalog check` or
 `cargo xtask catalog write`. Before the first commit, xtask verifies the digest
 against canonical stage-zero index tree records. After that commit, xtask

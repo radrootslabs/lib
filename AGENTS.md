@@ -182,7 +182,8 @@ Before editing code:
 - `contracts/crates/catalog.v2.toml` is the package-catalog authority. Preserve
   imported packages as `provenance_kind = "imported"` with their immutable
   repository, revision, path, and tree digest. New repository-native packages
-  must be active, unpublished `provenance_kind = "native"` entries and must
+  begin as active private `provenance_kind = "native"` entries; public eligibility
+  requires the approved current release allocation. Native entries always
   store only `introduction_tree_sha256`; never embed a self-referential
   introducing commit OID.
 - Before validating a new native catalog entry, stage the complete package path
@@ -209,10 +210,11 @@ Before editing code:
 - Preview, code-generation, fixture, binding-generator, coverage, xtask, and
   implementation-assembly packages remain private and absent from published
   feature closures.
-- During the migration, every package remains non-publishable until its
-  package-realistic release gates pass and publication is explicitly
-  authorized. `contracts/releases/publish_policy.toml` is the machine
-  authority; validation metadata does not authorize upload.
+- Current public eligibility is governed by the catalog and Release V2,
+  including exact `contracts/releases/publish_policy.toml` ownership. Package
+  upload still requires its release gates and explicit authorization; current
+  Release V2 keeps `publication_authorized = false`. Source publication and
+  validation metadata never authorize a package upload.
 
 ## 8. Service hardening boundaries
 

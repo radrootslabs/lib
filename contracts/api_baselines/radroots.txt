@@ -2,6 +2,7 @@ pub mod radroots
 pub use radroots::Client
 pub use radroots::ClientBuilder
 pub use radroots::Error
+pub use radroots::OperationId
 pub use radroots::Result
 pub mod radroots::client
 pub const fn radroots::client::geonames_enabled() -> bool
@@ -11,6 +12,16 @@ pub fn radroots::client::memory() -> radroots_sdk::client::ClientBuilder
 pub async fn radroots::client::native(radroots_sdk::storage::SqliteOptions) -> radroots_sdk::error::Result<radroots_sdk::client::ClientBuilder>
 pub fn radroots::client::with_nip46_signer(radroots_sdk::client::ClientBuilder, radroots_sdk::signing::Provider) -> radroots_sdk::client::ClientBuilder
 pub fn radroots::client::with_transport(radroots_sdk::client::ClientBuilder, alloc::sync::Arc<dyn radroots_transport::source::EventSource>, alloc::sync::Arc<dyn radroots_transport::sink::EventSink>) -> radroots_sdk::client::ClientBuilder
+pub mod radroots::domain
+pub use radroots::domain::AmountError
+pub use radroots::domain::Decimal
+pub use radroots::domain::ExecutorId
+pub use radroots::domain::IdentifierError
+pub use radroots::domain::OperationId
+pub use radroots::domain::OrderId
+pub use radroots::domain::PositiveDecimal
+pub use radroots::domain::ThreadId
+pub use radroots::domain::WorkspaceId
 pub mod radroots::event
 pub use radroots::event::Error
 pub use radroots::event::Event

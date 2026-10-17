@@ -8815,13 +8815,9 @@ fn validate_v1_release_policy(
             expected_approved.len()
         ));
     }
-    if control.spec_id != architecture.spec_id || control.spec_id != "radroots.crates.release.v1" {
-        return Err(format!(
-            "publication.spec_id {} must match architecture id {}",
-            control.spec_id, architecture.spec_id
-        ));
+    if architecture.spec_id != "radroots.crates.release.v1" {
+        return Err("frozen release architecture must retain its V1 identity".to_owned());
     }
-
     let approved = collect_unique_set(&control.approved_packages, "publication.approved_packages")?;
     let local = collect_unique_set(&control.local_packages, "publication.local_packages")?;
     let external = collect_unique_set(&control.external_packages, "publication.external_packages")?;
@@ -8842,6 +8838,28 @@ fn validate_v1_release_policy(
     } else {
         false
     };
+    let current_allocation = consolidated_here
+        && workspace_root
+            .join("contracts/crates/catalog.v2.toml")
+            .is_file();
+    let expected_approved = if current_allocation {
+        crate::catalog::public_packages(workspace_root)?
+            .into_iter()
+            .collect()
+    } else {
+        expected_approved
+    };
+    let expected_spec = if current_allocation {
+        "radroots.crates.release.v2"
+    } else {
+        architecture.spec_id.as_str()
+    };
+    if control.spec_id != expected_spec {
+        return Err(format!(
+            "publication.spec_id {} must match architecture id {expected_spec}",
+            control.spec_id
+        ));
+    }
     let (expected_local, expected_external) = if consolidated_here {
         (expected_approved.clone(), BTreeSet::new())
     } else {

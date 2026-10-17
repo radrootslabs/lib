@@ -88,7 +88,17 @@ impl Drop for GeneratedSboms {
 
 pub fn run(root: &Path) -> Result<(), String> {
     let contract = load(root)?;
-    validate(root, &contract, 19)?;
+    let expected = crate::catalog::public_packages(root)?;
+    validate(root, &contract, expected.len())?;
+    if contract
+        .package
+        .iter()
+        .map(|p| &p.name)
+        .collect::<BTreeSet<_>>()
+        != expected.iter().collect()
+    {
+        return Err("supply-chain contract must match the current public allocation".to_owned());
+    }
     verify_tools(&contract)?;
     let metadata = load_metadata(root)?;
     qualify_git_sources(root, &contract)?;
@@ -113,7 +123,7 @@ fn load(root: &Path) -> Result<Contract, String> {
 
 fn validate(root: &Path, contract: &Contract, expected_packages: usize) -> Result<(), String> {
     if contract.schema_version != 1
-        || contract.spec_id != "radroots.crates.release.v1"
+        || contract.spec_id != "radroots.crates.release.v2"
         || contract.package_version != "0.1.0-alpha"
         || contract.tools.cargo_deny != "0.19.8"
         || contract.tools.cargo_cyclonedx != "0.5.9"
@@ -873,7 +883,7 @@ mod tests {
     fn current_contract_is_exact_and_exception_bound() {
         let root = root();
         let contract = load(&root).expect("contract");
-        validate(&root, &contract, 19).expect("valid contract");
+        validate(&root, &contract, 21).expect("valid contract");
         qualify_git_sources(&root, &contract).expect("exact direct and transitive Git sources");
     }
 

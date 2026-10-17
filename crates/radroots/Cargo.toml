@@ -37,6 +37,7 @@ path = "src/lib.rs"
 
 [dependencies]
 radroots_core = { workspace = true }
+radroots_domain = { workspace = true, features = ["std", "serde"] }
 radroots_event = { workspace = true }
 radroots_identity = { workspace = true, features = ["std"] }
 radroots_sdk = { workspace = true }

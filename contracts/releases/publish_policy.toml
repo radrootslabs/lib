@@ -5,8 +5,10 @@ version = "1.0.0-alpha.1"
 frozen = false
 registry = "crates-io"
 final_enablement_step = 305
-spec_id = "radroots.crates.release.v1"
+spec_id = "radroots.crates.release.v2"
 approved_packages = [
+  "radroots_domain",
+  "radroots_execution",
   "radroots_core",
   "radroots_identity",
   "radroots_blossom",
@@ -28,6 +30,8 @@ approved_packages = [
   "radroots",
 ]
 local_packages = [
+  "radroots_domain",
+  "radroots_execution",
   "radroots_core",
   "radroots_identity",
   "radroots_blossom",
@@ -52,8 +56,6 @@ external_packages = []
 
 [workspace_classification]
 private = [
-  "radroots_domain",
-  "radroots_execution",
   "radroots_runtime_distribution",
   "radroots_runtime_manager",
   "radroots_runtime_paths",
@@ -97,6 +99,7 @@ retired = []
 crates = [
   "radroots_core",
   "radroots_identity",
+  "radroots_domain",
   "radroots_blossom",
   "radroots_protocol",
   "radroots_event",
@@ -111,6 +114,7 @@ crates = [
   "radroots_storage_sqlite",
   "radroots_transport_nostr",
   "radroots_sync",
+  "radroots_execution",
   "radroots_geonames",
   "radroots_sdk",
   "radroots",

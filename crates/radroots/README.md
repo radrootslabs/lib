@@ -76,6 +76,11 @@ delivery happens only when its `deliver` method is invoked.
 
 ## When to use radroots_sdk
 
+`radroots::domain` exposes exact decimal values and separate order, thread,
+workspace, executor and operation identities. `radroots::OperationId` is the
+retained operation identity, not an operation-kind enum. These validated values
+do not authenticate a participant or establish durable command admission.
+
 Use `radroots` for ordinary applications and the primary farm, listing, trade,
 identity, event, and transport paths. Use `radroots_sdk` directly when the host
 must own source-generation identity, inject arbitrary storage/signing/sync

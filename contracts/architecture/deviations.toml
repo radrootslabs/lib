@@ -2,6 +2,34 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-049"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete approved shared SDK refactor, necessary breaking source changes, verified source publication and master integration; package uploads and releases remain unauthorized."
+affected_steps = ["040", "050", "060", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#release_policy", "contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "The approved shared_sdk_refactor.v1 decision assigns reusable domain and execution to the public Lib package graph and the ordinary radroots facade.",
+  "Both implemented native packages currently remain private/unpublished boundaries; catalog and Release V1-derived public dependency guards therefore prohibit the facade from consuming their qualified values, errors and session implementation.",
+]
+replacement_action = "Promote exactly radroots_domain and radroots_execution into the current public allocation, preserving immutable native introduction provenance and frozen Release V1 artifacts. Derive current public metadata and dependency/API policy from the validated current allocation instead of rewriting historical package inventories. Keep package publication unauthorized, generate current projections and API baselines, and expose exact domain/operation values through the ordinary facade."
+verification = [
+  "Validate this prospective deviation before implementation. Preserve all existing test purposes and add denial controls for unapproved native promotion, public-to-private dependencies and stale/malformed current allocation.",
+  "Run focused owning tooling/package checks and tests, strict lint, current generated projections/API freshness, portable source checks and standalone package inspection/qualification through the owning commands.",
+  "Review native introduction digests and all frozen Release V1 artifact bytes as unchanged. Source allocation does not qualify an ordinary command, a durable store, browser runtime, binding or release.",
+]
+unresolved_risk = "The actual owned ordinary Client, authenticated command attachment, full receipts, known-kind durable workflows, browser/bindings and supported source/artifact/consumer adoption remain required; public eligibility supplies no execution or package-upload authority."
+normative_architecture_change = true
+adr_required = true
+closure_evidence = [
+  "Exactly domain and execution enter the current public allocation. Both immutable native introduction-tree digests and every frozen Release V1 artifact remain unchanged; Release V2 publication authorization remains false.",
+  "Current public metadata, all-kind dependency/API boundaries, source-policy, feature/target/API qualification and publication ownership use the validated current allocation. Negative controls retain rejection of malformed allocation and unapproved native exports.",
+  "Owner-generated catalog projections and three public API baselines are fresh. Cargo builds both actual package archives and verifies execution against the packaged domain provider through its temporary registry. The only dependency graph delta is the facade's exact domain edge.",
+  "The source-bound native tooling, facade/domain/execution tests, doctests, strict lint and selected native/no_std/WASM compiler checks pass. The two original canonical generator tests remain ignored with unchanged separate generator obligations. Ordinary Client, authenticated attachment, durable commands, browser runtime, bindings, consumer adoption and final acceptance remain open.",
+]
+
+
+[[deviation]]
 id = "RCRV1-DEV-048"
 date = "2026-10-17"
 status = "closed"

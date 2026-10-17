@@ -22,7 +22,11 @@ struct BaselineOverride {
 
 pub fn run(root: &Path) -> Result<(), String> {
     let contract = load(root)?;
-    validate(&contract, 19)?;
+    let expected = crate::catalog::public_packages(root)?;
+    validate(&contract, expected.len())?;
+    if contract.packages.iter().collect::<BTreeSet<_>>() != expected.iter().collect() {
+        return Err("public API contract must match the current public allocation".to_owned());
+    }
     verify_tool(&contract)?;
     verify_revision(root, &contract.baseline_revision)?;
     for baseline in &contract.baseline_override {
@@ -71,14 +75,22 @@ fn validate(contract: &Contract, expected_packages: usize) -> Result<(), String>
         .iter()
         .map(|baseline| baseline.package.as_str())
         .collect::<BTreeSet<_>>();
-    if overrides != BTreeSet::from(["radroots", "radroots_sdk"])
+    if overrides
+        != BTreeSet::from([
+            "radroots",
+            "radroots_sdk",
+            "radroots_domain",
+            "radroots_execution",
+        ])
+        || contract.baseline_override.len() != overrides.len()
         || contract
             .baseline_override
             .iter()
             .any(|baseline| baseline.revision.len() != 40)
     {
         return Err(
-            "public API baseline overrides must identify the two imported front doors".to_owned(),
+            "public API baselines must identify imported front doors and new shared owners"
+                .to_owned(),
         );
     }
     Ok(())
@@ -153,7 +165,7 @@ mod tests {
             .and_then(std::path::Path::parent)
             .expect("workspace root");
         let contract = load(root).expect("contract");
-        validate(&contract, 19).expect("valid contract");
+        validate(&contract, 21).expect("valid contract");
         let invocation = invocation(&contract, "radroots_core");
         assert!(invocation.contains(&"--all-features".to_owned()));
         assert!(invocation.ends_with(&["--release-type".to_owned(), "major".to_owned()]));

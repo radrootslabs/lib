@@ -1,6 +1,6 @@
 [package]
 name = "radroots_execution"
-publish = false
+publish = ["crates-io"]
 version = "0.1.0-alpha"
 edition.workspace = true
 authors.workspace = true
@@ -10,6 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 description = "Typed Radroots command execution and recovery boundaries"
 readme = "README.md"
+include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [features]
 default = []

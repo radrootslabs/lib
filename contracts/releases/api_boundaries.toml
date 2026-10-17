@@ -1,5 +1,5 @@
 schema_version = 1
-spec_id = "radroots.crates.release.v1"
+spec_id = "radroots.crates.release.v2"
 forbidden_public_paths = [
   "core_foundation",
   "dispatch",
@@ -96,4 +96,12 @@ allowed_public_paths = []
 
 [[package]]
 name = "radroots"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_domain"
+allowed_public_paths = []
+
+[[package]]
+name = "radroots_execution"
 allowed_public_paths = []

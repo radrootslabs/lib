@@ -15,7 +15,7 @@ const API_BOUNDARIES_RELATIVE: &str = "contracts/releases/api_boundaries.toml";
 const API_DECISION_RELATIVE: &str =
     "contracts/architecture/decisions/public_api_leakage_migration_baseline.v1.toml";
 const API_DECISION_ID: &str = "radroots.public_api_leakage_migration_baseline.v1";
-const SPEC_ID: &str = "radroots.crates.release.v1";
+const SPEC_ID: &str = "radroots.crates.release.v2";
 const POLICY_SCHEMA_VERSION: u16 = 1;
 const DECISION_SCHEMA_VERSION: u16 = 1;
 const CURRENT_STEP: u16 = 313;
@@ -1391,8 +1391,7 @@ mod tests {
     const DECISION: &str = include_str!(
         "../../../../contracts/architecture/decisions/public_api_leakage_migration_baseline.v1.toml"
     );
-    const ARCHITECTURE: &str =
-        include_str!("../../../../contracts/crates/release_v1/radroots_crates_release_v1.toml");
+    const ARCHITECTURE: &str = include_str!("../../../../contracts/crates/release.v2.toml");
     const GENERIC_SQLX: &str = include_str!("../../tests/fixtures/api-leakage/generic-sqlx.rs");
     const GENERIC_RENAMED_TOKIO: &str =
         include_str!("../../tests/fixtures/api-leakage/generic-renamed-tokio.rs");
@@ -1402,12 +1401,7 @@ mod tests {
         include_str!("../../tests/fixtures/api-leakage/private-implementation.rs");
     #[derive(Deserialize)]
     struct ArchitectureCatalog {
-        package: Vec<ArchitecturePackage>,
-    }
-
-    #[derive(Deserialize)]
-    struct ArchitecturePackage {
-        name: String,
+        public_packages: Vec<String>,
     }
 
     fn policy() -> ApiBoundaryPolicy {
@@ -1417,9 +1411,8 @@ mod tests {
     fn expected_packages() -> BTreeSet<String> {
         toml::from_str::<ArchitectureCatalog>(ARCHITECTURE)
             .expect("architecture")
-            .package
+            .public_packages
             .into_iter()
-            .map(|package| package.name)
             .collect()
     }
 

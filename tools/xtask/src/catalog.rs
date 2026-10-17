@@ -23,6 +23,9 @@ const CATALOG_SCHEMA: &str = "radroots.workspace.catalog.v2";
 const RELEASE_ID: &str = "radroots.crates.release.v2";
 const CONSOLIDATION_ID: &str = "radroots.rust.consolidation.v1";
 const VERSION: &str = "0.1.0-alpha";
+// Implemented public owners from the approved shared SDK target. Native
+// introduction provenance is independent of publication eligibility.
+const NATIVE_PUBLIC_PACKAGES: &[&str] = &["radroots_domain", "radroots_execution"];
 const APPLICATION_RETIREMENT: &str =
     "contracts/architecture/decisions/tera_application_ownership.v1.json";
 const RETIRED_APPLICATION_PACKAGES: [&str; 4] = [
@@ -212,6 +215,14 @@ pub(crate) fn active_packages(workspace_root: &Path) -> Result<Vec<String>, Stri
     active_packages_matching(workspace_root, |_| true)
 }
 
+pub(crate) fn public_packages(workspace_root: &Path) -> Result<Vec<String>, String> {
+    let catalog = parse_file::<Catalog>(workspace_root, CATALOG_RELATIVE)?;
+    validate_catalog(&catalog)?;
+    let release = parse_file::<ReleaseV2>(workspace_root, RELEASE_RELATIVE)?;
+    validate_release(&release, &catalog, workspace_root)?;
+    Ok(release.public_packages)
+}
+
 fn active_packages_matching(
     workspace_root: &Path,
     predicate: impl Fn(&CatalogPackage) -> bool,
@@ -306,7 +317,7 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         || catalog.rust_version != crate::architecture::STABLE_TOOLCHAIN
         || catalog.edition != "2024"
         || catalog.resolver != "3"
-        || catalog.public_package_count != 19
+        || catalog.public_package_count != expected_public_packages().len()
         || catalog.package_count != catalog.package.len()
         || catalog.digest_algorithm != "sha256-raw-bytes-v1"
         || catalog.source_tree_digest_algorithm != "sha256-git-ls-tree-r-v1"
@@ -433,7 +444,7 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         package_by_name.insert(package.name.as_str(), package);
     }
     if public != expected_public {
-        return Err("catalog must contain exactly the 19 approved public packages".to_owned());
+        return Err("catalog must contain exactly the approved public allocation".to_owned());
     }
     let required_groups = BTreeSet::from([
         "boundaries",
@@ -455,7 +466,7 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         .map(|package| package.name.as_str())
         .collect::<BTreeSet<_>>();
     if portable != expected_public {
-        return Err("portable group must contain exactly the 19 public packages".to_owned());
+        return Err("portable group must contain exactly the public allocation".to_owned());
     }
     for package in &catalog.package {
         for tier in &package.permitted_dependency_tiers {
@@ -555,12 +566,15 @@ fn validate_package_provenance(package: &CatalogPackage) -> Result<(), String> {
                     )
                 })?;
             validate_sha256(introduction_tree_sha256, "introduction tree digest")?;
+            let public = package.publish || package.visibility == "public_release";
             if package.state != "active"
-                || package.publish
-                || package.visibility == "public_release"
+                || (public
+                    && (!NATIVE_PUBLIC_PACKAGES.contains(&package.name.as_str())
+                        || !package.publish
+                        || package.visibility != "public_release"))
             {
                 return Err(format!(
-                    "native package {} must be active and unpublished",
+                    "native package {} must be active and use its approved publication boundary",
                     package.name
                 ));
             }
@@ -615,7 +629,7 @@ fn validate_release(
         || release.supersedes_without_mutation != "radroots.crates.release.v1"
         || release.canonical_repository != "https://github.com/radrootslabs/lib"
         || release.version != VERSION
-        || release.public_package_count != 19
+        || release.public_package_count != expected_public_packages().len()
         || release.publication_authorized
         || release
             .public_packages
@@ -1337,7 +1351,7 @@ fn sort_map_values(values: &mut BTreeMap<&str, Vec<&str>>) {
 }
 
 fn expected_public_packages() -> BTreeSet<&'static str> {
-    BTreeSet::from([
+    let mut packages = BTreeSet::from([
         "radroots",
         "radroots_blossom",
         "radroots_core",
@@ -1357,7 +1371,9 @@ fn expected_public_packages() -> BTreeSet<&'static str> {
         "radroots_trade",
         "radroots_transport",
         "radroots_transport_nostr",
-    ])
+    ]);
+    packages.extend(NATIVE_PUBLIC_PACKAGES.iter().copied());
+    packages
 }
 
 fn expected_retired_packages() -> BTreeSet<&'static str> {
@@ -1534,7 +1550,7 @@ mod tests {
 
     #[test]
     fn public_inventory_is_exact() {
-        assert_eq!(expected_public_packages().len(), 19);
+        assert_eq!(expected_public_packages().len(), 21);
         assert!(expected_public_packages().contains("radroots"));
         assert!(expected_public_packages().contains("radroots_sdk"));
     }
@@ -1546,6 +1562,24 @@ mod tests {
         assert!(validate_relative_path("crates/./sdk").is_err());
         assert!(validate_sha256(&"a".repeat(64), "digest").is_ok());
         assert!(validate_sha256(&"A".repeat(64), "digest").is_err());
+    }
+
+    #[test]
+    fn only_approved_shared_native_packages_can_be_public() {
+        for name in ["radroots_domain", "radroots_execution"] {
+            let mut catalog = checked_in_catalog();
+            let package = catalog.package.iter_mut().find(|p| p.name == name).unwrap();
+            package.visibility = "public_release".to_owned();
+            package.publish = true;
+            validate_package_provenance(package).expect("approved native public allocation");
+            package.source_revision = Some("a".repeat(40));
+            assert!(validate_package_provenance(package).is_err());
+        }
+        let mut catalog = checked_in_catalog();
+        let other = native_package(&mut catalog, "crates/nostrdb", &"a".repeat(64));
+        other.visibility = "public_release".to_owned();
+        other.publish = true;
+        assert!(validate_package_provenance(other).is_err());
     }
 
     #[test]

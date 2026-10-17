@@ -1,5 +1,5 @@
 schema_version = 1
-spec_id = "radroots.crates.release.v1"
+spec_id = "radroots.crates.release.v2"
 package_version = "0.1.0-alpha"
 
 [tools]
@@ -128,3 +128,11 @@ manifest_path = "crates/sdk/Cargo.toml"
 [[package]]
 name = "radroots"
 manifest_path = "crates/radroots/Cargo.toml"
+
+[[package]]
+name = "radroots_domain"
+manifest_path = "crates/domain/Cargo.toml"
+
+[[package]]
+name = "radroots_execution"
+manifest_path = "crates/execution/Cargo.toml"

@@ -3041,6 +3041,7 @@ name = "radroots"
 version = "0.1.0-alpha"
 dependencies = [
  "radroots_core",
+ "radroots_domain",
  "radroots_event",
  "radroots_identity",
  "radroots_sdk",

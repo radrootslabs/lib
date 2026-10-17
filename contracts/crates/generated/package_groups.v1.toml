@@ -1,5 +1,5 @@
 schema = "radroots.workspace.package-groups.v1"
-catalog_sha256 = "1e679431ad70a024affc52e6c71151459aca41707429dd8015d014d27e5f40b6"
+catalog_sha256 = "9c347e831bada40bd91e691aad9df2ba2573dc0ed1c76083939f47863f286d2c"
 
 [[group]]
 id = "boundaries"
@@ -15,20 +15,20 @@ reserved_packages = []
 
 [[group]]
 id = "portable"
-packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_event", "radroots_event_codec", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
-active_packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_event", "radroots_event_codec", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
+packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_domain", "radroots_event", "radroots_event_codec", "radroots_execution", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
+active_packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_domain", "radroots_event", "radroots_event_codec", "radroots_execution", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
 reserved_packages = []
 
 [[group]]
 id = "preview"
-packages = ["radroots_domain", "radroots_execution", "radroots_mesh", "radroots_mesh_agent_client", "radroots_mesh_agent_proto", "radroots_nostrdb", "radroots_replica_schema", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_service_host", "radroots_service_sqlite", "radroots_simplex_agent_proto", "radroots_simplex_app_store", "radroots_simplex_chat_proto", "radroots_simplex_smp_crypto", "radroots_simplex_smp_proto", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_test_fixtures", "radroots_transport_reticulum"]
-active_packages = ["radroots_domain", "radroots_execution", "radroots_mesh", "radroots_mesh_agent_client", "radroots_mesh_agent_proto", "radroots_nostrdb", "radroots_replica_schema", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_service_host", "radroots_service_sqlite", "radroots_simplex_agent_proto", "radroots_simplex_app_store", "radroots_simplex_chat_proto", "radroots_simplex_smp_crypto", "radroots_simplex_smp_proto", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_test_fixtures", "radroots_transport_reticulum"]
+packages = ["radroots_mesh", "radroots_mesh_agent_client", "radroots_mesh_agent_proto", "radroots_nostrdb", "radroots_replica_schema", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_service_host", "radroots_service_sqlite", "radroots_simplex_agent_proto", "radroots_simplex_app_store", "radroots_simplex_chat_proto", "radroots_simplex_smp_crypto", "radroots_simplex_smp_proto", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_test_fixtures", "radroots_transport_reticulum"]
+active_packages = ["radroots_mesh", "radroots_mesh_agent_client", "radroots_mesh_agent_proto", "radroots_nostrdb", "radroots_replica_schema", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_service_host", "radroots_service_sqlite", "radroots_simplex_agent_proto", "radroots_simplex_app_store", "radroots_simplex_chat_proto", "radroots_simplex_smp_crypto", "radroots_simplex_smp_proto", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_test_fixtures", "radroots_transport_reticulum"]
 reserved_packages = []
 
 [[group]]
 id = "public_native"
-packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_event", "radroots_event_codec", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
-active_packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_event", "radroots_event_codec", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
+packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_domain", "radroots_event", "radroots_event_codec", "radroots_execution", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
+active_packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_domain", "radroots_event", "radroots_event_codec", "radroots_execution", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]
 reserved_packages = []
 
 [[group]]

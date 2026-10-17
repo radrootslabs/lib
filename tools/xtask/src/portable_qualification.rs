@@ -68,8 +68,10 @@ fn load(workspace_root: &Path) -> Result<PortableMatrix, String> {
     let expected = [
         "radroots_blossom",
         "radroots_core",
+        "radroots_domain",
         "radroots_event",
         "radroots_event_codec",
+        "radroots_execution",
         "radroots_identity",
         "radroots_nostr",
         "radroots_protocol",
@@ -80,7 +82,7 @@ fn load(workspace_root: &Path) -> Result<PortableMatrix, String> {
     ];
     if names != expected || matrix.package.iter().any(|package| !package.wasm) {
         return Err(
-            "portable matrix must contain exactly the 11 declared no_std and WASM packages"
+            "portable matrix must contain exactly the 13 declared no_std and WASM packages"
                 .to_owned(),
         );
     }
@@ -136,7 +138,7 @@ mod tests {
             .and_then(std::path::Path::parent)
             .expect("workspace root");
         let matrix = load(root).expect("portable matrix");
-        assert_eq!(matrix.package.len(), 11);
+        assert_eq!(matrix.package.len(), 13);
         assert!(matrix.package.iter().all(|package| package.wasm));
     }
 }

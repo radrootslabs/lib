@@ -165,11 +165,7 @@ pub fn validate(workspace_root: &Path) -> Result<(), String> {
     let architecture = toml::from_str::<ArchitectureIdentity>(&architecture_raw)
         .map_err(|error| format!("parse {}: {error}", architecture_path.display()))?;
 
-    let architecture_packages = architecture
-        .package
-        .iter()
-        .map(|package| package.name.clone())
-        .collect::<BTreeSet<_>>();
+    let architecture_packages = public_package_names(workspace_root, &architecture)?;
     core_contract::validate(workspace_root)?;
     api_leakage::validate_policy_catalog(workspace_root, &architecture_packages)?;
     dependency_boundary::validate_policy_catalog(workspace_root, &architecture_packages)?;
@@ -318,6 +314,26 @@ fn validate_workspace_toolchain(
     Ok(())
 }
 
+fn public_package_names(
+    workspace_root: &Path,
+    architecture: &ArchitectureIdentity,
+) -> Result<BTreeSet<String>, String> {
+    if workspace_root
+        .join("contracts/crates/catalog.v2.toml")
+        .is_file()
+    {
+        // Current allocation supersedes the frozen V1 inventory. A malformed
+        // present catalog must fail; only historical fixtures lack this input.
+        return crate::catalog::public_packages(workspace_root)
+            .map(|packages| packages.into_iter().collect());
+    }
+    Ok(architecture
+        .package
+        .iter()
+        .map(|p| p.name.clone())
+        .collect())
+}
+
 fn validate_public_package_metadata(
     workspace_root: &Path,
     architecture: &ArchitectureIdentity,
@@ -331,11 +347,7 @@ fn validate_public_package_metadata(
         .values()
         .find(|repository| repository.url == workspace.workspace.package.repository)
         .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
-    let all_packages = architecture
-        .package
-        .iter()
-        .map(|package| package.name.as_str())
-        .collect::<BTreeSet<_>>();
+    let all_packages = public_package_names(workspace_root, architecture)?;
     let consolidation_path = workspace_root.join("contracts/consolidation/architecture.v1.toml");
     let consolidated_owner = if consolidation_path.is_file() {
         let consolidation = fs::read_to_string(&consolidation_path)
@@ -499,26 +511,36 @@ fn validate_public_dependency_versions(
         .values()
         .find(|repository| repository.url == workspace.workspace.package.repository)
         .ok_or_else(|| "workspace repository has no architecture allocation".to_owned())?;
-    let local_packages = repository
-        .packages
+    let current_public = public_package_names(workspace_root, architecture)?;
+    let public_packages = current_public
         .iter()
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
-    let public_packages = architecture
-        .package
-        .iter()
-        .map(|package| package.name.as_str())
-        .collect::<BTreeSet<_>>();
-    let package_versions = architecture
-        .repositories
-        .values()
-        .flat_map(|repository| {
-            repository
-                .packages
-                .iter()
-                .map(|package| (package.as_str(), repository.version.as_str()))
-        })
-        .collect::<BTreeMap<_, _>>();
+    let current_catalog = workspace_root
+        .join("contracts/crates/catalog.v2.toml")
+        .is_file();
+    let local_packages = if current_catalog {
+        public_packages.clone()
+    } else {
+        repository.packages.iter().map(String::as_str).collect()
+    };
+    let package_versions = if current_catalog {
+        public_packages
+            .iter()
+            .map(|name| (*name, workspace.workspace.package.version.as_str()))
+            .collect()
+    } else {
+        architecture
+            .repositories
+            .values()
+            .flat_map(|repository| {
+                repository
+                    .packages
+                    .iter()
+                    .map(|package| (package.as_str(), repository.version.as_str()))
+            })
+            .collect::<BTreeMap<_, _>>()
+    };
 
     for member in &workspace.workspace.members {
         let manifest_path = workspace_root.join(member).join("Cargo.toml");
@@ -1450,6 +1472,32 @@ adr_required = false
             .expect_err("mismatched toolchain must fail");
         assert!(error.contains("channel must match"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn malformed_current_catalog_never_falls_back_to_frozen_allocation() {
+        let root = test_root("malformed_current_catalog");
+        fs::create_dir_all(root.join("contracts/crates")).unwrap();
+        fs::write(
+            root.join("contracts/crates/catalog.v2.toml"),
+            "invalid current input",
+        )
+        .unwrap();
+        assert!(super::public_package_names(&root, &architecture()).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn current_allocation_includes_shared_owners_and_rejects_private_packages() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+        let names = super::public_package_names(root, &architecture()).unwrap();
+        assert_eq!(names.len(), 21);
+        assert!(names.contains("radroots_domain") && names.contains("radroots_execution"));
+        assert!(!names.contains("radroots_nostrdb"));
     }
 
     #[test]

@@ -4,9 +4,11 @@ status = "approved_not_published"
 supersedes_without_mutation = "radroots.crates.release.v1"
 canonical_repository = "https://github.com/radrootslabs/lib"
 version = "0.1.0-alpha"
-public_package_count = 19
+public_package_count = 21
 publication_authorized = false
 public_packages = [
+  "radroots_domain",
+  "radroots_execution",
   "radroots_core",
   "radroots_identity",
   "radroots_blossom",

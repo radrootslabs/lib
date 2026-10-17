@@ -88,9 +88,10 @@ fn load(workspace_root: &Path) -> Result<(TargetMatrix, Vec<String>), String> {
         .map(|package| package.name)
         .collect::<Vec<_>>();
     packages.sort();
-    if packages.len() != 19 {
+    let expected = crate::catalog::public_packages(workspace_root)?;
+    if packages.iter().collect::<std::collections::BTreeSet<_>>() != expected.iter().collect() {
         return Err(format!(
-            "target qualification requires exactly 19 public packages, found {}",
+            "target qualification must match current public allocation, found {} packages",
             packages.len()
         ));
     }
@@ -213,7 +214,7 @@ mod tests {
                 ("macos", "aarch64-apple-darwin"),
             ]
         );
-        assert_eq!(packages.len(), 19);
+        assert_eq!(packages.len(), 21);
     }
 
     #[test]

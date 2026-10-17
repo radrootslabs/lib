@@ -63,9 +63,15 @@ fn feature_matrix(workspace_root: &Path) -> Result<Vec<CargoInvocation>, String>
         })
         .collect::<Vec<_>>();
     packages.sort_by(|left, right| left.name.cmp(&right.name));
-    if packages.len() != 19 {
+    let expected = crate::catalog::public_packages(workspace_root)?;
+    if packages
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        != expected.iter().map(String::as_str).collect()
+    {
         return Err(format!(
-            "library feature qualification requires exactly 19 public packages, found {}",
+            "library feature qualification must match current public allocation, found {} packages",
             packages.len()
         ));
     }

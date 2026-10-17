@@ -1,0 +1,137 @@
+pub mod radroots_domain
+#[non_exhaustive] pub enum radroots_domain::AmountError
+pub radroots_domain::AmountError::CoefficientOutOfRange
+pub radroots_domain::AmountError::InvalidFormat
+pub radroots_domain::AmountError::MustBePositive
+pub radroots_domain::AmountError::NegativeResult
+pub radroots_domain::AmountError::NonCanonical
+pub radroots_domain::AmountError::ScaleOutOfRange
+impl core::error::Error for radroots_domain::AmountError
+impl core::fmt::Display for radroots_domain::AmountError
+pub fn radroots_domain::AmountError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::IdentifierError
+pub radroots_domain::IdentifierError::InvalidEncoding
+pub radroots_domain::IdentifierError::InvalidLength
+impl core::error::Error for radroots_domain::IdentifierError
+impl core::fmt::Display for radroots_domain::IdentifierError
+pub fn radroots_domain::IdentifierError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::Decimal
+impl radroots_domain::Decimal
+pub const radroots_domain::Decimal::MAX: Self
+pub const radroots_domain::Decimal::MAX_COEFFICIENT: u64
+pub const radroots_domain::Decimal::MAX_ENCODED_LEN: usize
+pub const radroots_domain::Decimal::MAX_SCALE: u8
+pub const radroots_domain::Decimal::ONE: Self
+pub const radroots_domain::Decimal::ZERO: Self
+pub fn radroots_domain::Decimal::checked_add(self, Self) -> core::result::Result<Self, radroots_domain::AmountError>
+pub fn radroots_domain::Decimal::checked_sub(self, Self) -> core::result::Result<Self, radroots_domain::AmountError>
+pub const fn radroots_domain::Decimal::coefficient(self) -> u64
+pub const fn radroots_domain::Decimal::from_parts(u64, u8) -> core::result::Result<Self, radroots_domain::AmountError>
+pub const fn radroots_domain::Decimal::is_zero(self) -> bool
+pub const fn radroots_domain::Decimal::scale(self) -> u8
+impl core::cmp::Ord for radroots_domain::Decimal
+pub fn radroots_domain::Decimal::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialOrd for radroots_domain::Decimal
+pub fn radroots_domain::Decimal::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<radroots_domain::PositiveDecimal> for radroots_domain::Decimal
+pub fn radroots_domain::Decimal::from(radroots_domain::PositiveDecimal) -> Self
+impl core::convert::TryFrom<radroots_domain::Decimal> for radroots_domain::PositiveDecimal
+pub type radroots_domain::PositiveDecimal::Error = radroots_domain::AmountError
+pub fn radroots_domain::PositiveDecimal::try_from(radroots_domain::Decimal) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for radroots_domain::Decimal
+pub fn radroots_domain::Decimal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::Decimal
+pub type radroots_domain::Decimal::Err = radroots_domain::AmountError
+pub fn radroots_domain::Decimal::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::Decimal
+pub fn radroots_domain::Decimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Decimal
+pub fn radroots_domain::Decimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::ExecutorId(_)
+impl radroots_domain::ExecutorId
+pub const fn radroots_domain::ExecutorId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::ExecutorId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::ExecutorId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::ExecutorId
+pub fn radroots_domain::ExecutorId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::ExecutorId
+pub type radroots_domain::ExecutorId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::ExecutorId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::ExecutorId
+pub fn radroots_domain::ExecutorId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ExecutorId
+pub fn radroots_domain::ExecutorId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::OperationId(_)
+impl radroots_domain::OperationId
+pub const fn radroots_domain::OperationId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::OperationId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::OperationId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::OperationId
+pub fn radroots_domain::OperationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::OperationId
+pub type radroots_domain::OperationId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::OperationId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::OperationId
+pub fn radroots_domain::OperationId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::OperationId
+pub fn radroots_domain::OperationId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::OrderId(_)
+impl radroots_domain::OrderId
+pub const fn radroots_domain::OrderId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::OrderId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::OrderId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::OrderId
+pub fn radroots_domain::OrderId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::OrderId
+pub type radroots_domain::OrderId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::OrderId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::OrderId
+pub fn radroots_domain::OrderId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::OrderId
+pub fn radroots_domain::OrderId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::PositiveDecimal(_)
+impl radroots_domain::PositiveDecimal
+pub const fn radroots_domain::PositiveDecimal::amount(self) -> radroots_domain::Decimal
+pub const fn radroots_domain::PositiveDecimal::new(radroots_domain::Decimal) -> core::result::Result<Self, radroots_domain::AmountError>
+impl core::convert::From<radroots_domain::PositiveDecimal> for radroots_domain::Decimal
+pub fn radroots_domain::Decimal::from(radroots_domain::PositiveDecimal) -> Self
+impl core::convert::TryFrom<radroots_domain::Decimal> for radroots_domain::PositiveDecimal
+pub type radroots_domain::PositiveDecimal::Error = radroots_domain::AmountError
+pub fn radroots_domain::PositiveDecimal::try_from(radroots_domain::Decimal) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Display for radroots_domain::PositiveDecimal
+pub fn radroots_domain::PositiveDecimal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::PositiveDecimal
+pub type radroots_domain::PositiveDecimal::Err = radroots_domain::AmountError
+pub fn radroots_domain::PositiveDecimal::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::PositiveDecimal
+pub fn radroots_domain::PositiveDecimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::PositiveDecimal
+pub fn radroots_domain::PositiveDecimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::ThreadId(_)
+impl radroots_domain::ThreadId
+pub const fn radroots_domain::ThreadId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::ThreadId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::ThreadId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::ThreadId
+pub fn radroots_domain::ThreadId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::ThreadId
+pub type radroots_domain::ThreadId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::ThreadId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::ThreadId
+pub fn radroots_domain::ThreadId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ThreadId
+pub fn radroots_domain::ThreadId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::WorkspaceId(_)
+impl radroots_domain::WorkspaceId
+pub const fn radroots_domain::WorkspaceId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::WorkspaceId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::WorkspaceId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::WorkspaceId
+pub fn radroots_domain::WorkspaceId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::WorkspaceId
+pub type radroots_domain::WorkspaceId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::WorkspaceId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::WorkspaceId
+pub fn radroots_domain::WorkspaceId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::WorkspaceId
+pub fn radroots_domain::WorkspaceId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>

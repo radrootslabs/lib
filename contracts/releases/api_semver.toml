@@ -5,6 +5,8 @@ minimum_tool_version = "0.50.0"
 release_type = "major"
 feature_policy = "all"
 packages = [
+  "radroots_domain",
+  "radroots_execution",
   "radroots_blossom",
   "radroots_core",
   "radroots_event",
@@ -33,3 +35,11 @@ revision = "865378c0bdefc74fae2320e41ea5f5727d444cee"
 [[baseline_override]]
 package = "radroots"
 revision = "865378c0bdefc74fae2320e41ea5f5727d444cee"
+
+[[baseline_override]]
+package = "radroots_domain"
+revision = "52e2a15a90aa4f07f053930be4dda203a0f6631a"
+
+[[baseline_override]]
+package = "radroots_execution"
+revision = "52e2a15a90aa4f07f053930be4dda203a0f6631a"
