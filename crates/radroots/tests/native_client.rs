@@ -183,3 +183,75 @@ async fn cancelled_client_close_retains_actual_provider_and_writer_until_callbac
     let reopened = SqliteStorage::open(options).await.unwrap();
     reopened.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn ordinary_native_signer_scope_returns_real_full_identity_signature_facts() {
+    use radroots::signing::{ArtifactRole, OutcomeKind, SigningIntent};
+    use radroots_event_codec::authoring::AuthoredEventPlan;
+    use radroots_signing::{provider::ProviderCall, request::CancellationSignal};
+    fn checked_clock() -> Result<u64, radroots_signing::Error> {
+        Ok(1_700_000_000_001)
+    }
+    let root = tempfile::tempdir().unwrap();
+    let options = options(root.path());
+    let client = Client::open(NativeConfig::public_read(options.clone()))
+        .await
+        .unwrap();
+    let provider = Arc::new(
+        LocalSigner::with_clock(
+            parse_secret_key("0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            checked_clock,
+        )
+        .unwrap(),
+    );
+    let author = provider.public_key();
+    let weak = Arc::downgrade(&provider);
+    let callbacks = callbacks(options, true);
+    let scope = client
+        .attach_signer(SignerHandle::new(provider, callbacks))
+        .await
+        .unwrap();
+    let plan = AuthoredEventPlan::from_generic(
+        radroots::event::GenericEventDraft::new(
+            "radroots.social.geochat.v1",
+            20_000,
+            1_700_000_000,
+            vec![],
+            "synthetic native retained preimage",
+            author.to_hex(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let operation = radroots::OperationId::from_bytes([31; 32]);
+    let intent = SigningIntent::new(
+        operation,
+        [32; 32],
+        plan,
+        ArtifactRole::PublicEvent,
+        None,
+        ProviderCall::new(
+            author,
+            std::num::NonZeroU64::new(1_700_000_010_000).unwrap(),
+            CancellationSignal::new(),
+        ),
+    )
+    .unwrap();
+    let outcome = scope.sign_exact(intent).await;
+    assert_eq!(outcome.binding().operation_id(), operation);
+    let OutcomeKind::Obtained(artifact) = outcome.kind() else {
+        panic!("native signature unavailable: {outcome:?}");
+    };
+    artifact.with_json(|raw| {
+        let value = radroots_event::wire::Nip01EventWire::parse_json(raw).unwrap();
+        assert_eq!(value.pubkey, author.to_hex());
+        assert_eq!(value.content, "synthetic native retained preimage");
+    });
+    assert!(artifact.observed_at_unix_ms().is_some());
+    client.close().await.unwrap();
+    assert!(weak.upgrade().is_none());
+    // Owning authenticated bytes outlive released key/callback roots. This
+    // primitive fact alone does not claim a durable command or publication.
+    artifact.with_json(|raw| assert!(!raw.is_empty()));
+}

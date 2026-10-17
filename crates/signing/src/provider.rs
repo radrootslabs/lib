@@ -6,7 +6,7 @@
 //! record/rumor/event budgets. Obtained results remain owned by that executor.
 
 #[cfg(not(feature = "std"))]
-use alloc::string::String;
+use alloc::{boxed::Box, string::String};
 use core::{fmt, num::NonZeroU64};
 use radroots_identity::PublicKey;
 #[cfg(feature = "std")]
@@ -164,6 +164,7 @@ pub struct ProviderState {
     encryption: PrivateCryptoCapability,
     decryption: PrivateCryptoCapability,
     signing_replay: crate::recovery::ReplayCapability,
+    exact_issuance: Option<crate::recovery::ReplayCapability>,
 }
 impl ProviderState {
     /// Reports capabilities actually implemented by the observing provider.
@@ -178,6 +179,7 @@ impl ProviderState {
             encryption,
             decryption,
             signing_replay,
+            exact_issuance: None,
         }
     }
     /// Returns the observed participant key, independently of any hosted principal.
@@ -196,6 +198,22 @@ impl ProviderState {
     /// overrides retained uncertainty or permits blind signing reissue.
     pub const fn signing_replay(self) -> crate::recovery::ReplayCapability {
         self.signing_replay
+    }
+
+    /// Reports support for the exact-intent issuance contract separately from
+    /// the retained legacy signing API. Absence means unavailable.
+    pub const fn exact_issuance(self) -> Option<crate::recovery::ReplayCapability> {
+        self.exact_issuance
+    }
+
+    /// Records the actual provider's qualified exact-intent support. This
+    /// observation alone never authorizes replay or business execution.
+    pub const fn with_exact_issuance(
+        mut self,
+        replay: Option<crate::recovery::ReplayCapability>,
+    ) -> Self {
+        self.exact_issuance = replay;
+        self
     }
 }
 
@@ -223,6 +241,11 @@ impl ProviderCall {
     /// Returns the participant key frozen by the owning session.
     pub const fn identity(&self) -> PublicKey {
         self.identity
+    }
+
+    /// Returns the captured first-issue deadline without consulting a clock.
+    pub const fn deadline_unix_ms(&self) -> NonZeroU64 {
+        self.deadline_unix_ms
     }
     /// Validates admission before an effect; never discard an obtained result
     /// by repeating this check after the effect.
@@ -259,6 +282,21 @@ pub trait NonceSource: HostBound {
 /// thread guarantees; browser implementations may retain local UI/key handles.
 /// No method exposes a private key or implicitly publishes a message.
 pub trait ParticipantProvider: Signer {
+    /// Issues one exact captured intent. Unsupported adapters do not delegate
+    /// to the legacy method, which may discard already obtained results.
+    /// A result is not durable until the executor confirms its capture.
+    fn sign_exact(
+        &self,
+        intent: crate::issuance::SigningIntent,
+    ) -> BoxFuture<'_, crate::issuance::SigningOutcome> {
+        Box::pin(async move {
+            crate::issuance::SigningOutcome::not_dispatched(
+                intent.binding(),
+                ProviderError::CapabilityUnavailable,
+            )
+        })
+    }
+
     /// Observes the actual key and currently available methods without signing.
     fn provider_state(&self) -> BoxFuture<'_, Result<ProviderState, ProviderError>>;
     /// Encrypts private text using provider-owned custody and qualified entropy.

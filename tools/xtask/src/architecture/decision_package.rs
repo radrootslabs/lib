@@ -415,7 +415,7 @@ fn validate_packages(packages: &[Package]) -> Result<(), String> {
         ("identity", &[][..]),
         ("domain", &["identity"][..]),
         ("protocol", &["domain", "identity"][..]),
-        ("signing", &["identity", "protocol"][..]),
+        ("signing", &["domain", "identity", "protocol"][..]),
         ("storage", &["domain", "protocol"][..]),
         ("transport", &["protocol", "identity"][..]),
         (

@@ -561,3 +561,125 @@ fn checked_in_conformance_vectors_match_wire_behavior() {
         }
     }
 }
+
+#[test]
+fn exact_result_profile_accepts_escaped_keys_without_interpreting_string_delimiters() {
+    let value = valid_event_value("soil 🌱: { [ \" \\ \n", default_tags());
+    let fields = value
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(key, value)| {
+            let escaped = key
+                .chars()
+                .map(|c| format!("\\u{:04x}", c as u32))
+                .collect::<String>();
+            format!("\"{escaped}\" : {value}")
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let raw = format!(" \n{{ {fields} }} \t");
+    let parsed =
+        Nip01EventWire::parse_json_exact_with_limits(&raw, EventWireLimits::default()).unwrap();
+    assert_eq!(parsed.content, value["content"].as_str().unwrap());
+    assert_eq!(parsed.tags, default_tags());
+    assert!(parsed.extra.is_empty());
+    let limits = EventWireLimits {
+        max_raw_json_bytes: raw.len() - 1,
+        ..EventWireLimits::default()
+    };
+    assert!(matches!(
+        Nip01EventWire::parse_json_exact_with_limits(&raw, limits),
+        Err(EventWireError::RawJsonTooLarge { .. })
+    ));
+    let mut changed = value.clone();
+    changed["content"] = json!("different preimage");
+    assert!(
+        Nip01EventWire::parse_json_exact_with_limits(
+            &raw_json(&changed),
+            EventWireLimits::default()
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn exact_result_profile_refuses_all_duplicate_missing_and_unknown_root_fields() {
+    let value = valid_event_value("soil", default_tags());
+    let raw = raw_json(&value);
+    for key in [
+        "id",
+        "pubkey",
+        "created_at",
+        "kind",
+        "tags",
+        "content",
+        "sig",
+    ] {
+        for spelling in [
+            key.to_owned(),
+            key.chars()
+                .map(|c| format!("\\u{:04x}", c as u32))
+                .collect(),
+        ] {
+            let duplicate = format!("{{\"{spelling}\":{},{}", value[key], &raw[1..]);
+            assert!(
+                Nip01EventWire::parse_json_exact_with_limits(
+                    &duplicate,
+                    EventWireLimits::default()
+                )
+                .is_err(),
+                "duplicate {key}"
+            );
+        }
+        let mut missing = value.clone();
+        missing.as_object_mut().unwrap().remove(key);
+        assert!(
+            Nip01EventWire::parse_json_exact_with_limits(
+                &raw_json(&missing),
+                EventWireLimits::default()
+            )
+            .is_err(),
+            "missing {key}"
+        );
+    }
+    for key in ["extra".to_owned(), "unknown".repeat(20)] {
+        let extra = format!("{{\"{key}\":0,{}", &raw[1..]);
+        assert!(
+            Nip01EventWire::parse_json_exact_with_limits(&extra, EventWireLimits::default())
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn exact_result_profile_refuses_malformed_roots_and_nesting_before_semantic_decoding() {
+    let raw = valid_event_json("soil", default_tags());
+    for malformed in [
+        String::new(),
+        "[]".into(),
+        "}".into(),
+        "[{}]".into(),
+        format!("{raw}{raw}"),
+        format!("{raw}]"),
+        format!("{{\"\\q\":0,{}", &raw[1..]),
+        "{\"id".into(),
+        format!(
+            "{{\"content\":{}0{},{}",
+            "[".repeat(17),
+            "]".repeat(17),
+            &raw[1..]
+        ),
+    ] {
+        assert!(
+            Nip01EventWire::parse_json_exact_with_limits(&malformed, EventWireLimits::default())
+                .is_err()
+        );
+    }
+    let mut typed = valid_event_value("soil", default_tags());
+    typed["kind"] = json!({"nested": 1});
+    assert!(
+        Nip01EventWire::parse_json_exact_with_limits(&raw_json(&typed), EventWireLimits::default())
+            .is_err()
+    );
+}

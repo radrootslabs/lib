@@ -48,6 +48,9 @@ fn state(second: bool, encrypt: bool) -> ProviderState {
 struct Control {
     current: Mutex<ProviderState>,
     calls: AtomicUsize,
+    sign_calls: AtomicUsize,
+    sign_response: Mutex<Option<oneshot::Receiver<radroots_signing::issuance::SigningOutcome>>>,
+    sign_binding: Mutex<Option<radroots_signing::issuance::IntentBinding>>,
     response: Mutex<Option<oneshot::Receiver<()>>>,
     quiesces: AtomicUsize,
     quiesced: AtomicBool,
@@ -77,6 +80,30 @@ impl Signer for Provider {
 }
 
 impl ParticipantProvider for Provider {
+    fn sign_exact(
+        &self,
+        intent: radroots_signing::issuance::SigningIntent,
+    ) -> BoxFuture<'_, radroots_signing::issuance::SigningOutcome> {
+        use radroots_signing::issuance::SigningOutcome;
+        Box::pin(async move {
+            self.0.sign_calls.fetch_add(1, Ordering::SeqCst);
+            let binding = self
+                .0
+                .sign_binding
+                .lock()
+                .unwrap()
+                .unwrap_or(intent.binding());
+            let response = self.0.sign_response.lock().unwrap().take();
+            if let Some(response) = response {
+                response.await.unwrap_or_else(|_| {
+                    SigningOutcome::unknown(binding, ProviderError::ProviderFailure)
+                })
+            } else {
+                SigningOutcome::unknown(binding, ProviderError::ProviderFailure)
+            }
+        })
+    }
+
     fn provider_state(&self) -> BoxFuture<'_, Result<ProviderState, ProviderError>> {
         Box::pin(async move {
             self.0.calls.fetch_add(1, Ordering::SeqCst);
@@ -165,6 +192,9 @@ fn control() -> Shared<Control> {
     Shared::new(Control {
         current: Mutex::new(state(false, false)),
         calls: AtomicUsize::new(0),
+        sign_calls: AtomicUsize::new(0),
+        sign_response: Mutex::new(None),
+        sign_binding: Mutex::new(None),
         response: Mutex::new(None),
         quiesces: AtomicUsize::new(0),
         quiesced: AtomicBool::new(false),
@@ -371,6 +401,12 @@ fn browser_scope_accepts_rc_local_provider_and_callbacks() {
         Shared::new(Callbacks(control)),
     ));
     assert_eq!(block_on(session.observe()).unwrap().identity(), key(false));
+    assert!(matches!(
+        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        radroots_signing::issuance::OutcomeKind::NotDispatched(
+            ProviderError::CapabilityUnavailable
+        )
+    ));
     block_on(session.close()).unwrap();
     assert_eq!(session.state(), SessionState::Closed);
 }
@@ -417,4 +453,153 @@ fn browser_client_composes_local_host_and_retained_callback_scope() {
     block_on(client.start()).unwrap();
     block_on(client.close()).unwrap();
     assert_eq!(observations.get(), 5);
+}
+
+fn exact_intent(second: bool, operation: u8) -> radroots_signing::issuance::SigningIntent {
+    use radroots_signing::issuance::{ArtifactRole, SigningIntent};
+    let plan = radroots_event_codec::authoring::AuthoredEventPlan::from_generic(
+        radroots_event::GenericEventDraft::new(
+            "radroots.social.geochat.v1",
+            20_000,
+            1_700_000_000,
+            vec![],
+            "synthetic captured scope",
+            key(second).to_hex(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    SigningIntent::new(
+        radroots_domain::OperationId::from_bytes([operation; 32]),
+        [9; 32],
+        plan,
+        ArtifactRole::PublicEvent,
+        None,
+        ProviderCall::new(
+            key(second),
+            core::num::NonZeroU64::new(1_700_000_010_000).unwrap(),
+            radroots_signing::request::CancellationSignal::new(),
+        ),
+    )
+    .unwrap()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn exact_issuance_requires_successful_observation_actual_support_and_the_frozen_key() {
+    use radroots_signing::issuance::OutcomeKind;
+    let Fixture {
+        session, control, ..
+    } = scope();
+    assert!(matches!(
+        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        OutcomeKind::NotDispatched(ProviderError::CapabilityUnavailable)
+    ));
+    block_on(session.observe()).unwrap();
+    assert!(matches!(
+        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        OutcomeKind::NotDispatched(ProviderError::CapabilityUnavailable)
+    ));
+    assert_eq!(control.sign_calls.load(Ordering::SeqCst), 0);
+    *control.current.lock().unwrap() =
+        state(false, false).with_exact_issuance(Some(ReplayCapability::NonReplayable));
+    block_on(session.observe()).unwrap();
+    assert!(matches!(
+        block_on(session.sign_exact(exact_intent(true, 1))).kind(),
+        OutcomeKind::NotDispatched(ProviderError::IdentityChanged)
+    ));
+    assert!(!session.identity_changed());
+    assert!(matches!(
+        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        OutcomeKind::Unknown(_)
+    ));
+    assert_eq!(control.sign_calls.load(Ordering::SeqCst), 1);
+    *control.current.lock().unwrap() =
+        state(true, false).with_exact_issuance(Some(ReplayCapability::NonReplayable));
+    assert_eq!(
+        block_on(session.observe()),
+        Err(ProviderError::IdentityChanged)
+    );
+    assert!(matches!(
+        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        OutcomeKind::NotDispatched(ProviderError::IdentityChanged)
+    ));
+    assert_eq!(control.sign_calls.load(Ordering::SeqCst), 1);
+    block_on(session.close()).unwrap();
+
+    let Fixture {
+        session, control, ..
+    } = scope();
+    let (send, receive) = oneshot::channel();
+    drop(send);
+    *control.response.lock().unwrap() = Some(receive);
+    assert!(block_on(session.observe()).is_err());
+    assert!(matches!(
+        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        OutcomeKind::NotDispatched(ProviderError::CapabilityUnavailable)
+    ));
+    assert_eq!(control.sign_calls.load(Ordering::SeqCst), 0);
+    block_on(session.close()).unwrap();
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn pending_exact_issuance_retains_callbacks_until_its_bound_outcome_is_observed() {
+    use radroots_signing::issuance::{OutcomeKind, SigningOutcome};
+    let Fixture {
+        session,
+        control,
+        provider,
+        callbacks,
+    } = scope();
+    *control.current.lock().unwrap() =
+        state(false, false).with_exact_issuance(Some(ReplayCapability::NonReplayable));
+    block_on(session.observe()).unwrap();
+    let input = exact_intent(false, 1);
+    let binding = input.binding();
+    let (send, receive) = oneshot::channel();
+    *control.sign_response.lock().unwrap() = Some(receive);
+    let mut issue = Box::pin(session.sign_exact(input));
+    let mut cx = Context::from_waker(noop_waker_ref());
+    assert!(issue.as_mut().poll(&mut cx).is_pending());
+    let mut close = Box::pin(session.close());
+    assert!(close.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(session.state(), SessionState::Closing);
+    assert_eq!(control.close_attempts.load(Ordering::SeqCst), 0);
+    assert!(provider.upgrade().is_some() && callbacks.upgrade().is_some());
+    send.send(SigningOutcome::unknown(
+        binding,
+        ProviderError::ProviderFailure,
+    ))
+    .unwrap();
+    let Poll::Ready(outcome) = issue.as_mut().poll(&mut cx) else {
+        panic!("outcome not received");
+    };
+    assert_eq!(outcome.binding(), binding);
+    assert!(matches!(outcome.kind(), OutcomeKind::Unknown(_)));
+    assert!(matches!(close.as_mut().poll(&mut cx), Poll::Ready(Ok(()))));
+    assert!(provider.upgrade().is_none() && callbacks.upgrade().is_none());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn exact_callback_binding_cannot_claim_another_operations_result() {
+    use radroots_signing::issuance::{OutcomeKind, RejectionReason};
+    let Fixture {
+        session, control, ..
+    } = scope();
+    *control.current.lock().unwrap() =
+        state(false, false).with_exact_issuance(Some(ReplayCapability::NonReplayable));
+    block_on(session.observe()).unwrap();
+    *control.sign_binding.lock().unwrap() = Some(exact_intent(false, 2).binding());
+    let input = exact_intent(false, 1);
+    let expected = input.binding();
+    let outcome = block_on(session.sign_exact(input));
+    assert_eq!(outcome.binding(), expected);
+    let OutcomeKind::Rejected(rejected) = outcome.kind() else {
+        panic!("wrong binding promoted");
+    };
+    assert_eq!(rejected.reason(), RejectionReason::BindingMismatch);
+    assert!(rejected.fingerprint().is_none());
+    block_on(session.close()).unwrap();
 }

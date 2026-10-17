@@ -2,6 +2,36 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-052"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete approved shared SDK refactor, necessary breaking changes, verified source commits and ordinary master publication."
+affected_steps = ["040", "050", "060", "070", "110", "120", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_signing", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_nostr"]
+source_evidence = [
+  "The local adapter signs before reading a fallible completion clock and rechecking expiry/cancellation. The authored default delegates to that path, so already obtained valid signatures can be discarded.",
+  "Legacy signing operation/artifact identities are sixteen bytes and authored evidence requires a positive observation time. Neither can represent the approved new operation identity and nullable observation contract by truncation or an invented timestamp.",
+  "The approved domain owns the implemented thirty-two-byte OperationId. The specification assigns signing ports downward domain/protocol dependencies; the prospective signing edge list omitted the direct domain edge needed to use that canonical type.",
+]
+replacement_action = "Before the new durable native command consumes a signer, implement an exact-intent issuance boundary using the canonical domain operation identity, immutable command/plan/purpose/recipient/deadline binding, bounded complete-event inputs and authenticated obtained bytes with optional observation time. Qualify the concrete local adapter with real signatures, failed completion clocks, late/cancelled results and malformed output. Unsupported providers explicitly report unavailable without delegating to the lossy legacy method. Update the prospective direct domain edge and owning guards. Preserve existing source/history while requiring every successor worker/provider to adopt the new contract; do not claim the retained legacy consumers corrected by this primitive alone."
+verification = [
+  "Validate this prospective deviation and machine decision before implementation. Prove exact unsigned fields, operation/digest/recipient binding, complete-event byte limits before effects, explicit unsupported behavior and redacted diagnostics.",
+  "Execute actual local signing and independent signature verification when the completion clock fails, expires or observes cancellation. Preserve genuine unknown/tampered outcomes without successful business or durable-admission claims.",
+  "Run affected native source checks/tests/docs/strict lint, native/WASM callers, generated API freshness, unchanged actual coverage gates and owning architecture/dependency/contracts. Preserve existing concrete-provider test purposes and all final native/browser/binding/durable requirements.",
+]
+unresolved_risk = "A qualified signing primitive does not authenticate a workspace, commit T0/T1/S/T2/D, retain work across process exit, qualify remote/platform providers or migrate retained legacy callers. Those remain required before complete known-kind and downstream acceptance."
+normative_architecture_change = true
+adr_required = true
+closure_evidence = [
+  "The canonical full-width operation and captured command/preimage/role/recipient/deadline binding execute with exact event-size preflight and real Schnorr verification. Original authenticated bytes survive missing, late, zero or cancelled completion observation; unsupported providers never invoke the legacy signer.",
+  "Exact seven-field ingress rejects duplicate and escaped duplicate keys, unsupported fields, malformed structure and excessive nesting before semantic decoding. Existing general wire behavior and retained caller migration obligations are preserved.",
+  "Standalone execution, actual native SQLite/LocalSigner callers, native source/tests/docs/strict lint, Rc-local WASM and no_std checks pass. The original unused-import lint and standalone missing alloc::Box failures remain preserved with their narrow repairs.",
+  "The original Signing branch gate failure remains preserved. Every one of the same six pure exact-field/ID comparisons is retained in a reordered rejection; actual changed authenticated fields, frozen identity/time, preflight and byte budgets execute. Affected native/portable callers and strict lint are requalified; the unchanged upstream Event measurement is reused only for its unchanged owner scope.",
+  "Owning generated APIs, architecture/catalog/contracts/API/dependency boundaries and actual unchanged ninety-percent coverage gates pass. This closes the obtained-signing primitive only; authenticated workspace/context, complete receipts, durable T0/T1/S/T2/D, owned workers, browser/platform providers, bindings, retained legacy callers and final consumer acceptance remain required.",
+]
+
+
+[[deviation]]
 id = "RCRV1-DEV-051"
 date = "2026-10-17"
 status = "closed"

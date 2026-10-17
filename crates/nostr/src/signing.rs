@@ -21,6 +21,7 @@ use radroots_signing::{
 
 use crate::{Error as NostrError, key::SecretKey};
 
+mod issuance;
 mod private;
 pub use private::OsNonceSource;
 

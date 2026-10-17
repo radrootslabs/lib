@@ -266,6 +266,27 @@ impl Nip01EventWire {
         Ok(wire)
     }
 
+    /// Parses the exact seven-field NIP-01 event profile. Root keys, including
+    /// escaped spellings, must occur exactly once; nesting is bounded to 16
+    /// before the semantic JSON decoder allocates values. Unknown fields are
+    /// unsupported by this exact signing-result profile. Historical/general
+    /// decoding retains its separately governed behavior.
+    pub fn parse_json_exact_with_limits(
+        raw_json: &str,
+        limits: EventWireLimits,
+    ) -> Result<Self, EventWireError> {
+        if raw_json.len() > limits.max_raw_json_bytes {
+            return Err(EventWireError::RawJsonTooLarge {
+                max: limits.max_raw_json_bytes,
+                actual: raw_json.len(),
+            });
+        }
+        if !exact_event_json_shape(raw_json) {
+            return Err(EventWireError::InvalidField("exact_event_profile"));
+        }
+        Self::parse_json_with_limits(raw_json, limits)
+    }
+
     /// Parses and structurally validates an event under explicit limits
     /// without verifying its ID.
     pub fn parse_json_unverified_with_limits(
@@ -653,6 +674,83 @@ fn push_unicode_escape(target: &mut String, character: char) {
     target.push_str("\\u00");
     target.push(HEX[((value >> 4) & 0x0f) as usize] as char);
     target.push(HEX[(value & 0x0f) as usize] as char);
+}
+
+// This policy guard does not interpret event values. The existing JSON and
+// event validators remain authoritative for syntax, types, budgets and ID.
+fn exact_event_json_shape(raw: &str) -> bool {
+    let (mut depth, mut seen) = (0usize, 0u8);
+    let (mut in_string, mut escaped, mut expect_key, mut root_key) = (false, false, false, false);
+    let mut start = 0usize;
+    for (index, byte) in raw.bytes().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match byte {
+                b'\\' => escaped = true,
+                b'"' => {
+                    in_string = false;
+                    if root_key {
+                        // Every supported ASCII key has at most ten characters;
+                        // even its fully escaped spelling fits this bound.
+                        if index - start + 1 > 64 {
+                            return false;
+                        }
+                        let Ok(key) = serde_json::from_str::<String>(&raw[start..=index]) else {
+                            return false;
+                        };
+                        let bit = match key.as_str() {
+                            "id" => 1,
+                            "pubkey" => 2,
+                            "created_at" => 4,
+                            "kind" => 8,
+                            "tags" => 16,
+                            "content" => 32,
+                            "sig" => 64,
+                            _ => return false,
+                        };
+                        if seen & bit != 0 {
+                            return false;
+                        }
+                        seen |= bit;
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+        match byte {
+            b'"' => {
+                in_string = true;
+                start = index;
+                root_key = depth == 1 && expect_key;
+            }
+            b'{' | b'[' => {
+                if depth == 0 {
+                    if byte != b'{' || seen != 0 {
+                        return false;
+                    }
+                    expect_key = true;
+                }
+                depth += 1;
+                if depth > 16 {
+                    return false;
+                }
+            }
+            b'}' | b']' => {
+                let Some(next) = depth.checked_sub(1) else {
+                    return false;
+                };
+                depth = next;
+            }
+            b':' if depth == 1 => expect_key = false,
+            b',' if depth == 1 => expect_key = true,
+            _ => {}
+        }
+    }
+    !in_string && depth == 0 && seen == 127
 }
 
 #[cfg(test)]

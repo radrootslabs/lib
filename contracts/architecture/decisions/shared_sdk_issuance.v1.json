@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots.shared_sdk.issuance.v1",
+  "state": "approved_target_implementation_pending",
+  "owning_package": "radroots_signing",
+  "concrete_native_provider": "radroots_nostr",
+  "operation_identity": "Use radroots_domain::OperationId directly; never truncate or fabricate a legacy sixteen-byte identity",
+  "direct_domain_edge": "Signing ports consume canonical domain values as allowed by the approved specification; no new package owner or semantic engine",
+  "intent": [
+    "operation_id",
+    "command_digest",
+    "exact authored preimage and event_id",
+    "purpose",
+    "recipient",
+    "original first-issue deadline",
+    "frozen signer identity"
+  ],
+  "construction_authority": "Validated intent values are neither an authenticated command context nor durable admission",
+  "event_max_bytes": 65536,
+  "profile_limits": "Executor applies tighter chat, record and rumor limits before constructing this generic event boundary",
+  "before_effect": "Check actual signer identity, bounded exact fields, capabilities, captured deadline and cancellation before invoking cryptography",
+  "after_effect": "Verify and preserve obtained authenticated bytes regardless of later clock failure, expiry or cancellation; missing observation is explicit null",
+  "malformed_output": "Bounded tampering classification and scoped forensic digest; never authenticated business status",
+  "unsupported_provider": "Explicitly unavailable with no legacy signing fallback",
+  "replay": "Provider observation never overrides retained uncertainty; successor execution uses the qualified exact captured-intent contract",
+  "durability": "Only actual T0/T1/S/T2/D store execution and owned workers establish durable behavior",
+  "remaining": [
+    "Protected authenticated workspace and complete command context",
+    "Complete operation receipts",
+    "Actual durable native listing/chat and fault recovery",
+    "Remote/platform/browser provider qualification",
+    "All retained caller migration, bindings and final acceptance"
+  ],
+  "exact_result_profile": {
+    "fields": [
+      "id",
+      "pubkey",
+      "created_at",
+      "kind",
+      "tags",
+      "content",
+      "sig"
+    ],
+    "root_keys": "exactly once, including escaped spellings",
+    "unknown_fields": "unsupported",
+    "json_depth": 16,
+    "semantic_validation": "existing bounded NIP-01 decoder and cryptographic verification"
+  }
+}

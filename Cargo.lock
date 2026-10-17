@@ -3044,6 +3044,7 @@ dependencies = [
  "radroots_core",
  "radroots_domain",
  "radroots_event",
+ "radroots_event_codec",
  "radroots_execution",
  "radroots_identity",
  "radroots_nostr",
@@ -3165,6 +3166,8 @@ version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "radroots_domain",
+ "radroots_event",
+ "radroots_event_codec",
  "radroots_identity",
  "radroots_signing",
 ]
@@ -3521,6 +3524,7 @@ dependencies = [
  "hex",
  "nostr 0.44.7",
  "radroots_blossom",
+ "radroots_domain",
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",

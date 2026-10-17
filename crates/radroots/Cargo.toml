@@ -62,6 +62,7 @@ full = ["native", "radroots_sdk/full"]
 
 [dev-dependencies]
 futures = { workspace = true }
+radroots_event_codec = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, features = ["signing"] }
 serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }

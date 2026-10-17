@@ -228,3 +228,30 @@ core, and `serde` is supported independently of `std`.
 Applications that only need ordinary Radroots operations should normally use
 `radroots` or `radroots_sdk`; implement this package directly when providing a
 new signer adapter or advanced host composition.
+
+## Exact issuance and obtained results
+
+`issuance::SigningIntent` binds the canonical 256-bit domain operation ID,
+command digest, exact authored preimage, role/recipient and captured deadline.
+Its generic complete-event limit is 64 KiB, including escaped content, tags,
+keys and signature. Executor chat/record/rumor limits remain tighter. Values and
+bindings are neither authenticated command contexts nor durable admission.
+
+`ParticipantProvider::sign_exact` has no fallback to the legacy signer method.
+An unsupported provider reports unavailable. `ProviderState::exact_issuance`
+is observed separately from legacy replay metadata. The concrete local adapter
+reports non-replayable exact issuance; no durable retrieval or safe uncertain
+reissue is inferred from custody of the key or a stable event ID.
+
+`SigningOutcome` binds every classification to the original intent. Obtained
+bytes are verified against every signed field and signature, own their original
+representation, and carry optional observation time. A failed, expired or
+cancelled completion observation cannot discard valid bytes. Rejected output
+has fixed forensic metadata; prefix digests report their actual coverage. No
+classification claims that T0/T1/S/T2/D ran, and rejection is not proof that
+issuance never happened. The executor owns polling and durable capture through
+its safe journal boundary; dropping an observer cannot erase that responsibility.
+
+The legacy request/evidence API retains its existing callers while the
+successor workers and providers migrate. Its sixteen-byte identities and
+mandatory observation clock do not qualify the new execution contract.

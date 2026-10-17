@@ -145,6 +145,65 @@ pub fn radroots_signing::identity::SigningOperationId::new([u8; 16]) -> core::re
 pub fn radroots_signing::identity::SigningOperationId::to_hex(self) -> alloc::string::String
 impl core::fmt::Debug for radroots_signing::identity::SigningOperationId
 pub fn radroots_signing::identity::SigningOperationId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_signing::issuance
+#[non_exhaustive] pub enum radroots_signing::issuance::ArtifactRole
+pub radroots_signing::issuance::ArtifactRole::BusinessSeal
+pub radroots_signing::issuance::ArtifactRole::GiftWrap
+pub radroots_signing::issuance::ArtifactRole::PublicEvent
+#[non_exhaustive] pub enum radroots_signing::issuance::OutcomeKind
+pub radroots_signing::issuance::OutcomeKind::NotDispatched(radroots_signing::provider::ProviderError)
+pub radroots_signing::issuance::OutcomeKind::Obtained(radroots_signing::issuance::SignedArtifact)
+pub radroots_signing::issuance::OutcomeKind::Rejected(radroots_signing::issuance::RejectedArtifact)
+pub radroots_signing::issuance::OutcomeKind::Unknown(radroots_signing::provider::ProviderError)
+#[non_exhaustive] pub enum radroots_signing::issuance::RejectionReason
+pub radroots_signing::issuance::RejectionReason::BindingMismatch
+pub radroots_signing::issuance::RejectionReason::InvalidArtifact
+pub radroots_signing::issuance::RejectionReason::InvalidSignature
+pub radroots_signing::issuance::RejectionReason::TooLarge
+pub struct radroots_signing::issuance::ArtifactFingerprint
+impl radroots_signing::issuance::ArtifactFingerprint
+pub const fn radroots_signing::issuance::ArtifactFingerprint::covered_bytes(self) -> usize
+pub const fn radroots_signing::issuance::ArtifactFingerprint::sha256(&self) -> &[u8; 32]
+pub const fn radroots_signing::issuance::ArtifactFingerprint::total_bytes(self) -> usize
+pub struct radroots_signing::issuance::IntentBinding
+impl radroots_signing::issuance::IntentBinding
+pub const fn radroots_signing::issuance::IntentBinding::command_digest(&self) -> &[u8; 32]
+pub const fn radroots_signing::issuance::IntentBinding::digest(&self) -> &[u8; 32]
+pub const fn radroots_signing::issuance::IntentBinding::operation_id(self) -> radroots_domain::identifier::OperationId
+pub struct radroots_signing::issuance::RejectedArtifact
+impl radroots_signing::issuance::RejectedArtifact
+pub const fn radroots_signing::issuance::RejectedArtifact::fingerprint(self) -> core::option::Option<radroots_signing::issuance::ArtifactFingerprint>
+pub const fn radroots_signing::issuance::RejectedArtifact::reason(self) -> radroots_signing::issuance::RejectionReason
+pub struct radroots_signing::issuance::SignedArtifact
+impl radroots_signing::issuance::SignedArtifact
+pub const fn radroots_signing::issuance::SignedArtifact::event_id(&self) -> radroots_event::id::EventId
+pub const fn radroots_signing::issuance::SignedArtifact::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
+pub fn radroots_signing::issuance::SignedArtifact::with_json<T>(&self, impl core::ops::function::FnOnce(&str) -> T) -> T
+impl core::fmt::Debug for radroots_signing::issuance::SignedArtifact
+pub fn radroots_signing::issuance::SignedArtifact::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_signing::issuance::SigningIntent
+impl radroots_signing::issuance::SigningIntent
+pub const fn radroots_signing::issuance::SigningIntent::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_signing::issuance::SigningIntent::binding(&self) -> radroots_signing::issuance::IntentBinding
+pub fn radroots_signing::issuance::SigningIntent::check_before_effect(&self, radroots_identity::key::PublicKey, u64) -> core::result::Result<(), radroots_signing::provider::ProviderError>
+pub fn radroots_signing::issuance::SigningIntent::new(radroots_domain::identifier::OperationId, [u8; 32], radroots_event_codec::authoring::AuthoredEventPlan, radroots_signing::issuance::ArtifactRole, core::option::Option<radroots_identity::key::PublicKey>, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+pub const fn radroots_signing::issuance::SigningIntent::recipient(&self) -> core::option::Option<radroots_identity::key::PublicKey>
+pub const fn radroots_signing::issuance::SigningIntent::role(&self) -> radroots_signing::issuance::ArtifactRole
+pub const fn radroots_signing::issuance::SigningIntent::signed_json_bytes(&self) -> usize
+pub fn radroots_signing::issuance::SigningIntent::with_plan<T>(&self, impl core::ops::function::FnOnce(&radroots_event_codec::authoring::AuthoredEventPlan) -> T) -> T
+impl core::fmt::Debug for radroots_signing::issuance::SigningIntent
+pub fn radroots_signing::issuance::SigningIntent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_signing::issuance::SigningOutcome
+impl radroots_signing::issuance::SigningOutcome
+pub const fn radroots_signing::issuance::SigningOutcome::binding(&self) -> radroots_signing::issuance::IntentBinding
+pub fn radroots_signing::issuance::SigningOutcome::capture(&radroots_signing::issuance::SigningIntent, alloc::string::String, core::option::Option<core::num::nonzero::NonZeroU64>) -> Self
+pub fn radroots_signing::issuance::SigningOutcome::enforce_binding(self, radroots_signing::issuance::IntentBinding) -> Self
+pub fn radroots_signing::issuance::SigningOutcome::into_parts(self) -> (radroots_signing::issuance::IntentBinding, radroots_signing::issuance::OutcomeKind)
+pub const fn radroots_signing::issuance::SigningOutcome::kind(&self) -> &radroots_signing::issuance::OutcomeKind
+pub const fn radroots_signing::issuance::SigningOutcome::not_dispatched(radroots_signing::issuance::IntentBinding, radroots_signing::provider::ProviderError) -> Self
+pub const fn radroots_signing::issuance::SigningOutcome::unknown(radroots_signing::issuance::IntentBinding, radroots_signing::provider::ProviderError) -> Self
+pub const radroots_signing::issuance::MAX_EVENT_UNIX_SECONDS: u64
+pub const radroots_signing::issuance::SIGNED_EVENT_MAX_BYTES: usize
 pub mod radroots_signing::provider
 pub enum radroots_signing::provider::PrivateCryptoCapability
 pub radroots_signing::provider::PrivateCryptoCapability::Nip44V2
@@ -180,15 +239,18 @@ pub fn radroots_signing::provider::PrivateText::fmt(&self, &mut core::fmt::Forma
 pub struct radroots_signing::provider::ProviderCall
 impl radroots_signing::provider::ProviderCall
 pub fn radroots_signing::provider::ProviderCall::check_before_effect(&self, radroots_identity::key::PublicKey, u64) -> core::result::Result<(), radroots_signing::provider::ProviderError>
+pub const fn radroots_signing::provider::ProviderCall::deadline_unix_ms(&self) -> core::num::nonzero::NonZeroU64
 pub const fn radroots_signing::provider::ProviderCall::identity(&self) -> radroots_identity::key::PublicKey
 pub const fn radroots_signing::provider::ProviderCall::new(radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64, radroots_signing::request::CancellationSignal) -> Self
 pub struct radroots_signing::provider::ProviderState
 impl radroots_signing::provider::ProviderState
 pub const fn radroots_signing::provider::ProviderState::decryption(self) -> radroots_signing::provider::PrivateCryptoCapability
 pub const fn radroots_signing::provider::ProviderState::encryption(self) -> radroots_signing::provider::PrivateCryptoCapability
+pub const fn radroots_signing::provider::ProviderState::exact_issuance(self) -> core::option::Option<radroots_signing::recovery::ReplayCapability>
 pub const fn radroots_signing::provider::ProviderState::identity(self) -> radroots_identity::key::PublicKey
 pub const fn radroots_signing::provider::ProviderState::new(radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::recovery::ReplayCapability) -> Self
 pub const fn radroots_signing::provider::ProviderState::signing_replay(self) -> radroots_signing::recovery::ReplayCapability
+pub const fn radroots_signing::provider::ProviderState::with_exact_issuance(self, core::option::Option<radroots_signing::recovery::ReplayCapability>) -> Self
 pub struct radroots_signing::provider::SignerHandle
 impl radroots_signing::provider::SignerHandle
 pub fn radroots_signing::provider::SignerHandle::into_parts(self) -> (radroots_signing::host::Shared<dyn radroots_signing::provider::ParticipantProvider>, radroots_signing::host::Shared<dyn radroots_signing::provider::SignerCallbacks>)
@@ -200,6 +262,7 @@ pub trait radroots_signing::provider::ParticipantProvider: radroots_signing::sig
 pub fn radroots_signing::provider::ParticipantProvider::decrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCiphertext) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateText, radroots_signing::provider::ProviderError>>
 pub fn radroots_signing::provider::ParticipantProvider::encrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateText) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateCiphertext, radroots_signing::provider::ProviderError>>
 pub fn radroots_signing::provider::ParticipantProvider::provider_state(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>>
+pub fn radroots_signing::provider::ParticipantProvider::sign_exact(&self, radroots_signing::issuance::SigningIntent) -> radroots_signing::signer::BoxFuture<'_, radroots_signing::issuance::SigningOutcome>
 pub trait radroots_signing::provider::SignerCallbacks: radroots_signing::host::HostBound
 pub fn radroots_signing::provider::SignerCallbacks::close(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<(), radroots_signing::provider::ProviderError>>
 pub fn radroots_signing::provider::SignerCallbacks::quiesce(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<(), radroots_signing::provider::ProviderError>>

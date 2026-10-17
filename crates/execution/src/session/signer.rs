@@ -122,6 +122,40 @@ impl Clone for SignerSession {
 }
 
 impl SignerSession {
+    /// Issues only through an already observed, live exact-intent provider.
+    /// The executor must retain its own work permit through durable capture;
+    /// this scoped future owns resources but supplies no admission receipt.
+    pub async fn sign_exact(
+        &self,
+        intent: radroots_signing::issuance::SigningIntent,
+    ) -> radroots_signing::issuance::SigningOutcome {
+        use radroots_signing::issuance::SigningOutcome;
+        let binding = intent.binding();
+        let Ok(_permit) = self.session.admit() else {
+            return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
+        };
+        if self.identity_changed() {
+            return SigningOutcome::not_dispatched(binding, ProviderError::IdentityChanged);
+        }
+        let Some(observed) = self.observed() else {
+            return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
+        };
+        if observed.identity() != intent.author() {
+            return SigningOutcome::not_dispatched(binding, ProviderError::IdentityChanged);
+        }
+        if observed.exact_issuance().is_none() {
+            return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
+        }
+        let Some(provider) = self.resources.retain_binding() else {
+            return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
+        };
+        provider
+            .provider
+            .sign_exact(intent)
+            .await
+            .enforce_binding(binding)
+    }
+
     /// Owns the handle without invoking it. Observations serialize through a
     /// single admitted resource permit; excess concurrent observations refuse.
     pub fn new(handle: SignerHandle) -> Self {

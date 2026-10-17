@@ -131,6 +131,7 @@
       "package": "radroots_signing",
       "directory": "crates/signing",
       "dependencies": [
+        "domain",
         "identity",
         "protocol"
       ],
