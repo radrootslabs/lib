@@ -3154,6 +3154,7 @@ dependencies = [
 name = "radroots_execution"
 version = "0.1.0-alpha"
 dependencies = [
+ "futures",
  "radroots_domain",
 ]
 

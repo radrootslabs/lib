@@ -6,6 +6,12 @@
 mod diagnostic;
 mod error;
 
+#[cfg(feature = "session")]
+extern crate std;
+
+#[cfg(feature = "session")]
+pub mod session;
+
 pub use diagnostic::{Detail, Field, Reason};
 pub use error::{Admission, Code, Error, InvalidErrorContext, OperationContext, RetryClass};
 

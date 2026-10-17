@@ -191,6 +191,16 @@ pub struct Error {
 }
 
 impl Error {
+    #[cfg(feature = "session")]
+    pub(crate) const fn session_unavailable(reason: crate::Reason) -> Self {
+        Self {
+            code: Code::CapabilityUnavailable,
+            context: OperationContext::proposed(None),
+            retry: RetryClass::Never,
+            detail: Some(Detail::new(crate::Field::Operation, reason)),
+        }
+    }
+
     /// Validates the relationship between the outcome, durable identity and
     /// retry policy. Safe same-operation continuation never means blind reissue.
     pub const fn new(

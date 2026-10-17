@@ -1,0 +1,256 @@
+//! Shared session admission and resumable resource shutdown.
+//!
+//! This module creates no runtime or detached task. The executor, rather than a
+//! caller's observation future, retains each work permit until its safe boundary.
+//! A permit is resource ownership, never proof of durable command admission.
+
+mod host;
+
+pub use host::{HostBound, HostFuture, SessionHost};
+
+use core::{
+    future::poll_fn,
+    num::NonZeroU16,
+    task::{Poll, Waker},
+};
+use futures::lock::Mutex as AsyncMutex;
+use std::sync::{Mutex, MutexGuard};
+
+use crate::{Error, Reason, Result};
+use host::Shared;
+
+/// Session resource state, independent of durable operation state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionState {
+    /// Resources are owned but workers have not started.
+    Ready,
+    /// Worker startup is pending or must be resumed.
+    Starting,
+    /// Startup succeeded and new work may be admitted within the fixed limit.
+    Running,
+    /// Admission is permanently closed and shutdown must be awaited or resumed.
+    Closing,
+    /// All resource shutdown hooks completed successfully.
+    Closed,
+}
+
+#[derive(Clone, Copy)]
+enum CloseStage {
+    Quiesce,
+    Drain,
+    Disconnect,
+    Callbacks,
+    Storage,
+    Complete,
+}
+
+struct Gate {
+    state: SessionState,
+    active: u16,
+    drained: Option<Waker>,
+    starting: Option<Waker>,
+}
+
+struct Inner<H> {
+    host: H,
+    limit: NonZeroU16,
+    gate: Mutex<Gate>,
+    control: AsyncMutex<CloseStage>,
+}
+
+impl<H> Inner<H> {
+    fn gate(&self) -> MutexGuard<'_, Gate> {
+        // No user code or await runs while holding the gate. Recovery retains
+        // the closed-admission state if an observer panics during unwinding.
+        self.gate
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+/// Cloneable ownership of one coherent session. Native handles are Send/Sync;
+/// browser handles use Rc and cannot cross their owning thread.
+pub struct Session<H: SessionHost> {
+    inner: Shared<Inner<H>>,
+}
+
+impl<H: SessionHost> Clone for Session<H> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<H: SessionHost> Session<H> {
+    /// Takes ownership of already constructed resources without starting work.
+    /// The explicit limit bounds concurrent owned work; it cannot be enlarged.
+    pub fn new(host: H, maximum_in_flight: NonZeroU16) -> Self {
+        Self {
+            inner: Shared::new(Inner {
+                host,
+                limit: maximum_in_flight,
+                gate: Mutex::new(Gate {
+                    state: SessionState::Ready,
+                    active: 0,
+                    drained: None,
+                    starting: None,
+                }),
+                control: AsyncMutex::new(CloseStage::Quiesce),
+            }),
+        }
+    }
+
+    /// Returns resource lifecycle state without claiming a durable checkpoint.
+    pub fn state(&self) -> SessionState {
+        self.inner.gate().state
+    }
+
+    /// Starts or resumes startup on the caller's host executor.
+    /// Concurrent calls serialize; completed startup is not repeated.
+    pub async fn start(&self) -> Result<()> {
+        let _control = self.inner.control.lock().await;
+        {
+            let mut gate = self.inner.gate();
+            match gate.state {
+                SessionState::Running => return Ok(()),
+                SessionState::Closing | SessionState::Closed => return Err(unavailable()),
+                SessionState::Ready | SessionState::Starting => gate.state = SessionState::Starting,
+            }
+        }
+        let mut startup = self.inner.host.start();
+        let result = poll_fn(|context| {
+            {
+                let mut gate = self.inner.gate();
+                if gate.state == SessionState::Closing {
+                    return Poll::Ready(Err(unavailable()));
+                }
+                if !gate
+                    .starting
+                    .as_ref()
+                    .is_some_and(|w| w.will_wake(context.waker()))
+                {
+                    gate.starting = Some(context.waker().clone());
+                }
+            }
+            startup.as_mut().poll(context)
+        })
+        .await;
+        let mut gate = self.inner.gate();
+        gate.starting = None;
+        result?;
+        if gate.state == SessionState::Closing {
+            return Err(unavailable());
+        }
+        gate.state = SessionState::Running;
+        Ok(())
+    }
+
+    /// Reserves one unit of live resource ownership for executor work.
+    ///
+    /// The executor must move this permit into the owned operation, independently
+    /// of caller observation, and retain it through result/uncertainty storage.
+    /// This call performs no journal write, authorization or signing.
+    pub fn admit(&self) -> Result<WorkPermit<H>> {
+        let mut gate = self.inner.gate();
+        if gate.state != SessionState::Running {
+            return Err(unavailable());
+        }
+        if gate.active == self.inner.limit.get() {
+            return Err(Error::session_unavailable(Reason::OutOfRange));
+        }
+        gate.active += 1;
+        Ok(WorkPermit {
+            inner: self.inner.clone(),
+        })
+    }
+
+    /// Permanently closes admission on first poll, then shuts down in order.
+    ///
+    /// Cancelling this future retains its last completed stage. Awaiting close
+    /// again resumes the unfinished hook. No Drop implementation claims close.
+    pub async fn close(&self) -> Result<()> {
+        let starting = {
+            let mut gate = self.inner.gate();
+            if gate.state == SessionState::Closed {
+                return Ok(());
+            }
+            gate.state = SessionState::Closing;
+            gate.starting.take()
+        };
+        if let Some(waker) = starting {
+            waker.wake();
+        }
+        let mut stage = self.inner.control.lock().await;
+        loop {
+            *stage = match *stage {
+                CloseStage::Quiesce => {
+                    self.inner.host.quiesce().await?;
+                    CloseStage::Drain
+                }
+                CloseStage::Drain => {
+                    poll_fn(|context| {
+                        let mut gate = self.inner.gate();
+                        if gate.active == 0 {
+                            return Poll::Ready(());
+                        }
+                        if !gate
+                            .drained
+                            .as_ref()
+                            .is_some_and(|w| w.will_wake(context.waker()))
+                        {
+                            gate.drained = Some(context.waker().clone());
+                        }
+                        Poll::Pending
+                    })
+                    .await;
+                    CloseStage::Disconnect
+                }
+                CloseStage::Disconnect => {
+                    self.inner.host.disconnect().await?;
+                    CloseStage::Callbacks
+                }
+                CloseStage::Callbacks => {
+                    self.inner.host.dispose_callbacks().await?;
+                    CloseStage::Storage
+                }
+                CloseStage::Storage => {
+                    self.inner.host.close_storage().await?;
+                    CloseStage::Complete
+                }
+                CloseStage::Complete => {
+                    self.inner.gate().state = SessionState::Closed;
+                    return Ok(());
+                }
+            };
+        }
+    }
+}
+
+fn unavailable() -> Error {
+    Error::session_unavailable(Reason::Unavailable)
+}
+
+/// Live executor work retaining the session's resources until its safe boundary.
+/// Dropping a permit releases capacity; it does not cancel or roll back effects.
+#[must_use = "retain the permit in owned work through its safe journal boundary"]
+pub struct WorkPermit<H: SessionHost> {
+    inner: Shared<Inner<H>>,
+}
+
+impl<H: SessionHost> Drop for WorkPermit<H> {
+    fn drop(&mut self) {
+        let wake = {
+            let mut gate = self.inner.gate();
+            gate.active -= 1;
+            if gate.active == 0 {
+                gate.drained.take()
+            } else {
+                None
+            }
+        };
+        if let Some(waker) = wake {
+            waker.wake();
+        }
+    }
+}
