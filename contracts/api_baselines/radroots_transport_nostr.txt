@@ -31,6 +31,7 @@ pub radroots_transport_nostr::Error::Target
 pub radroots_transport_nostr::Error::TooManyRelays
 pub radroots_transport_nostr::Error::TooManyRelays::actual: usize
 pub radroots_transport_nostr::Error::TooManyRelays::max: usize
+pub radroots_transport_nostr::Error::TransportClosed
 pub radroots_transport_nostr::Error::UnexpectedTransport
 impl core::error::Error for radroots_transport_nostr::Error
 impl core::fmt::Display for radroots_transport_nostr::Error
@@ -81,13 +82,15 @@ pub fn radroots_transport_nostr::Config::with_timeouts(self, u64, u64, u64) -> c
 pub fn radroots_transport_nostr::Config::write_relays(&self) -> impl core::iter::traits::iterator::Iterator<Item = &radroots_transport_nostr::RelayUrl>
 pub struct radroots_transport_nostr::NostrTransport
 impl radroots_transport_nostr::NostrTransport
-pub fn radroots_transport_nostr::NostrTransport::begin_authentication(&self, &radroots_transport_nostr::RelayUrl, impl core::convert::AsRef<str>, u64, u64) -> core::result::Result<alloc::string::String, radroots_transport_nostr::Error>
-pub fn radroots_transport_nostr::NostrTransport::complete_authentication<'a>(&'a self, &'a radroots_transport_nostr::RelayUrl, &'a str, core::option::Option<&'a str>, u64) -> radroots_transport::source::BoxFuture<'a, core::result::Result<(), radroots_transport_nostr::Error>>
-pub fn radroots_transport_nostr::NostrTransport::reject_authentication(&self, &radroots_transport_nostr::RelayUrl, &str) -> core::result::Result<(), radroots_transport_nostr::Error>
-impl radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::admission_is_closed(&self) -> bool
 pub const fn radroots_transport_nostr::NostrTransport::config(&self) -> &radroots_transport_nostr::Config
 pub fn radroots_transport_nostr::NostrTransport::new(radroots_transport_nostr::Config) -> Self
 pub fn radroots_transport_nostr::NostrTransport::relay_status(&self) -> radroots_transport_nostr::RelayStatusReport
+pub async fn radroots_transport_nostr::NostrTransport::shutdown(&self)
+impl radroots_transport_nostr::NostrTransport
+pub fn radroots_transport_nostr::NostrTransport::begin_authentication(&self, &radroots_transport_nostr::RelayUrl, impl core::convert::AsRef<str>, u64, u64) -> core::result::Result<alloc::string::String, radroots_transport_nostr::Error>
+pub fn radroots_transport_nostr::NostrTransport::complete_authentication<'a>(&'a self, &'a radroots_transport_nostr::RelayUrl, &'a str, core::option::Option<&'a str>, u64) -> radroots_transport::source::BoxFuture<'a, core::result::Result<(), radroots_transport_nostr::Error>>
+pub fn radroots_transport_nostr::NostrTransport::reject_authentication(&self, &radroots_transport_nostr::RelayUrl, &str) -> core::result::Result<(), radroots_transport_nostr::Error>
 impl radroots_transport_nostr::NostrTransport
 pub fn radroots_transport_nostr::NostrTransport::execute_prepared_delivery(&self, radroots_transport_nostr::PreparedDelivery) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
 pub fn radroots_transport_nostr::NostrTransport::prepare_delivery(&self, radroots_transport::sink::DeliveryRequest) -> core::result::Result<radroots_transport_nostr::PreparedDelivery, alloc::boxed::Box<radroots_transport::sink::SinkFailure>>

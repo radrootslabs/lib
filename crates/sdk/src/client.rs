@@ -389,16 +389,17 @@ impl Client {
             .and_then(crate::transport::NostrSlot::relay_status))
     }
 
-    /// Atomically replaces the active Nostr relay profile after validating it.
-    /// This does not perform DNS lookup or open a socket.
+    /// Validates a Nostr profile and shuts down the old pool before replacement.
+    /// This opens no new socket or DNS lookup. Interrupted cleanup can be retried.
     #[cfg(feature = "nostr")]
-    pub fn configure_nostr(&self, profile: crate::transport::RelayProfile) -> Result<()> {
+    pub async fn configure_nostr(&self, profile: crate::transport::RelayProfile) -> Result<()> {
         self.require_open()?;
         self.inner
             .nostr
             .as_ref()
             .ok_or_else(Error::shared_operation_unavailable)?
             .configure(profile)
+            .await
     }
 
     /// Returns the explicitly composed Blossom adapter, when configured.
@@ -448,14 +449,13 @@ impl Client {
             .map(|sync| crate::trade::Operations::new(storage, sync)))
     }
 
-    /// Returns whether explicit close completed successfully or reached the
-    /// lower storage commit point.
+    /// Returns whether explicit close completed successfully.
     #[must_use]
     pub fn is_closed(&self) -> bool {
         self.inner.lifecycle.load(Ordering::Acquire) == CLOSED
     }
 
-    /// Explicitly closes active storage resources across every client clone.
+    /// Shuts down the selected Nostr pool before closing storage across every client clone.
     ///
     /// Dropping this future before its first poll has no effect. Cancellation
     /// after close begins leaves the client unavailable and permits an
@@ -481,11 +481,15 @@ impl Client {
         }
 
         let attempt = CloseAttempt::new(Arc::clone(&self.inner));
+        #[cfg(feature = "nostr")]
+        if let Some(slot) = &self.inner.nostr {
+            slot.shutdown().await;
+        }
         let close_result = radroots_storage::BackupSource::close(self.inner.storage.as_ref()).await;
-        attempt.complete();
-        close_result
+        let result = close_result
             .map(|_| ())
-            .map_err(Error::storage_close_failed)
+            .map_err(Error::storage_close_failed);
+        attempt.finish(result)
     }
 
     fn require_open(&self) -> Result<()> {
@@ -531,9 +535,12 @@ impl CloseAttempt {
         }
     }
 
-    fn complete(mut self) {
-        self.inner.lifecycle.store(CLOSED, Ordering::Release);
-        self.completed = true;
+    fn finish(mut self, result: Result<()>) -> Result<()> {
+        if result.is_ok() {
+            self.inner.lifecycle.store(CLOSED, Ordering::Release);
+            self.completed = true;
+        }
+        result
     }
 }
 
@@ -692,17 +699,19 @@ mod tests {
     #[test]
     fn nostr_capabilities_require_directional_profile_authority_and_evidence() {
         let slot = crate::transport::NostrSlot::new();
-        slot.configure(
-            crate::transport::RelayProfile::explicit(
-                crate::transport::RelayProfileKind::Public,
-                [crate::transport::RelayEndpoint::new(
-                    "wss://radroots.org",
-                    crate::transport::RelayUrlPolicy::Public,
-                    crate::transport::RelayAccess::ReadOnly,
+        block_on(
+            slot.configure(
+                crate::transport::RelayProfile::explicit(
+                    crate::transport::RelayProfileKind::Public,
+                    [crate::transport::RelayEndpoint::new(
+                        "wss://radroots.org",
+                        crate::transport::RelayUrlPolicy::Public,
+                        crate::transport::RelayAccess::ReadOnly,
+                    )
+                    .expect("read-only endpoint")],
                 )
-                .expect("read-only endpoint")],
-            )
-            .expect("read-only public profile"),
+                .expect("read-only public profile"),
+            ),
         )
         .expect("configure slot");
         let client = ClientBuilder::memory(generation())
@@ -722,8 +731,8 @@ mod tests {
         assert!(!delivery.is_configured());
         assert_eq!(delivery.availability(), Availability::Unavailable);
 
-        client
-            .configure_nostr(
+        block_on(
+            client.configure_nostr(
                 crate::transport::RelayProfile::explicit(
                     crate::transport::RelayProfileKind::Public,
                     [crate::transport::RelayEndpoint::new(
@@ -734,8 +743,9 @@ mod tests {
                     .expect("writable endpoint")],
                 )
                 .expect("writable profile"),
-            )
-            .expect("reconfigure");
+            ),
+        )
+        .expect("reconfigure");
         let capabilities = client.capabilities();
         let delivery = capabilities
             .get(CapabilityId::NOSTR_DELIVERY)
@@ -861,6 +871,84 @@ mod tests {
         ));
         block_on(client.close()).expect("retry close");
         assert!(client.is_closed());
+    }
+
+    #[test]
+    fn storage_close_failure_keeps_admission_closed_and_allows_an_explicit_retry() {
+        let client = ClientBuilder::memory(generation()).build().expect("client");
+        let clone = client.clone();
+        client.inner.lifecycle.store(CLOSING, Ordering::Release);
+        let attempt = CloseAttempt::new(Arc::clone(&client.inner));
+        let failure = attempt
+            .finish(Err(Error::storage_close_failed(
+                radroots_storage::Error::BackendUnavailable,
+            )))
+            .unwrap_err();
+        assert_eq!(failure.kind(), crate::error::ErrorKind::StorageCloseFailed);
+        assert!(!client.is_closed());
+        assert!(
+            matches!(clone.storage(), Err(error) if error.kind() == crate::error::ErrorKind::ClientClosing)
+        );
+        block_on(clone.close()).expect("retry confirms storage close");
+        assert!(client.is_closed());
+    }
+
+    #[cfg(feature = "nostr")]
+    #[tokio::test]
+    async fn cancelled_pool_cleanup_retains_resources_until_client_close_is_retried() {
+        use radroots_storage::status::ShutdownState;
+        use std::task::Poll;
+
+        let slot = crate::transport::NostrSlot::new();
+        let profile = crate::transport::RelayProfile::explicit(
+            crate::transport::RelayProfileKind::Simulator,
+            [crate::transport::RelayEndpoint::new(
+                "ws://127.0.0.1:7447",
+                crate::transport::RelayUrlPolicy::Local,
+                crate::transport::RelayAccess::ReadWrite,
+            )
+            .unwrap()],
+        )
+        .unwrap();
+        slot.configure(profile.clone()).await.unwrap();
+        let client = ClientBuilder::memory(generation())
+            .nostr(slot.clone())
+            .build()
+            .unwrap();
+        let clone = client.clone();
+        let held = slot.hold_transition_for_test().await;
+        let mut close = Box::pin(client.close());
+        assert!(matches!(
+            close.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+            Poll::Pending
+        ));
+        drop(close);
+        assert!(!client.is_closed());
+        assert!(
+            matches!(clone.storage(), Err(error) if error.kind() == crate::error::ErrorKind::ClientClosing)
+        );
+        assert_eq!(
+            radroots_storage::BackupSource::status(client.inner.storage.as_ref())
+                .await
+                .unwrap()
+                .shutdown(),
+            ShutdownState::Open
+        );
+        assert_eq!(
+            slot.configure(profile).await.unwrap_err().kind(),
+            crate::error::ErrorKind::ClientClosed
+        );
+        drop(held);
+        clone.close().await.unwrap();
+        assert!(client.is_closed());
+        assert_eq!(
+            radroots_storage::BackupSource::status(client.inner.storage.as_ref())
+                .await
+                .unwrap()
+                .shutdown(),
+            ShutdownState::Closed
+        );
+        assert!(slot.read_targets().is_none());
     }
 
     #[test]

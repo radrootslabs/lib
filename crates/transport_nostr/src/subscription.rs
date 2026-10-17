@@ -462,6 +462,7 @@ impl EventSubscriber for NostrTransport {
         request: SubscriptionRequest,
     ) -> BoxFuture<'_, Result<BoxSubscription, radroots_transport::Error>> {
         Box::pin(async move {
+            self.require_open()?;
             let remaining = remaining_duration(request.bounds().deadline_unix_ms());
             if remaining.is_zero() {
                 return RelayEventSubscription::ended(

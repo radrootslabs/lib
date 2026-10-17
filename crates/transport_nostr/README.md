@@ -55,6 +55,18 @@ and `DeliveryRequest` values from `radroots_transport`, polls the returned
 futures on its executor, and applies any retry or scheduling policy outside
 this crate.
 
+## Explicit pool shutdown
+
+Await [`NostrTransport::shutdown`] before disposing an owned session. Clones
+share closed admission; new fetch, subscription, delivery and AUTH effects
+are refused, and pending AUTH challenges are disposed. Delivery refusal keeps
+one exact unattempted observation for every requested target. An unpolled
+shutdown future is inert; await shutdown again after interrupted cleanup.
+Already-started work still requires its owner to await and retain obtained
+results. Upstream pool shutdown signals its relay tasks; it does not itself
+establish that every internal task joined. [`NostrTransport::admission_is_closed`]
+reports admission, rather than complete session cleanup or business rollback.
+
 ## Prepared delivery boundary
 
 [`NostrTransport::prepare_delivery`] validates the exact request, writable

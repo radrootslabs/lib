@@ -219,6 +219,9 @@ impl NostrTransport {
                 authorized,
                 mut skipped,
             } = prepared;
+            if self.admission_is_closed() {
+                return Err(SinkFailure::transport_closed(&request));
+            }
             if config != *self.config() {
                 return Err(SinkFailure::invalid_contract(&request));
             }
@@ -316,7 +319,10 @@ impl NostrTransport {
 
 impl EventSink for NostrTransport {
     fn status(&self) -> BoxFuture<'_, Result<SinkStatus, radroots_transport::Error>> {
-        Box::pin(async move { Ok(status::sink_status(&self.status)) })
+        Box::pin(async move {
+            self.require_open()?;
+            Ok(status::sink_status(&self.status))
+        })
     }
 
     fn deliver(

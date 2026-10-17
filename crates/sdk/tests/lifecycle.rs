@@ -154,3 +154,91 @@ async fn sqlite_resources_exist_only_after_explicit_open_and_close_across_clones
         ErrorKind::ClientClosed
     );
 }
+
+#[cfg(all(feature = "memory", feature = "nostr"))]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn close_terminates_a_pending_owned_connection_and_closes_retained_slot_clones() {
+    use radroots_sdk::transport::{
+        NostrSlot, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind, RelayUrlPolicy,
+    };
+    use radroots_transport::{FetchRequest, source::FetchBounds};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    use tokio::{io::AsyncReadExt, net::TcpListener, sync::oneshot};
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("ws://{}", listener.local_addr().unwrap());
+    let (connected, ready) = oneshot::channel();
+    let mut server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut bytes = [0; 4096];
+        assert!(stream.read(&mut bytes).await.unwrap() > 0);
+        connected.send(()).unwrap();
+        // Deliberately withhold the upgrade. The configured connection timeout
+        // is ten seconds; owner shutdown must close this socket before that.
+        loop {
+            match stream.read(&mut bytes).await {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+    });
+    let profile = RelayProfile::explicit(
+        RelayProfileKind::Simulator,
+        [RelayEndpoint::new(&url, RelayUrlPolicy::Local, RelayAccess::ReadOnly).unwrap()],
+    )
+    .unwrap();
+    let slot = NostrSlot::new();
+    slot.configure(profile.clone()).await.unwrap();
+    let targets = slot.read_targets().unwrap();
+    let request = FetchRequest::new(
+        "close-pending-connect",
+        targets,
+        FetchBounds::new(
+            1,
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64
+                + 5000,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let client = ClientBuilder::memory_default()
+        .nostr(slot.clone())
+        .build()
+        .unwrap();
+    let clone = client.clone();
+    let mut fetch =
+        tokio::spawn(async move { clone.source().unwrap().unwrap().fetch(request).await });
+    tokio::time::timeout(Duration::from_secs(2), ready)
+        .await
+        .unwrap()
+        .unwrap();
+    drop(client.close());
+    assert!(!client.is_closed());
+    client.close().await.unwrap();
+    assert!(client.is_closed());
+    let disconnected = tokio::time::timeout(Duration::from_secs(2), &mut server).await;
+    if disconnected.is_err() {
+        server.abort();
+        let _ = server.await;
+        fetch.abort();
+        let _ = fetch.await;
+        panic!("client close left a pending owned socket alive");
+    }
+    disconnected.unwrap().unwrap();
+    let finished = tokio::time::timeout(Duration::from_secs(5), &mut fetch).await;
+    if finished.is_err() {
+        fetch.abort();
+        let _ = fetch.await;
+        panic!("started fetch did not terminate after shutdown");
+    }
+    let _obtained_fetch_outcome = finished.unwrap().unwrap();
+    assert_eq!(
+        slot.configure(profile).await.unwrap_err().kind(),
+        ErrorKind::ClientClosed
+    );
+    assert!(slot.read_targets().is_none());
+    client.close().await.unwrap();
+}

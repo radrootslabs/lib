@@ -10,13 +10,15 @@ use radroots_transport::{
     policy::SatisfactionPolicy,
 };
 #[cfg(any(feature = "blossom", feature = "nostr"))]
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    Arc, RwLock,
+    atomic::{AtomicBool, Ordering},
+};
 
 #[cfg(feature = "blossom")]
 use std::{
     collections::BTreeSet,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    sync::atomic::{AtomicBool, Ordering},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -1880,6 +1882,8 @@ impl Default for Profile {
 #[derive(Clone)]
 pub struct NostrSlot {
     state: Arc<RwLock<Option<NostrState>>>,
+    transition: Arc<tokio::sync::Mutex<()>>,
+    admission_closed: Arc<AtomicBool>,
 }
 
 #[cfg(feature = "nostr")]
@@ -1891,17 +1895,52 @@ struct NostrState {
 }
 
 #[cfg(feature = "nostr")]
+enum NostrSlotAccessError {
+    Closed,
+    Unavailable,
+}
+
+#[cfg(feature = "nostr")]
+impl NostrSlotAccessError {
+    fn transport_error(self) -> radroots_transport::Error {
+        match self {
+            Self::Closed => radroots_transport::Error::TransportClosed,
+            Self::Unavailable => radroots_transport::Error::TransportUnavailable,
+        }
+    }
+
+    fn sink_failure(
+        self,
+        request: &radroots_transport::DeliveryRequest,
+    ) -> radroots_transport::SinkFailure {
+        match self {
+            Self::Closed => radroots_transport::SinkFailure::transport_closed(request),
+            Self::Unavailable => radroots_transport::SinkFailure::transport_unavailable(request),
+        }
+    }
+}
+
+#[cfg(feature = "nostr")]
 impl NostrSlot {
     /// Creates an inert slot with no selected host profile.
     #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(RwLock::new(None)),
+            transition: Arc::new(tokio::sync::Mutex::new(())),
+            admission_closed: Arc::new(AtomicBool::new(false)),
         }
     }
 
-    /// Atomically installs one completely validated relay profile.
-    pub fn configure(&self, profile: RelayProfile) -> crate::Result<()> {
+    /// Validates a profile, shuts down its predecessor and installs the new inert adapter.
+    ///
+    /// Cancellation during predecessor cleanup retains that selection for a
+    /// later retry, with its admission closed. No replacement is installed
+    /// after permanent shutdown begins.
+    pub async fn configure(&self, profile: RelayProfile) -> crate::Result<()> {
+        if self.admission_closed.load(Ordering::Acquire) {
+            return Err(crate::Error::client_closed());
+        }
         let config = radroots_transport_nostr::Config::from_profile(profile);
         let read_targets = TargetSet::new(
             config
@@ -1926,24 +1965,51 @@ impl NostrSlot {
                 )
             }
         };
-        let state = NostrState {
-            transport: Arc::new(radroots_transport_nostr::NostrTransport::new(config)),
-            read_targets,
-            write_targets,
-        };
+        let _transition = self.transition.lock().await;
+        if self.admission_closed.load(Ordering::Acquire) {
+            return Err(crate::Error::client_closed());
+        }
+        if let Some(previous) = self.cleanup_snapshot() {
+            previous.transport.shutdown().await;
+        }
         let mut current = self
             .state
             .write()
             .map_err(|_| crate::Error::shared_operation_unavailable())?;
-        *current = Some(state);
+        if self.admission_closed.load(Ordering::Acquire) {
+            return Err(crate::Error::client_closed());
+        }
+        *current = Some(NostrState {
+            transport: Arc::new(radroots_transport_nostr::NostrTransport::new(config)),
+            read_targets,
+            write_targets,
+        });
         Ok(())
     }
 
-    /// Removes the active adapter without starting or stopping background work.
-    pub fn clear(&self) {
-        if let Ok(mut state) = self.state.write() {
-            *state = None;
+    /// Shuts down the selected pool before removing its profile.
+    ///
+    /// Cancellation retains the selected pool so cleanup can be awaited again.
+    pub async fn clear(&self) {
+        let _transition = self.transition.lock().await;
+        if let Some(previous) = self.cleanup_snapshot() {
+            previous.transport.shutdown().await;
         }
+        // Poisoned state cannot authorize work, but its owned resources still
+        // require disposal. Never reuse the recovered selection for admission.
+        *self
+            .state
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+
+    /// Permanently closes admission and shuts down the selected pool across all clones.
+    ///
+    /// An unpolled future is inert. Re-await after interruption to finish
+    /// disposal; no background cleanup task is detached.
+    pub async fn shutdown(&self) {
+        self.admission_closed.store(true, Ordering::Release);
+        self.clear().await;
     }
 
     /// Returns the currently selected canonical read targets.
@@ -1966,7 +2032,45 @@ impl NostrSlot {
     }
 
     fn snapshot(&self) -> Option<NostrState> {
-        self.state.read().ok().and_then(|state| state.clone())
+        self.operation_snapshot().ok().flatten()
+    }
+
+    fn cleanup_snapshot(&self) -> Option<NostrState> {
+        self.state
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    fn operation_snapshot(&self) -> Result<Option<NostrState>, NostrSlotAccessError> {
+        if self.admission_closed.load(Ordering::Acquire) {
+            return Err(NostrSlotAccessError::Closed);
+        }
+        let _transition = self
+            .transition
+            .try_lock()
+            .map_err(|_| NostrSlotAccessError::Unavailable)?;
+        if self.admission_closed.load(Ordering::Acquire) {
+            return Err(NostrSlotAccessError::Closed);
+        }
+        let selected = self
+            .state
+            .read()
+            .map_err(|_| NostrSlotAccessError::Unavailable)?
+            .clone();
+        if selected
+            .as_ref()
+            .is_some_and(|state| state.transport.admission_is_closed())
+        {
+            Err(NostrSlotAccessError::Unavailable)
+        } else {
+            Ok(selected)
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn hold_transition_for_test(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        self.transition.lock().await
     }
 }
 
@@ -1976,7 +2080,10 @@ impl radroots_transport::EventSource for NostrSlot {
         &self,
     ) -> radroots_transport::BoxFuture<'_, Result<SourceStatus, radroots_transport::Error>> {
         Box::pin(async move {
-            match self.snapshot() {
+            match self
+                .operation_snapshot()
+                .map_err(NostrSlotAccessError::transport_error)?
+            {
                 Some(state) => {
                     radroots_transport::EventSource::status(state.transport.as_ref()).await
                 }
@@ -2001,7 +2108,8 @@ impl radroots_transport::EventSource for NostrSlot {
     > {
         Box::pin(async move {
             let state = self
-                .snapshot()
+                .operation_snapshot()
+                .map_err(NostrSlotAccessError::transport_error)?
                 .ok_or(radroots_transport::Error::UnsupportedOperation)?;
             radroots_transport::EventSource::fetch(state.transport.as_ref(), request).await
         })
@@ -2014,7 +2122,10 @@ impl radroots_transport::EventSink for NostrSlot {
         &self,
     ) -> radroots_transport::BoxFuture<'_, Result<SinkStatus, radroots_transport::Error>> {
         Box::pin(async move {
-            match self.snapshot() {
+            match self
+                .operation_snapshot()
+                .map_err(NostrSlotAccessError::transport_error)?
+            {
                 Some(state) => {
                     radroots_transport::EventSink::status(state.transport.as_ref()).await
                 }
@@ -2038,7 +2149,10 @@ impl radroots_transport::EventSink for NostrSlot {
         Result<radroots_transport::DeliveryReceipt, radroots_transport::SinkFailure>,
     > {
         Box::pin(async move {
-            let Some(state) = self.snapshot() else {
+            let Some(state) = self
+                .operation_snapshot()
+                .map_err(|error| error.sink_failure(&request))?
+            else {
                 return Err(radroots_transport::SinkFailure::for_request(
                     &request,
                     "nostr_transport_not_configured",
@@ -2065,7 +2179,10 @@ impl radroots_transport::EventSink for NostrSlot {
             if request.validate_target_selection(&selected).is_err() {
                 return Err(radroots_transport::SinkFailure::invalid_contract(&request));
             }
-            let Some(state) = self.snapshot() else {
+            let Some(state) = self
+                .operation_snapshot()
+                .map_err(|error| error.sink_failure(&request))?
+            else {
                 return Err(radroots_transport::SinkFailure::for_request(
                     &request,
                     "nostr_transport_not_configured",
@@ -2298,6 +2415,16 @@ mod tests {
     };
 
     use super::*;
+
+    #[cfg(feature = "nostr")]
+    fn ready<T>(future: impl std::future::Future<Output = T>) -> T {
+        let mut future = std::pin::pin!(future);
+        let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+        match std::future::Future::poll(future.as_mut(), &mut context) {
+            std::task::Poll::Ready(value) => value,
+            std::task::Poll::Pending => panic!("inert configuration must need no executor or I/O"),
+        }
+    }
 
     fn target(index: usize) -> Target {
         Target::nostr_relay(format!("wss://relay-{index}.example")).expect("target")
@@ -3362,17 +3489,19 @@ mod tests {
         assert!(slot.read_targets().is_none());
         assert!(slot.relay_status().is_none());
         assert!(
-            slot.configure(
-                RelayProfile::explicit(
-                    RelayProfileKind::Simulator,
-                    [RelayEndpoint::new(
-                        "ws://127.0.0.1:7447",
-                        RelayUrlPolicy::Local,
-                        RelayAccess::ReadWrite,
+            ready(
+                slot.configure(
+                    RelayProfile::explicit(
+                        RelayProfileKind::Simulator,
+                        [RelayEndpoint::new(
+                            "ws://127.0.0.1:7447",
+                            RelayUrlPolicy::Local,
+                            RelayAccess::ReadWrite,
+                        )
+                        .expect("endpoint")],
                     )
-                    .expect("endpoint")],
+                    .expect("profile"),
                 )
-                .expect("profile"),
             )
             .is_ok()
         );
@@ -3382,7 +3511,7 @@ mod tests {
         assert_eq!(status.profile_kind(), RelayProfileKind::Simulator);
         assert_eq!(status.read_availability(), Availability::Unavailable);
         assert_eq!(status.write_availability(), Availability::Unavailable);
-        slot.clear();
+        ready(slot.clear());
         assert!(slot.read_targets().is_none());
         assert!(slot.write_targets().is_none());
         assert!(format!("{slot:?}").contains("configured: false"));
@@ -3398,23 +3527,111 @@ mod tests {
             panic!("poison transport slot");
         }));
 
-        slot.clear();
+        ready(slot.clear());
         assert!(slot.read_targets().is_none());
         assert!(
-            slot.configure(
-                RelayProfile::explicit(
-                    RelayProfileKind::Simulator,
-                    [RelayEndpoint::new(
-                        "ws://127.0.0.1:7447",
-                        RelayUrlPolicy::Local,
-                        RelayAccess::ReadWrite,
+            ready(
+                slot.configure(
+                    RelayProfile::explicit(
+                        RelayProfileKind::Simulator,
+                        [RelayEndpoint::new(
+                            "ws://127.0.0.1:7447",
+                            RelayUrlPolicy::Local,
+                            RelayAccess::ReadWrite,
+                        )
+                        .expect("endpoint")],
                     )
-                    .expect("endpoint")],
+                    .expect("profile"),
                 )
-                .expect("profile"),
             )
             .is_err()
         );
+    }
+
+    #[cfg(feature = "nostr")]
+    #[tokio::test]
+    async fn transitions_and_cancelled_reconfiguration_never_report_the_old_pool_as_available() {
+        use radroots_transport::{EventSink, EventSource, FetchRequest, source::FetchBounds};
+        let profile = RelayProfile::explicit(
+            RelayProfileKind::Simulator,
+            [RelayEndpoint::new(
+                "ws://127.0.0.1:7447",
+                RelayUrlPolicy::Local,
+                RelayAccess::ReadWrite,
+            )
+            .unwrap()],
+        )
+        .unwrap();
+        let slot = NostrSlot::new();
+        slot.configure(profile.clone()).await.unwrap();
+        let previous = slot.cleanup_snapshot().unwrap();
+        let targets = slot.read_targets().unwrap();
+        let fetch = FetchRequest::new(
+            "transition-fetch",
+            targets.clone(),
+            FetchBounds::new(1, u64::MAX).unwrap(),
+        )
+        .unwrap();
+        let delivery = radroots_transport::DeliveryRequest::new(
+            "transition-delivery",
+            radroots_transport::sink::DeliveryPayload::new(signed_event()),
+            TargetSet::new(vec![target(1), target(2)]).unwrap(),
+            SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+            1,
+        )
+        .unwrap();
+        let held = slot.transition.lock().await;
+        assert!(slot.relay_status().is_none());
+        assert!(slot.read_targets().is_none());
+        assert_eq!(
+            EventSource::status(&slot).await.unwrap_err(),
+            radroots_transport::Error::TransportUnavailable
+        );
+        assert_eq!(
+            EventSink::status(&slot).await.unwrap_err(),
+            radroots_transport::Error::TransportUnavailable
+        );
+        assert_eq!(
+            slot.fetch(fetch.clone()).await.unwrap_err(),
+            radroots_transport::Error::TransportUnavailable
+        );
+        for failure in [
+            slot.deliver(delivery.clone()).await.unwrap_err(),
+            slot.deliver_selected(delivery.clone(), delivery.target_set().clone())
+                .await
+                .unwrap_err(),
+        ] {
+            assert_eq!(failure.code(), "transport_unavailable");
+            assert_eq!(
+                failure.partial_evidence().len(),
+                delivery.target_set().len()
+            );
+            assert!(
+                failure
+                    .partial_evidence()
+                    .iter()
+                    .all(|row| !row.was_attempted())
+            );
+            failure.validate_for_request(&delivery).unwrap();
+        }
+        drop(held);
+        // This is the retained selection after interrupted predecessor cleanup.
+        previous.transport.shutdown().await;
+        assert!(slot.relay_status().is_none());
+        assert_eq!(
+            slot.fetch(fetch).await.unwrap_err(),
+            radroots_transport::Error::TransportUnavailable
+        );
+        slot.configure(profile).await.unwrap();
+        assert!(slot.read_targets().is_some());
+        slot.shutdown().await;
+        assert_eq!(
+            EventSource::status(&slot).await.unwrap_err(),
+            radroots_transport::Error::TransportClosed
+        );
+        let failure = slot.deliver(delivery).await.unwrap_err();
+        assert_eq!(failure.code(), "transport_closed");
+        assert_eq!(failure.partial_evidence().len(), 2);
     }
 
     #[cfg(feature = "nostr")]
@@ -3489,6 +3706,7 @@ mod tests {
             )
             .unwrap(),
         )
+        .await
         .unwrap();
         let receipt = slot
             .deliver_selected(deliver.clone(), deliver.target_set().clone())

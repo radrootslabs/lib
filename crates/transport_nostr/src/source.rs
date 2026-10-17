@@ -459,7 +459,10 @@ struct Candidate {
 
 impl EventSource for NostrTransport {
     fn status(&self) -> BoxFuture<'_, Result<SourceStatus, radroots_transport::Error>> {
-        Box::pin(async move { Ok(status::source_status(&self.status)) })
+        Box::pin(async move {
+            self.require_open()?;
+            Ok(status::source_status(&self.status))
+        })
     }
 
     fn fetch(
@@ -467,6 +470,7 @@ impl EventSource for NostrTransport {
         request: FetchRequest,
     ) -> BoxFuture<'_, Result<FetchPage, radroots_transport::Error>> {
         Box::pin(async move {
+            self.require_open()?;
             let cursor_scope = request_scope(&request);
             let cursor = request
                 .cursor()

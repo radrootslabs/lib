@@ -315,6 +315,52 @@ impl DeliveryReceipt {
 }
 
 impl SinkFailure {
+    /// Refuses a request after admission closed, retaining an unattempted row for every target.
+    pub fn transport_closed(request: &DeliveryRequest) -> Self {
+        Self::unattempted(
+            request,
+            "transport_closed",
+            Retryability::Terminal,
+            DeliveryOutcome::rejected()
+                .with_detail("transport_closed", "transport admission is closed")
+                .expect("static closed outcome is valid"),
+        )
+    }
+
+    /// Refuses work during a lifecycle transition without losing per-target attempt certainty.
+    pub fn transport_unavailable(request: &DeliveryRequest) -> Self {
+        Self::unattempted(
+            request,
+            "transport_unavailable",
+            Retryability::Retryable,
+            DeliveryOutcome::unavailable()
+                .with_detail(
+                    "transport_unavailable",
+                    "transport is temporarily unavailable",
+                )
+                .expect("static unavailable outcome is valid"),
+        )
+    }
+
+    fn unattempted(
+        request: &DeliveryRequest,
+        code: &str,
+        retry: Retryability,
+        outcome: DeliveryOutcome,
+    ) -> Self {
+        let evidence = request
+            .target_set()
+            .targets()
+            .iter()
+            .map(|target| {
+                DeliveryTargetReceipt::skipped(target.clone(), outcome.clone())
+                    .expect("validated target and unattempted outcome are valid")
+            })
+            .collect();
+        Self::for_request(request, code, retry, None, None, evidence)
+            .expect("complete static unattempted delivery evidence is valid")
+    }
+
     /// Creates a request-bound sink-wide failure with validated partial evidence.
     pub fn for_request(
         request: &DeliveryRequest,

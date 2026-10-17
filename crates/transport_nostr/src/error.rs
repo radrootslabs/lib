@@ -6,6 +6,8 @@ use core::fmt;
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Error {
+    /// The owner has permanently closed admission to this transport.
+    TransportClosed,
     /// No relay was configured.
     EmptyRelaySet,
     /// The configured relay count exceeds the adapter bound.
@@ -64,6 +66,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::TransportClosed => formatter.write_str("transport admission is closed"),
             Self::EmptyRelaySet => formatter.write_str("relay set must not be empty"),
             Self::TooManyRelays { max, actual } => {
                 write!(formatter, "relay count {actual} exceeds maximum {max}")
@@ -131,6 +134,7 @@ mod tests {
     #[test]
     fn every_error_has_a_stable_nonempty_message() {
         let errors = [
+            Error::TransportClosed,
             Error::EmptyRelaySet,
             Error::TooManyRelays { max: 1, actual: 2 },
             Error::DuplicateRelayUrl,

@@ -154,7 +154,9 @@ pub radroots_transport::error::Error::SubscriptionEndRequestMismatch
 pub radroots_transport::error::Error::SubscriptionEventCheckpointMismatch
 pub radroots_transport::error::Error::SubscriptionUnavailable
 pub radroots_transport::error::Error::TargetSetTooLarge
+pub radroots_transport::error::Error::TransportClosed
 pub radroots_transport::error::Error::TransportOutcomeStatusMismatch
+pub radroots_transport::error::Error::TransportUnavailable
 pub radroots_transport::error::Error::UnexpectedDeliveryTargetReceipt
 pub radroots_transport::error::Error::UnexpectedFetchEvent
 pub radroots_transport::error::Error::UnexpectedFetchProvenance
@@ -290,6 +292,8 @@ pub fn radroots_transport::sink::SinkFailure::message(&self) -> core::option::Op
 pub fn radroots_transport::sink::SinkFailure::partial_evidence(&self) -> &[radroots_transport::sink::DeliveryTargetReceipt]
 pub const fn radroots_transport::sink::SinkFailure::retry_after_unix_ms(&self) -> core::option::Option<u64>
 pub const fn radroots_transport::sink::SinkFailure::retryability(&self) -> radroots_transport::outcome::Retryability
+pub fn radroots_transport::sink::SinkFailure::transport_closed(&radroots_transport::sink::DeliveryRequest) -> Self
+pub fn radroots_transport::sink::SinkFailure::transport_unavailable(&radroots_transport::sink::DeliveryRequest) -> Self
 pub fn radroots_transport::sink::SinkFailure::validate_for_request(&self, &radroots_transport::sink::DeliveryRequest) -> core::result::Result<(), radroots_transport::error::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::sink::SinkFailure
 pub fn radroots_transport::sink::SinkFailure::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
@@ -648,7 +652,9 @@ pub radroots_transport::Error::SubscriptionEndRequestMismatch
 pub radroots_transport::Error::SubscriptionEventCheckpointMismatch
 pub radroots_transport::Error::SubscriptionUnavailable
 pub radroots_transport::Error::TargetSetTooLarge
+pub radroots_transport::Error::TransportClosed
 pub radroots_transport::Error::TransportOutcomeStatusMismatch
+pub radroots_transport::Error::TransportUnavailable
 pub radroots_transport::Error::UnexpectedDeliveryTargetReceipt
 pub radroots_transport::Error::UnexpectedFetchEvent
 pub radroots_transport::Error::UnexpectedFetchProvenance
@@ -722,6 +728,8 @@ pub fn radroots_transport::sink::SinkFailure::message(&self) -> core::option::Op
 pub fn radroots_transport::sink::SinkFailure::partial_evidence(&self) -> &[radroots_transport::sink::DeliveryTargetReceipt]
 pub const fn radroots_transport::sink::SinkFailure::retry_after_unix_ms(&self) -> core::option::Option<u64>
 pub const fn radroots_transport::sink::SinkFailure::retryability(&self) -> radroots_transport::outcome::Retryability
+pub fn radroots_transport::sink::SinkFailure::transport_closed(&radroots_transport::sink::DeliveryRequest) -> Self
+pub fn radroots_transport::sink::SinkFailure::transport_unavailable(&radroots_transport::sink::DeliveryRequest) -> Self
 pub fn radroots_transport::sink::SinkFailure::validate_for_request(&self, &radroots_transport::sink::DeliveryRequest) -> core::result::Result<(), radroots_transport::error::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::sink::SinkFailure
 pub fn radroots_transport::sink::SinkFailure::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>

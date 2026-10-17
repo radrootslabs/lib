@@ -2,6 +2,32 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-046"
+date = "2026-10-17"
+status = "closed"
+approval = "The user authorizes the complete shared SDK refactor, verified source checkpoints and master publication."
+affected_steps = ["040", "070", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sdk"]
+source_evidence = [
+  "The current client close path closes storage but does not close its retained concrete Nostr pool. Slot clones can retain or replace a live adapter independently of that storage lifecycle.",
+  "The approved session contract requires explicit owned shutdown and post-close effect refusal. The exact consumed upstream client exposes pool shutdown, which signals relay shutdown and is not a proof that every internal task joined.",
+]
+replacement_action = "Add explicit concrete Nostr pool shutdown, closed admission and pending AUTH disposal; close the shared slot before client storage. Serialize asynchronous reconfiguration and shutdown, dispose the old pool before replacement, update actual callers and provide no synchronous compatibility alias or detached cleanup task. Preserve unpolled-close behavior, retry after cancelled cleanup, exact unattempted delivery evidence and previously obtained results. Refuse post-close reconfiguration and network effects without introducing a runtime or worker into pure construction."
+verification = [
+  "Validate this record before implementation and bind the exact owning source, complete lock records and public API inputs.",
+  "Execute real loopback shutdown and post-close refusal, shared-clone and repeated-close tests, retained transport and SDK suites, strict checks and lint, owner-produced API freshness and current architecture/contracts.",
+  "Execute the affected native Linux lane; preserve genuine failures and leave full worker joining, operation admission/recovery, known-kind effects, browser/bindings, consumer adoption and final matrix acceptance open.",
+]
+unresolved_risk = "An upstream shutdown signal alone does not prove full session task joining or retained signing/commit reconciliation. Those explicit remaining obligations cannot be represented as completed by this bounded native cleanup unit. No package release or deployment is authorized."
+normative_architecture_change = false
+adr_required = false
+closure_evidence = [
+  "The concrete shared pool and slot now close admission, dispose pending AUTH state and await upstream shutdown before storage closure or profile replacement. Configuration is asynchronous and serialized with shutdown; cancellation retains cleanup ownership and a failed storage close remains retryable. No detached cleanup task or synchronous alias is introduced.",
+  "Actual native and Linux retained transport/SDK suites include real loopback socket termination, live subscription closure, post-close refusal, unpolled/repeated/shared-clone shutdown, interrupted profile/client cleanup and complete unattempted target evidence. A controlled AUTH adapter proves that an already obtained successful response survives shutdown disposal. Full session worker joining and the separate live AUTH replacement race remain later obligations.",
+  "The exact candidate passes strict lint/docs, no_std and portable WASM compilation, current facade/native binding compilation, owner-produced API freshness, unchanged measured coverage gates, catalog, architecture, contracts and preflight. Supported consumer pin/caller/artifact adoption remains separate; this component does not qualify listing/chat commands, durable operations, browser execution or final acceptance.",
+]
+
+[[deviation]]
 id = "RCRV1-DEV-045"
 date = "2026-10-17"
 status = "closed"

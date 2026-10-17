@@ -71,15 +71,23 @@ impl AuthClient for LiveAuthClient {
 
 pub(crate) struct AuthFlow {
     client: Arc<dyn AuthClient>,
-    pending: Mutex<BTreeMap<RelayUrl, PendingAuth>>,
+    pending: Mutex<Option<BTreeMap<RelayUrl, PendingAuth>>>,
 }
 
 impl AuthFlow {
     pub(crate) fn new(client: Arc<dyn AuthClient>) -> Self {
         Self {
             client,
-            pending: Mutex::new(BTreeMap::new()),
+            pending: Mutex::new(Some(BTreeMap::new())),
         }
+    }
+
+    pub(crate) fn close(&self) {
+        // Disposal never reads or reuses possibly poisoned authentication state.
+        *self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
     }
 
     #[cfg(test)]
@@ -105,6 +113,7 @@ impl AuthFlow {
             .pending
             .lock()
             .map_err(|_| Error::AuthStateUnavailable)?;
+        let state = state.as_mut().ok_or(Error::TransportClosed)?;
         match state.get(&relay) {
             Some(existing) if existing == &pending => {}
             Some(_) => return Err(Error::AuthChallengeConflict),
@@ -130,6 +139,7 @@ impl AuthFlow {
             .pending
             .lock()
             .map_err(|_| Error::AuthStateUnavailable)?;
+        let state = state.as_ref().ok_or(Error::TransportClosed)?;
         let pending = state.get(relay).ok_or(Error::AuthChallengeMissing)?;
         if pending.challenge != challenge {
             return Err(Error::AuthResponseMismatch);
@@ -137,11 +147,20 @@ impl AuthFlow {
         Ok(pending.clone())
     }
 
-    fn remove(&self, relay: &RelayUrl, challenge: &str) -> Result<(), Error> {
+    fn remove(&self, relay: &RelayUrl, challenge: &str, obtained: bool) -> Result<(), Error> {
         let mut state = self
             .pending
             .lock()
             .map_err(|_| Error::AuthStateUnavailable)?;
+        let Some(state) = state.as_mut() else {
+            // A response obtained from already-started work remains an observed
+            // success even when shutdown disposed its pending challenge.
+            return if obtained {
+                Ok(())
+            } else {
+                Err(Error::TransportClosed)
+            };
+        };
         match state.get(relay) {
             Some(pending) if pending.challenge == challenge => {
                 state.remove(relay);
@@ -158,7 +177,7 @@ impl fmt::Debug for AuthFlow {
         let pending_count = self
             .pending
             .lock()
-            .map(|pending| pending.len())
+            .map(|pending| pending.as_ref().map_or(0, BTreeMap::len))
             .unwrap_or_default();
         formatter
             .debug_struct("AuthFlow")
@@ -176,6 +195,9 @@ impl NostrTransport {
         required_at_unix_ms: u64,
         expires_at_unix_ms: u64,
     ) -> Result<String, Error> {
+        if self.admission_is_closed() {
+            return Err(Error::TransportClosed);
+        }
         if !self.config().relays().contains(relay) {
             return Err(Error::AuthResponseMismatch);
         }
@@ -196,9 +218,12 @@ impl NostrTransport {
         now_unix_ms: u64,
     ) -> BoxFuture<'a, Result<(), Error>> {
         Box::pin(async move {
+            if self.admission_is_closed() {
+                return Err(Error::TransportClosed);
+            }
             let pending = self.auth.pending(relay, challenge)?;
             if now_unix_ms > pending.expires_at_unix_ms {
-                self.auth.remove(relay, challenge)?;
+                self.auth.remove(relay, challenge, false)?;
                 return Err(Error::AuthChallengeExpired);
             }
             let signed_event_json = signed_event_json.ok_or(Error::AuthSignerUnavailable)?;
@@ -222,13 +247,13 @@ impl NostrTransport {
             let event =
                 Event::from_json(signed.raw_json()).map_err(|_| Error::AuthResponseInvalid)?;
             self.auth.client.submit(relay.clone(), event).await?;
-            self.auth.remove(relay, challenge)
+            self.auth.remove(relay, challenge, true)
         })
     }
 
     /// Rejects and consumes one exact pending challenge without relay access.
     pub fn reject_authentication(&self, relay: &RelayUrl, challenge: &str) -> Result<(), Error> {
-        self.auth.remove(relay, challenge)
+        self.auth.remove(relay, challenge, false)
     }
 
     #[cfg(test)]
@@ -309,6 +334,113 @@ mod tests {
             .finalize(&Keys::generate())
             .expect("signed auth event")
             .as_json()
+    }
+
+    #[test]
+    fn shutdown_disposes_pending_auth_without_discarding_an_already_obtained_success() {
+        struct DelayedAuth {
+            started: AtomicUsize,
+            completion: Mutex<Option<futures::channel::oneshot::Receiver<()>>>,
+        }
+        impl AuthClient for DelayedAuth {
+            fn submit<'a>(
+                &'a self,
+                _relay: RelayUrl,
+                _event: Event,
+            ) -> BoxFuture<'a, Result<(), Error>> {
+                self.started.fetch_add(1, Ordering::SeqCst);
+                let completion = self.completion.lock().unwrap().take().unwrap();
+                Box::pin(async move {
+                    completion.await.unwrap();
+                    Ok(())
+                })
+            }
+        }
+        let (transport, _, relay) = transport();
+        let (complete, completion) = futures::channel::oneshot::channel();
+        let client = Arc::new(DelayedAuth {
+            started: AtomicUsize::new(0),
+            completion: Mutex::new(Some(completion)),
+        });
+        let transport = transport.with_auth_client(client.clone());
+        transport
+            .begin_authentication(&relay, "late response", 1_000_000, 1_600_000)
+            .unwrap();
+        let response = signed_response(&relay, "late response", 1200);
+        let mut pending =
+            transport.complete_authentication(&relay, "late response", Some(&response), 1_300_000);
+        assert!(matches!(
+            pending
+                .as_mut()
+                .poll(&mut std::task::Context::from_waker(std::task::Waker::noop())),
+            std::task::Poll::Pending
+        ));
+        assert_eq!(client.started.load(Ordering::SeqCst), 1);
+        futures::executor::block_on(transport.shutdown());
+        assert!(transport.admission_is_closed());
+        assert!(transport.auth.pending.lock().unwrap().is_none());
+        complete.send(()).unwrap();
+        assert_eq!(futures::executor::block_on(pending), Ok(()));
+        assert_eq!(
+            transport.reject_authentication(&relay, "late response"),
+            Err(Error::TransportClosed)
+        );
+        assert_eq!(client.started.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn invalid_auth_responses_never_submit_or_consume_the_pending_challenge() {
+        let (transport, client, relay) = transport();
+        transport
+            .begin_authentication(&relay, "retained-challenge", 1_000_000, 1_600_000)
+            .unwrap();
+        for (kind, content, created_at) in [
+            (Kind::TextNote, "", 1_200),
+            (Kind::Authentication, "unexpected content", 1_200),
+            (Kind::Authentication, "", 999),
+            (Kind::Authentication, "", 1_601),
+        ] {
+            let response = EventBuilder::new(kind, content)
+                .tags([
+                    Tag::parse(["relay", relay.as_str()]).unwrap(),
+                    Tag::parse(["challenge", "retained-challenge"]).unwrap(),
+                ])
+                .custom_created_at(Timestamp::from_secs(created_at))
+                .finalize(&Keys::generate())
+                .unwrap()
+                .as_json();
+            assert_eq!(
+                futures::executor::block_on(transport.complete_authentication(
+                    &relay,
+                    "retained-challenge",
+                    Some(&response),
+                    1_300_000,
+                )),
+                Err(Error::AuthResponseMismatch)
+            );
+            assert_eq!(client.0.load(Ordering::SeqCst), 0);
+        }
+        let valid = signed_response(&relay, "retained-challenge", 1_200);
+        let mut tampered: serde_json::Value = serde_json::from_str(&valid).unwrap();
+        tampered["sig"] = serde_json::Value::String("0".repeat(128));
+        assert_eq!(
+            futures::executor::block_on(transport.complete_authentication(
+                &relay,
+                "retained-challenge",
+                Some(&tampered.to_string()),
+                1_300_000,
+            )),
+            Err(Error::AuthResponseInvalid)
+        );
+        assert_eq!(client.0.load(Ordering::SeqCst), 0);
+        futures::executor::block_on(transport.complete_authentication(
+            &relay,
+            "retained-challenge",
+            Some(&valid),
+            1_300_000,
+        ))
+        .unwrap();
+        assert_eq!(client.0.load(Ordering::SeqCst), 1);
     }
 
     #[test]

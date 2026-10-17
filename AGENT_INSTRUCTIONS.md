@@ -196,7 +196,8 @@ regenerate one package with:
 ```sh
 RUSTC="$(rustup which --toolchain nightly-2026-07-16 rustc)" \
 RUSTDOC="$(rustup which --toolchain nightly-2026-07-16 rustdoc)" \
-cargo public-api --manifest-path crates/<crate>/Cargo.toml \
+RUSTUP_TOOLCHAIN=nightly-2026-07-16 \
+cargo +nightly-2026-07-16 public-api --manifest-path crates/<crate>/Cargo.toml \
   --all-features -sss \
   > contracts/api_baselines/<package>.txt
 ```

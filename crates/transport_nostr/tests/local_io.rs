@@ -199,6 +199,177 @@ async fn simulator_profile_streams_and_cancels_a_real_live_subscription() {
         .expect("relay task");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn shutdown_disconnects_the_shared_live_pool_and_refuses_new_effects() {
+    use nostr_sdk::prelude::{EventBuilder, FinalizeEvent, Keys, Kind};
+    use radroots_transport::{
+        DeliveryRequest, EventSink,
+        policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+        sink::DeliveryPayload,
+    };
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let relay_url = format!("ws://{}", listener.local_addr().unwrap());
+    let mut server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut socket = accept_async(stream).await.unwrap();
+        while let Some(message) = socket.next().await {
+            match message {
+                Ok(Message::Text(message)) => {
+                    let value: Value = serde_json::from_str(&message).unwrap();
+                    if value[0] == "REQ" {
+                        socket
+                            .send(Message::Text(
+                                serde_json::to_string(&("EOSE", &value[1])).unwrap().into(),
+                            ))
+                            .await
+                            .unwrap();
+                    }
+                }
+                Ok(Message::Close(_)) | Err(_) => return listener,
+                _ => {}
+            }
+        }
+        listener
+    });
+    let profile = RelayProfile::explicit(
+        RelayProfileKind::Simulator,
+        [RelayEndpoint::new(&relay_url, RelayUrlPolicy::Local, RelayAccess::ReadWrite).unwrap()],
+    )
+    .unwrap();
+    let config = Config::from_profile(profile)
+        .with_timeouts(1000, 2000, 500)
+        .unwrap();
+    let relay = config.relays()[0].clone();
+    let targets = TargetSet::new(vec![relay.to_target().unwrap()]).unwrap();
+    let fetch = FetchRequest::new(
+        "shutdown-fetch",
+        targets.clone(),
+        FetchBounds::new(1, unix_time_ms() + 5000).unwrap(),
+    )
+    .unwrap();
+    let subscription = SubscriptionRequest::new(
+        "shutdown-subscription",
+        targets.clone(),
+        SubscriptionBounds::new(1, unix_time_ms() + 5000).unwrap(),
+    )
+    .unwrap();
+    let event = EventBuilder::new(Kind::TextNote, "synthetic shutdown fixture")
+        .finalize(&Keys::parse(FIXTURE_SECRET_KEY).unwrap())
+        .unwrap();
+    let delivery = DeliveryRequest::new(
+        "shutdown-delivery",
+        DeliveryPayload::new(radroots_event_codec::decode::signed_event(&event.as_json()).unwrap()),
+        targets,
+        SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+        unix_time_ms() + 5000,
+    )
+    .unwrap();
+    let transport = NostrTransport::new(config);
+    let prepared = transport.prepare_delivery(delivery.clone()).unwrap();
+    transport
+        .begin_authentication(&relay, "shutdown challenge", 1000, 2000)
+        .unwrap();
+    let page = tokio::time::timeout(Duration::from_secs(5), transport.fetch(fetch.clone()))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        page.target_outcomes()[0].state(),
+        FetchTargetState::Complete
+    );
+
+    let mut live = transport.subscribe(subscription.clone()).await.unwrap();
+    assert!(
+        !server.is_finished(),
+        "the pool must still own a live socket before shutdown"
+    );
+
+    drop(transport.shutdown());
+    assert!(EventSource::status(&transport).await.is_ok());
+    let clone = transport.clone();
+    clone.shutdown().await;
+    transport.shutdown().await;
+    let joined = tokio::time::timeout(Duration::from_secs(2), &mut server).await;
+    if joined.is_err() {
+        server.abort();
+        let _ = server.await;
+        panic!("shutdown did not terminate the live loopback socket");
+    }
+    let listener = joined.unwrap().unwrap();
+    let ended = tokio::time::timeout(Duration::from_secs(2), live.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(ended, SubscriptionNext::End(ref end) if end.reason() == SubscriptionEndReason::SourceClosed)
+    );
+    assert_eq!(
+        transport.fetch(fetch).await.unwrap_err(),
+        radroots_transport::Error::TransportClosed
+    );
+    assert!(matches!(
+        transport.subscribe(subscription).await,
+        Err(radroots_transport::Error::TransportClosed)
+    ));
+    assert_eq!(
+        EventSource::status(&clone).await.unwrap_err(),
+        radroots_transport::Error::TransportClosed
+    );
+    assert_eq!(
+        EventSink::status(&clone).await.unwrap_err(),
+        radroots_transport::Error::TransportClosed
+    );
+    assert_eq!(
+        transport
+            .begin_authentication(&relay, "new challenge", 1000, 2000)
+            .unwrap_err(),
+        radroots_transport_nostr::Error::TransportClosed
+    );
+    assert_eq!(
+        transport
+            .complete_authentication(&relay, "shutdown challenge", None, 1500)
+            .await
+            .unwrap_err(),
+        radroots_transport_nostr::Error::TransportClosed
+    );
+    assert_eq!(
+        transport
+            .reject_authentication(&relay, "shutdown challenge")
+            .unwrap_err(),
+        radroots_transport_nostr::Error::TransportClosed
+    );
+    for failure in [
+        transport
+            .execute_prepared_delivery(prepared)
+            .await
+            .unwrap_err(),
+        transport.deliver(delivery.clone()).await.unwrap_err(),
+        transport
+            .deliver_selected(delivery.clone(), delivery.target_set().clone())
+            .await
+            .unwrap_err(),
+    ] {
+        assert_eq!(failure.code(), "transport_closed");
+        failure.validate_for_request(&delivery).unwrap();
+        assert_eq!(
+            failure.partial_evidence().len(),
+            delivery.target_set().len()
+        );
+        assert!(
+            failure
+                .partial_evidence()
+                .iter()
+                .all(|row| !row.was_attempted())
+        );
+    }
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), listener.accept())
+            .await
+            .is_err()
+    );
+}
+
 fn unix_time_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

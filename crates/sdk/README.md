@@ -124,8 +124,18 @@ and remote outcomes; a restored snapshot never authorizes automatic resend.
 Native mobile hosts can retain one client while changing host-owned identity
 and relay selection. The host injects one opaque implementation of the
 canonical `radroots_signing::Signer` SPI; the SDK has no mutable secret slot and
-accepts no secret string. `transport::NostrSlot` validates a complete relay set
-before atomically installing it. `ClientBuilder::host_sync(sync::HostPolicy)`
+accepts no secret string. Await `transport::NostrSlot::configure` or
+`Client::configure_nostr` to validate a relay set, shut down its predecessor,
+and install the replacement without opening a new connection. Transitions
+are serialized. During cleanup, capability observations report unavailable;
+interrupted cleanup retains the old selection for an explicit retry.
+`NostrSlot::clear` also awaits pool disposal. `NostrSlot::shutdown` permanently
+closes admission across clones, so a retained handle cannot install another
+pool after client close. `Client::close` requests that shutdown before closing
+storage; failed storage close remains unavailable and retryable. Already
+started work still needs its owner to retain outcomes and reconcile durable
+obligations. These operations do not claim complete upstream task joining.
+`ClientBuilder::host_sync(sync::HostPolicy)`
 explicitly opts SDK-created memory or SQLite storage into system-clock and
 random operation-ID policy without creating a runtime, timer, retry loop, or
 worker.

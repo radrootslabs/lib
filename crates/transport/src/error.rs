@@ -5,6 +5,8 @@ use core::fmt;
 /// Transport contract failure.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
+    TransportClosed,
+    TransportUnavailable,
     UnsupportedOperation,
     EmptyTransportKind,
     InvalidTransportKind,
@@ -82,6 +84,8 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::TransportClosed => f.write_str("transport admission is closed"),
+            Self::TransportUnavailable => f.write_str("transport is temporarily unavailable"),
             Self::UnsupportedOperation => f.write_str("transport operation is unsupported"),
             Self::EmptyTransportKind => f.write_str("transport kind is empty"),
             Self::InvalidTransportKind => f.write_str("transport kind is invalid"),

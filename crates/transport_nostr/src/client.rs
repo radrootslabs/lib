@@ -4,7 +4,7 @@ use crate::{Error, RelayEndpoint, RelayProfile, RelayProfileKind, RelayStatusRep
 use core::fmt;
 use std::sync::{
     Arc,
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
 /// Maximum relay targets accepted by one transport instance.
@@ -256,6 +256,8 @@ impl nostr_sdk::policy::AdmitPolicy for VerifiedEventAdmission {
 #[derive(Clone)]
 pub struct NostrTransport {
     config: Config,
+    session_client: nostr_sdk::client::Client,
+    admission_closed: Arc<AtomicBool>,
     pub(crate) client: Arc<dyn crate::sink::RelayClient>,
     pub(crate) source_client: Arc<dyn crate::source::RelaySourceClient>,
     pub(crate) subscription_client: Arc<dyn crate::subscription::RelaySubscriptionClient>,
@@ -284,6 +286,8 @@ impl NostrTransport {
         let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
+            session_client: client.clone(),
+            admission_closed: Arc::new(AtomicBool::new(false)),
             client: Arc::new(crate::sink::LiveRelayClient::new(client.clone(), writers)),
             source_client: Arc::new(crate::source::LiveRelaySourceClient::new(
                 client.clone(),
@@ -311,11 +315,39 @@ impl NostrTransport {
         self.status.report()
     }
 
+    /// Closes admission, disposes pending AUTH challenges and shuts down the owned relay pool.
+    ///
+    /// An unpolled future has no effect. Re-await after cancellation to finish
+    /// cleanup. This is idempotent across clones; already-started operations
+    /// must still be awaited and their obtained results retained by their owner.
+    /// Upstream pool shutdown signals its relay tasks; this method does not
+    /// claim to join every upstream internal task.
+    pub async fn shutdown(&self) {
+        self.admission_closed.store(true, Ordering::Release);
+        self.auth.close();
+        self.session_client.shutdown().await;
+    }
+
+    /// Reports closed admission, including interrupted shutdown, without claiming task joining.
+    pub fn admission_is_closed(&self) -> bool {
+        self.admission_closed.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn require_open(&self) -> Result<(), radroots_transport::Error> {
+        if self.admission_is_closed() {
+            Err(radroots_transport::Error::TransportClosed)
+        } else {
+            Ok(())
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn with_client(config: Config, client: Arc<dyn crate::sink::RelayClient>) -> Self {
         let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
+            session_client: nostr_sdk::client::Client::default(),
+            admission_closed: Arc::new(AtomicBool::new(false)),
             client,
             source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
             subscription_client: Arc::new(
@@ -335,6 +367,8 @@ impl NostrTransport {
         let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
+            session_client: nostr_sdk::client::Client::default(),
+            admission_closed: Arc::new(AtomicBool::new(false)),
             client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client,
             subscription_client: Arc::new(
@@ -354,6 +388,8 @@ impl NostrTransport {
         let status = Arc::new(crate::status::StatusTracker::new(&config));
         Self {
             config,
+            session_client: nostr_sdk::client::Client::default(),
+            admission_closed: Arc::new(AtomicBool::new(false)),
             client: Arc::new(crate::sink::LiveRelayClient::isolated()),
             source_client: Arc::new(crate::source::LiveRelaySourceClient::isolated()),
             subscription_client,
