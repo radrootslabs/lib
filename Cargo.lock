@@ -3482,14 +3482,19 @@ name = "radroots_secrets"
 version = "0.1.0-alpha"
 dependencies = [
  "chacha20poly1305",
+ "futures",
  "futures-executor",
  "hex",
+ "js-sys",
  "keyring",
  "serde",
  "serde_json",
  "sha2",
  "subtle",
  "tempfile",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "zeroize",
 ]
 

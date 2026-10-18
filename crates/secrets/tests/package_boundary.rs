@@ -28,7 +28,9 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
 
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
-        BTreeSet::from(["default", "file", "keyring", "memory", "serde", "std"])
+        BTreeSet::from([
+            "browser", "default", "file", "keyring", "memory", "serde", "std"
+        ])
     );
     assert!(
         table_keys(MANIFEST, "[dependencies]")
@@ -52,6 +54,22 @@ fn manifest_has_final_identity_features_and_no_radroots_dependencies() {
         table_keys(MANIFEST, "[dev-dependencies]"),
         BTreeSet::from(["futures-executor", "hex", "serde_json"])
     );
+    assert_eq!(
+        table_keys(
+            MANIFEST,
+            "[target.'cfg(target_arch = \"wasm32\")'.dependencies]"
+        ),
+        BTreeSet::from([
+            "futures",
+            "js-sys",
+            "wasm-bindgen",
+            "wasm-bindgen-futures",
+            "web-sys"
+        ])
+    );
+    assert!(ROOT.contains(
+        "#[cfg(all(feature = \"browser\", target_arch = \"wasm32\"))]\npub mod browser;"
+    ));
 }
 
 #[test]
@@ -90,8 +108,8 @@ fn crate_root_contains_only_the_approved_module_skeleton() {
     assert_eq!(
         declarations(ROOT, "pub mod "),
         BTreeSet::from([
-            "context", "envelope", "error", "file", "id", "keyring", "memory", "provider",
-            "wrapping",
+            "browser", "context", "envelope", "error", "file", "id", "keyring", "memory",
+            "provider", "wrapping",
         ])
     );
     assert_eq!(

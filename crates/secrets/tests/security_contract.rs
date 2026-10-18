@@ -10,9 +10,48 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const PUBLIC_API: &str = include_str!("../../../contracts/api_baselines/radroots_secrets.txt");
+const BROWSER_PUBLIC_API: &str =
+    include_str!("../../../contracts/api_baselines/radroots_secrets.wasm32_browser.txt");
 
 #[test]
 fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
+    for public_api in [PUBLIC_API, BROWSER_PUBLIC_API] {
+        assert_reviewed_api(public_api);
+    }
+}
+
+#[test]
+fn browser_api_has_only_opaque_provider_ownership_and_typed_setup() {
+    assert!(!PUBLIC_API.contains("pub mod radroots_secrets::browser"));
+    for required in [
+        "pub struct radroots_secrets::browser::BrowserProvider",
+        "pub async fn radroots_secrets::browser::BrowserProvider::create(",
+        "pub async fn radroots_secrets::browser::BrowserProvider::open(",
+        "pub async fn radroots_secrets::browser::BrowserProvider::close(",
+        "pub fn radroots_secrets::browser::BrowserProvider::fingerprint(&self) -> [u8; 32]",
+    ] {
+        assert!(BROWSER_PUBLIC_API.contains(required));
+    }
+    for dependency in [
+        "web_sys",
+        "js_sys",
+        "wasm_bindgen",
+        "wasm_bindgen_futures",
+        "futures",
+    ] {
+        assert!(!exposes_crate_path(BROWSER_PUBLIC_API, dependency));
+    }
+    for forbidden in [
+        "CryptoKey",
+        "JsValue",
+        "BrowserProvider::export",
+        "BrowserProvider::key",
+    ] {
+        assert!(!BROWSER_PUBLIC_API.contains(forbidden));
+    }
+}
+
+fn assert_reviewed_api(public_api: &str) {
     for required in [
         "pub mod radroots_secrets::context",
         "pub mod radroots_secrets::envelope",
@@ -26,7 +65,7 @@ fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
         "pub trait radroots_secrets::wrapping::KeyWrapping",
     ] {
         assert!(
-            PUBLIC_API.contains(required),
+            public_api.contains(required),
             "reviewed public API is missing `{required}`"
         );
     }
@@ -42,7 +81,7 @@ fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
         for forbidden_trait in ["core::clone::Clone", "serde_core::ser::Serialize"] {
             let forbidden = format!("impl {forbidden_trait} for {secret_bearing_type}");
             assert!(
-                !PUBLIC_API.contains(&forbidden),
+                !public_api.contains(&forbidden),
                 "secret-bearing public type exposes forbidden trait: {forbidden}"
             );
         }
@@ -58,7 +97,7 @@ fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
         "SealRequest<'a>::new(radroots_secrets::id::SecretRef, &'a radroots_secrets::wrapping::SecretMaterial",
     ] {
         assert!(
-            !PUBLIC_API.contains(forbidden),
+            !public_api.contains(forbidden),
             "reviewed API exposes forbidden plaintext or duplication surface `{forbidden}`"
         );
     }
@@ -72,7 +111,7 @@ fn reviewed_api_forbids_secret_bearing_clone_serialize_and_byte_access() {
         "zeroize",
     ] {
         assert!(
-            !exposes_crate_path(PUBLIC_API, forbidden_dependency),
+            !exposes_crate_path(public_api, forbidden_dependency),
             "reviewed API leaks implementation dependency `{forbidden_dependency}`"
         );
     }

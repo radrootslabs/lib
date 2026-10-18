@@ -7,6 +7,8 @@ use wasm_bindgen::prelude::*;
 
 mod protected;
 pub use protected::protected_round_trip;
+mod persistent;
+pub use persistent::Persistent;
 
 fn failure(error: Error) -> JsValue {
     JsValue::from_str(error.code())

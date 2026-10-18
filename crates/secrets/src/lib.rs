@@ -6,6 +6,8 @@
 
 extern crate alloc;
 
+#[cfg(all(feature = "browser", target_arch = "wasm32"))]
+pub mod browser;
 pub mod context;
 pub mod envelope;
 pub mod error;

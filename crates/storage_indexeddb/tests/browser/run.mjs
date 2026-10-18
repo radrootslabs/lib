@@ -20,9 +20,12 @@ const server = createServer(async (req,res) => {
     }
     if (path.endsWith('/worker.js')) {
       res.setHeader('content-type','text/javascript');
-      res.end(`import init, {Fixture,protected_round_trip} from './fixture.js';
+      res.end(`import init, {Fixture,Persistent,protected_round_trip} from './fixture.js';
         await init();
-        self.onmessage=async()=>{try{await protected_round_trip(79);const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
+        self.onmessage=async(event)=>{try{
+          if(event.data?.kind==='persistent_create'){const provider=await Persistent.create(90);const fingerprint=provider.fingerprint();const encoded=await provider.protect(new Uint8Array([90,91,92]));await provider.close();self.postMessage({fingerprint:Array.from(fingerprint),encoded:Array.from(encoded)});return;}
+          if(event.data?.kind==='persistent_open'){const provider=await Persistent.open(90,new Uint8Array(event.data.fingerprint));const plain=await provider.reveal(new Uint8Array(event.data.encoded));await provider.close();self.postMessage({plain:Array.from(plain)});return;}
+          await protected_round_trip(79);const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
         self.postMessage({ready:true});`); return;
     }
     res.setHeader('content-type',path.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
@@ -40,7 +43,7 @@ try {
   page.on('console',message=>{if(message.type()==='log')console.log(message.text());});
   await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
   const result=await page.evaluate(async()=>{
-    const {default:init,Fixture,protected_round_trip}=await import('./fixture.js'); await init();
+    const {default:init,Fixture,Persistent,protected_round_trip}=await import('./fixture.js'); await init();
     console.log('STEP wasm_initialized');
     const events=[];
     const nativeTransaction=IDBDatabase.prototype.transaction;
@@ -57,6 +60,26 @@ try {
     const passed=name=>{tests.push(name);console.log('PASS '+name);};
     try {
       await protected_round_trip(78);passed('local provider and migration validator across real protected IndexedDB reopen');
+      const persistent=await Persistent.create(80);
+      same(persistent.truthful_capabilities(),true);
+      same(await persistent.context_and_reference_refusal(),true);
+      const fingerprint=Array.from(persistent.fingerprint());
+      const encoded=Array.from(await persistent.protect(new Uint8Array([80,81,82])));
+      same(Array.from(await persistent.reveal(new Uint8Array(encoded))),[80,81,82]);
+      const changedEnvelope=new Uint8Array(encoded);changedEnvelope[changedEnvelope.length-1]^=1;
+      await rejects(()=>persistent.reveal(changedEnvelope),'persistent_crypto_refused');
+      await persistent.close();
+      const reopenedProvider=await Persistent.open(80,new Uint8Array(fingerprint));
+      same(Array.from(await reopenedProvider.reveal(new Uint8Array(encoded))),[80,81,82]);
+      await rejects(()=>Persistent.open(80,new Uint8Array(32)),'provider_key_mismatch');
+      await rejects(()=>Persistent.create(80),'namespace_exists');
+      await reopenedProvider.close();
+      const different=await Persistent.create(81);
+      if(JSON.stringify(Array.from(different.fingerprint()))===JSON.stringify(fingerprint))throw Error('independent master keys aliased');
+      await different.close();
+      passed('persistent key creation, exact reopen, context, reference, capabilities and key independence');
+      const dataStore=await Fixture.open(80,true);
+      await dataStore.write(4,undefined,new Uint8Array(encoded));await dataStore.close();
       await rejects(()=>Fixture.open(12,false),'missing_namespace');
       console.log('STEP missing_existing_refused');
       const db=await Fixture.open(12,true);
@@ -106,6 +129,80 @@ try {
         request.onupgradeneeded=()=>upgrade?.(request.result);
         request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(Error('raw fixture open failed'));
       });
+      const providerName=n=>'radroots.secrets.browser.v1.persistent_fixture_'+n;
+      const providerRaw=n=>new Promise((resolve,reject)=>{
+        const request=indexedDB.open(providerName(n),1);
+        request.onupgradeneeded=()=>request.transaction.abort();
+        request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(Error('missing provider fixture'));
+      });
+      const providerRead=async n=>{
+        const raw=await providerRaw(n);
+        try{return await new Promise((resolve,reject)=>{
+          const tx=raw.transaction('provider','readonly');const store=tx.objectStore('provider');let key,binding;
+          store.get('key').onsuccess=e=>key=e.target.result;store.get('binding').onsuccess=e=>binding=e.target.result;
+          tx.oncomplete=()=>resolve({key,binding});tx.onabort=reject;
+        });}finally{raw.close();}
+      };
+      const providerMutate=async(n,change)=>{
+        const raw=await providerRaw(n);
+        try{await new Promise((resolve,reject)=>{const tx=raw.transaction('provider','readwrite');change(tx.objectStore('provider'));tx.oncomplete=resolve;tx.onabort=reject;});}
+        finally{raw.close();}
+      };
+      const storedProvider=await providerRead(80);
+      same(storedProvider.key.type,'secret');same(storedProvider.key.algorithm.name,'HKDF');same(storedProvider.key.extractable,false);same(storedProvider.key.usages,['deriveKey']);
+      let exportRefused=false;try{await crypto.subtle.exportKey('raw',storedProvider.key);}catch{exportRefused=true;}same(exportRefused,true);
+      passed('actual persisted master CryptoKey is nonextractable and raw export is refused');
+      const copied=await Persistent.create(82);await copied.close();
+      await providerMutate(82,store=>{store.put(storedProvider.key,'key');store.put(storedProvider.binding,'binding');});
+      await rejects(()=>Persistent.open(82,new Uint8Array(fingerprint)),'provider_key_mismatch');
+      passed('copied key and metadata cannot cross namespace binding');
+      const lostKey=await Persistent.create(86);const lostFingerprint=lostKey.fingerprint();
+      const lostNamespace=await Persistent.create(87);const lostNamespaceFingerprint=lostNamespace.fingerprint();
+      const originalImport=SubtleCrypto.prototype.importKey;let masterImports=0;
+      SubtleCrypto.prototype.importKey=function(format,data,algorithm,...args){if((typeof algorithm==='string'?algorithm:algorithm.name)==='HKDF')masterImports++;return originalImport.call(this,format,data,algorithm,...args);};
+      try{
+        await providerMutate(86,store=>store.delete('key'));
+        await rejects(()=>lostKey.protect(new Uint8Array([1])),'persistent_crypto_refused');
+        await rejects(()=>Persistent.open(86,lostFingerprint),'missing_key');
+        await rejects(()=>Persistent.create(86),'namespace_exists');await lostKey.close();
+        await new Promise((resolve,reject)=>{const request=indexedDB.deleteDatabase(providerName(87));request.onsuccess=resolve;request.onerror=reject;});
+        await rejects(()=>lostNamespace.protect(new Uint8Array([1])),'persistent_crypto_refused');
+        await rejects(()=>Persistent.open(87,lostNamespaceFingerprint),'missing_namespace');await lostNamespace.close();
+        same(masterImports,0);
+      }finally{SubtleCrypto.prototype.importKey=originalImport;}
+      passed('actual key and namespace loss refuse without master-key regeneration');
+      const wrongKey=await Persistent.create(91);const wrongFingerprint=wrongKey.fingerprint();
+      await providerMutate(91,store=>store.put({algorithm:'HKDF'},'key'));
+      await rejects(()=>wrongKey.protect(new Uint8Array([1])),'persistent_crypto_refused');
+      await rejects(()=>Persistent.open(91,wrongFingerprint),'provider_key_mismatch');await wrongKey.close();
+      const foreignProvider=n=>new Promise((resolve,reject)=>{const request=indexedDB.open(providerName(n),n===89?2:1);request.onupgradeneeded=()=>request.result.createObjectStore('provider',{autoIncrement:true});request.onsuccess=()=>{request.result.close();resolve();};request.onerror=reject;});
+      for(const n of [88,89]){await foreignProvider(n);await rejects(()=>Persistent.open(n,new Uint8Array(32)),'incompatible_schema');}
+      passed('foreign key representation and provider schema/version are refused');
+      const originalAdd=IDBObjectStore.prototype.add;let keyWriteSucceeded=false;
+      IDBObjectStore.prototype.add=function(...args){const request=originalAdd.apply(this,args);if(this.name==='provider'){request.addEventListener('success',()=>{if(args[1]==='key')keyWriteSucceeded=true;if(args[1]==='binding')this.transaction.abort();},{once:true});}return request;};
+      try{await rejects(()=>Persistent.create(92),'transaction_aborted');}finally{IDBObjectStore.prototype.add=originalAdd;}
+      same(keyWriteSucceeded,true);await rejects(()=>Persistent.open(92,new Uint8Array(32)),'missing_namespace');
+      passed('actual creation abort after key-write success returns no provider and retains no empty namespace');
+      const originalOpen=IDBFactory.prototype.open;let createdResolve;
+      const createdUnobserved=new Promise(resolve=>createdResolve=resolve);
+      IDBFactory.prototype.open=function(...args){const request=originalOpen.apply(this,args);if(args[0]===providerName(93))request.addEventListener('success',()=>createdResolve(),{once:true});return request;};
+      try{Persistent.abandon_create(93);await createdUnobserved;}finally{IDBFactory.prototype.open=originalOpen;}
+      const unobserved=await providerRead(93);const unobservedFingerprint=unobserved.binding.slice(unobserved.binding.length-32);
+      const retained=await Persistent.open(93,unobservedFingerprint);const retainedBytes=await retained.protect(new Uint8Array([93]));same(Array.from(await retained.reveal(retainedBytes)),[93]);await retained.close();
+      passed('accepted creation remains Rust-owned after its observer is dropped');
+      const completedSetups=new Set();let setupsResolve;
+      const allSetups=new Promise(resolve=>setupsResolve=resolve);
+      IDBFactory.prototype.open=function(...args){const request=originalOpen.apply(this,args);for(let n=100;n<132;n++)if(args[0]===providerName(n))request.addEventListener('success',()=>{completedSetups.add(n);if(completedSetups.size===32)setupsResolve();},{once:true});return request;};
+      try{Persistent.abandon_setup_batch(100);await allSetups;}finally{IDBFactory.prototype.open=originalOpen;}
+      const setupBinding=(await providerRead(100)).binding;
+      const setupReopened=await Persistent.open(100,setupBinding.slice(-32));
+      await setupReopened.close();setupReopened.free();
+      passed('create and open share bounded setup admission and release it after unobserved completion');
+      const busy=await Persistent.create(94);const busyFingerprint=busy.fingerprint();
+      same(busy.abandon_wraps(33),32);for(let n=0;n<64;n++)busy.abandon_close();await busy.close();
+      await rejects(()=>busy.protect(new Uint8Array([1])),'persistent_crypto_refused');
+      const busyReopened=await Persistent.open(94,busyFingerprint);await busyReopened.close();
+      passed('bounded wrapping survives dropped observers and cancelled close, then reopens');
       const foreign=await rawOpen(14,1,db=>db.createObjectStore('records',{autoIncrement:true}));foreign.close();
       await rejects(()=>Fixture.open(14,false),'incompatible_schema');
       const future=await rawOpen(15,2,db=>db.createObjectStore('records'));future.close();
@@ -127,9 +224,23 @@ try {
       await rejects(()=>Fixture.open(18,false),'missing_namespace');passed('actual namespace deletion cannot silently recreate');
       const workerResult=await new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage('run');return;}worker.terminate();resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
       same(workerResult,{value:[77]});passed('dedicated worker actual WASM and IndexedDB reopen');
-      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{})};
+      const workerCall=message=>new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage(message);return;}worker.terminate();if(e.data.error)reject(Error(e.data.error));else resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
+      const workerCreated=await workerCall({kind:'persistent_create'});
+      same(await workerCall({kind:'persistent_open',...workerCreated}),{plain:[90,91,92]});
+      passed('persistent provider survives actual worker termination and new worker instance');
+      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded}};
     } finally {IDBDatabase.prototype.transaction=nativeTransaction;}
   });
+  await page.reload();
+  const restarted=await page.evaluate(async receipt=>{
+    const {default:init,Persistent,Fixture}=await import('./fixture.js');await init();
+    const provider=await Persistent.open(80,new Uint8Array(receipt.fingerprint));
+    const store=await Fixture.open(80,false);const encoded=await store.read(4);
+    const plain=await provider.reveal(encoded);await provider.close();await store.close();return Array.from(plain);
+  },result.persistent);
+  assert.deepEqual(restarted,[80,81,82]);
+  result.tests.push('persistent provider and encrypted data survive actual page and WASM restart');
+  delete result.persistent;
   console.log(JSON.stringify({engine,version:browser.version(),...result}));
 } finally {
   clearTimeout(deadline);

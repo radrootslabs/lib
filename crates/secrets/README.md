@@ -3,7 +3,7 @@
 `radroots_secrets` defines the bounded secret-provider, key-wrapping, and
 authenticated-envelope contracts for Radroots. Hosts choose and configure a
 provider explicitly; this crate does not own application authorization,
-credential UI, account policy, runtime execution, or global provider state.
+credential UI, account policy, application command execution, or global provider state.
 
 The crate is pre-release and publication remains disabled. Its Cargo version
 is frozen at `0.1.0-alpha` until the coordinated release contract explicitly
@@ -20,6 +20,7 @@ changes it.
 | `memory` | Opt-in, process-local adapter for development and deterministic tests. |
 | `file` | Opt-in encrypted file adapter with secure path, permission, and durable-write rules. |
 | `keyring` | Opt-in operating-system credential-store adapter with lazy native access. |
+| `browser` | Opt-in WASM origin-storage provider with independently pinned nonextractable keys. |
 | `error` | Normalized errors that do not expose provider-native messages or secret values. |
 
 The curated root exports only `EncryptedEnvelope`, `Error`, `SecretId`,
@@ -98,6 +99,7 @@ every encryption under the same data key.
 | `memory` | no | Enables the explicit process-local adapter; requires `std`. |
 | `file` | no | Enables encrypted file persistence; requires `std`. |
 | `keyring` | no | Enables lazy operating-system credential-store access; requires `std`. |
+| `browser` | no | Enables the explicit WASM Web Crypto/IndexedDB adapter; requires `std`. |
 
 The core contracts compile without the standard library. `file` and `keyring`
 are native host adapters; `memory` is available on standard-library targets.
@@ -111,6 +113,27 @@ WASM hosts may retain local objects and local futures, including scoped
 Envelope migration validators follow the same host boundary. Hosts still own
 accepted work and callback lifetimes; the SPI starts no executor or background
 task and supplies no unsafe thread bridge.
+
+`browser::BrowserProvider::create` explicitly creates one immutable selected
+key/version in a new origin namespace. `open` requires the caller's retained
+public fingerprint. Missing or changed keys never trigger generation or
+replacement; retain old namespaces for their protected data. Native targets do
+not compile this adapter. Its capability report is user-profile storage with
+presence, device-local and hardware requirements unavailable.
+
+The provider keeps a nonextractable HKDF master CryptoKey in IndexedDB, derives
+AES-256-KW keys from the exact namespace/reference/context and wraps 32-byte
+data keys. Generic envelope v2 retains its XChaCha20-Poly1305 format and nonce
+requirements. Provider keys never leave the adapter; controllable transient
+plaintext arrays are cleared. The browser and OS own their internal key memory.
+See the [Web Crypto key serialization contract](https://www.w3.org/TR/webcrypto/#cryptokey-interface-clone).
+
+The adapter exposes a provider only after the key and binding commit together.
+Its accepted mechanical jobs and event callbacks stay Rust-owned through lost
+observation. Close stops admission and drains those jobs. Version change and
+unexpected database closure stop admission. Storage eviction remains possible;
+exact opening then fails without creating an empty replacement. A fingerprint
+is a provider identity check and grants no participant or stock authority.
 
 ## Security and serialization contract
 
