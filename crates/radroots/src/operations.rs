@@ -8,6 +8,19 @@ pub struct Operations<'a> {
     scope: WorkspaceSession,
 }
 impl<'a> Operations<'a> {
+    /// Explicitly resumes one original inquiry. Retained signing claims never
+    /// permit reissuance. Delivery retries use the original exact envelope and
+    /// criterion, preserving accepted targets and the original business result.
+    pub async fn resume(
+        &self,
+        operation: OperationId,
+        expected: Option<CommandDigest>,
+    ) -> Result<OperationReceipt<ChatMessage>> {
+        self.client
+            .session
+            .resume_inquiry(self.client.journal()?, &self.scope, operation, expected)
+            .await
+    }
     pub(crate) const fn new(client: &'a Client, scope: WorkspaceSession) -> Self {
         Self { client, scope }
     }

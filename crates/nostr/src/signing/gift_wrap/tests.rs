@@ -11,6 +11,30 @@ const NOW: u64 = 1_700_200_000;
 fn time(value: u64) -> NonZeroU64 {
     NonZeroU64::new(value).unwrap()
 }
+
+#[test]
+fn public_past_time_boundary_is_positive_bounded_and_refuses_invalid_time_or_entropy() {
+    for now in [1, 2, PAST_SECONDS, NOW, MAX_TIME] {
+        let selected = randomized_past_time(time(now), &Entropy::default())
+            .unwrap()
+            .get();
+        assert!((now.saturating_sub(PAST_SECONDS).max(1)..=now).contains(&selected));
+    }
+    let source = Entropy::default();
+    assert_eq!(
+        randomized_past_time(time(MAX_TIME + 1), &source),
+        Err(WrapError::InvalidTime)
+    );
+    assert_eq!(source.calls.load(Ordering::SeqCst), 0);
+    let source = Entropy {
+        fail_at: Some(0),
+        ..Default::default()
+    };
+    assert_eq!(
+        randomized_past_time(time(NOW), &source),
+        Err(WrapError::EntropyUnavailable)
+    );
+}
 fn keys(value: u8) -> nostr::Keys {
     let mut key = [0; 32];
     key[31] = value;

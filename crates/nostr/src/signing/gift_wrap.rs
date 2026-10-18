@@ -114,6 +114,18 @@ fn past_time(now: u64, source: &dyn NonceSource) -> Result<u64, WrapError> {
     Err(WrapError::EntropyUnavailable)
 }
 
+/// Draws a positive timestamp within the NIP-59 two-day past interval using
+/// bounded unbiased sampling. The injected source must be a qualified CSPRNG.
+pub fn randomized_past_time(
+    now: NonZeroU64,
+    source: &dyn NonceSource,
+) -> Result<NonZeroU64, WrapError> {
+    if now.get() > MAX_TIME {
+        return Err(WrapError::InvalidTime);
+    }
+    NonZeroU64::new(past_time(now.get(), source)?).ok_or(WrapError::InvalidTime)
+}
+
 fn wrapping_keys(
     source: &dyn NonceSource,
     author: PublicKey,

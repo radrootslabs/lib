@@ -63,6 +63,28 @@ Errors come from `radroots_execution`: fixed codes, bounded redacted details,
 explicit admission/retry disposition and optional exact operation identity.
 Backend prose, private payloads and paths are not retained in the error.
 
+## Native inquiries
+
+An explicitly opened protected workspace can be supplied with
+`NativeConfig::with_workspace`. Attach its authenticated scope and a scoped
+participant signer to the Client. `with_nostr` additionally selects exact relay
+destinations, directional access and a relay-acceptance criterion.
+`StartMode::Online` permits command IO without querying or replaying on startup;
+`LocalOnly` keeps inquiries at durable admission without network or signing.
+A started session cannot silently escalate from local to online mode.
+
+`client.inbox().inquire(context, input)` owns accepted native work through
+planning, exact participant signing, protected capture, logical installation
+and retained-envelope publication. Peer and self copies have independent
+progress. Relay acceptance proves neither recipient delivery nor acceptance
+of an agreement. Original operation queries never dispatch work.
+`client.operations(&scope).resume(operation, digest)` explicitly continues an
+original inquiry: retained signing claims cannot be reissued, and publication
+retries preserve exact original bytes, the full criterion and prior accepted
+targets. A dropped observer does not cancel the native job. Obtained material
+whose capture fails stays owned; close reports recovery until its protected
+capture can be confirmed.
+
 ## Values and retained capabilities
 
 `radroots::domain` provides exact decimals and distinct order, thread, workspace,
@@ -71,10 +93,9 @@ retained identity. These values alone perform no authorization or transaction.
 
 Farm, listing, trade, event, identity, transport, geographic and knowledge
 modules retain their source-owned values/planners and advanced capability
-paths. The advanced `radroots_sdk` still owns its existing explicit transport
-composition while concrete ordinary network integration is unfinished; the
-new Client does not wrap that engine or report its writes as new durable
-commerce. Optional capabilities remain governed by their actual host/target
+paths. The advanced `radroots_sdk` retains its existing explicit transport
+composition. The ordinary Client composes the shared execution owner directly.
+Optional capabilities remain governed by their actual host/target
 qualification and do not become available because a feature compiles.
 
 The former root `ClientBuilder` and builder-returning memory/native helpers

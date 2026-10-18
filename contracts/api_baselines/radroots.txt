@@ -18,6 +18,7 @@ pub use radroots::WorkspaceSession
 pub mod radroots::client
 #[non_exhaustive] pub enum radroots::client::StartMode
 pub radroots::client::StartMode::LocalOnly
+pub radroots::client::StartMode::Online
 pub struct radroots::client::Client
 impl radroots::client::Client
 pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
@@ -37,6 +38,7 @@ pub const fn radroots::client::CloseReceipt::storage(self) -> radroots_storage::
 pub struct radroots::client::NativeConfig
 impl radroots::client::NativeConfig
 pub fn radroots::client::NativeConfig::public_read(radroots_storage_sqlite::config::OpenOptions) -> Self
+pub fn radroots::client::NativeConfig::with_nostr(self, radroots_transport_nostr::client::Config, radroots_transport::policy::SatisfactionPolicy) -> radroots_execution::Result<Self>
 pub fn radroots::client::NativeConfig::with_workspace(self, radroots_storage_sqlite::workspace::NativeWorkspace) -> Self
 pub struct radroots::client::SessionStatus
 impl radroots::client::SessionStatus
@@ -127,6 +129,7 @@ pub struct radroots::operations::Operations<'a>
 impl<'a> radroots::operations::Operations<'a>
 pub async fn radroots::operations::Operations<'a>::get(&self, radroots_domain::identifier::OperationId) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>>
 pub async fn radroots::operations::Operations<'a>::get_matching(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>>
+pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>
 pub mod radroots::signing
 pub use radroots::signing::ArtifactRole
 pub use radroots::signing::AuthorizationHeader
@@ -199,6 +202,7 @@ pub use radroots::transport::TargetSet
 pub use radroots::transport::TransportId
 #[non_exhaustive] pub enum radroots::StartMode
 pub radroots::StartMode::LocalOnly
+pub radroots::StartMode::Online
 pub struct radroots::Client
 impl radroots::client::Client
 pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
@@ -218,6 +222,7 @@ pub const fn radroots::client::CloseReceipt::storage(self) -> radroots_storage::
 pub struct radroots::NativeConfig
 impl radroots::client::NativeConfig
 pub fn radroots::client::NativeConfig::public_read(radroots_storage_sqlite::config::OpenOptions) -> Self
+pub fn radroots::client::NativeConfig::with_nostr(self, radroots_transport_nostr::client::Config, radroots_transport::policy::SatisfactionPolicy) -> radroots_execution::Result<Self>
 pub fn radroots::client::NativeConfig::with_workspace(self, radroots_storage_sqlite::workspace::NativeWorkspace) -> Self
 pub struct radroots::SessionStatus
 impl radroots::client::SessionStatus

@@ -42,6 +42,14 @@ pub trait SessionHost: HostBound {
     /// Existing permitted work must remain able to reach its safe boundary.
     fn quiesce(&self) -> HostFuture<'_, crate::Result<()>>;
 
+    /// Drains the host's owned jobs after dispatch has been quiesced. A failed
+    /// protected capture must keep its original material and resource permits;
+    /// return recovery rather than claiming successful disposal. Repeated calls
+    /// resume the same retained work. Hosts without an owned job set do nothing.
+    fn drain(&self) -> HostFuture<'_, crate::Result<()>> {
+        Box::pin(async { Ok(()) })
+    }
+
     /// Disconnects every owned transport and its authentication state.
     fn disconnect(&self) -> HostFuture<'_, crate::Result<()>>;
 

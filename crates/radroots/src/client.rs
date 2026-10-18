@@ -37,6 +37,9 @@ const MISSING_WORKSPACE: Error = match Error::new(
 pub enum StartMode {
     /// Enables local resource work without opening sockets or replaying writes.
     LocalOnly,
+    /// Permits explicit commands to use the configured transport. Startup
+    /// itself performs no query, publication or automatic outbox replay.
+    Online,
 }
 /// A passive resource-start observation, independent of business authority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -75,6 +78,8 @@ impl CloseReceipt {
 pub struct NativeConfig {
     options: radroots_storage_sqlite::OpenOptions,
     workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    inquiry: Option<Shared<crate::native_inquiry::NativeInquiry>>,
 }
 #[cfg(feature = "native")]
 impl NativeConfig {
@@ -84,6 +89,8 @@ impl NativeConfig {
         Self {
             options,
             workspace: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            inquiry: None,
         }
     }
     /// Adds an explicitly opened protected local outbox. A public cache alone
@@ -96,28 +103,118 @@ impl NativeConfig {
         self.workspace = Some(Shared::new(workspace));
         self
     }
+    /// Selects explicit relay destinations and a relay-acceptance criterion.
+    /// Construction opens no socket. Actual command IO requires Online start.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_nostr(
+        mut self,
+        config: radroots_transport_nostr::Config,
+        policy: radroots_transport::policy::SatisfactionPolicy,
+    ) -> crate::Result<Self> {
+        self.inquiry = Some(Shared::new(
+            crate::native_inquiry::NativeInquiry::new(config, policy)
+                .map_err(|error| Error::operation(error, OperationContext::proposed(None)))?,
+        ));
+        Ok(self)
+    }
 }
 
+#[derive(Clone, Default)]
+enum TargetRuntime {
+    #[default]
+    Preview,
+    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+    Native(Shared<crate::native_tasks::NativeTasks>),
+}
+impl TargetRuntime {
+    fn task_host(&self) -> Option<Shared<dyn radroots_execution::session::tasks::TaskHost>> {
+        match self {
+            Self::Preview => None,
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            Self::Native(tasks) => Some(tasks.clone()),
+        }
+    }
+}
 pub(crate) struct StoreHost {
     store: Shared<dyn Storage>,
     workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
+    runtime: TargetRuntime,
+    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+    inquiry: Option<Shared<radroots_execution::session::inquiry::InquiryRuntime>>,
+    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+    native_inquiry: Option<Shared<crate::native_inquiry::NativeInquiry>>,
 }
 impl SessionHost for StoreHost {
     fn start(&self) -> HostFuture<'_, crate::Result<()>> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async move {
+            match &self.runtime {
+                TargetRuntime::Preview => Ok(()),
+                #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+                TargetRuntime::Native(tasks) => tasks.start().await,
+            }
+        })
     }
     fn quiesce(&self) -> HostFuture<'_, crate::Result<()>> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async move {
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            if let TargetRuntime::Native(tasks) = &self.runtime {
+                tasks.quiesce();
+            }
+            Ok(())
+        })
+    }
+    fn drain(&self) -> HostFuture<'_, crate::Result<()>> {
+        Box::pin(async move {
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            if let TargetRuntime::Native(tasks) = &self.runtime {
+                let inquiry = self.inquiry.clone();
+                tasks
+                    .control(
+                        crate::native_tasks::ControlKind::Drain,
+                        Box::pin(async move {
+                            if let Some(inquiry) = inquiry {
+                                inquiry.drain().await.map_err(|error| {
+                                    Error::operation(error, OperationContext::proposed(None))
+                                })?;
+                            }
+                            Ok(())
+                        }),
+                    )
+                    .await?;
+            }
+            Ok(())
+        })
     }
     fn disconnect(&self) -> HostFuture<'_, crate::Result<()>> {
-        Box::pin(async { Ok(()) })
+        Box::pin(async move {
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            if let TargetRuntime::Native(tasks) = &self.runtime {
+                let inquiry = self.native_inquiry.clone();
+                tasks
+                    .control(
+                        crate::native_tasks::ControlKind::Disconnect,
+                        Box::pin(async move {
+                            if let Some(inquiry) = inquiry {
+                                inquiry.disconnect().await;
+                            }
+                            Ok(())
+                        }),
+                    )
+                    .await?;
+            }
+            Ok(())
+        })
     }
     fn dispose_callbacks(&self) -> HostFuture<'_, crate::Result<()>> {
         Box::pin(async { Ok(()) })
     }
     fn close_storage(&self) -> HostFuture<'_, crate::Result<()>> {
         Box::pin(async move {
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            if let TargetRuntime::Native(tasks) = &self.runtime {
+                tasks.close().await?;
+            }
             if let Some(workspace) = &self.workspace {
                 workspace
                     .close_workspace()
@@ -145,27 +242,58 @@ pub struct Client {
     store: Shared<dyn Storage>,
     workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
+    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+    native_inquiry: Option<Shared<crate::native_inquiry::NativeInquiry>>,
 }
 impl Client {
     #[cfg(any(feature = "client", feature = "native"))]
     fn from_store(
         store: Shared<dyn Storage>,
         workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
+        runtime: TargetRuntime,
+        #[cfg(all(feature = "native", not(target_arch = "wasm32")))] native_inquiry: Option<
+            Shared<crate::native_inquiry::NativeInquiry>,
+        >,
     ) -> Self {
         let closed = Shared::new(Mutex::new(None));
-        let session = ClientSession::new(
-            StoreHost {
-                store: store.clone(),
-                workspace: workspace.clone(),
-                closed: closed.clone(),
-            },
-            NonZeroU16::MIN,
-        );
+        let task_host = runtime.task_host();
+        #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+        let inquiry = native_inquiry.as_ref().map(|io| {
+            Shared::new(radroots_execution::session::inquiry::InquiryRuntime::new(
+                io.clone(),
+            ))
+        });
+        #[cfg(not(all(feature = "native", not(target_arch = "wasm32"))))]
+        let inquiry: Option<Shared<radroots_execution::session::inquiry::InquiryRuntime>> = None;
+        let host = StoreHost {
+            store: store.clone(),
+            workspace: workspace.clone(),
+            closed: closed.clone(),
+            runtime,
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            inquiry: inquiry.clone(),
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            native_inquiry: native_inquiry.clone(),
+        };
+        const MAX_RESOURCES: NonZeroU16 = match NonZeroU16::new(32) {
+            Some(limit) => limit,
+            None => panic!("invalid constant resource bound"),
+        };
+        let session = match task_host {
+            Some(tasks) => ClientSession::new_with_task_host(host, MAX_RESOURCES, tasks),
+            None => ClientSession::new(host, MAX_RESOURCES),
+        };
+        let session = match inquiry {
+            Some(inquiry) => session.with_inquiry_runtime(inquiry),
+            None => session,
+        };
         Self {
             session,
             store,
             workspace,
             closed,
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            native_inquiry,
         }
     }
     /// Creates a deterministic in-memory preview with no filesystem, network,
@@ -180,6 +308,9 @@ impl Client {
         Self::from_store(
             Shared::new(radroots_storage::memory::MemoryStorage::new(GENERATION)),
             None,
+            TargetRuntime::Preview,
+            #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+            None,
         )
     }
     /// Opens the actual native SQLite cache using explicit host options. This
@@ -189,7 +320,17 @@ impl Client {
         let store = radroots_storage_sqlite::SqliteStorage::open(config.options)
             .await
             .map_err(|_| STORAGE_FAILURE)?;
-        Ok(Self::from_store(Shared::new(store), config.workspace))
+        #[cfg(not(target_arch = "wasm32"))]
+        let runtime = TargetRuntime::Native(Shared::new(crate::native_tasks::NativeTasks::new()));
+        #[cfg(target_arch = "wasm32")]
+        let runtime = TargetRuntime::Preview;
+        Ok(Self::from_store(
+            Shared::new(store),
+            config.workspace,
+            runtime,
+            #[cfg(not(target_arch = "wasm32"))]
+            config.inquiry,
+        ))
     }
     /// Observes resource lifecycle without probing signer, store or network.
     pub fn state(&self) -> SessionState {
@@ -215,9 +356,19 @@ impl Client {
     /// Enables the selected local resource host. No background runtime,
     /// transport, command writer or stock authority is implicitly constructed.
     pub async fn start(&self, mode: StartMode) -> crate::Result<SessionStatus> {
-        match mode {
-            StartMode::LocalOnly => self.session.start().await?,
+        #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+        if let Some(inquiry) = &self.native_inquiry {
+            inquiry
+                .select(mode == StartMode::Online)
+                .map_err(|error| Error::operation(error, OperationContext::proposed(None)))?;
+        } else if mode == StartMode::Online {
+            return Err(MISSING_WORKSPACE);
         }
+        #[cfg(not(all(feature = "native", not(target_arch = "wasm32"))))]
+        if mode == StartMode::Online {
+            return Err(MISSING_WORKSPACE);
+        }
+        self.session.start().await?;
         Ok(SessionStatus {
             state: self.state(),
         })

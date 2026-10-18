@@ -13,6 +13,7 @@ use radroots_transport::BoxFuture;
 
 mod delivery;
 mod delivery_summary;
+mod dm_source;
 mod installation;
 mod issuance;
 mod observation;
@@ -22,6 +23,7 @@ pub use delivery::{
     EnvelopeCandidate,
 };
 pub use delivery_summary::DeliveryAttemptSummary;
+pub use dm_source::SignedDmRelaySource;
 pub use installation::{
     ChatInstallation, InstallationOutcome, InstallationRequest, PublicationWork,
 };
@@ -272,6 +274,19 @@ impl fmt::Debug for AdmissionOutcome {
 /// Typed transaction port, implemented by actual shared storage adapters.
 /// Applications do not implement a second orchestration or stock engine here.
 pub trait OperationJournal: WorkspaceStore {
+    /// Reconciles a failed/unknown capture of already obtained original seal
+    /// bytes. A qualified host must retain its namespace/writer identity,
+    /// verify the existing schema and original claim, and confirm capture before
+    /// clearing uncertainty. This grants no fresh issuance or replacement
+    /// authority. The current profile covers obtained chat evidence only.
+    fn reconcile_unknown<'a>(
+        &'a self,
+        _input: crate::workspace::AttachmentInput,
+        _proof: &'a AttachmentProof,
+        _evidence: &'a SealEvidence,
+    ) -> BoxFuture<'a, Result<EvidenceCaptureOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::RecoveryRequired) })
+    }
     /// Appends obtained target evidence against the actual original retained
     /// attempt. Original credential authentication is required; late capture
     /// does not acquire a fresh lease, deadline, grant or dispatch permission.

@@ -284,6 +284,7 @@ pub fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::signed_json(&self) -
 pub fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::with_wrapping_key<T>(&self, impl core::ops::function::FnOnce(&[u8; 32]) -> T) -> T
 impl core::fmt::Debug for radroots_nostr::signing::gift_wrap::PendingGiftWrap
 pub fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_nostr::signing::gift_wrap::randomized_past_time(core::num::nonzero::NonZeroU64, &dyn radroots_signing::provider::NonceSource) -> core::result::Result<core::num::nonzero::NonZeroU64, radroots_nostr::signing::gift_wrap::WrapError>
 pub fn radroots_nostr::signing::gift_wrap::wrap_retained_seal(&str, radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64, &dyn radroots_signing::provider::NonceSource) -> core::result::Result<radroots_nostr::signing::gift_wrap::PendingGiftWrap, radroots_nostr::signing::gift_wrap::WrapError>
 pub struct radroots_nostr::signing::LocalSigner
 impl radroots_nostr::signing::LocalSigner

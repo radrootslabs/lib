@@ -49,6 +49,8 @@ struct Control {
     current: Mutex<ProviderState>,
     calls: AtomicUsize,
     sign_calls: AtomicUsize,
+    crypto_calls: AtomicUsize,
+    crypto_response: Mutex<Option<oneshot::Receiver<()>>>,
     sign_response: Mutex<Option<oneshot::Receiver<radroots_signing::issuance::SigningOutcome>>>,
     sign_binding: Mutex<Option<radroots_signing::issuance::IntentBinding>>,
     response: Mutex<Option<oneshot::Receiver<()>>>,
@@ -123,7 +125,14 @@ impl ParticipantProvider for Provider {
         _: PublicKey,
         _: PrivateText,
     ) -> BoxFuture<'_, Result<PrivateCiphertext, ProviderError>> {
-        Box::pin(async { Err(ProviderError::CapabilityUnavailable) })
+        Box::pin(async move {
+            self.0.crypto_calls.fetch_add(1, Ordering::SeqCst);
+            let response = self.0.crypto_response.lock().unwrap().take();
+            if let Some(response) = response {
+                response.await.map_err(|_| ProviderError::Cancelled)?;
+            }
+            Err(ProviderError::ProviderFailure)
+        })
     }
     fn decrypt_private(
         &self,
@@ -131,7 +140,10 @@ impl ParticipantProvider for Provider {
         _: PublicKey,
         _: PrivateCiphertext,
     ) -> BoxFuture<'_, Result<PrivateText, ProviderError>> {
-        Box::pin(async { Err(ProviderError::CapabilityUnavailable) })
+        Box::pin(async move {
+            self.0.crypto_calls.fetch_add(1, Ordering::SeqCst);
+            Err(ProviderError::ProviderFailure)
+        })
     }
 }
 
@@ -193,6 +205,8 @@ fn control() -> Shared<Control> {
         current: Mutex::new(state(false, false)),
         calls: AtomicUsize::new(0),
         sign_calls: AtomicUsize::new(0),
+        crypto_calls: AtomicUsize::new(0),
+        crypto_response: Mutex::new(None),
         sign_response: Mutex::new(None),
         sign_binding: Mutex::new(None),
         response: Mutex::new(None),
@@ -602,4 +616,137 @@ fn exact_callback_binding_cannot_claim_another_operations_result() {
     assert_eq!(rejected.reason(), RejectionReason::BindingMismatch);
     assert!(rejected.fingerprint().is_none());
     block_on(session.close()).unwrap();
+}
+
+fn crypto_call(second: bool) -> ProviderCall {
+    ProviderCall::new(
+        key(second),
+        core::num::NonZeroU64::new(1_700_000_010_000).unwrap(),
+        radroots_signing::request::CancellationSignal::new(),
+    )
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn private_crypto_reobserves_the_attached_identity_and_capability_without_fallback() {
+    let Fixture {
+        session, control, ..
+    } = scope();
+    assert_eq!(
+        block_on(session.encrypt_private(
+            crypto_call(false),
+            key(true),
+            PrivateText::new("private model").unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::CapabilityUnavailable
+    );
+    assert_eq!(control.calls.load(Ordering::SeqCst), 0);
+    block_on(session.observe()).unwrap();
+    assert_eq!(
+        block_on(session.encrypt_private(
+            crypto_call(false),
+            key(true),
+            PrivateText::new("private model").unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::CapabilityUnavailable
+    );
+    assert_eq!(control.crypto_calls.load(Ordering::SeqCst), 0);
+    *control.current.lock().unwrap() = state(false, true);
+    assert_eq!(
+        block_on(session.encrypt_private(
+            crypto_call(true),
+            key(true),
+            PrivateText::new("private model").unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::IdentityChanged
+    );
+    assert!(!session.identity_changed());
+    assert_eq!(
+        block_on(session.encrypt_private(
+            crypto_call(false),
+            key(true),
+            PrivateText::new("private model").unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::ProviderFailure
+    );
+    // This is structural port data, not authenticated NIP-44 ciphertext.
+    assert_eq!(
+        block_on(session.decrypt_private(
+            crypto_call(false),
+            key(true),
+            PrivateCiphertext::parse(&"A".repeat(132)).unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::ProviderFailure
+    );
+    assert_eq!(control.crypto_calls.load(Ordering::SeqCst), 2);
+    *control.current.lock().unwrap() = state(true, true);
+    assert_eq!(
+        block_on(session.encrypt_private(
+            crypto_call(false),
+            key(true),
+            PrivateText::new("private model").unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::IdentityChanged
+    );
+    *control.current.lock().unwrap() = state(false, true);
+    assert_eq!(
+        block_on(session.decrypt_private(
+            crypto_call(false),
+            key(true),
+            PrivateCiphertext::parse(&"A".repeat(132)).unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::IdentityChanged
+    );
+    assert_eq!(control.crypto_calls.load(Ordering::SeqCst), 2);
+    block_on(session.close()).unwrap();
+    assert_eq!(
+        block_on(session.encrypt_private(
+            crypto_call(false),
+            key(true),
+            PrivateText::new("private model").unwrap()
+        ))
+        .unwrap_err(),
+        ProviderError::CapabilityUnavailable
+    );
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn scoped_private_crypto_retains_callbacks_until_the_issued_call_finishes() {
+    let Fixture {
+        session,
+        control,
+        provider,
+        callbacks,
+    } = scope();
+    *control.current.lock().unwrap() = state(false, true);
+    block_on(session.observe()).unwrap();
+    let (send, receive) = oneshot::channel();
+    *control.crypto_response.lock().unwrap() = Some(receive);
+    let mut encrypt = Box::pin(session.encrypt_private(
+        crypto_call(false),
+        key(true),
+        PrivateText::new("private model").unwrap(),
+    ));
+    let mut cx = Context::from_waker(noop_waker_ref());
+    assert!(encrypt.as_mut().poll(&mut cx).is_pending());
+    let mut close = Box::pin(session.close());
+    assert!(close.as_mut().poll(&mut cx).is_pending());
+    assert_eq!(session.state(), SessionState::Closing);
+    assert_eq!(control.close_attempts.load(Ordering::SeqCst), 0);
+    assert!(provider.upgrade().is_some() && callbacks.upgrade().is_some());
+    send.send(()).unwrap();
+    assert!(matches!(
+        encrypt.as_mut().poll(&mut cx),
+        Poll::Ready(Err(ProviderError::ProviderFailure))
+    ));
+    assert!(matches!(close.as_mut().poll(&mut cx), Poll::Ready(Ok(()))));
+    assert!(provider.upgrade().is_none() && callbacks.upgrade().is_none());
 }

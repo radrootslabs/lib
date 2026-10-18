@@ -428,3 +428,147 @@ async fn unpolled_ordinary_inquiry_and_post_close_admission_have_no_effect() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn ordinary_owned_budget_survives_lost_observers_and_all_accepted_commands_drain() {
+    use std::{
+        future::Future,
+        task::{Context, Poll},
+    };
+    let ready = Ordinary::new().await;
+    ready.start().await;
+    let inbox = ready.client.inbox();
+    let (paused, release) = ready.fixture.clock.arm(0);
+    let mut first = Box::pin(inbox.inquire(
+        ready.context(97, "first owned"),
+        input("first owned command"),
+    ));
+    assert!(matches!(
+        first
+            .as_mut()
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref())),
+        Poll::Pending
+    ));
+    reached(paused).await;
+    let mut second = Box::pin(inbox.inquire(
+        ready.context(98, "second owned"),
+        input("second owned command"),
+    ));
+    assert!(matches!(
+        second
+            .as_mut()
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref())),
+        Poll::Pending
+    ));
+    drop(first);
+    drop(second);
+    let copy_client = ready.client.clone();
+    let error = copy_client
+        .inbox()
+        .inquire(ready.context(99, "over quota"), input("not accepted"))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), Code::CapabilityUnavailable);
+    assert_eq!(
+        error.context().operation_id(),
+        Some(OperationId::from_bytes([99; 32]))
+    );
+    assert_eq!(error.context().admission(), Admission::NotAdmitted);
+    let mut close = Box::pin(ready.client.close());
+    assert!(matches!(
+        close
+            .as_mut()
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref())),
+        Poll::Pending
+    ));
+    release.send(()).unwrap();
+    close.await.unwrap();
+    let reopened = ready.fixture.reopen(ready.input.clone()).await;
+    let binding = reopened
+        .authenticate(ready.input.clone(), &ready.proof)
+        .await
+        .unwrap();
+    for (id, body) in [(97, "first owned command"), (98, "second owned command")] {
+        let snapshot = reopened
+            .operation_snapshot(
+                binding.clone(),
+                OperationId::from_bytes([id; 32]),
+                None,
+                copy(&ready.proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.prepared().request().command().text(), body);
+    }
+    assert!(
+        reopened
+            .operation_snapshot(
+                binding,
+                OperationId::from_bytes([99; 32]),
+                None,
+                copy(&ready.proof)
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+    reopened.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn owned_inquiry_continues_to_its_coherent_query_after_the_caller_disappears() {
+    use std::{
+        future::Future,
+        task::{Context, Poll},
+    };
+    let ready = Ordinary::new().await;
+    ready.start().await;
+    let inbox = ready.client.inbox();
+    let (first_paused, release_first) = ready.fixture.clock.arm(0);
+    let mut wait = Box::pin(inbox.inquire(
+        ready.context(100, "lost before admission reply"),
+        input("independent owner continuation"),
+    ));
+    assert!(matches!(
+        wait.as_mut()
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref())),
+        Poll::Pending
+    ));
+    reached(first_paused).await;
+    drop(wait);
+    // After the first access observation, T0's fence consumes one clock read;
+    // the coherent query's access is the next actual boundary.
+    let (query_paused, release_query) = ready.fixture.clock.arm(1);
+    release_first.send(()).unwrap();
+    reached(query_paused).await;
+    let mut close = Box::pin(ready.client.close());
+    assert!(matches!(
+        close
+            .as_mut()
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref())),
+        Poll::Pending
+    ));
+    release_query.send(()).unwrap();
+    close.await.unwrap();
+    let reopened = ready.fixture.reopen(ready.input.clone()).await;
+    let binding = reopened
+        .authenticate(ready.input.clone(), &ready.proof)
+        .await
+        .unwrap();
+    let snapshot = reopened
+        .operation_snapshot(
+            binding,
+            OperationId::from_bytes([100; 32]),
+            None,
+            copy(&ready.proof),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        snapshot.prepared().request().command().text(),
+        "independent owner continuation"
+    );
+    reopened.close().await.unwrap();
+}

@@ -94,6 +94,12 @@ enum Job {
         Box<SealEvidence>,
         Reply<EvidenceCaptureOutcome, OperationError>,
     ),
+    RecoverCapture(
+        Box<AttachmentInput>,
+        AttachmentProof,
+        Box<SealEvidence>,
+        Reply<EvidenceCaptureOutcome, OperationError>,
+    ),
     Captured(
         Box<ClaimAttemptRequest>,
         AttachmentProof,
@@ -126,6 +132,60 @@ enum Job {
         AttachmentProof,
         Reply<Option<PreparedOperation>, OperationError>,
     ),
+}
+impl Job {
+    fn reject_recovery(self) {
+        match self {
+            Self::CaptureDeliveryObservation(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::QueryDeliveryObservations(_, _, _, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::PrepareDelivery(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::QueryDelivery(_, _, _, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Install(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Snapshot(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Claim(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Attempt(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Capture(_, _, _, reply) | Self::RecoverCapture(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Captured(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::BindPlan(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::SigningPlan(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Authenticate(_, _, reply) => {
+                let _ = reply.send(Err(WorkspaceError::RecoveryRequired));
+            }
+            Self::Revoke(_, _, reply) => {
+                let _ = reply.send(Err(WorkspaceError::RecoveryRequired));
+            }
+            Self::Admit(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Operation(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+        }
+    }
 }
 struct Budget {
     used: Arc<AtomicUsize>,
@@ -214,9 +274,35 @@ impl Handle {
                         return Err(error);
                     }
                     let mut uncertain = false;
+                    let mut cached_grant = None;
+                    let mut connection = Some(connection);
                     if ready.send(Ok(())).is_ok() {
                         while let Ok(Queued { job, _budget }) = requests.recv() {
+                            let job = match job {
+                                Job::RecoverCapture(selected, proof, evidence, reply) => {
+                                    let result = super::recovery::RecoveryTurn {
+                                        connection: &mut connection,
+                                        cached_grant: &mut cached_grant,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                        options: &options,
+                                    }
+                                    .capture(*selected, proof, *evidence)
+                                    .await;
+                                    let _ = reply.send(result);
+                                    continue;
+                                }
+                                job => job,
+                            };
+                            let Some(connection) = connection.as_mut() else {
+                                job.reject_recovery();
+                                continue;
+                            };
                             match job {
+                                job @ Job::RecoverCapture(..) => job.reject_recovery(),
                                 Job::CaptureDeliveryObservation(
                                     binding,
                                     proof,
@@ -224,7 +310,7 @@ impl Handle {
                                     reply,
                                 ) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -245,7 +331,7 @@ impl Handle {
                                     reply,
                                 ) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -260,7 +346,7 @@ impl Handle {
                                 }
                                 Job::PrepareDelivery(request, proof, candidate, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -285,7 +371,7 @@ impl Handle {
                                     reply,
                                 ) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -300,7 +386,7 @@ impl Handle {
                                 }
                                 Job::Install(request, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -313,7 +399,7 @@ impl Handle {
                                 }
                                 Job::Snapshot(binding, operation, digest, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -326,7 +412,7 @@ impl Handle {
                                 }
                                 Job::Claim(request, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -339,7 +425,7 @@ impl Handle {
                                 }
                                 Job::Attempt(request, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -352,7 +438,7 @@ impl Handle {
                                 }
                                 Job::Capture(selected, proof, evidence, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -365,7 +451,7 @@ impl Handle {
                                 }
                                 Job::Captured(request, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -378,7 +464,7 @@ impl Handle {
                                 }
                                 Job::BindPlan(binding, plan, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -391,7 +477,7 @@ impl Handle {
                                 }
                                 Job::SigningPlan(binding, operation_id, digest, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -404,7 +490,7 @@ impl Handle {
                                 }
                                 Job::Authenticate(selected, proof, reply) => {
                                     let result = authenticate(
-                                        &mut connection,
+                                        connection,
                                         &namespace,
                                         &input,
                                         &crypto,
@@ -418,7 +504,7 @@ impl Handle {
                                 }
                                 Job::Revoke(selected, proof, reply) => {
                                     let result = revoke(
-                                        &mut connection,
+                                        connection,
                                         &namespace,
                                         &input,
                                         &crypto,
@@ -431,7 +517,7 @@ impl Handle {
                                 }
                                 Job::Admit(request, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -444,7 +530,7 @@ impl Handle {
                                 }
                                 Job::Operation(binding, operation_id, digest, proof, reply) => {
                                     let result = Journal {
-                                        connection: &mut connection,
+                                        connection,
                                         namespace: &namespace,
                                         selected: &input,
                                         crypto: &crypto,
@@ -459,6 +545,9 @@ impl Handle {
                         }
                     }
                     // The admission sender is gone. All admitted work has drained.
+                    let Some(mut connection) = connection else {
+                        return Err(WorkspaceError::RecoveryRequired);
+                    };
                     let checkpoint = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
                         .fetch_one(&mut connection)
                         .await;
@@ -499,7 +588,7 @@ impl Handle {
             Job::CaptureDeliveryObservation(..) => 96 * 1024,
             Job::PrepareDelivery(..) => 1024 * 1024,
             Job::BindPlan(..) => 1024 * 1024,
-            Job::Capture(..) => 256 * 1024,
+            Job::Capture(..) | Job::RecoverCapture(..) => 256 * 1024,
             Job::Admit(..) => 96 * 1024,
             _ => 16 * 1024,
         };
@@ -687,6 +776,30 @@ impl Handle {
             Err(_) => Ok(EvidenceCaptureOutcome::Unknown(anchor)),
         }
     }
+    pub(super) async fn reconcile_unknown(
+        &self,
+        input: AttachmentInput,
+        proof: &AttachmentProof,
+        evidence: &SealEvidence,
+    ) -> Result<EvidenceCaptureOutcome, OperationError> {
+        let anchor = CommitAttempt::new(
+            evidence.workspace_id(),
+            evidence.operation_id(),
+            evidence.command_digest(),
+            None,
+        );
+        let copied = proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
+        let (reply, result) = oneshot::channel();
+        self.send(Job::RecoverCapture(
+            Box::new(input),
+            copied,
+            Box::new(evidence.retained_copy()),
+            reply,
+        ))?;
+        result
+            .await
+            .unwrap_or(Ok(EvidenceCaptureOutcome::Unknown(anchor)))
+    }
     pub(super) async fn obtained_evidence(
         &self,
         request: ClaimAttemptRequest,
@@ -814,7 +927,7 @@ impl Handle {
     }
 }
 
-async fn preflight_existing(
+pub(super) async fn preflight_existing(
     namespace: &Namespace,
     expected: &AttachmentInput,
     crypto: &WorkspaceCrypto,
@@ -838,7 +951,7 @@ async fn preflight_existing(
     inspected.and(closed)
 }
 
-async fn initialize(
+pub(super) async fn initialize(
     connection: &mut SqliteConnection,
     namespace: &Namespace,
     expected: &AttachmentInput,

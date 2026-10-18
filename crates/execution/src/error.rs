@@ -209,7 +209,9 @@ impl Error {
     }
 
     #[cfg(feature = "workspace_session")]
-    pub(crate) const fn operation(
+    /// Projects a typed journal refusal with its observed admission context.
+    /// This data conversion performs no transaction or authorization check.
+    pub const fn operation(
         error: radroots_storage::command::OperationError,
         context: OperationContext,
     ) -> Self {

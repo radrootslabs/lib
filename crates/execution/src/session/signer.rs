@@ -1,6 +1,7 @@
 use core::num::NonZeroU16;
 use radroots_signing::provider::{
-    ParticipantProvider, ProviderError, ProviderState, SignerCallbacks, SignerHandle,
+    ParticipantProvider, PrivateCiphertext, PrivateCryptoCapability, PrivateText, ProviderCall,
+    ProviderError, ProviderState, SignerCallbacks, SignerHandle,
 };
 use std::{
     boxed::Box,
@@ -122,6 +123,70 @@ impl Clone for SignerSession {
 }
 
 impl SignerSession {
+    async fn private_provider(
+        &self,
+        call: &ProviderCall,
+        encrypt: bool,
+    ) -> Result<Binding, ProviderError> {
+        if self.state() != SessionState::Running || self.observed().is_none() {
+            return Err(ProviderError::CapabilityUnavailable);
+        }
+        let observed = self.observe().await?;
+        if observed.identity() != call.identity() {
+            return Err(ProviderError::IdentityChanged);
+        }
+        let capability = if encrypt {
+            observed.encryption()
+        } else {
+            observed.decryption()
+        };
+        if capability != PrivateCryptoCapability::Nip44V2 {
+            return Err(ProviderError::CapabilityUnavailable);
+        }
+        self.resources
+            .retain_binding()
+            .ok_or(ProviderError::CapabilityUnavailable)
+    }
+
+    /// Encrypts only with the already attached participant's current NIP-44 v2
+    /// provider. It reobserves identity/capability before dispatch and retains
+    /// the callback scope through the call. No signing or persistence occurs.
+    pub async fn encrypt_private(
+        &self,
+        call: ProviderCall,
+        recipient: radroots_domain::PublicKey,
+        plaintext: PrivateText,
+    ) -> Result<PrivateCiphertext, ProviderError> {
+        let provider = self.private_provider(&call, true).await?;
+        let _permit = self
+            .session
+            .admit()
+            .map_err(|_| ProviderError::CapabilityUnavailable)?;
+        provider
+            .provider
+            .encrypt_private(call, recipient, plaintext)
+            .await
+    }
+
+    /// Decrypts through the current attached NIP-44 v2 provider. The composing
+    /// executor must first authenticate the carrier and bind its actual author.
+    /// Plaintext remains zeroizing and grants no history/command authority.
+    pub async fn decrypt_private(
+        &self,
+        call: ProviderCall,
+        sender: radroots_domain::PublicKey,
+        ciphertext: PrivateCiphertext,
+    ) -> Result<PrivateText, ProviderError> {
+        let provider = self.private_provider(&call, false).await?;
+        let _permit = self
+            .session
+            .admit()
+            .map_err(|_| ProviderError::CapabilityUnavailable)?;
+        provider
+            .provider
+            .decrypt_private(call, sender, ciphertext)
+            .await
+    }
     /// Issues only through an already observed, live exact-intent provider.
     /// The executor must retain its own work permit through durable capture;
     /// this scoped future owns resources but supplies no admission receipt.
@@ -131,9 +196,9 @@ impl SignerSession {
     ) -> radroots_signing::issuance::SigningOutcome {
         use radroots_signing::issuance::SigningOutcome;
         let binding = intent.binding();
-        let Ok(_permit) = self.session.admit() else {
+        if self.state() != SessionState::Running {
             return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
-        };
+        }
         if self.identity_changed() {
             return SigningOutcome::not_dispatched(binding, ProviderError::IdentityChanged);
         }
@@ -146,6 +211,16 @@ impl SignerSession {
         if observed.exact_issuance().is_none() {
             return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
         }
+        let observed = match self.observe().await {
+            Ok(observed) => observed,
+            Err(error) => return SigningOutcome::not_dispatched(binding, error),
+        };
+        if observed.identity() != intent.author() || observed.exact_issuance().is_none() {
+            return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
+        }
+        let Ok(_permit) = self.session.admit() else {
+            return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
+        };
         let Some(provider) = self.resources.retain_binding() else {
             return SigningOutcome::not_dispatched(binding, ProviderError::CapabilityUnavailable);
         };

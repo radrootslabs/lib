@@ -16,6 +16,7 @@ mod issuance;
 mod operation;
 mod plan;
 mod record;
+mod recovery;
 mod snapshot;
 mod worker;
 
@@ -220,6 +221,20 @@ impl WorkspaceStore for NativeWorkspace {
     }
 }
 impl radroots_storage::command::OperationJournal for NativeWorkspace {
+    fn reconcile_unknown<'a>(
+        &'a self,
+        input: AttachmentInput,
+        proof: &'a AttachmentProof,
+        evidence: &'a radroots_storage::command::SealEvidence,
+    ) -> BoxFuture<
+        'a,
+        Result<
+            radroots_storage::command::EvidenceCaptureOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.reconcile_unknown(input, proof, evidence))
+    }
     fn record_delivery_observation(
         &self,
         binding: WorkspaceBinding,

@@ -581,3 +581,91 @@ fn explicit_quiesce_stops_admission_without_draining_or_disposing_resources() {
         ]
     );
 }
+
+struct RetainedJobsHost {
+    host: Host,
+    drains: Arc<AtomicUsize>,
+    retained: Arc<AtomicBool>,
+}
+impl SessionHost for RetainedJobsHost {
+    fn start(&self) -> HostFuture<'_, Result<()>> {
+        self.host.start()
+    }
+    fn quiesce(&self) -> HostFuture<'_, Result<()>> {
+        self.host.quiesce()
+    }
+    fn drain(&self) -> HostFuture<'_, Result<()>> {
+        Box::pin(async move {
+            self.drains.fetch_add(1, Ordering::SeqCst);
+            if self.retained.load(Ordering::SeqCst) {
+                return Err(Error::new(
+                    Code::RecoveryRequired,
+                    OperationContext::proposed(None),
+                    RetryClass::ManualReconciliation,
+                    None,
+                )
+                .unwrap());
+            }
+            Ok(())
+        })
+    }
+    fn disconnect(&self) -> HostFuture<'_, Result<()>> {
+        self.host.disconnect()
+    }
+    fn dispose_callbacks(&self) -> HostFuture<'_, Result<()>> {
+        self.host.dispose_callbacks()
+    }
+    fn close_storage(&self) -> HostFuture<'_, Result<()>> {
+        self.host.close_storage()
+    }
+}
+#[test]
+fn owned_drain_failure_preserves_close_stage_and_resources_until_safe_completion() {
+    let observations = Arc::new(Observations::default());
+    let drains = Arc::new(AtomicUsize::new(0));
+    let retained = Arc::new(AtomicBool::new(true));
+    let session = Session::new(
+        RetainedJobsHost {
+            host: Host(observations.clone()),
+            drains: drains.clone(),
+            retained: retained.clone(),
+        },
+        NonZeroU16::MIN,
+    );
+    block_on(session.start()).unwrap();
+    let permit = session.admit().unwrap();
+    assert_eq!(
+        block_on(session.close()).unwrap_err().code(),
+        Code::RecoveryRequired
+    );
+    assert_eq!(session.state(), SessionState::Closing);
+    assert_eq!(
+        *observations.calls.lock().unwrap(),
+        vec![Hook::Start, Hook::Quiesce]
+    );
+    assert!(session.admit().is_err());
+    assert_eq!(
+        block_on(session.close()).unwrap_err().code(),
+        Code::RecoveryRequired
+    );
+    assert_eq!(drains.load(Ordering::SeqCst), 2);
+    retained.store(false, Ordering::SeqCst);
+    let mut wait = Box::pin(session.close());
+    assert!(poll(wait.as_mut()).is_pending());
+    drop(wait);
+    assert_eq!(drains.load(Ordering::SeqCst), 3);
+    drop(permit);
+    block_on(session.close()).unwrap();
+    assert_eq!(drains.load(Ordering::SeqCst), 3);
+    assert_eq!(
+        *observations.calls.lock().unwrap(),
+        vec![
+            Hook::Start,
+            Hook::Quiesce,
+            Hook::Disconnect,
+            Hook::Callbacks,
+            Hook::Storage
+        ]
+    );
+    assert_eq!(session.state(), SessionState::Closed);
+}

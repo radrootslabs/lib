@@ -6,6 +6,9 @@ mod plans;
 #[path = "support/receipt_client.rs"]
 mod ordinary;
 
+#[path = "support/receipt_workflow.rs"]
+mod workflow;
+
 use radroots_domain::{
     CommandContextData, CommandDigest, CorrelationId, OperationId, PublicKey, UnixSeconds,
 };
@@ -32,7 +35,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     time::Duration,
@@ -45,6 +48,7 @@ struct Pause {
 }
 struct Clock {
     now: AtomicU64,
+    live: AtomicBool,
     pause: Mutex<Option<Pause>>,
 }
 impl Clock {
@@ -84,7 +88,15 @@ impl WorkspaceClock for Clock {
                 .recv_timeout(Duration::from_secs(10))
                 .map_err(|_| WorkspaceError::Unavailable)?;
         }
-        UnixSeconds::new(self.now.load(Ordering::SeqCst)).map_err(|_| WorkspaceError::Unavailable)
+        let now = if self.live.load(Ordering::SeqCst) {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| WorkspaceError::Unavailable)?
+                .as_secs()
+        } else {
+            self.now.load(Ordering::SeqCst)
+        };
+        UnixSeconds::new(now).map_err(|_| WorkspaceError::Unavailable)
     }
 }
 struct Fixture {
@@ -118,6 +130,7 @@ impl Fixture {
             provider,
             clock: Arc::new(Clock {
                 now: AtomicU64::new(100),
+                live: AtomicBool::new(false),
                 pause: Mutex::new(None),
             }),
         }

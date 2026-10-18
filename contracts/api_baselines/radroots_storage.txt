@@ -1072,6 +1072,17 @@ pub fn radroots_storage::command::SealEvidence::verify(&radroots_storage::comman
 pub const fn radroots_storage::command::SealEvidence::workspace_id(&self) -> radroots_domain::identifier::WorkspaceId
 impl core::fmt::Debug for radroots_storage::command::SealEvidence
 pub fn radroots_storage::command::SealEvidence::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::command::SignedDmRelaySource
+impl radroots_storage::command::SignedDmRelaySource
+pub const fn radroots_storage::command::SignedDmRelaySource::created_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_storage::command::SignedDmRelaySource::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
+pub const fn radroots_storage::command::SignedDmRelaySource::participant(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_storage::command::SignedDmRelaySource::raw_json(&self) -> &str
+pub fn radroots_storage::command::SignedDmRelaySource::relay_uris(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn radroots_storage::command::SignedDmRelaySource::validate_capture(&self, &radroots_protocol::chat::routes::CapturedDmRoute) -> core::result::Result<(), radroots_storage::command::OperationError>
+pub fn radroots_storage::command::SignedDmRelaySource::verify(&str) -> core::result::Result<Self, radroots_storage::command::OperationError>
+impl core::fmt::Debug for radroots_storage::command::SignedDmRelaySource
+pub fn radroots_storage::command::SignedDmRelaySource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::SigningAttempt
 impl radroots_storage::command::SigningAttempt
 pub const fn radroots_storage::command::SigningAttempt::attempt_id(&self) -> radroots_domain::identifier::SigningAttemptId
@@ -1098,6 +1109,7 @@ pub fn radroots_storage::command::OperationJournal::obtained_evidence(&self, rad
 pub fn radroots_storage::command::OperationJournal::operation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::PreparedOperation>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::operation_snapshot(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::OperationSnapshot>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::prepare_delivery_attempt<'a>(&'a self, radroots_storage::command::DeliveryAttemptRequest, radroots_storage::workspace::AttachmentProof, core::option::Option<&'a radroots_storage::command::EnvelopeCandidate>) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::command::DeliveryAttemptOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::command::OperationJournal::reconcile_unknown<'a>(&'a self, radroots_storage::workspace::AttachmentInput, &'a radroots_storage::workspace::AttachmentProof, &'a radroots_storage::command::SealEvidence) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::command::EvidenceCaptureOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::record_delivery_observation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::AttachmentProof, radroots_storage::command::DeliveryObservation) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::DeliveryObservationOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::signing_attempt(&self, radroots_storage::command::ClaimAttemptRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::SigningAttempt>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::signing_plan(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::BoundSigningPlan>, radroots_storage::command::OperationError>>

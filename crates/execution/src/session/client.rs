@@ -63,6 +63,9 @@ impl<H: SessionHost> SessionHost for Resources<H> {
     fn disconnect(&self) -> HostFuture<'_, crate::Result<()>> {
         self.host.disconnect()
     }
+    fn drain(&self) -> HostFuture<'_, crate::Result<()>> {
+        self.host.drain()
+    }
     fn dispose_callbacks(&self) -> HostFuture<'_, crate::Result<()>> {
         Box::pin(async move {
             let signer = signer_lock(&self.signer).clone();
@@ -86,6 +89,12 @@ pub struct ClientSession<H: SessionHost> {
     signer: Shared<Mutex<Option<SignerSession>>>,
     #[cfg(feature = "workspace_session")]
     workspaces: WorkspaceScopes,
+    #[cfg(feature = "workspace_session")]
+    pub(crate) task_host: Option<Shared<dyn super::tasks::TaskHost>>,
+    #[cfg(feature = "workspace_session")]
+    pub(crate) task_budget: super::tasks::TaskBudget,
+    #[cfg(feature = "workspace_session")]
+    pub(crate) inquiry: Option<Shared<super::inquiry::InquiryRuntime>>,
 }
 impl<H: SessionHost> Clone for ClientSession<H> {
     fn clone(&self) -> Self {
@@ -94,6 +103,12 @@ impl<H: SessionHost> Clone for ClientSession<H> {
             signer: self.signer.clone(),
             #[cfg(feature = "workspace_session")]
             workspaces: self.workspaces.clone(),
+            #[cfg(feature = "workspace_session")]
+            task_host: self.task_host.clone(),
+            #[cfg(feature = "workspace_session")]
+            task_budget: self.task_budget.clone(),
+            #[cfg(feature = "workspace_session")]
+            inquiry: self.inquiry.clone(),
         }
     }
 }
@@ -117,7 +132,34 @@ impl<H: SessionHost> ClientSession<H> {
             signer,
             #[cfg(feature = "workspace_session")]
             workspaces,
+            #[cfg(feature = "workspace_session")]
+            task_host: None,
+            #[cfg(feature = "workspace_session")]
+            task_budget: super::tasks::TaskBudget::new(),
+            #[cfg(feature = "workspace_session")]
+            inquiry: None,
         }
+    }
+    /// Pairs an explicit target task host with its owning lifecycle host. The
+    /// lifecycle must drain accepted tasks and retain failed captures through
+    /// recovery before allowing storage disposal. This is a host trust boundary;
+    /// supplying an implementation is not execution qualification.
+    #[cfg(feature = "workspace_session")]
+    pub fn new_with_task_host(
+        host: H,
+        maximum_in_flight: NonZeroU16,
+        task_host: Shared<dyn super::tasks::TaskHost>,
+    ) -> Self {
+        let mut client = Self::new(host, maximum_in_flight);
+        client.task_host = Some(task_host);
+        client
+    }
+    /// Pairs the workflow's obtained-material owner with the lifecycle host
+    /// which must drain that same owner before closing resources.
+    #[cfg(feature = "workspace_session")]
+    pub fn with_inquiry_runtime(mut self, runtime: Shared<super::inquiry::InquiryRuntime>) -> Self {
+        self.inquiry = Some(runtime);
+        self
     }
     /// Reports resource lifecycle independently of business authority.
     pub fn state(&self) -> SessionState {

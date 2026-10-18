@@ -36,22 +36,27 @@ name = "radroots"
 path = "src/lib.rs"
 
 [dependencies]
+futures = { workspace = true, optional = true }
 radroots_core = { workspace = true }
 radroots_domain = { workspace = true, features = ["std", "serde"] }
 radroots_execution = { workspace = true, features = ["client_session", "workspace_session"] }
+radroots_protocol = { workspace = true, default-features = false, features = ["chat"] }
 radroots_event = { workspace = true }
 radroots_identity = { workspace = true, features = ["std"] }
 radroots_sdk = { workspace = true }
 radroots_signing = { workspace = true }
 radroots_storage = { workspace = true }
 radroots_storage_sqlite = { workspace = true, optional = true }
+radroots_nostr = { workspace = true, features = ["signing", "nip17"], optional = true }
+radroots_transport_nostr = { workspace = true, optional = true }
 radroots_trade = { workspace = true, features = ["json", "std"] }
 radroots_transport = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [features]
 default = ["client"]
 client = ["radroots_sdk/default", "radroots_storage/memory"]
-native = ["client", "radroots_sdk/native", "dep:radroots_storage_sqlite"]
+native = ["client", "radroots_sdk/native", "dep:radroots_storage_sqlite", "dep:futures", "dep:tokio", "dep:radroots_nostr", "dep:radroots_transport_nostr"]
 nostr = ["client", "radroots_sdk/nostr"]
 blossom = ["client", "radroots_sdk/blossom"]
 nip46 = ["nostr", "radroots_sdk/nip46"]

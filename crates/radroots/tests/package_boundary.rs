@@ -12,17 +12,22 @@ fn package_has_final_identity_and_exact_dependencies() {
     assert_eq!(
         dependency_names(MANIFEST),
         BTreeSet::from([
+            "futures",
             "radroots_core",
             "radroots_domain",
             "radroots_event",
             "radroots_execution",
             "radroots_identity",
+            "radroots_nostr",
+            "radroots_protocol",
             "radroots_sdk",
             "radroots_signing",
             "radroots_storage",
             "radroots_storage_sqlite",
             "radroots_trade",
             "radroots_transport",
+            "radroots_transport_nostr",
+            "tokio",
         ])
     );
     assert!(WORKSPACE.contains(
@@ -35,7 +40,7 @@ fn features_forward_the_exact_user_oriented_graph() {
     for forwarding in [
         "default = [\"client\"]",
         "client = [\"radroots_sdk/default\", \"radroots_storage/memory\"]",
-        "native = [\"client\", \"radroots_sdk/native\", \"dep:radroots_storage_sqlite\"]",
+        "native = [\"client\", \"radroots_sdk/native\", \"dep:radroots_storage_sqlite\", \"dep:futures\", \"dep:tokio\", \"dep:radroots_nostr\", \"dep:radroots_transport_nostr\"]",
         "nostr = [\"client\", \"radroots_sdk/nostr\"]",
         "nip46 = [\"nostr\", \"radroots_sdk/nip46\"]",
         "radrootsd = [\"client\", \"radroots_sdk/radrootsd\"]",

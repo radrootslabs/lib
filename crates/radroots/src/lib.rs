@@ -18,6 +18,12 @@ pub mod sync;
 pub mod trade;
 pub mod transport;
 
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+mod native_tasks;
+
+#[cfg(all(feature = "native", not(target_arch = "wasm32")))]
+mod native_inquiry;
+
 #[cfg(feature = "native")]
 pub use client::NativeConfig;
 pub use client::{Client, CloseReceipt, SessionStatus, StartMode};

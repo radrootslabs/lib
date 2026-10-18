@@ -5,6 +5,10 @@
 //! A permit is resource ownership, never proof of durable command admission.
 
 pub(crate) mod host;
+pub mod tasks;
+
+#[cfg(feature = "workspace_session")]
+pub mod inquiry;
 
 #[cfg(feature = "client_session")]
 mod client;
@@ -49,6 +53,7 @@ pub enum SessionState {
 #[derive(Clone, Copy)]
 enum CloseStage {
     Quiesce,
+    DrainOwned,
     Drain,
     Disconnect,
     Callbacks,
@@ -220,7 +225,7 @@ impl<H: SessionHost> Session<H> {
         let mut stage = self.inner.control.lock().await;
         if matches!(*stage, CloseStage::Quiesce) {
             self.inner.host.quiesce().await?;
-            *stage = CloseStage::Drain;
+            *stage = CloseStage::DrainOwned;
         }
         Ok(())
     }
@@ -238,6 +243,10 @@ impl<H: SessionHost> Session<H> {
             *stage = match *stage {
                 CloseStage::Quiesce => {
                     self.inner.host.quiesce().await?;
+                    CloseStage::DrainOwned
+                }
+                CloseStage::DrainOwned => {
+                    self.inner.host.drain().await?;
                     CloseStage::Drain
                 }
                 CloseStage::Drain => {

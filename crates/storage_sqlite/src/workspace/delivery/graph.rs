@@ -6,15 +6,9 @@ use super::{
     codec::{self, Fact},
 };
 use radroots_domain::{OperationId, PublicKey};
-use radroots_event::{
-    SignedEvent,
-    wire::{EventWireLimits, Nip01EventWire},
-};
-use radroots_event_codec::verify::{self, Nip01SignatureVerifier, RawEvent};
 use radroots_storage::command::{
-    BoundSigningPlan, DeliveryAttempt, DeliveryIntent, OperationError,
+    BoundSigningPlan, DeliveryAttempt, DeliveryIntent, OperationError, SignedDmRelaySource,
 };
-use radroots_transport::target::EndpointUri;
 use sqlx::{Row, SqliteConnection};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -51,52 +45,13 @@ fn allowed_routes(
         .iter()
         .filter(|route| route.participant() == recipient)
     {
-        let limits = EventWireLimits {
-            max_raw_json_bytes: 65536,
-            max_tag_element_bytes: 32768,
-            max_total_tag_bytes: 65536,
-            max_extra_fields: 0,
-            max_total_extra_json_bytes: 0,
-            ..Default::default()
-        };
-        let wire = Nip01EventWire::parse_json_exact_with_limits(route.raw_json(), limits)
-            .map_err(|_| OperationError::InvalidEvidence)?;
-        if wire.kind != 10050
-            || wire.pubkey != route.participant().to_hex()
-            || wire.id != route.source_id().to_string()
-            || wire.created_at == 0
-            || wire.created_at > 253_402_300_799
-        {
-            return Err(OperationError::InvalidEvidence);
-        }
-        for tag in &wire.tags {
-            if tag.first().is_some_and(|v| v == "relay") && (tag.len() != 2 || tag[1].len() > 2048)
-            {
-                return Err(OperationError::InvalidEvidence);
-            }
-        }
-        let mut selected = BTreeSet::new();
-        for target in route.selected_relays() {
-            if !wire
-                .tags
-                .iter()
-                .any(|tag| tag.len() == 2 && tag[0] == "relay" && tag[1] == target.as_ref())
-            {
-                return Err(OperationError::UnverifiedApproval);
-            }
-            let endpoint =
-                EndpointUri::parse(target.as_ref()).map_err(|_| OperationError::InvalidCommand)?;
-            if endpoint.as_str().len() > 2048 {
-                return Err(OperationError::InvalidCommand);
-            }
-            selected.insert(target.as_ref().to_owned());
-        }
-        let event = SignedEvent::from_wire_verified_id(wire, route.raw_json())
-            .map_err(|_| OperationError::InvalidEvidence)?;
-        let checked = verify::id(RawEvent::new(event.envelope().clone()))
-            .map_err(|_| OperationError::InvalidEvidence)?;
-        verify::signature(checked, &Nip01SignatureVerifier)
-            .map_err(|_| OperationError::InvalidEvidence)?;
+        let source = SignedDmRelaySource::verify(route.raw_json())?;
+        source.validate_capture(route)?;
+        let selected = route
+            .selected_relays()
+            .iter()
+            .map(|target| target.as_ref().to_owned())
+            .collect::<BTreeSet<_>>();
         if selected.is_empty() || result.insert(route.participant(), selected).is_some() {
             return Err(OperationError::InvalidCommand);
         }

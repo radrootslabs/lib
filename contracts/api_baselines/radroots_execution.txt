@@ -3,6 +3,24 @@ pub mod radroots_execution::inbox
 pub use radroots_execution::inbox::InquireInput
 pub use radroots_execution::inbox::ListingRevisionRef
 pub mod radroots_execution::session
+pub mod radroots_execution::session::inquiry
+pub struct radroots_execution::session::inquiry::InquiryRuntime
+impl radroots_execution::session::inquiry::InquiryRuntime
+pub async fn radroots_execution::session::inquiry::InquiryRuntime::drain(&self) -> core::result::Result<(), radroots_storage::command::OperationError>
+pub fn radroots_execution::session::inquiry::InquiryRuntime::new(alloc::sync::Arc<dyn radroots_execution::session::inquiry::InquiryIo>) -> Self
+pub trait radroots_execution::session::inquiry::InquiryIo: radroots_execution::session::HostBound
+pub fn radroots_execution::session::inquiry::InquiryIo::delivery_id(&self) -> core::result::Result<alloc::string::String, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::inquiry::InquiryIo::enabled(&self) -> bool
+pub fn radroots_execution::session::inquiry::InquiryIo::envelope(&self, radroots_storage::command::installation::PublicationWork, &str) -> core::result::Result<radroots_storage::command::delivery::EnvelopeCandidate, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::inquiry::InquiryIo::now(&self) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::inquiry::InquiryIo::publication_policy(&self) -> radroots_transport::policy::SatisfactionPolicy
+pub fn radroots_execution::session::inquiry::InquiryIo::publish(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
+pub fn radroots_execution::session::inquiry::InquiryIo::route(&self, radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_storage::command::OperationError>>
+pub fn radroots_execution::session::inquiry::InquiryIo::seal_time(&self, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::inquiry::InquiryIo::targets(&self, &radroots_protocol::chat::routes::CapturedDmRoute) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
+pub mod radroots_execution::session::tasks
+pub trait radroots_execution::session::tasks::TaskHost: radroots_execution::session::HostBound
+pub fn radroots_execution::session::tasks::TaskHost::submit(&self, radroots_execution::session::HostFuture<'static, ()>) -> radroots_execution::Result<()>
 pub enum radroots_execution::session::SessionState
 pub radroots_execution::session::SessionState::Closed
 pub radroots_execution::session::SessionState::Closing
@@ -10,16 +28,20 @@ pub radroots_execution::session::SessionState::Ready
 pub radroots_execution::session::SessionState::Running
 pub radroots_execution::session::SessionState::Starting
 pub struct radroots_execution::session::ClientSession<H: radroots_execution::session::SessionHost>
+impl<H: radroots_execution::session::SessionHost + 'static> radroots_execution::session::ClientSession<H>
+pub async fn radroots_execution::session::ClientSession<H>::inquire(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
+pub async fn radroots_execution::session::ClientSession<H>::resume_inquiry(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
 impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
 pub async fn radroots_execution::session::ClientSession<H>::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::SignerSession>
 pub async fn radroots_execution::session::ClientSession<H>::attach_workspace(&self, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceStore>, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
 pub async fn radroots_execution::session::ClientSession<H>::close(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::ClientSession<H>::new(H, core::num::nonzero::NonZeroU16) -> Self
+pub fn radroots_execution::session::ClientSession<H>::new_with_task_host(H, core::num::nonzero::NonZeroU16, alloc::sync::Arc<dyn radroots_execution::session::tasks::TaskHost>) -> Self
 pub fn radroots_execution::session::ClientSession<H>::signer_session(&self) -> core::option::Option<radroots_execution::session::SignerSession>
 pub async fn radroots_execution::session::ClientSession<H>::start(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::ClientSession<H>::state(&self) -> radroots_execution::session::SessionState
+pub fn radroots_execution::session::ClientSession<H>::with_inquiry_runtime(self, alloc::sync::Arc<radroots_execution::session::inquiry::InquiryRuntime>) -> Self
 impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
-pub async fn radroots_execution::session::ClientSession<H>::inquire(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
 pub async fn radroots_execution::session::ClientSession<H>::operation(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>>
 impl<H: radroots_execution::session::SessionHost> core::clone::Clone for radroots_execution::session::ClientSession<H>
 pub fn radroots_execution::session::ClientSession<H>::clone(&self) -> Self
@@ -36,6 +58,8 @@ pub fn radroots_execution::session::Session<H>::clone(&self) -> Self
 pub struct radroots_execution::session::SignerSession
 impl radroots_execution::session::SignerSession
 pub async fn radroots_execution::session::SignerSession::close(&self) -> radroots_execution::Result<()>
+pub async fn radroots_execution::session::SignerSession::decrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCiphertext) -> core::result::Result<radroots_signing::provider::PrivateText, radroots_signing::provider::ProviderError>
+pub async fn radroots_execution::session::SignerSession::encrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateText) -> core::result::Result<radroots_signing::provider::PrivateCiphertext, radroots_signing::provider::ProviderError>
 pub fn radroots_execution::session::SignerSession::identity_changed(&self) -> bool
 pub fn radroots_execution::session::SignerSession::new(radroots_signing::provider::SignerHandle) -> Self
 pub async fn radroots_execution::session::SignerSession::observe(&self) -> core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>
@@ -54,6 +78,7 @@ pub trait radroots_execution::session::SessionHost: radroots_execution::session:
 pub fn radroots_execution::session::SessionHost::close_storage(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
 pub fn radroots_execution::session::SessionHost::disconnect(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
 pub fn radroots_execution::session::SessionHost::dispose_callbacks(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
+pub fn radroots_execution::session::SessionHost::drain(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
 pub fn radroots_execution::session::SessionHost::quiesce(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
 pub fn radroots_execution::session::SessionHost::start(&self) -> radroots_execution::session::HostFuture<'_, radroots_execution::Result<()>>
 pub type radroots_execution::session::HostFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
@@ -230,6 +255,7 @@ pub const fn radroots_execution::Error::code(self) -> radroots_execution::Code
 pub const fn radroots_execution::Error::context(self) -> radroots_execution::OperationContext
 pub const fn radroots_execution::Error::detail(self) -> core::option::Option<radroots_execution::Detail>
 pub const fn radroots_execution::Error::new(radroots_execution::Code, radroots_execution::OperationContext, radroots_execution::RetryClass, core::option::Option<radroots_execution::Detail>) -> core::result::Result<Self, radroots_execution::InvalidErrorContext>
+pub const fn radroots_execution::Error::operation(radroots_storage::command::OperationError, radroots_execution::OperationContext) -> Self
 pub const fn radroots_execution::Error::retry(self) -> radroots_execution::RetryClass
 impl core::error::Error for radroots_execution::Error
 impl core::fmt::Display for radroots_execution::Error

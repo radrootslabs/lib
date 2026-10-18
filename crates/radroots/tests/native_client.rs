@@ -255,3 +255,104 @@ async fn ordinary_native_signer_scope_returns_real_full_identity_signature_facts
     // primitive fact alone does not claim a durable command or publication.
     artifact.with_json(|raw| assert!(!raw.is_empty()));
 }
+
+#[tokio::test]
+async fn ordinary_scoped_private_crypto_uses_actual_custody_and_nip44() {
+    use radroots_nostr::signing::OsNonceSource;
+    use radroots_signing::provider::{
+        ParticipantProvider, PrivateText, ProviderCall, ProviderError,
+    };
+    use radroots_signing::request::CancellationSignal;
+    fn checked_clock() -> Result<u64, radroots_signing::Error> {
+        Ok(1_700_000_000_001)
+    }
+    let root = tempfile::tempdir().unwrap();
+    let options = options(root.path());
+    let client = Client::open(NativeConfig::public_read(options.clone()))
+        .await
+        .unwrap();
+    let owner = Arc::new(
+        LocalSigner::with_clock(
+            parse_secret_key("0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            checked_clock,
+        )
+        .unwrap()
+        .with_nonce_source(Arc::new(OsNonceSource)),
+    );
+    let peer = LocalSigner::with_clock(
+        parse_secret_key("0000000000000000000000000000000000000000000000000000000000000002")
+            .unwrap(),
+        checked_clock,
+    )
+    .unwrap()
+    .with_nonce_source(Arc::new(OsNonceSource));
+    let call = |identity| {
+        ProviderCall::new(
+            identity,
+            std::num::NonZeroU64::new(1_700_000_010_000).unwrap(),
+            CancellationSignal::new(),
+        )
+    };
+    let scope = client
+        .attach_signer(SignerHandle::new(owner.clone(), callbacks(options, true)))
+        .await
+        .unwrap();
+    let text = "scoped private inquiry: apples 🍎 and exact original text";
+    let ciphertext = scope
+        .encrypt_private(
+            call(owner.public_key()),
+            peer.public_key(),
+            PrivateText::new(text).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        peer.decrypt_private(call(peer.public_key()), owner.public_key(), ciphertext)
+            .await
+            .unwrap()
+            .expose(),
+        text
+    );
+    let ciphertext = peer
+        .encrypt_private(
+            call(peer.public_key()),
+            owner.public_key(),
+            PrivateText::new("independent peer response").unwrap(),
+        )
+        .await
+        .unwrap();
+    let plaintext = scope
+        .decrypt_private(call(owner.public_key()), peer.public_key(), ciphertext)
+        .await
+        .unwrap();
+    assert_eq!(plaintext.expose(), "independent peer response");
+    assert!(!format!("{plaintext:?}").contains("independent peer response"));
+    let cancelled = CancellationSignal::new();
+    cancelled.cancel();
+    let denied = scope
+        .encrypt_private(
+            ProviderCall::new(
+                owner.public_key(),
+                std::num::NonZeroU64::new(1_700_000_010_000).unwrap(),
+                cancelled,
+            ),
+            peer.public_key(),
+            PrivateText::new(text).unwrap(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(denied, ProviderError::Cancelled);
+    client.close().await.unwrap();
+    assert_eq!(
+        scope
+            .encrypt_private(
+                call(owner.public_key()),
+                peer.public_key(),
+                PrivateText::new(text).unwrap()
+            )
+            .await
+            .unwrap_err(),
+        ProviderError::CapabilityUnavailable
+    );
+}

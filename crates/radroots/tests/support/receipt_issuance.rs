@@ -1,4 +1,6 @@
 use super::*;
+#[path = "receipt_recovery.rs"]
+mod recovery;
 use core::cell::Cell;
 use radroots_nostr::{
     key::parse_secret_key,
