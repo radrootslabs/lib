@@ -1,10 +1,11 @@
 use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
-    WorkspaceError, admission::Journal, fs::Namespace, operation, record::GrantRecord,
+    WorkspaceError, admission::Journal, fs::Namespace, operation, plan, record::GrantRecord,
 };
 use radroots_domain::{CommandDigest, OperationId};
 use radroots_storage::command::{
-    AdmissionOutcome, AdmissionRequest, CommitAttempt, OperationError, PreparedOperation,
+    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, ChatSigningPlan, CommitAttempt,
+    OperationError, PlanBindingOutcome, PreparedOperation,
 };
 use sqlx::{
     Connection, Row, SqliteConnection,
@@ -14,6 +15,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
         mpsc::{self, SyncSender},
     },
     thread::JoinHandle,
@@ -21,14 +23,26 @@ use std::{
 };
 use tokio::sync::{oneshot, watch};
 
-// Each request holds bounded descriptors and one 32-byte proof. With 32
-// queued requests and a single in-flight request this is below the 4 MiB
-// contract. Command data has a 64 KiB canonical bound, 4 KiB decoded text and
-// bounded exact-sized descriptors; no unbounded event/SQL enters this queue.
+// Count conservative retained input bounds across queued and in-flight jobs.
+// Plan jobs retain both their canonical bytes and bounded decoded fields.
+const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 const TABLE: &str = "CREATE TABLE workspace_grant (singleton INTEGER PRIMARY KEY CHECK(singleton=1), workspace BLOB NOT NULL CHECK(length(workspace)=32), grant_id BLOB NOT NULL CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    BindPlan(
+        Box<WorkspaceBinding>,
+        ChatSigningPlan,
+        AttachmentProof,
+        Reply<PlanBindingOutcome, OperationError>,
+    ),
+    SigningPlan(
+        Box<WorkspaceBinding>,
+        OperationId,
+        CommandDigest,
+        AttachmentProof,
+        Reply<Option<BoundSigningPlan>, OperationError>,
+    ),
     Authenticate(AttachmentInput, AttachmentProof, Reply<WorkspaceBinding>),
     Revoke(AttachmentInput, AttachmentProof, Reply<()>),
     Admit(
@@ -44,8 +58,22 @@ enum Job {
         Reply<Option<PreparedOperation>, OperationError>,
     ),
 }
+struct Budget {
+    used: Arc<AtomicUsize>,
+    bytes: usize,
+}
+impl Drop for Budget {
+    fn drop(&mut self) {
+        self.used.fetch_sub(self.bytes, Ordering::AcqRel);
+    }
+}
+struct Queued {
+    job: Job,
+    _budget: Budget,
+}
 pub(super) struct Handle {
-    sender: Mutex<Option<SyncSender<Job>>>,
+    sender: Mutex<Option<SyncSender<Queued>>>,
+    queued_bytes: Arc<AtomicUsize>,
     completed: watch::Receiver<Option<Result<(), WorkspaceError>>>,
     thread: Mutex<Option<JoinHandle<()>>>,
 }
@@ -57,7 +85,8 @@ impl Handle {
         crypto: WorkspaceCrypto,
         clock: Arc<dyn WorkspaceClock>,
     ) -> Result<Self, WorkspaceError> {
-        let (sender, requests) = mpsc::sync_channel(QUEUE_CAPACITY);
+        let (sender, requests) = mpsc::sync_channel::<Queued>(QUEUE_CAPACITY);
+        let queued_bytes = Arc::new(AtomicUsize::new(0));
         let (ready, started) = oneshot::channel();
         let (completion, completed) = watch::channel(None);
         let thread = std::thread::Builder::new()
@@ -117,8 +146,34 @@ impl Handle {
                     }
                     let mut uncertain = false;
                     if ready.send(Ok(())).is_ok() {
-                        while let Ok(job) = requests.recv() {
+                        while let Ok(Queued { job, _budget }) = requests.recv() {
                             match job {
+                                Job::BindPlan(binding, plan, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .bind_plan(*binding, plan, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
+                                Job::SigningPlan(binding, operation_id, digest, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .query_plan(*binding, operation_id, digest, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
                                 Job::Authenticate(selected, proof, reply) => {
                                     let result = authenticate(
                                         &mut connection,
@@ -195,6 +250,7 @@ impl Handle {
             .map_err(|_| WorkspaceError::Unavailable)?;
         let handle = Self {
             sender: Mutex::new(Some(sender)),
+            queued_bytes,
             completed,
             thread: Mutex::new(Some(thread)),
         };
@@ -211,16 +267,70 @@ impl Handle {
         }
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
+        let bytes = match &job {
+            Job::BindPlan(..) => 1024 * 1024,
+            Job::Admit(..) => 96 * 1024,
+            _ => 16 * 1024,
+        };
+        self.queued_bytes
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(bytes)
+                    .filter(|next| *next <= QUEUE_MAX_BYTES)
+            })
+            .map_err(|_| WorkspaceError::Unavailable)?;
+        let queued = Queued {
+            job,
+            _budget: Budget {
+                used: self.queued_bytes.clone(),
+                bytes,
+            },
+        };
         self.sender
             .lock()
             .map_err(|_| WorkspaceError::Unavailable)?
             .as_ref()
             .ok_or(WorkspaceError::Closed)?
-            .try_send(job)
+            .try_send(queued)
             .map_err(|error| match error {
                 mpsc::TrySendError::Full(_) => WorkspaceError::Unavailable,
                 mpsc::TrySendError::Disconnected(_) => WorkspaceError::Closed,
             })
+    }
+    pub(super) async fn bind_plan(
+        &self,
+        binding: WorkspaceBinding,
+        plan: ChatSigningPlan,
+        proof: AttachmentProof,
+    ) -> Result<PlanBindingOutcome, OperationError> {
+        let anchor = CommitAttempt::new(
+            binding.input().workspace_id(),
+            plan.operation_id(),
+            plan.command_digest(),
+            None,
+        );
+        let (reply, result) = oneshot::channel();
+        self.send(Job::BindPlan(Box::new(binding), plan, proof, reply))?;
+        match result.await {
+            Ok(result) => result,
+            Err(_) => Ok(PlanBindingOutcome::Unknown(anchor)),
+        }
+    }
+    pub(super) async fn signing_plan(
+        &self,
+        binding: WorkspaceBinding,
+        operation_id: OperationId,
+        digest: CommandDigest,
+        proof: AttachmentProof,
+    ) -> Result<Option<BoundSigningPlan>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::SigningPlan(
+            Box::new(binding),
+            operation_id,
+            digest,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
     pub(super) async fn authenticate(
         &self,
@@ -357,7 +467,15 @@ async fn initialize(
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
-        sqlx::query("PRAGMA user_version=3")
+        sqlx::raw_sql(plan::TABLE)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| WorkspaceError::StorageFailure)?;
+        sqlx::raw_sql(plan::PARTS)
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| WorkspaceError::StorageFailure)?;
+        sqlx::query("PRAGMA user_version=4")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -379,11 +497,11 @@ async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if version != 3 {
+    if version != 4 {
         return Err(WorkspaceError::RecoveryRequired);
     }
-    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=3 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 ELSE 0 END)=3 THEN 1 ELSE 0 END FROM sqlite_schema")
-        .bind(TABLE).bind(operation::TABLE).bind(operation::INDEX).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=5 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 ELSE 0 END)=5 THEN 1 ELSE 0 END FROM sqlite_schema")
+        .bind(TABLE).bind(operation::TABLE).bind(plan::TABLE).bind(plan::PARTS).bind(operation::INDEX).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
     if catalog_matches != 1 {
         return Err(WorkspaceError::RecoveryRequired);
     }

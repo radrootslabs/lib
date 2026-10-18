@@ -10,7 +10,7 @@ use alloc::{
     vec::Vec,
 };
 use core::fmt;
-use radroots_domain::{MessageId, PublicKey, UnixSeconds};
+use radroots_domain::{CommandDigest, MessageId, OperationId, PublicKey, UnixSeconds};
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
@@ -20,6 +20,11 @@ pub const RUMOR_MAX_BYTES: usize = 24_576;
 pub const SIGNED_MAX_BYTES: usize = 65_536;
 const MAX_TIME: u64 = 253_402_300_799;
 const RANDOMIZED_PAST_SECONDS: u64 = 172_800;
+
+mod plan;
+pub use plan::{ChatReplay, ChatSigningPlan, PLAN_MAX_BYTES};
+mod routes;
+pub use routes::{CapturedDmRoute, DmRelayAdvertisement};
 
 fn payload_shape(plaintext_bytes: usize) -> Result<(usize, usize), WireError> {
     // The qualified small-payload profile uses the two-byte length prefix.
@@ -111,6 +116,8 @@ impl ChatBudget {
 /// Selectors and codec output authenticate no parent, source or participant.
 pub struct ChatRumor {
     event: UnsignedEvent,
+    operation_id: OperationId,
+    command_digest: CommandDigest,
     author: PublicKey,
     created_at: UnixSeconds,
     recipients: Vec<PublicKey>,
@@ -166,6 +173,8 @@ impl ChatRumor {
         recipients.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
         Ok(Self {
             event,
+            operation_id: command.context().operation_id(),
+            command_digest: command.digest(),
             author,
             created_at,
             recipients,
@@ -236,6 +245,9 @@ fn ciphertext_shape(value: &str, plaintext_bytes: usize) -> Result<(), WireError
 
 /// Bounded exact kind-13 data for one recipient, with no signature/authority.
 pub struct ChatSeal {
+    operation_id: OperationId,
+    command_digest: CommandDigest,
+    message_id: MessageId,
     author: PublicKey,
     recipient: PublicKey,
     created_at: UnixSeconds,
@@ -271,6 +283,9 @@ impl ChatSeal {
         let preimage = crate::nip01::bounded_preimage(&fields, SIGNED_MAX_BYTES)?;
         let event_id = Sha256::digest(preimage.as_bytes()).into();
         Ok(Self {
+            operation_id: rumor.operation_id,
+            command_digest: rumor.command_digest,
+            message_id: rumor.message_id(),
             author: rumor.author,
             recipient,
             created_at,
@@ -287,6 +302,19 @@ impl ChatSeal {
             tags: &[],
             content: &self.ciphertext,
         }
+    }
+    /// Returns the originating captured operation descriptor, without authority.
+    pub const fn operation_id(&self) -> OperationId {
+        self.operation_id
+    }
+    /// Returns the originating semantic command commitment.
+    pub const fn command_digest(&self) -> CommandDigest {
+        self.command_digest
+    }
+    /// Returns the exact unsigned rumor this seal was constructed to carry.
+    /// The qualified encryption provider must separately bind its plaintext.
+    pub const fn message_id(&self) -> MessageId {
+        self.message_id
     }
     /// Returns the exact recipient, separate from public seal tags.
     pub const fn recipient(&self) -> PublicKey {

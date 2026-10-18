@@ -7,6 +7,7 @@ use core::fmt;
 use radroots_domain::{
     CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId, WorkspaceId,
 };
+pub use radroots_protocol::chat::ChatSigningPlan;
 use radroots_protocol::command::CapturedChatCommand;
 use radroots_transport::BoxFuture;
 
@@ -244,6 +245,23 @@ impl fmt::Debug for AdmissionOutcome {
 /// Typed transaction port, implemented by actual shared storage adapters.
 /// Applications do not implement a second orchestration or stock engine here.
 pub trait OperationJournal: WorkspaceStore {
+    /// Atomically retains the complete immutable plan under current access and
+    /// the original first-issue window. No signer invocation happens here.
+    fn bind_signing_intents(
+        &self,
+        binding: WorkspaceBinding,
+        plan: ChatSigningPlan,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<PlanBindingOutcome, OperationError>>;
+    /// Queries original complete plan bytes under current access, including
+    /// after expiry. The returned value grants no permission to dispatch.
+    fn signing_plan(
+        &self,
+        binding: WorkspaceBinding,
+        operation_id: OperationId,
+        expected_digest: CommandDigest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<BoundSigningPlan>, OperationError>>;
     /// Authenticates current grant/fences, checks the original operation first,
     /// and confirms atomic retained preparation before any signing. Chat has no
     /// physical hold. Only confirmed rollback may return a known-failure error.
@@ -261,4 +279,78 @@ pub trait OperationJournal: WorkspaceStore {
         expected_digest: Option<CommandDigest>,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Option<PreparedOperation>, OperationError>>;
+}
+
+/// Complete retained T1 observation, separate from issuance and installation.
+/// A custom adapter's structural report does not qualify durable execution.
+pub struct BoundSigningPlan {
+    prepared: PreparedOperation,
+    plan: ChatSigningPlan,
+    transaction_id: TransactionId,
+    bound_at: radroots_domain::UnixSeconds,
+}
+impl BoundSigningPlan {
+    /// Compares exact original command and fixed first-issue window.
+    pub fn from_committed_store(
+        prepared: PreparedOperation,
+        plan: ChatSigningPlan,
+        transaction_id: TransactionId,
+        bound_at: radroots_domain::UnixSeconds,
+    ) -> Result<Self, OperationError> {
+        if plan.operation_id() != prepared.identity().operation_id()
+            || plan.command_digest() != prepared.identity().command_digest()
+            || bound_at < prepared.issuance_window().prepared_at()
+            || bound_at >= prepared.issuance_window().first_issue_not_after()
+            || plan.created_at() < prepared.issuance_window().prepared_at()
+            || plan.created_at() > bound_at
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        // Reconstruct against the actually retained command, rather than trust
+        // a matching digest descriptor attached to unrelated plan fields.
+        let checked = ChatSigningPlan::parse(prepared.request().command(), plan.protected_wire())
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        Ok(Self {
+            prepared,
+            plan: checked,
+            transaction_id,
+            bound_at,
+        })
+    }
+    /// Transfers retained command and exact plan without changing their identities.
+    pub fn into_parts(self) -> (PreparedOperation, ChatSigningPlan) {
+        (self.prepared, self.plan)
+    }
+    pub const fn prepared(&self) -> &PreparedOperation {
+        &self.prepared
+    }
+    pub const fn plan(&self) -> &ChatSigningPlan {
+        &self.plan
+    }
+    pub const fn transaction_id(&self) -> TransactionId {
+        self.transaction_id
+    }
+    /// Returns the checked observation captured before protection; this is not
+    /// an independently measured wall-clock commit or signing time.
+    pub const fn bound_at(&self) -> radroots_domain::UnixSeconds {
+        self.bound_at
+    }
+}
+impl fmt::Debug for BoundSigningPlan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("BoundSigningPlan(<redacted>)")
+    }
+}
+/// Confirmed T1 completion or an original anchor requiring reconciliation.
+pub enum PlanBindingOutcome {
+    Committed(BoundSigningPlan),
+    Unknown(CommitAttempt),
+}
+impl fmt::Debug for PlanBindingOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Committed(_) => "PlanBindingOutcome::Committed(<redacted>)",
+            Self::Unknown(_) => "PlanBindingOutcome::Unknown(<retained>)",
+        })
+    }
 }

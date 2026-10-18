@@ -64,6 +64,36 @@ impl WorkspaceCrypto {
         self.seal_bound(operation_context(workspace, operation)?, 65_536, plaintext)
             .await
     }
+    pub(super) async fn seal_plan_part(
+        &self,
+        workspace: WorkspaceId,
+        operation: OperationId,
+        digest: &[u8; 32],
+        part: u8,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            plan_context(workspace, operation, digest, part)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            plaintext,
+        )
+        .await
+    }
+    pub(super) async fn open_plan_part(
+        &self,
+        workspace: WorkspaceId,
+        operation: OperationId,
+        digest: &[u8; 32],
+        part: u8,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            plan_context(workspace, operation, digest, part)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
     async fn seal_bound(
         &self,
         context: EnvelopeContext,
@@ -188,6 +218,30 @@ fn operation_context(
         EnvelopeSubject::parse("workspace_operation", format!("{workspace}{operation}"))
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse("radroots.workspace.operation.v2")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+fn plan_context(
+    workspace: WorkspaceId,
+    operation: OperationId,
+    digest: &[u8; 32],
+    part: u8,
+) -> Result<EnvelopeContext, WorkspaceError> {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"radroots.workspace.signing_plan.part.v1\0");
+    hash.update(workspace.as_bytes());
+    hash.update(operation.as_bytes());
+    hash.update(digest);
+    hash.update([part]);
+    let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.workspace.signing_plan")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("workspace_plan_part", subject.to_string())
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse("radroots.workspace.signing_plan.v1")
             .map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }

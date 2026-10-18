@@ -60,6 +60,8 @@ zeroize = { workspace = true, features = ["alloc"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
 
 [dev-dependencies]
+radroots_protocol = { workspace = true, default-features = false, features = ["chat"] }
+nostr = { workspace = true, default-features = false, features = ["std", "nip44"] }
 futures = { workspace = true }
 hex = { workspace = true }
 radroots_secrets = { workspace = true, features = ["file", "memory"] }

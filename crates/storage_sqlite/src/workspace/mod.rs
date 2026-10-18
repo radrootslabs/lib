@@ -9,6 +9,7 @@ mod admission;
 mod crypto;
 mod fs;
 mod operation;
+mod plan;
 mod record;
 mod worker;
 
@@ -213,6 +214,38 @@ impl WorkspaceStore for NativeWorkspace {
     }
 }
 impl radroots_storage::command::OperationJournal for NativeWorkspace {
+    fn bind_signing_intents(
+        &self,
+        binding: WorkspaceBinding,
+        plan: radroots_storage::command::ChatSigningPlan,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            radroots_storage::command::PlanBindingOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.bind_plan(binding, plan, proof))
+    }
+    fn signing_plan(
+        &self,
+        binding: WorkspaceBinding,
+        operation_id: radroots_domain::OperationId,
+        digest: radroots_domain::CommandDigest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::command::BoundSigningPlan>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .signing_plan(binding, operation_id, digest, proof),
+        )
+    }
     fn admit_command_and_hold(
         &self,
         request: radroots_storage::command::AdmissionRequest,

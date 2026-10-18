@@ -203,5 +203,22 @@ authority. Close permanently stops admission, drains admitted requests, checks
 the WAL checkpoint and awaits connection closure before releasing the lock.
 Cancelled close can be awaited again. Dropping the handle is not close evidence.
 Revocation commits a protected grant revision and survives reopening. This
-attachment boundary supplies no command journal, network pairing, firm stock,
-transfer, restore or browser qualification.
+attachment alone supplies no network pairing, firm stock, transfer, restore or
+browser qualification.
+
+
+The separate `OperationJournal` implementation durably admits non-stock chat
+preparations and binds complete immutable signing plans before dispatch. It
+rechecks the current protected grant, original preparation and all indexed facts
+under `BEGIN IMMEDIATE`, with provider work outside that transaction. A fixed
+first-issue window never restarts on replay. Already-bound bytes remain queryable
+and replayable after expiry under current access; this grants no new issuance.
+
+The current workspace schema is version 4. Older namespaces are preserved and
+refused for explicit cutover, without an automatic state rewrite. Complete plans
+use a protected manifest and at most twenty-four 16 KiB protected data parts,
+with context binding the full workspace/operation/plan identity and part index.
+Existing secret-material/envelope bounds remain intact. Queued and in-flight
+request reservations share a 4 MiB byte cap alongside the 32-slot queue limit.
+Known rollback, confirmed commit and unknown completion remain distinct.
+This component performs no signer dispatch, business installation or delivery.

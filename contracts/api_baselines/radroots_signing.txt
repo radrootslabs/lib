@@ -203,6 +203,15 @@ pub fn radroots_signing::issuance::SigningOutcome::into_parts(self) -> (radroots
 pub const fn radroots_signing::issuance::SigningOutcome::kind(&self) -> &radroots_signing::issuance::OutcomeKind
 pub const fn radroots_signing::issuance::SigningOutcome::not_dispatched(radroots_signing::issuance::IntentBinding, radroots_signing::provider::ProviderError) -> Self
 pub const fn radroots_signing::issuance::SigningOutcome::unknown(radroots_signing::issuance::IntentBinding, radroots_signing::provider::ProviderError) -> Self
+pub struct radroots_signing::issuance::VerifiedDmRelayAdvertisement
+impl radroots_signing::issuance::VerifiedDmRelayAdvertisement
+pub const fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::advertisement(&self) -> &radroots_protocol::chat::routes::DmRelayAdvertisement
+pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::capture_route(&self, &[alloc::string::String]) -> core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_signing::provider::ProviderError>
+pub const fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
+pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::raw_json(&self) -> &str
+pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::verify(&str, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+impl core::fmt::Debug for radroots_signing::issuance::VerifiedDmRelayAdvertisement
+pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_signing::issuance::MAX_EVENT_UNIX_SECONDS: u64
 pub const radroots_signing::issuance::SIGNED_EVENT_MAX_BYTES: usize
 pub mod radroots_signing::provider

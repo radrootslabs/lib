@@ -20,6 +20,8 @@ numbers embedded in wire and schema contracts.
 | `radrootsd::transport_publish::v5` | daemon transport-publish request, job, outcome, and capability DTOs |
 | `schema` | schema IDs, module generations, descriptors, and aggregate registries |
 | `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
+| `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
+| `chat` (`chat` feature) | bounded kind-14/13 data, complete immutable signing-plan codec and observed DM route descriptors |
 
 Versioned DTOs live below an explicit generation module. The command codec
 implements its fixed v1 profile without exposing automatic serialization of
@@ -35,6 +37,8 @@ they use.
 | `std` | yes | implements standard-library error integration and enables `serde?/std` |
 | `serde` | yes | derives serialization and deserialization for wire-contract types |
 | `commands` | no | enables the portable closed chat codec, domain values, SHA-256 and zeroizing private command buffers |
+| `nip01` | no | enables pure exact NIP-01 serialization and complete byte counting |
+| `chat` | no | enables commands, NIP-01 and the bounded known-kind chat/plan data profile |
 
 Disabling default features leaves the catalog and structural validation APIs
 available with `alloc` only. Enable `serde` without `std` for portable encoded
@@ -90,3 +94,20 @@ The package charter is the
 [Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 The reviewed Rust surface is recorded in the
 [public API baseline](../../contracts/api_baselines/radroots_protocol.txt).
+
+## Complete private signing-plan data
+
+`chat::ChatSigningPlan` retains the exact sorted unique peer/self recipient set,
+seal author/kind/time/empty tags/content/event ID/purpose, original signed DM
+route-source bytes, selected targets, logical message ID, command commitment and
+provider replay declaration. The closed binary profile is capped at 384 KiB;
+its decoded recipient collections discard caller spare capacity. Original route
+sources are each at most 64 KiB, selected URIs at most 2048 bytes, and the
+combined session selection at most sixteen distinct relays.
+
+Construction and decoding validate descriptors only. They verify no signature,
+MAC, grant, consent, route readiness or provider capability and create no durable
+commit. The executor must verify source evidence, approved targets and current
+access, then retain this complete plan through its qualified protected journal
+before any business signing invocation. A stored replay declaration alone never
+permits uncertain reissue.

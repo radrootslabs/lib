@@ -173,4 +173,17 @@ fn known_seal_conversion_refuses_substituted_signer_identity() {
         ),
         Err(ProviderError::InvalidInput)
     ));
+    assert_eq!(seal.message_id(), rumor.message_id());
+    for (operation, digest) in [
+        (OperationId::from_bytes([99; 32]), command.digest()),
+        (
+            command.context().operation_id(),
+            radroots_domain::CommandDigest::from_bytes([99; 32]),
+        ),
+    ] {
+        assert!(matches!(
+            SigningIntent::from_chat_seal(operation, digest, &seal, call(rumor.author())),
+            Err(ProviderError::InvalidInput)
+        ));
+    }
 }

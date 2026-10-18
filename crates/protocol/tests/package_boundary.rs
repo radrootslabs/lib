@@ -17,6 +17,8 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/command.rs"),
     include_str!("../src/nip01.rs"),
     include_str!("../src/chat.rs"),
+    include_str!("../src/chat/routes.rs"),
+    include_str!("../src/chat/plan.rs"),
 ];
 
 #[test]

@@ -255,3 +255,12 @@ its safe journal boundary; dropping an observer cannot erase that responsibility
 The legacy request/evidence API retains its existing callers while the
 successor workers and providers migrate. Its sixteen-byte identities and
 mandatory observation clock do not qualify the new execution contract.
+
+
+With `chat`, `issuance::VerifiedDmRelayAdvertisement` checks bounded exact
+kind-10050 fields, event ID, Schnorr signature and expected participant while
+retaining original bytes. Capturing an explicit advertised subset preserves
+that source observation; it establishes no global freshness, configured or
+available transport, workspace grant, consent or signing permission. Missing DM
+information supplies no fallback target. Exact seal conversion also compares the
+originating captured operation and command commitment before creating an intent.

@@ -27,6 +27,11 @@ pub const MAX_EVENT_UNIX_SECONDS: u64 = 253_402_300_799;
 const MAX_OBSERVATION_UNIX_MS: u64 = MAX_EVENT_UNIX_SECONDS * 1000 + 999;
 const INTENT_DOMAIN: &[u8] = b"radroots.exact_signing_intent.v1\0";
 
+#[cfg(feature = "chat")]
+mod dm_relays;
+#[cfg(feature = "chat")]
+pub use dm_relays::VerifiedDmRelayAdvertisement;
+
 /// Transport artifact role, separate from a participant's command permission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -161,6 +166,9 @@ impl SigningIntent {
         seal: &radroots_protocol::chat::ChatSeal,
         call: ProviderCall,
     ) -> Result<Self, ProviderError> {
+        if seal.operation_id() != operation_id || seal.command_digest() != command_digest {
+            return Err(ProviderError::InvalidInput);
+        }
         let fields = seal.fields();
         let draft = radroots_event::GenericEventDraft::new(
             "radroots.message.seal.v1",

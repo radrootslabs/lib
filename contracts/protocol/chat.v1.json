@@ -73,7 +73,33 @@
       "59.md"
     ]
   },
-  "remaining": "Actual native T1 commit of complete plans, authenticated current access and advertised routes, issuance attempt ownership, obtained evidence capture, install/outbox, exact per-recipient wrapping/delivery, full receipts, browser/bindings and final acceptance",
+  "remaining": "Complete owned native execution route/capability approval, signer attempt ownership, obtained evidence capture, install/outbox, exact per-recipient wrapping/delivery, full receipts, browser/bindings and final acceptance",
   "structured_commerce_authoring_enabled": false,
-  "package_publication_authorized": false
+  "package_publication_authorized": false,
+  "recipient_dm_routes": {
+    "source_kind": 10050,
+    "source_max_bytes": 65536,
+    "source_verifier": "radroots_signing::issuance::VerifiedDmRelayAdvertisement",
+    "selected_uri_max_bytes": 2048,
+    "combined_session_max_relays": 16,
+    "empty_advertisement": "Explicit unavailable DM information; no fallback",
+    "data_constructor_authority": "No signature, source identity, configured/available transport, grant or consent proof; execution revalidates before dispatch"
+  },
+  "native_signing_plan": {
+    "state": "protected_native_transaction_component_implemented",
+    "codec_owner": "radroots_protocol::chat::ChatSigningPlan",
+    "complete_max_bytes": 393216,
+    "recipient_set": "Exactly sorted unique author and peer; no partial set",
+    "retained": "Original command and message commitments, exact per-recipient seal author/kind/time/tags/content/event ID/purpose, original signed route-source bytes, selected targets and explicit replay declaration",
+    "retained_memory": "Canonical buffer bounded before allocation; decoded recipient collections use boxed slices, not caller spare vector capacity",
+    "protected_data_part_max_bytes": 16384,
+    "max_data_parts": 24,
+    "protected_total_max_bytes": 2097152,
+    "native_workspace_schema": 4,
+    "predecessors": "Preserve and refuse; no inferred timestamps or automatic namespace rewrite",
+    "queue": "32 slots plus conservative queued and in-flight reservations under 4194304 bytes",
+    "transaction": "Current protected grant, original preparation, all indexed facts and fixed first-issue window rechecked under BEGIN IMMEDIATE; crypto work before transaction",
+    "completion": "Confirmed commit, known rollback and original anchored unknown are distinct; accepted owner work survives observer loss",
+    "remaining": "Execution route/capability approval, attempt ownership and S/T2/D, complete receipts, supported consumer adoption, browser/binding runtime and final acceptance"
+  }
 }

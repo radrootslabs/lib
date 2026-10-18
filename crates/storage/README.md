@@ -234,12 +234,13 @@ remain owned by `radroots_protocol`.
 
 | Feature | Default | Contract |
 | --- | --- | --- |
+| `command_journal` | no | Enables typed protected command admission and complete chat-plan bind/query contracts through the portable Protocol profile. It starts no worker and grants no execution authority. |
 | `memory` | yes | Enables the deterministic bounded in-memory reference backend. It installs no task, clock, entropy source, filesystem, or global state. |
 | `serde` | yes | Adds validated serialization to passive storage values. It does not serialize backend handles, active secret capabilities, or transactions. |
 
 Features are additive. `--no-default-features` exposes the backend-neutral SPI
 without an implementation. `memory` and `serde` are supported independently,
-and `--all-features` enables both.
+and `--all-features` enables all declared features.
 
 ## Paired authored revisions
 
@@ -283,3 +284,13 @@ Except as otherwise noted, all files in the `radroots_storage` distribution are
 
 For information on usage and redistribution, and for a DISCLAIMER OF ALL
 WARRANTIES, see LICENSE included in the `radroots_storage` distribution.
+
+## Protected command and signing-plan transactions
+
+With `command_journal`, `command::OperationJournal` defines admission/query and
+complete immutable signing-plan bind/query transactions. Concrete adapters own
+current authentication, exact indexed-fact comparisons, fixed first-issue
+windows and observed commit/rollback completion. `PlanBindingOutcome::Unknown`
+retains the original workspace, operation and command anchor for reconciliation;
+a missing observer cannot establish rollback. `BoundSigningPlan` is a structural
+store report, separate from signature, business installation and delivery.
