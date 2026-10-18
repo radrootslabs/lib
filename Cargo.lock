@@ -3649,6 +3649,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "subtle",
  "zeroize",
 ]
 
@@ -3658,10 +3659,15 @@ version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "js-sys",
+ "radroots_domain",
+ "radroots_secrets",
  "radroots_storage",
+ "radroots_transport",
+ "sha2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "zeroize",
 ]
 
 [[package]]

@@ -36,6 +36,7 @@ name = "radroots_storage"
 default = ["memory", "serde"]
 memory = []
 command_journal = ["radroots_protocol/chat", "radroots_protocol/intent"]
+protected_outbox = ["command_journal", "serde", "dep:serde_json", "dep:subtle"]
 serde = [
   "dep:serde",
   "radroots_domain/serde",
@@ -59,6 +60,8 @@ serde = { workspace = true, default-features = false, features = [
   "derive",
 ], optional = true }
 sha2 = { workspace = true, default-features = false }
+serde_json = { workspace = true, optional = true }
+subtle = { workspace = true, optional = true }
 zeroize = { workspace = true, default-features = false }
 
 [dev-dependencies]

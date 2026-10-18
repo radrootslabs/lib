@@ -1,5 +1,5 @@
 schema = "radroots.workspace.platform-inventory.v1"
-catalog_sha256 = "a64c4056370fcd715f6f13df879c71cf34f22520f29a53c0b8b17c7e9d17bde7"
+catalog_sha256 = "39ff80bd34966be30ef54f5591d9ca149b869864ac3bcf1c7b97d91041759caa"
 
 [[platform]]
 id = "any"

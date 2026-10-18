@@ -1,0 +1,69 @@
+pub mod radroots_storage_indexeddb
+pub mod radroots_storage_indexeddb::workspace
+pub use radroots_storage_indexeddb::workspace::LocalOutboxConfig
+pub struct radroots_storage_indexeddb::workspace::BrowserWorkspace
+impl radroots_storage_indexeddb::workspace::BrowserWorkspace
+pub async fn radroots_storage_indexeddb::workspace::BrowserWorkspace::close(&self) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+pub async fn radroots_storage_indexeddb::workspace::BrowserWorkspace::initialize_local_outbox(radroots_storage::workspace::local_outbox::LocalOutboxConfig, alloc::rc::Rc<dyn radroots_secrets::provider::SecretProvider>, radroots_secrets::id::SecretRef, radroots_secrets::provider::AccessPolicy, alloc::rc::Rc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<(Self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof), radroots_storage::workspace::WorkspaceError>
+pub async fn radroots_storage_indexeddb::workspace::BrowserWorkspace::open_existing(radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof, alloc::rc::Rc<dyn radroots_secrets::provider::SecretProvider>, radroots_secrets::id::SecretRef, radroots_secrets::provider::AccessPolicy, alloc::rc::Rc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub async fn radroots_storage_indexeddb::workspace::BrowserWorkspace::revoke(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+impl core::fmt::Debug for radroots_storage_indexeddb::workspace::BrowserWorkspace
+pub fn radroots_storage_indexeddb::workspace::BrowserWorkspace::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl radroots_storage::workspace::WorkspaceStore for radroots_storage_indexeddb::workspace::BrowserWorkspace
+pub fn radroots_storage_indexeddb::workspace::BrowserWorkspace::authenticate(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::WorkspaceError>>
+pub fn radroots_storage_indexeddb::workspace::BrowserWorkspace::close_workspace(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::workspace::WorkspaceError>>
+#[non_exhaustive] pub enum radroots_storage_indexeddb::Error
+pub radroots_storage_indexeddb::Error::Aborted
+pub radroots_storage_indexeddb::Error::Capacity
+pub radroots_storage_indexeddb::Error::Closed
+pub radroots_storage_indexeddb::Error::CommitUnknown
+pub radroots_storage_indexeddb::Error::Conflict
+pub radroots_storage_indexeddb::Error::CorruptRecord
+pub radroots_storage_indexeddb::Error::GuardRefused
+pub radroots_storage_indexeddb::Error::IncompatibleSchema
+pub radroots_storage_indexeddb::Error::InvalidInput
+pub radroots_storage_indexeddb::Error::MissingNamespace
+pub radroots_storage_indexeddb::Error::NamespaceExists
+pub radroots_storage_indexeddb::Error::Unavailable
+impl radroots_storage_indexeddb::Error
+pub const fn radroots_storage_indexeddb::Error::code(self) -> &'static str
+impl core::error::Error for radroots_storage_indexeddb::Error
+impl core::fmt::Display for radroots_storage_indexeddb::Error
+pub fn radroots_storage_indexeddb::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_storage_indexeddb::OpenMode
+pub radroots_storage_indexeddb::OpenMode::CreateNew
+pub radroots_storage_indexeddb::OpenMode::Existing
+pub struct radroots_storage_indexeddb::Batch
+impl radroots_storage_indexeddb::Batch
+pub fn radroots_storage_indexeddb::Batch::is_empty(&self) -> bool
+pub fn radroots_storage_indexeddb::Batch::len(&self) -> usize
+pub fn radroots_storage_indexeddb::Batch::new(alloc::vec::Vec<radroots_storage_indexeddb::Mutation>) -> core::result::Result<Self, radroots_storage_indexeddb::Error>
+pub const fn radroots_storage_indexeddb::Batch::retained_bytes(&self) -> usize
+impl core::fmt::Debug for radroots_storage_indexeddb::Batch
+pub fn radroots_storage_indexeddb::Batch::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_indexeddb::Commit
+impl radroots_storage_indexeddb::Commit
+pub const fn radroots_storage_indexeddb::Commit::records(self) -> usize
+pub struct radroots_storage_indexeddb::Database
+impl radroots_storage_indexeddb::Database
+pub async fn radroots_storage_indexeddb::Database::close(&self) -> core::result::Result<(), radroots_storage_indexeddb::Error>
+pub async fn radroots_storage_indexeddb::Database::compare_exchange(&self, radroots_storage_indexeddb::Batch) -> core::result::Result<radroots_storage_indexeddb::Commit, radroots_storage_indexeddb::Error>
+pub async fn radroots_storage_indexeddb::Database::compare_exchange_checked(&self, radroots_storage_indexeddb::Batch, impl core::ops::function::Fn() -> bool + 'static) -> core::result::Result<radroots_storage_indexeddb::Commit, radroots_storage_indexeddb::Error>
+pub async fn radroots_storage_indexeddb::Database::get(&self, radroots_storage_indexeddb::RecordKey) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, radroots_storage_indexeddb::Error>
+pub async fn radroots_storage_indexeddb::Database::open(radroots_storage_indexeddb::Namespace, radroots_storage_indexeddb::OpenMode) -> core::result::Result<Self, radroots_storage_indexeddb::Error>
+pub struct radroots_storage_indexeddb::Mutation
+impl radroots_storage_indexeddb::Mutation
+pub fn radroots_storage_indexeddb::Mutation::new(radroots_storage_indexeddb::RecordKey, core::option::Option<alloc::vec::Vec<u8>>, core::option::Option<alloc::vec::Vec<u8>>) -> core::result::Result<Self, radroots_storage_indexeddb::Error>
+impl core::fmt::Debug for radroots_storage_indexeddb::Mutation
+pub fn radroots_storage_indexeddb::Mutation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_indexeddb::Namespace(_)
+impl radroots_storage_indexeddb::Namespace
+pub fn radroots_storage_indexeddb::Namespace::name(self) -> alloc::string::String
+pub const fn radroots_storage_indexeddb::Namespace::new(radroots_storage::event::SourceGeneration) -> Self
+pub struct radroots_storage_indexeddb::RecordKey(_)
+impl radroots_storage_indexeddb::RecordKey
+pub const fn radroots_storage_indexeddb::RecordKey::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_storage_indexeddb::RecordKey::new([u8; 32]) -> Self
+pub const radroots_storage_indexeddb::BATCH_RECORDS_MAX: usize
+pub const radroots_storage_indexeddb::LIVE_BYTES_MAX: usize
+pub const radroots_storage_indexeddb::RECORD_BYTES_MAX: usize

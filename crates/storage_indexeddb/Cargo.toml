@@ -11,15 +11,24 @@ homepage.workspace = true
 description = "Per-client IndexedDB atomic persistence for Radroots browser hosts"
 readme = "README.md"
 
+[features]
+default = []
+workspace = ["radroots_storage/protected_outbox", "dep:radroots_domain", "dep:radroots_secrets", "radroots_secrets/std", "dep:radroots_transport", "dep:sha2", "dep:zeroize"]
+
 [dependencies]
 radroots_storage = { workspace = true }
+radroots_domain = { workspace = true, optional = true }
+radroots_secrets = { workspace = true, default-features = false, optional = true }
+radroots_transport = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 futures = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true, features = ["DomException", "DomStringList", "Event", "EventTarget", "IdbDatabase", "IdbFactory", "IdbObjectStore", "IdbOpenDbRequest", "IdbRequest", "IdbTransaction", "IdbTransactionMode", "IdbVersionChangeEvent"] }
+web-sys = { workspace = true, features = ["Crypto", "DomException", "DomStringList", "Event", "EventTarget", "IdbDatabase", "IdbFactory", "IdbObjectStore", "IdbOpenDbRequest", "IdbRequest", "IdbTransaction", "IdbTransactionMode", "IdbVersionChangeEvent"] }
 
 [lints]
 workspace = true

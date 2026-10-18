@@ -9,6 +9,9 @@ mod browser;
 #[cfg(target_arch = "wasm32")]
 pub use browser::Database;
 
+#[cfg(all(feature = "workspace", target_arch = "wasm32"))]
+pub mod workspace;
+
 /// Maximum opaque record size; private codecs must enforce their lower limit.
 pub const RECORD_BYTES_MAX: usize = 64 * 1024;
 /// Maximum atomic batch width.
@@ -28,6 +31,7 @@ pub enum Error {
     Closed,
     Capacity,
     Conflict,
+    GuardRefused,
     CorruptRecord,
     Aborted,
     CommitUnknown,
@@ -43,6 +47,7 @@ impl Error {
             Self::Closed => "closed",
             Self::Capacity => "capacity_exhausted",
             Self::Conflict => "record_conflict",
+            Self::GuardRefused => "transaction_precondition_refused",
             Self::CorruptRecord => "corrupt_record",
             Self::Aborted => "transaction_aborted",
             Self::CommitUnknown => "commit_unknown",
@@ -262,6 +267,7 @@ mod tests {
             Error::Closed,
             Error::Capacity,
             Error::Conflict,
+            Error::GuardRefused,
             Error::CorruptRecord,
             Error::Aborted,
             Error::CommitUnknown,

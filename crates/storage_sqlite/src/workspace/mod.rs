@@ -28,53 +28,12 @@ pub use radroots_storage::workspace::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceError,
 };
 
-use radroots_domain::{
-    ActorRef, ActorRole, AuthorityRef, CheckpointDigest, CheckpointRef, Coverage, ExecutorId,
-    Generation, GrantId, PublicKey, RouteDigest, Sequence, UnixSeconds, WorkspaceId,
-};
+use radroots_domain::{ExecutorId, GrantId, PublicKey, WorkspaceId};
 use radroots_storage::workspace::WorkspaceStore;
 use radroots_transport::BoxFuture;
-use sha2::{Digest, Sha256};
 use std::{path::Path, sync::Arc};
 
-/// Explicit local enrollment inputs, supplied by a trusted host interaction.
-/// Creation is limited to an unrelated new buyer outbox, never seller stock.
-pub struct LocalOutboxConfig {
-    participant: PublicKey,
-    endpoint_identity: PublicKey,
-    principal: String,
-    expires_at: UnixSeconds,
-}
-impl LocalOutboxConfig {
-    /// Captures the participant, local application identity, device audit label
-    /// and positive expiry. This performs no authentication or filesystem work.
-    pub fn new(
-        participant: PublicKey,
-        endpoint_identity: PublicKey,
-        principal: impl Into<String>,
-        expires_at: UnixSeconds,
-    ) -> Result<Self, WorkspaceError> {
-        let principal = principal.into();
-        if principal.is_empty()
-            || principal.len() > 128
-            || principal.chars().any(char::is_control)
-            || expires_at.get() == 0
-        {
-            return Err(WorkspaceError::InvalidInput);
-        }
-        Ok(Self {
-            participant,
-            endpoint_identity,
-            principal,
-            expires_at,
-        })
-    }
-}
-impl std::fmt::Debug for LocalOutboxConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("LocalOutboxConfig(<redacted>)")
-    }
-}
+pub use radroots_storage::workspace::local_outbox::LocalOutboxConfig;
 
 /// One native local-outbox connection, with an owned bounded request worker.
 /// Clones refer to the same admission, writer authority and close completion.
@@ -93,60 +52,15 @@ impl NativeWorkspace {
         clock: Arc<dyn WorkspaceClock>,
     ) -> Result<(Self, AttachmentInput, AttachmentProof), WorkspaceError> {
         let now = clock.now()?;
-        if now.get() == 0 {
-            return Err(WorkspaceError::Unavailable);
-        }
-        if config.expires_at <= now {
-            return Err(WorkspaceError::GrantExpired);
-        }
-        let workspace = WorkspaceId::from_bytes(random()?);
-        let executor = ExecutorId::from_bytes(random()?);
-        let grant = GrantId::from_bytes(random()?);
-        let authority = AuthorityRef::new(
-            executor,
-            Generation::new(1).map_err(|_| WorkspaceError::InvalidInput)?,
-        );
-        let endpoint = format!("local://workspace/{workspace}");
-        let mut route = Sha256::new();
-        route.update(b"radroots.local_buyer_outbox.route.v1\0");
-        route.update(workspace.as_bytes());
-        route.update(executor.as_bytes());
-        route.update(config.endpoint_identity.as_bytes());
-        route.update(endpoint.as_bytes());
-        let route = RouteDigest::from_bytes(route.finalize().into());
-        let mut checkpoint = Sha256::new();
-        checkpoint.update(b"radroots.local_buyer_outbox.genesis.v1\0");
-        checkpoint.update(workspace.as_bytes());
-        checkpoint.update(executor.as_bytes());
-        checkpoint.update(grant.as_bytes());
-        // Genesis certifies only a fresh unrelated outbox. Partial coverage is
-        // deliberate: no old order, private history or stock has been recovered.
-        let checkpoint = CheckpointRef::new(
-            CheckpointDigest::from_bytes(checkpoint.finalize().into()),
-            Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
-            Coverage::Partial,
-            vec![],
-        )
-        .map_err(|_| WorkspaceError::InvalidInput)?;
-        let input = AttachmentInput::new(
-            workspace,
-            authority,
-            config.participant,
-            endpoint,
-            config.endpoint_identity,
-            grant,
-            checkpoint,
-            route,
-        )?;
+        config.validate_at(now)?;
         let secret = zeroize::Zeroizing::new(random()?);
         let proof = AttachmentProof::from_protected_input(secret.as_ref())?;
-        let actor = ActorRef::new(config.participant, ActorRole::Buyer, None, Some(grant));
-        let record = record::GrantRecord::new(
-            input.clone(),
-            actor,
-            config.principal,
-            config.expires_at,
-            &proof,
+        let (input, proof, record) = config.enroll(
+            now,
+            WorkspaceId::from_bytes(random()?),
+            ExecutorId::from_bytes(random()?),
+            GrantId::from_bytes(random()?),
+            proof,
         )?;
         let worker = worker::Handle::launch(
             path.to_path_buf(),

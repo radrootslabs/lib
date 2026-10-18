@@ -73,9 +73,19 @@ protected-record internals.
 All SPIs are externally implementable and dyn-compatible. Native traits retain
 `Send + Sync` and boxed `Future + Send`; browser traits and futures may stay
 local. Every SPI uses the same target-aware transport host bounds and future
-alias, allowing the host to choose the async executor. Implementations must not
+alias, allowing the host to choose the async executor. SPI declarations and
+pure value imports do not
 install an executor, spawn hidden
 workers, read a clock, generate identities, or perform implicit retries.
+
+The opt-in `protected_outbox` feature supplies the pure local buyer-outbox
+enrollment and validated protected-grant codec at `workspace::local_outbox`.
+Concrete native/browser hosts share these rules and exact envelope context.
+The codec's Serde wire stays private; decoding enforces the 16 KiB limit and
+validates current scope. Enrollment takes qualified host identities and proof
+without acquiring a backend or establishing durable authority. Concrete hosts
+must protect, commit and authenticate that state through their explicit owned
+lifecycle. This feature does not enable a database, provider or runtime.
 
 `BackupSource::settle_backup_writes` waits for earlier owner writes, including
 work whose caller was cancelled. The host excludes new writes before settling

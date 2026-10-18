@@ -160,6 +160,23 @@ impl Database {
     /// All requests are enqueued in active callbacks; no user future runs
     /// inside a transaction. Only the complete event returns a Commit.
     pub async fn compare_exchange(&self, batch: Batch) -> Result<Commit, Error> {
+        self.exchange(batch, None).await
+    }
+    /// Runs a trusted host's synchronous eligibility check in each active
+    /// write callback. Refusal aborts the whole transaction, including earlier
+    /// writes. Captures must obey the concrete host's retained-input budget.
+    pub async fn compare_exchange_checked(
+        &self,
+        batch: Batch,
+        guard: impl Fn() -> bool + 'static,
+    ) -> Result<Commit, Error> {
+        self.exchange(batch, Some(Rc::new(guard))).await
+    }
+    async fn exchange(
+        &self,
+        batch: Batch,
+        guard: Option<Rc<dyn Fn() -> bool>>,
+    ) -> Result<Commit, Error> {
         let work = self.state.admit(batch.bytes)?;
         let (send, observe) = oneshot::channel();
         spawn_local(async move {
@@ -169,7 +186,7 @@ impl Database {
                 .db
                 .transaction_with_str_and_mode(STORE, IdbTransactionMode::Readwrite)
             {
-                Ok(tx) => exchange(tx, batch).await,
+                Ok(tx) => exchange(tx, batch, guard).await,
                 Err(error) => Err(classify(error)),
             };
             let _ = send.send(result);
@@ -459,7 +476,11 @@ async fn read(tx: IdbTransaction, record: RecordKey) -> Result<Option<Vec<u8>>, 
     completion.wait().await?;
     value.borrow_mut().take().ok_or(Error::CommitUnknown)
 }
-async fn exchange(tx: IdbTransaction, batch: Batch) -> Result<Commit, Error> {
+async fn exchange(
+    tx: IdbTransaction,
+    batch: Batch,
+    guard: Option<Rc<dyn Fn() -> bool>>,
+) -> Result<Commit, Error> {
     let failure = Rc::new(Cell::new(None));
     let mut completion = Completion::new(tx.clone(), failure.clone());
     let mut handlers = Vec::with_capacity(batch.entries.len());
@@ -487,8 +508,13 @@ async fn exchange(tx: IdbTransaction, batch: Batch) -> Result<Commit, Error> {
             let store = store.clone();
             let tx = tx.clone();
             let failure = failure.clone();
+            let guard = guard.clone();
             Closure::new(move |_: Event| {
                 if failure.get().is_some() {
+                    return;
+                }
+                if guard.as_ref().is_some_and(|check| !check()) {
+                    refuse(&tx, &failure, Error::GuardRefused);
                     return;
                 }
                 if let Err(error) = apply(&store, &request, &entry) {

@@ -636,9 +636,12 @@ dependencies = [
  "futures",
  "hex",
  "js-sys",
+ "radroots_domain",
  "radroots_secrets",
  "radroots_storage",
  "radroots_storage_indexeddb",
+ "serde_json",
+ "sha2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -648,8 +651,10 @@ dependencies = [
 name = "radroots_protocol"
 version = "0.1.0-alpha"
 dependencies = [
+ "radroots_domain",
  "radroots_identity",
  "serde",
+ "serde_json",
  "sha2",
  "zeroize",
 ]
@@ -681,7 +686,9 @@ dependencies = [
  "radroots_trade",
  "radroots_transport",
  "serde",
+ "serde_json",
  "sha2",
+ "subtle",
  "zeroize",
 ]
 
@@ -691,10 +698,15 @@ version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "js-sys",
+ "radroots_domain",
+ "radroots_secrets",
  "radroots_storage",
+ "radroots_transport",
+ "sha2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "zeroize",
 ]
 
 [[package]]

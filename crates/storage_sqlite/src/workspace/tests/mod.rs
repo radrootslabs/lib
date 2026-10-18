@@ -1,4 +1,8 @@
 use super::*;
+use radroots_domain::{
+    ActorRole, AuthorityRef, CheckpointDigest, CheckpointRef, Coverage, Generation, RouteDigest,
+    Sequence, UnixSeconds,
+};
 pub(super) mod issuance_records;
 mod operation_records;
 mod plan_records;
@@ -531,7 +535,7 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
     use sqlx::Connection;
     let fixture = CryptoFixture::new();
     let base = fixture._temp.path().canonicalize().unwrap();
-    for fault in 0..7 {
+    for fault in 0..9 {
         let path = base.join(format!("corrupt-{fault}"));
         let (store, input, proof) = NativeWorkspace::initialize_local_outbox(
             &path,
@@ -557,6 +561,21 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             .execute(&mut connection)
             .await
             .unwrap();
+        let retained_protected: Option<Vec<u8>> = if fault >= 7 {
+            Some(
+                sqlx::query_scalar("SELECT protected FROM workspace_grant")
+                    .fetch_one(&mut connection)
+                    .await
+                    .unwrap(),
+            )
+        } else {
+            None
+        };
+        let expected_error = if fault >= 7 {
+            WorkspaceError::WrongNamespace
+        } else {
+            WorkspaceError::RecoveryRequired
+        };
         let statement = match fault {
             0 => "PRAGMA user_version=8",
             1 => "DELETE FROM workspace_grant",
@@ -565,6 +584,8 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             4 => "UPDATE workspace_grant SET protected=zeroblob(262145)",
             5 => "UPDATE workspace_grant SET protected=zeroblob(262144)",
             6 => "UPDATE workspace_grant SET workspace=zeroblob(31)",
+            7 => "UPDATE workspace_grant SET workspace=zeroblob(32)",
+            8 => "UPDATE workspace_grant SET grant_id=zeroblob(32)",
             _ => unreachable!(),
         };
         sqlx::query(statement)
@@ -573,11 +594,9 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             .unwrap();
         connection.close().await.unwrap();
         if fault != 0 {
-            assert!(
-                matches!(
-                    store.authenticate(input.clone(), &proof).await,
-                    Err(WorkspaceError::RecoveryRequired)
-                ),
+            assert_eq!(
+                store.authenticate(input.clone(), &proof).await.err(),
+                Some(expected_error),
                 "live fault {fault}"
             );
         }
@@ -590,7 +609,7 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
         )
         .await;
         assert!(
-            matches!(&result, Err(WorkspaceError::RecoveryRequired)),
+            matches!(&result, Err(error) if *error == expected_error),
             "fault {fault}: {result:?}"
         );
         let mut connection = sqlx::SqliteConnection::connect_with(&options.clone().read_only(true))
@@ -606,6 +625,16 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             .unwrap();
         assert_eq!(version, if fault == 0 { 8 } else { 7 });
         assert_eq!(rows, if fault == 1 { 0 } else { 1 });
+        if let Some(expected) = retained_protected {
+            let actual: Vec<u8> = sqlx::query_scalar("SELECT protected FROM workspace_grant")
+                .fetch_one(&mut connection)
+                .await
+                .unwrap();
+            assert_eq!(
+                actual, expected,
+                "foreign row must retain its original ciphertext"
+            );
+        }
         if (3..=5).contains(&fault) {
             let size: i64 = sqlx::query_scalar("SELECT length(protected) FROM workspace_grant")
                 .fetch_one(&mut connection)

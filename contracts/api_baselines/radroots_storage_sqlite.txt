@@ -362,19 +362,15 @@ pub mod radroots_storage_sqlite::status
 pub mod radroots_storage_sqlite::workspace
 pub use radroots_storage_sqlite::workspace::AttachmentInput
 pub use radroots_storage_sqlite::workspace::AttachmentProof
+pub use radroots_storage_sqlite::workspace::LocalOutboxConfig
 pub use radroots_storage_sqlite::workspace::WorkspaceBinding
 pub use radroots_storage_sqlite::workspace::WorkspaceClock
 pub use radroots_storage_sqlite::workspace::WorkspaceError
-pub struct radroots_storage_sqlite::workspace::LocalOutboxConfig
-impl radroots_storage_sqlite::workspace::LocalOutboxConfig
-pub fn radroots_storage_sqlite::workspace::LocalOutboxConfig::new(radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, impl core::convert::Into<alloc::string::String>, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
-impl core::fmt::Debug for radroots_storage_sqlite::workspace::LocalOutboxConfig
-pub fn radroots_storage_sqlite::workspace::LocalOutboxConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::NativeWorkspace
 impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::authenticate(&self, radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::close(&self) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
-pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::initialize_local_outbox(&std::path::Path, radroots_storage_sqlite::workspace::LocalOutboxConfig, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<(Self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof), radroots_storage::workspace::WorkspaceError>
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::initialize_local_outbox(&std::path::Path, radroots_storage::workspace::local_outbox::LocalOutboxConfig, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<(Self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof), radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::open_existing(&std::path::Path, radroots_storage::workspace::AttachmentInput, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::revoke(&self, radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::NativeWorkspace

@@ -9,6 +9,8 @@ mod protected;
 pub use protected::protected_round_trip;
 mod persistent;
 pub use persistent::Persistent;
+mod workspace;
+pub use workspace::WorkspaceFixture;
 
 fn failure(error: Error) -> JsValue {
     JsValue::from_str(error.code())
@@ -76,6 +78,21 @@ impl Fixture {
             .await
             .map_err(failure)?
             .records())
+    }
+    pub async fn refused_pair(&self) -> Result<(), JsValue> {
+        let n = std::cell::Cell::new(0usize);
+        let entries = vec![
+            Mutation::new(key(1), Some(vec![1]), Some(vec![3])).map_err(failure)?,
+            Mutation::new(key(2), Some(vec![2]), Some(vec![4])).map_err(failure)?,
+        ];
+        self.db
+            .compare_exchange_checked(Batch::new(entries).map_err(failure)?, move || {
+                n.set(n.get() + 1);
+                n.get() == 1
+            })
+            .await
+            .map(|_| ())
+            .map_err(failure)
     }
     pub fn abandon_write(&self, n: u8) -> Result<(), JsValue> {
         let result = self

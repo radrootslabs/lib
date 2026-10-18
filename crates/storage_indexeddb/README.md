@@ -11,9 +11,30 @@ IndexedDB callbacks. Success is returned only after `complete`; request success
 alone never acknowledges a commit. Accepted work remains owned after its
 observer is dropped. Closing stops admission and waits for accepted work.
 
-This initial private host stores opaque bytes. It supplies no participant
-custody, authenticated workspace, complete storage SPI or stock authority.
-Callers must apply their own protected record codecs and exact journal rules.
+The default private host stores opaque bytes. The opt-in `workspace` feature
+adds `workspace::BrowserWorkspace`: an authenticated protected local buyer
+outbox using the shared storage enrollment/grant rules and an explicitly
+selected nonvolatile provider. It creates only a fresh unrelated outbox;
+opening existing data requires its retained selection and protected proof.
+It supplies no participant custody, complete operation journal/storage SPI or
+stock authority.
+
+The workspace holds an actual exclusive origin Web Lock. Unavailable or
+contended acquisition refuses; no in-memory substitute is selected. Accepted
+jobs remain Rust-owned and serial through cancelled observation. Closing stops
+admission, drains the jobs, closes IndexedDB, then observes actual lock release.
+Its setup/connection queues reserve a conservative 512 KiB per job, accept at
+most eight jobs within 4 MiB, and retain at most 32 weak close observations.
+These limits cover owned inputs, not browser-internal or whole-process memory.
+Clear grants are bounded to 16 KiB and their protected representation to 32 KiB.
+
+`compare_exchange_checked` runs a trusted host's synchronous eligibility check
+in active write callbacks, after asynchronous crypto completes. Refusal aborts
+the whole transaction. The workspace uses it to recheck current expiry/clock
+and writer ownership before grant writes. Native and browser hosts share the
+same grant context; generic authenticated envelope v2 remains unchanged.
+No JavaScript object or key handle is exposed by the workspace API. The Web
+Lock follows the [standard holding and released promise lifecycle](https://www.w3.org/TR/web-locks/#locks).
 Browser storage can be evicted; opening an absent namespace reports its absence.
 No SQL global, memory fallback, network, implicit migration or automatic replay
 is used. The transaction behavior follows the

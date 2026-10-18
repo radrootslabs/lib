@@ -46,6 +46,7 @@ radroots_secrets = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false, features = [
   "serde",
   "command_journal",
+  "protected_outbox",
 ] }
 radroots_transport = { workspace = true, default-features = false, features = [
   "serde",

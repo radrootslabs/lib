@@ -20,9 +20,11 @@ const server = createServer(async (req,res) => {
     }
     if (path.endsWith('/worker.js')) {
       res.setHeader('content-type','text/javascript');
-      res.end(`import init, {Fixture,Persistent,protected_round_trip} from './fixture.js';
+      res.end(`import init, {Fixture,Persistent,WorkspaceFixture,protected_round_trip} from './fixture.js';
         await init();
+        let retainedWorkspace;
         self.onmessage=async(event)=>{try{
+          if(event.data?.kind==='workspace_open'||event.data?.kind==='workspace_hold'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const revision=await owner.authenticate();if(m.kind==='workspace_hold')retainedWorkspace=owner;else await owner.close();self.postMessage({revision});return;}
           if(event.data?.kind==='persistent_create'){const provider=await Persistent.create(90);const fingerprint=provider.fingerprint();const encoded=await provider.protect(new Uint8Array([90,91,92]));await provider.close();self.postMessage({fingerprint:Array.from(fingerprint),encoded:Array.from(encoded)});return;}
           if(event.data?.kind==='persistent_open'){const provider=await Persistent.open(90,new Uint8Array(event.data.fingerprint));const plain=await provider.reveal(new Uint8Array(event.data.encoded));await provider.close();self.postMessage({plain:Array.from(plain)});return;}
           await protected_round_trip(79);const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
@@ -43,7 +45,7 @@ try {
   page.on('console',message=>{if(message.type()==='log')console.log(message.text());});
   await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
   const result=await page.evaluate(async()=>{
-    const {default:init,Fixture,Persistent,protected_round_trip}=await import('./fixture.js'); await init();
+    const {default:init,Fixture,Persistent,WorkspaceFixture,protected_round_trip}=await import('./fixture.js'); await init();
     console.log('STEP wasm_initialized');
     const events=[];
     const nativeTransaction=IDBDatabase.prototype.transaction;
@@ -93,6 +95,11 @@ try {
       await rejects(()=>db.atomic_pair(99),'record_conflict');
       if(!events.slice(failedBefore).includes('abort'))throw Error('no actual atomic abort');
       same(await value(db,1),[1]);same(await value(db,2),[2]);
+      const refusedAt=events.length;
+      await rejects(()=>db.refused_pair(),'transaction_precondition_refused');
+      same(await value(db,1),[1]);same(await value(db,2),[2]);
+      if(!events.slice(refusedAt).includes('abort'))throw Error('no actual precondition abort');
+      passed('synchronous eligibility refusal aborts the whole real compare/exchange batch');
       const nativePut=IDBObjectStore.prototype.put;
       let firstWriteSucceeded=false;
       IDBObjectStore.prototype.put=function(...args) {
@@ -224,11 +231,60 @@ try {
       await rejects(()=>Fixture.open(18,false),'missing_namespace');passed('actual namespace deletion cannot silently recreate');
       const workerResult=await new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage('run');return;}worker.terminate();resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
       same(workerResult,{value:[77]});passed('dedicated worker actual WASM and IndexedDB reopen');
+      const outbox=await WorkspaceFixture.create(160);
+      const workspaceReceipt={n:160,fingerprint:Array.from(outbox.fingerprint()),selection:Array.from(outbox.selection()),proof:Array.from(outbox.proof()),namespace:outbox.data_namespace()};
+      same(await outbox.authenticate(),1);
+      await rejects(()=>outbox.wrong_proof(),'unauthorized');await rejects(()=>outbox.wrong_selection(),'unauthorized');
+      await rejects(()=>outbox.contended_open(),'writer_active');same(await outbox.authenticate(),1);
+      passed('actual protected browser buyer enrollment, authentication and exclusive writer contention');
+      const rawWorkspace=receipt=>new Promise((resolve,reject)=>{const r=indexedDB.open(receipt.namespace,1);r.onupgradeneeded=()=>r.transaction.abort();r.onsuccess=()=>resolve(r.result);r.onerror=reject;});
+      const workspaceBytes=async receipt=>{const raw=await rawWorkspace(receipt);try{return await new Promise((resolve,reject)=>{const tx=raw.transaction('records','readonly');const store=tx.objectStore('records');let keys,values;store.getAllKeys().onsuccess=e=>keys=e.target.result;store.getAll().onsuccess=e=>values=e.target.result;tx.oncomplete=()=>resolve({keys,values});tx.onabort=reject;});}finally{raw.close();}};
+      const changeWorkspace=async(receipt,change)=>{const raw=await rawWorkspace(receipt);try{await new Promise((resolve,reject)=>{const tx=raw.transaction('records','readwrite');change(tx.objectStore('records'));tx.oncomplete=resolve;tx.onabort=reject;});}finally{raw.close();}};
+      const originalGrant=await workspaceBytes(workspaceReceipt);same(originalGrant.values.length,1);
+      outbox.expire_after_next_read();await rejects(()=>outbox.revoke(),'grant_expired');outbox.set_time(1000);
+      const afterRefusal=await workspaceBytes(workspaceReceipt);same(Array.from(afterRefusal.values[0]),Array.from(originalGrant.values[0]));same(await outbox.authenticate(),1);
+      outbox.set_time(2000);await rejects(()=>outbox.authenticate(),'grant_expired');outbox.set_time(1000);
+      passed('actual active write callback refuses expiry after asynchronous wrapping and retains the original grant');
+      const workCall=message=>new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage(message);return;}worker.terminate();resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
+      same(await workCall({kind:'workspace_open',...workspaceReceipt}),{error:'writer_active'});
+      same(outbox.abandon_auths(9),8);for(let n=0;n<64;n++)outbox.abandon_close();await outbox.close();
+      await rejects(()=>outbox.authenticate(),'closed');
+      same(await workCall({kind:'workspace_open',...workspaceReceipt}),{revision:1});
+      passed('bounded owned authentication and cancelled close drain before actual cross-worker writer acquisition');
+      let heldWorker;
+      const held=await new Promise((resolve,reject)=>{heldWorker=new Worker('./worker.js',{type:'module'});heldWorker.onmessage=e=>{if(e.data.ready){heldWorker.postMessage({kind:'workspace_hold',...workspaceReceipt});return;}resolve(e.data);};heldWorker.onerror=e=>reject(Error(e.message));});
+      same(held,{revision:1});
+      const openReceipt=r=>WorkspaceFixture.open(r.n,new Uint8Array(r.fingerprint),new Uint8Array(r.selection),new Uint8Array(r.proof));
+      await rejects(()=>openReceipt(workspaceReceipt),'writer_active');heldWorker.terminate();
+      await navigator.locks.request(workspaceReceipt.namespace,()=>{});
+      const recoveredWorkspace=await openReceipt(workspaceReceipt);same(await recoveredWorkspace.authenticate(),1);await recoveredWorkspace.close();
+      passed('actual worker termination releases writer ownership and the same protected outbox reopens');
+      const source=await WorkspaceFixture.create(164);const target=await source.sibling();
+      const sourceReceipt={namespace:source.data_namespace()},targetReceipt={namespace:target.data_namespace()};
+      const sourceBytes=await workspaceBytes(sourceReceipt),targetBytes=await workspaceBytes(targetReceipt);
+      await changeWorkspace(targetReceipt,store=>store.put(sourceBytes.values[0],targetBytes.keys[0]));
+      await rejects(()=>target.authenticate(),'recovery_required');await target.close();await source.close();
+      passed('copied protected grants under the same provider cannot cross workspace context');
+      const revocable=await WorkspaceFixture.create(166);const revokedReceipt={n:166,fingerprint:Array.from(revocable.fingerprint()),selection:Array.from(revocable.selection()),proof:Array.from(revocable.proof()),namespace:revocable.data_namespace()};
+      await revocable.revoke();await rejects(()=>revocable.authenticate(),'grant_revoked');await revocable.close();await rejects(()=>openReceipt(revokedReceipt),'grant_revoked');
+      const removed=await WorkspaceFixture.create(167);const removedReceipt={n:167,fingerprint:Array.from(removed.fingerprint()),selection:Array.from(removed.selection()),proof:Array.from(removed.proof()),namespace:removed.data_namespace()};await removed.close();
+      await changeWorkspace(removedReceipt,store=>store.clear());await rejects(()=>openReceipt(removedReceipt),'recovery_required');
+      await new Promise((resolve,reject)=>{const r=indexedDB.deleteDatabase(removedReceipt.namespace);r.onsuccess=resolve;r.onerror=reject;});await rejects(()=>openReceipt(removedReceipt),'namespace_unavailable');
+      passed('revoked, empty and evicted browser workspaces refuse exact reopen without fresh enrollment');
+      const displaced=await WorkspaceFixture.create(169);const displacedReceipt={n:169,fingerprint:Array.from(displaced.fingerprint()),selection:Array.from(displaced.selection()),proof:Array.from(displaced.proof()),namespace:displaced.data_namespace()};
+      let releaseForeign,foreignAcquired;const foreignHold=new Promise(resolve=>releaseForeign=resolve);const acquiredForeign=new Promise(resolve=>foreignAcquired=resolve);
+      const foreignLock=navigator.locks.request(displacedReceipt.namespace,{steal:true},()=>{foreignAcquired();return foreignHold;});
+      try{await acquiredForeign;await rejects(()=>displaced.authenticate(),'closed');await rejects(()=>displaced.close(),'workspace_unavailable');}
+      finally{releaseForeign();await foreignLock;}
+      const afterDisplacement=await openReceipt(displacedReceipt);same(await afterDisplacement.authenticate(),1);await afterDisplacement.close();
+      passed('actual unexpected Web Lock loss stops admission and remains visible through owned close');
+      await rejects(()=>WorkspaceFixture.create_expiring(168),'grant_expired');
+      passed('expired creation exposes no workspace or protected proof');
       const workerCall=message=>new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage(message);return;}worker.terminate();if(e.data.error)reject(Error(e.data.error));else resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
       const workerCreated=await workerCall({kind:'persistent_create'});
       same(await workerCall({kind:'persistent_open',...workerCreated}),{plain:[90,91,92]});
       passed('persistent provider survives actual worker termination and new worker instance');
-      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded}};
+      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded},workspace:workspaceReceipt};
     } finally {IDBDatabase.prototype.transaction=nativeTransaction;}
   });
   await page.reload();
@@ -240,6 +296,8 @@ try {
   },result.persistent);
   assert.deepEqual(restarted,[80,81,82]);
   result.tests.push('persistent provider and encrypted data survive actual page and WASM restart');
+  const workspaceRestart=await page.evaluate(async receipt=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(receipt.n,new Uint8Array(receipt.fingerprint),new Uint8Array(receipt.selection),new Uint8Array(receipt.proof));const revision=await owner.authenticate();await owner.close();return revision;},result.workspace);
+  assert.equal(workspaceRestart,1);result.tests.push('authenticated browser workspace survives actual page and WASM restart');delete result.workspace;
   delete result.persistent;
   console.log(JSON.stringify({engine,version:browser.version(),...result}));
 } finally {

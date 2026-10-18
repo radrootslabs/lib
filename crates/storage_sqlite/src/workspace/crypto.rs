@@ -7,6 +7,9 @@ use radroots_secrets::{
     provider::{AccessPolicy, ResidencySupport, SecretProvider, SelectionPolicy},
     wrapping::SecretMaterial,
 };
+use radroots_storage::workspace::local_outbox::{
+    GRANT_ENVELOPE_PURPOSE, GRANT_PAYLOAD_SCHEMA, grant_envelope_subject,
+};
 use std::{fmt, sync::Arc};
 
 pub(super) const PRIVATE_PAYLOAD_MAX_BYTES: usize = 16 * 1024;
@@ -345,12 +348,10 @@ fn context(workspace: WorkspaceId, grant: GrantId) -> Result<EnvelopeContext, Wo
     // Both values are fixed-width lowercase hex; their 128-byte concatenation
     // is unambiguous and binds the complete IDs without truncation.
     Ok(EnvelopeContext::new(
-        EnvelopePurpose::parse("radroots.workspace.grant")
+        EnvelopePurpose::parse(GRANT_ENVELOPE_PURPOSE).map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("workspace_grant", grant_envelope_subject(workspace, grant))
             .map_err(|_| WorkspaceError::InvalidInput)?,
-        EnvelopeSubject::parse("workspace_grant", format!("{workspace}{grant}"))
-            .map_err(|_| WorkspaceError::InvalidInput)?,
-        PayloadSchemaId::parse("radroots.workspace.grant.v1")
-            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse(GRANT_PAYLOAD_SCHEMA).map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }
 

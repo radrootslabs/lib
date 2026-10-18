@@ -1,5 +1,5 @@
 schema = "radroots.workspace.release-inventory.v2"
-catalog_sha256 = "a64c4056370fcd715f6f13df879c71cf34f22520f29a53c0b8b17c7e9d17bde7"
+catalog_sha256 = "39ff80bd34966be30ef54f5591d9ca149b869864ac3bcf1c7b97d91041759caa"
 architecture = "radroots.crates.release.v2"
 version = "0.1.0-alpha"
 public_packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_domain", "radroots_event", "radroots_event_codec", "radroots_execution", "radroots_geonames", "radroots_identity", "radroots_nostr", "radroots_nostr_connect", "radroots_protocol", "radroots_sdk", "radroots_secrets", "radroots_signing", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade", "radroots_transport", "radroots_transport_nostr"]

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots.storage.browser_workspace.v1",
+  "state": "implemented_workspace_component",
+  "owner": "radroots_storage_indexeddb",
+  "feature": "workspace",
+  "target": "wasm32-unknown-unknown",
+  "shared_policy": "radroots_storage::workspace::local_outbox",
+  "native_policy_consumer": "radroots_storage_sqlite::workspace",
+  "shared_grant_wire_private": true,
+  "default_import_side_effects": false,
+  "scope": "fresh_unrelated_buyer_outbox",
+  "stock_authority": false,
+  "participant_key_is_workspace_proof": false,
+  "full_operation_journal_or_client_claim": false,
+  "storage": {
+    "namespace_domain": "radroots.browser.local_outbox.namespace.v1",
+    "grant_key_domain": "radroots.browser.local_outbox.grant.v1",
+    "create_and_existing_open_separate": true,
+    "existing_requires_selection_and_protected_proof": true,
+    "grant_acknowledgement": "actual_indexeddb_transaction_completion",
+    "missing_or_damaged_state_replacement_allowed": false,
+    "envelope_version": 2,
+    "fresh_key_and_nonce_per_grant_seal": true,
+    "native_context_and_wire_preserved": true
+  },
+  "writer": {
+    "mechanism": "origin_scoped_web_locks",
+    "mode": "exclusive",
+    "if_available": true,
+    "fallback_allowed": false,
+    "accepted_jobs_serial": true,
+    "accepted_work_rust_owned": true,
+    "admission_and_active_write_check_lease": true,
+    "active_write_callback_rechecks_clock_and_expiry": true,
+    "guard_refusal_aborts_whole_batch": true,
+    "close_order": [
+      "stop_admission",
+      "drain_accepted_jobs",
+      "close_database",
+      "observe_released_lock_promise"
+    ]
+  },
+  "resources": {
+    "clear_grant_bytes_max": 16384,
+    "protected_grant_bytes_max": 32768,
+    "conservative_job_reservation_bytes": 524288,
+    "live_job_bytes_max": 4194304,
+    "live_jobs_max_per_workspace": 8,
+    "setup_jobs_max_per_host_thread": 8,
+    "close_observers_max": 32,
+    "whole_browser_memory_bound_claim": false
+  },
+  "qualification": {
+    "browsers": [
+      "chromium",
+      "firefox",
+      "webkit"
+    ],
+    "main_thread_and_worker_required": true,
+    "actual_worker_termination_and_page_restart_required": true,
+    "native_workspace_and_ordinary_inquiry_regressions_required": true,
+    "final_phone_or_full_rcld_claim": false
+  }
+}

@@ -9,6 +9,9 @@ use radroots_domain::{
 use radroots_transport::{BoxFuture, host::HostBound};
 use zeroize::Zeroizing;
 
+#[cfg(feature = "protected_outbox")]
+pub mod local_outbox;
+
 /// A fixed workspace boundary error; no path, credential, SQL or caller prose.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -37,6 +40,8 @@ pub enum WorkspaceError {
     StaleCheckpoint,
     /// Admission is permanently closed.
     Closed,
+    /// The bounded host queue or close-observer budget is exhausted.
+    Capacity,
     /// Storage reports a known failure before confirmed completion.
     StorageFailure,
     /// Transaction completion is uncertain and must be reconciled.
@@ -58,6 +63,7 @@ impl WorkspaceError {
             Self::StaleAuthority => "stale_authority",
             Self::StaleCheckpoint => "stale_checkpoint",
             Self::Closed => "closed",
+            Self::Capacity => "capacity_exhausted",
             Self::StorageFailure => "storage_failure",
             Self::CommitUnknown => "commit_unknown",
         }

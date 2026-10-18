@@ -11,6 +11,14 @@ use radroots_storage::command::{
 };
 use serde_json::{Value, json};
 use sqlx::{Connection, SqliteConnection};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+struct MutableClock(AtomicU64);
+impl WorkspaceClock for MutableClock {
+    fn now(&self) -> Result<UnixSeconds, WorkspaceError> {
+        UnixSeconds::new(self.0.load(Ordering::SeqCst)).map_err(|_| WorkspaceError::Unavailable)
+    }
+}
 
 #[tokio::test]
 async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_each_inconsistency() {
@@ -21,6 +29,7 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
         .canonicalize()
         .unwrap()
         .join("plan-records");
+    let clock = Arc::new(MutableClock(AtomicU64::new(100)));
     let (store, selected, proof) = NativeWorkspace::initialize_local_outbox(
         &path,
         LocalOutboxConfig::new(
@@ -31,7 +40,7 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
         )
         .unwrap(),
         fixture.crypto(),
-        Arc::new(FixedClock(100)),
+        clock.clone(),
     )
     .await
     .unwrap();
@@ -107,6 +116,7 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
     .unwrap();
     let digest = *plan.digest();
     let original_wire = plan.protected_wire().to_vec();
+    let rollback_plan = ChatSigningPlan::parse(&command, &original_wire).unwrap();
     let copied =
         || proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes).unwrap());
     assert!(matches!(
@@ -119,6 +129,30 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
             .unwrap(),
         AdmissionOutcome::Committed(_)
     ));
+    clock.0.store(90, Ordering::SeqCst);
+    assert!(matches!(
+        store
+            .bind_signing_intents(binding.clone(), rollback_plan, copied())
+            .await,
+        Err(radroots_storage::command::OperationError::Workspace(
+            WorkspaceError::Unavailable
+        ))
+    ));
+    let mut unchanged = SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path.join("execution_v1.sqlite"))
+            .create_if_missing(false)
+            .read_only(true),
+    )
+    .await
+    .unwrap();
+    let plans: i64 = sqlx::query_scalar("SELECT count(*) FROM signing_plans")
+        .fetch_one(&mut unchanged)
+        .await
+        .unwrap();
+    assert_eq!(plans, 0, "clock rollback cannot install a signing plan");
+    unchanged.close().await.unwrap();
+    clock.0.store(100, Ordering::SeqCst);
     assert!(matches!(
         store
             .bind_signing_intents(binding, plan, copied())
