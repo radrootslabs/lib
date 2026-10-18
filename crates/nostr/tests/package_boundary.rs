@@ -62,7 +62,7 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
             "`{required}` must be required"
         );
     }
-    for optional in ["radroots_signing", "radroots_blossom"] {
+    for optional in ["radroots_signing", "radroots_blossom", "radroots_protocol"] {
         let declaration = table_value(MANIFEST, "[dependencies]", optional)
             .unwrap_or_else(|| panic!("missing optional dependency `{optional}`"));
         assert!(
@@ -81,6 +81,7 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
             "radroots_event",
             "radroots_event_codec",
             "radroots_identity",
+            "radroots_protocol",
             "radroots_signing",
         ])
     );
@@ -395,7 +396,7 @@ fn local_signer_consumes_only_the_opaque_secret_boundary() {
 fn focused_nip_and_blossom_features_own_no_network_operations() {
     for required in [
         "blossom = [\"events\", \"dep:base64\", \"dep:radroots_blossom\"]",
-        "nip17 = [\"events\", \"nostr/nip44\", \"nostr/nip59\", \"dep:base64\"]",
+        "nip17 = [\"events\", \"nostr/nip44\", \"nostr/nip59\", \"dep:base64\", \"dep:radroots_protocol\"]",
     ] {
         assert!(
             MANIFEST.contains(required),
@@ -565,7 +566,14 @@ fn superseded_surface_retirement_is_explicit_and_release_bounded() {
     assert_eq!(
         public_modules,
         BTreeSet::from([
-            "blossom", "event", "filter", "key", "nip17", "signing", "tag"
+            "blossom",
+            "event",
+            "filter",
+            "key",
+            "nip17",
+            "signing",
+            "signing::gift_wrap",
+            "tag"
         ]),
         "reviewed API baseline must expose only chartered modules"
     );

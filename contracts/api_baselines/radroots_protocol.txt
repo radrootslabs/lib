@@ -128,6 +128,11 @@ pub fn radroots_protocol::chat::DmRelayAdvertisement::from_tags(radroots_identit
 pub const fn radroots_protocol::chat::DmRelayAdvertisement::participant(&self) -> radroots_identity::key::PublicKey
 impl core::fmt::Debug for radroots_protocol::chat::DmRelayAdvertisement
 pub fn radroots_protocol::chat::DmRelayAdvertisement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::chat::GiftWrapBudget
+impl radroots_protocol::chat::GiftWrapBudget
+pub const fn radroots_protocol::chat::GiftWrapBudget::ciphertext_bytes(self) -> usize
+pub fn radroots_protocol::chat::GiftWrapBudget::for_seal(usize, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::chat::GiftWrapBudget::signed_max_bytes(self) -> usize
 pub const radroots_protocol::chat::PLAN_MAX_BYTES: usize
 pub const radroots_protocol::chat::RUMOR_MAX_BYTES: usize
 pub const radroots_protocol::chat::SIGNED_MAX_BYTES: usize

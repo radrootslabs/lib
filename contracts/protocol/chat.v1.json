@@ -166,5 +166,22 @@
     "reporting": "Owned message only with scoped actual installation report; independent original installation and recipient work transactions; delivery pending and zero inferred relay observations",
     "qualification": "Separate exact-source executed evidence; declarations and data constructors are not qualification",
     "remaining": "Exact outer-envelope retention and per-target D observations, ordinary library-owned inbox jobs, browser/bindings, supported consumer adoption and all final gates"
+  },
+  "outer_wrapping": {
+    "state": "retained_seal_crypto_component_implemented",
+    "owner": "radroots_nostr::signing::gift_wrap",
+    "budget_owner": "radroots_protocol::chat::GiftWrapBudget",
+    "source": "Exact seven-field, depth-bounded, ID and BIP-340 verified original kind13 event; empty tags and supported NIP44v2 payload shape; actual operation/recipient/capture linkage remains the composing journal responsibility",
+    "representation": "Encrypt original UTF8 bytes, including whitespace, not a canonical replacement; size complete nested output before requesting entropy",
+    "entropy": "Explicit qualified NonceSource for independent temporary key, unbiased randomized past timestamp, NIP44 nonce and BIP340 auxiliary randomness; no ambient clock or participant signer call. Upstream secp256k1 context blinding retains its own initialization contract; no ambient artifact-entropy fallback.",
+    "qualification": "Separate exact-source executed evidence; this declaration does not qualify durable capture, transport, a custom entropy source or a host runtime",
+    "temporary_material": "Opaque noncloneable pending outer holds zeroizing original 32-byte key and permits a scoped verification borrow. Known author and recipient keys are refused. The pinned upstream erases Keys/SecretKey on Drop using non_secure_erase; no total memory-erasure guarantee is claimed for upstream intermediate values.",
+    "bounds": {
+      "signed_event_bytes": 65536,
+      "past_timestamp_seconds": 172800,
+      "entropy_rejection_draws_per_selection": 16
+    },
+    "authority": "Construction authenticates a seal and creates an outer representation; it proves no grant, route, operation linkage, durable capture, scheduling lease or delivery",
+    "remaining": "Protected native exact-envelope and target-intent retention before transport, bound observations, ordinary owned inbox jobs, browser/binding runtime and final acceptance"
   }
 }

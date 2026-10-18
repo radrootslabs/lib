@@ -21,6 +21,8 @@ use radroots_signing::{
 
 use crate::{Error as NostrError, key::SecretKey};
 
+#[cfg(feature = "nip17")]
+pub mod gift_wrap;
 mod issuance;
 mod private;
 pub use private::OsNonceSource;

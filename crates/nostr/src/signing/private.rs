@@ -114,7 +114,6 @@ fn encrypt(
     plaintext: &PrivateText,
 ) -> Result<PrivateCiphertext, ProviderError> {
     use base64::Engine;
-    use nostr::nips::nip44::v2::{ConversationKey, encrypt_to_bytes_with_rng};
     use radroots_signing::provider::PRIVATE_CRYPTO_MAX_BYTES;
 
     let peer =
@@ -141,18 +140,30 @@ fn encrypt(
         .as_ref()
         .ok_or(ProviderError::CapabilityUnavailable)?;
     let nonce = source.next_nonce()?;
-    let key = ConversationKey::derive(signer.keys.secret_key(), &peer).map_err(normalize_crypto)?;
+    let payload = encrypt_payload(signer.keys.secret_key(), &peer, plaintext.expose(), nonce)?;
+    PrivateCiphertext::parse(&base64::engine::general_purpose::STANDARD.encode(payload))
+}
+
+#[cfg(feature = "nip17")]
+pub(super) fn encrypt_payload(
+    secret: &nostr::SecretKey,
+    recipient: &nostr::PublicKey,
+    plaintext: &str,
+    nonce: [u8; 32],
+) -> Result<alloc::vec::Vec<u8>, ProviderError> {
+    use nostr::nips::nip44::v2::{ConversationKey, encrypt_to_bytes_with_rng};
+    let key = ConversationKey::derive(secret, recipient).map_err(normalize_crypto)?;
     let mut transcript = NonceTranscript {
         nonce,
         consumed: false,
         invalid: false,
     };
-    let payload = encrypt_to_bytes_with_rng(&mut transcript, &key, plaintext.expose().as_bytes())
+    let payload = encrypt_to_bytes_with_rng(&mut transcript, &key, plaintext.as_bytes())
         .map_err(normalize_crypto)?;
     if transcript.invalid || !transcript.consumed {
         return Err(ProviderError::ProviderFailure);
     }
-    PrivateCiphertext::parse(&base64::engine::general_purpose::STANDARD.encode(payload))
+    Ok(payload)
 }
 
 #[cfg(feature = "nip17")]
@@ -200,6 +211,14 @@ struct NonceTranscript {
     nonce: [u8; 32],
     consumed: bool,
     invalid: bool,
+}
+
+#[cfg(feature = "nip17")]
+impl Drop for NonceTranscript {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.nonce.zeroize();
+    }
 }
 
 #[cfg(feature = "nip17")]

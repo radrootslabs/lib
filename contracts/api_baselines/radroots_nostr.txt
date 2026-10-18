@@ -264,6 +264,27 @@ pub async fn radroots_nostr::nip17::unwrap_gift_wrap<T>(&T, &nostr::event::Event
 pub async fn radroots_nostr::nip17::wrap_message<T>(&T, &radroots_event::social::message::Message, radroots_nostr::nip17::WrapOptions) -> core::result::Result<alloc::vec::Vec<nostr::event::Event>, radroots_nostr::nip17::Error> where T: nostr::signer::NostrSigner
 pub async fn radroots_nostr::nip17::wrap_message_file<T>(&T, &radroots_event::social::message_file::MessageFile, radroots_nostr::nip17::WrapOptions) -> core::result::Result<alloc::vec::Vec<nostr::event::Event>, radroots_nostr::nip17::Error> where T: nostr::signer::NostrSigner
 pub mod radroots_nostr::signing
+pub mod radroots_nostr::signing::gift_wrap
+pub enum radroots_nostr::signing::gift_wrap::WrapError
+pub radroots_nostr::signing::gift_wrap::WrapError::CryptoFailure
+pub radroots_nostr::signing::gift_wrap::WrapError::EntropyUnavailable
+pub radroots_nostr::signing::gift_wrap::WrapError::InvalidSeal
+pub radroots_nostr::signing::gift_wrap::WrapError::InvalidTime
+pub radroots_nostr::signing::gift_wrap::WrapError::LimitExceeded
+impl core::error::Error for radroots_nostr::signing::gift_wrap::WrapError
+impl core::fmt::Display for radroots_nostr::signing::gift_wrap::WrapError
+pub fn radroots_nostr::signing::gift_wrap::WrapError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr::signing::gift_wrap::PendingGiftWrap
+impl radroots_nostr::signing::gift_wrap::PendingGiftWrap
+pub fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::event_id(&self) -> [u8; 32]
+pub const fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::recipient(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::seal_digest(&self) -> [u8; 32]
+pub const fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::seal_event_id(&self) -> [u8; 32]
+pub fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::signed_json(&self) -> &str
+pub fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::with_wrapping_key<T>(&self, impl core::ops::function::FnOnce(&[u8; 32]) -> T) -> T
+impl core::fmt::Debug for radroots_nostr::signing::gift_wrap::PendingGiftWrap
+pub fn radroots_nostr::signing::gift_wrap::PendingGiftWrap::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_nostr::signing::gift_wrap::wrap_retained_seal(&str, radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64, &dyn radroots_signing::provider::NonceSource) -> core::result::Result<radroots_nostr::signing::gift_wrap::PendingGiftWrap, radroots_nostr::signing::gift_wrap::WrapError>
 pub struct radroots_nostr::signing::LocalSigner
 impl radroots_nostr::signing::LocalSigner
 pub fn radroots_nostr::signing::LocalSigner::generate() -> core::result::Result<Self, radroots_nostr::Error>

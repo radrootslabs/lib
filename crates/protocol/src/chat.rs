@@ -25,6 +25,8 @@ mod plan;
 pub use plan::{ChatReplay, ChatSigningPlan, PLAN_MAX_BYTES};
 mod routes;
 pub use routes::{CapturedDmRoute, DmRelayAdvertisement};
+mod gift_wrap;
+pub use gift_wrap::GiftWrapBudget;
 
 fn payload_shape(plaintext_bytes: usize) -> Result<(usize, usize), WireError> {
     // The qualified small-payload profile uses the two-byte length prefix.

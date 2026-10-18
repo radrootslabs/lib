@@ -1,5 +1,10 @@
 # radroots_protocol
 
+The chat profile's `GiftWrapBudget` measures the complete kind-1059 envelope
+for the exact already obtained seal representation. Whitespace in retained
+signed JSON still consumes encryption and event budget; canonical event
+identity does not permit replacing those bytes during recovery.
+
 `radroots_protocol` defines the passive, versioned wire contracts shared by
 Radroots processes and language bindings. It is a `no_std + alloc` foundation
 crate: it validates schema identities and contract catalogs, but performs no

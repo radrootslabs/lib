@@ -15,6 +15,18 @@ or cancellation check. These are crypto primitives: the composing executor
 authenticates carriers, enforces profile budgets and retains preimages before
 signing or transport. No private key is exported or message published.
 
+With both `signing` and `nip17`, `signing::gift_wrap::wrap_retained_seal`
+authenticates an already obtained kind-13 seal and wraps its exact original
+bytes. It accepts an explicit positive time and qualified entropy source,
+creates a separate temporary key, and never invokes the participant signer.
+The complete nested budget is checked before entropy; randomized timestamps,
+nonce generation and signing auxiliary randomness use the injected source.
+`PendingGiftWrap` retains the exact outer bytes and temporary key for independent
+protected-capture verification, with redacted diagnostics and no cloning or
+automatic serialization. The caller must retain the envelope and its original
+operation, recipient and route binding before transport. This primitive grants
+no scheduling authority and proves no durable capture or relay observation.
+
 Run `cargo extbuild run -- cargo run -p radroots_nostr --example
 participant_private --features signing,nip17 --locked` for the native OS-entropy
 smoke. It uses published synthetic vector identities, encrypts twice and
