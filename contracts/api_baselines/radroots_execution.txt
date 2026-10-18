@@ -1,4 +1,7 @@
 pub mod radroots_execution
+pub mod radroots_execution::inbox
+pub use radroots_execution::inbox::InquireInput
+pub use radroots_execution::inbox::ListingRevisionRef
 pub mod radroots_execution::session
 pub enum radroots_execution::session::SessionState
 pub radroots_execution::session::SessionState::Closed
@@ -15,6 +18,9 @@ pub fn radroots_execution::session::ClientSession<H>::new(H, core::num::nonzero:
 pub fn radroots_execution::session::ClientSession<H>::signer_session(&self) -> core::option::Option<radroots_execution::session::SignerSession>
 pub async fn radroots_execution::session::ClientSession<H>::start(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::ClientSession<H>::state(&self) -> radroots_execution::session::SessionState
+impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
+pub async fn radroots_execution::session::ClientSession<H>::inquire(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
+pub async fn radroots_execution::session::ClientSession<H>::operation(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>>
 impl<H: radroots_execution::session::SessionHost> core::clone::Clone for radroots_execution::session::ClientSession<H>
 pub fn radroots_execution::session::ClientSession<H>::clone(&self) -> Self
 pub struct radroots_execution::session::Session<H: radroots_execution::session::SessionHost>

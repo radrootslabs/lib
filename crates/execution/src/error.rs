@@ -192,6 +192,51 @@ pub struct Error {
 }
 
 impl Error {
+    #[cfg(feature = "workspace_session")]
+    pub(crate) const fn with_context(mut self, context: OperationContext) -> Self {
+        self.context = context;
+        self
+    }
+
+    #[cfg(feature = "workspace_session")]
+    pub(crate) const fn admission_uncertain(operation: OperationId) -> Self {
+        Self {
+            code: Code::CommitUnknown,
+            context: OperationContext::admission_unknown(operation),
+            retry: RetryClass::ManualReconciliation,
+            detail: Some(Detail::new(crate::Field::Storage, crate::Reason::Unknown)),
+        }
+    }
+
+    #[cfg(feature = "workspace_session")]
+    pub(crate) const fn operation(
+        error: radroots_storage::command::OperationError,
+        context: OperationContext,
+    ) -> Self {
+        use radroots_storage::command::OperationError as O;
+        let (code, retry) = match error {
+            O::Workspace(error) => {
+                return Self::workspace(error, context.operation_id()).with_context(context);
+            }
+            O::InvalidCommand => (Code::InvalidInput, RetryClass::Never),
+            O::InvalidEvidence => (Code::RecoveryRequired, RetryClass::ManualReconciliation),
+            O::Unauthorized | O::UnverifiedApproval => (Code::Unauthorized, RetryClass::Never),
+            O::MissingHistory => (Code::MissingHistory, RetryClass::AfterStateRefresh),
+            O::DeadlineExceeded => (Code::DeadlineExceeded, RetryClass::AfterStateRefresh),
+            O::IdempotencyConflict => (Code::IdempotencyConflict, RetryClass::Never),
+            O::StorageFailure => (Code::StorageFailure, RetryClass::Never),
+            O::RecoveryRequired | O::DeliveryAttemptLimit => {
+                (Code::RecoveryRequired, RetryClass::ManualReconciliation)
+            }
+            _ => (Code::RecoveryRequired, RetryClass::ManualReconciliation),
+        };
+        Self {
+            code,
+            context,
+            retry,
+            detail: None,
+        }
+    }
     #[cfg(feature = "receipts")]
     pub(crate) const fn retained_deadline_exceeded(operation: OperationId) -> Self {
         Self {

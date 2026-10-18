@@ -376,3 +376,6 @@ fn close_invalidates_clones_and_an_already_pending_context_revalidation() {
         );
     })
 }
+
+#[path = "support/workspace_commands.rs"]
+mod commands;

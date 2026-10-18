@@ -31,8 +31,20 @@ Attachment verifies its persisted credential and exact selection before returnin
 `WorkspaceSession`. That session constructs opaque, immutable command contexts
 without I/O or a clock read; admission must recheck current rights and expiry.
 A context does not submit a command or prove
-user consent; network pairing, seller authority, complete command receipts and
-durable listing/chat operations remain separate implementation requirements.
+user consent. After explicit start, `client.inbox().inquire(context, input)`
+durably captures a known-kind inquiry through the actual protected journal.
+The returned coherent receipt reports pending preparation without claiming a
+signature, installed message or relay acceptance. `client.operations(&scope)`
+selects an explicitly authenticated attachment for `get(operation_id)` and
+matching-digest reads. Every call enforces this client's attachment ownership
+and current persisted grant. An expired retained inquiry remains queryable and
+replay uses its original transaction, command, correlation and issuance window;
+new expired input and conflicting reuse are refused.
+
+The existing bounded native worker owns accepted admission after observer loss;
+client close drains it before releasing storage. Unpolled calls do nothing.
+Network pairing, seller authority, owned signing/install/delivery continuation,
+listing execution and browser qualification remain separate requirements.
 
 `attach_signer` observes the concrete provider only after retaining its callback
 scope. The first successful key freezes and later drift invalidates that scope.
@@ -90,5 +102,6 @@ coherent retained snapshot for this projection. Native T2 can install a bounded
 logical chat result and retain independent recipient publication work; its
 original installation time/transaction remain separate from later work and
 unknown issuance. `domain::ChatMessage` is the owned private business view.
-Ordinary inbox job orchestration and exact wrapping/delivery remain required
-before the complete native submission workflow is available.
+The ordinary inquiry boundary admits and queries T0. Owned continuation through
+exact signing, native T2, wrapping and delivery remains required before the
+complete native submission workflow is available.

@@ -94,10 +94,20 @@ Closing the attachment invalidates its contexts. A custom adapter is an explicit
 host trust boundary and requires its own qualification; its observation cannot
 establish native SQL authority. An approval descriptor is not consent proof.
 
-Package upload is not authorized. Ordinary durable command orchestration, outbox
-workers, inventory authority, public listing/private chat execution, browser
-attachment and new bindings remain separate requirements. Revalidating a context
-is not durable admission; the authoritative transaction must recheck its scope.
+`ClientSession::inquire` captures a validated inquiry from this client's own
+authenticated context, calls the actual journal admission and queries its
+coherent retained graph. It does not preempt original-operation lookup with a
+fresh deadline check. Known failure, uncertain initial commit and a failure
+after confirmed admission keep distinct original-ID dispositions. No signer or
+network operation occurs in this T0 boundary. `operation` reads original progress
+through an explicitly selected client-owned scope, independently of the old
+first-issue deadline. The qualified concrete bounded worker owns accepted native
+admission through observer loss; its close must drain accepted work.
+
+Package upload is not authorized. Owned signing/install/delivery continuation,
+inventory authority, listing execution, browser attachment and new bindings
+remain separate requirements. Revalidating a context is not durable admission;
+the authoritative transaction must recheck its scope.
 
 
 `OperationReceipt<T>` owns the original captured scope, command and transaction

@@ -74,7 +74,7 @@ impl CloseReceipt {
 #[cfg(feature = "native")]
 pub struct NativeConfig {
     options: radroots_storage_sqlite::OpenOptions,
-    workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
+    workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
 }
 #[cfg(feature = "native")]
 impl NativeConfig {
@@ -98,9 +98,9 @@ impl NativeConfig {
     }
 }
 
-struct StoreHost {
+pub(crate) struct StoreHost {
     store: Shared<dyn Storage>,
-    workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
+    workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
 }
 impl SessionHost for StoreHost {
@@ -141,16 +141,16 @@ impl SessionHost for StoreHost {
 /// signing qualification, a retained operation or firm stock capability.
 #[derive(Clone)]
 pub struct Client {
-    session: ClientSession<StoreHost>,
+    pub(crate) session: ClientSession<StoreHost>,
     store: Shared<dyn Storage>,
-    workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
+    workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
 }
 impl Client {
     #[cfg(any(feature = "client", feature = "native"))]
     fn from_store(
         store: Shared<dyn Storage>,
-        workspace: Option<Shared<dyn radroots_storage::workspace::WorkspaceStore>>,
+        workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
     ) -> Self {
         let closed = Shared::new(Mutex::new(None));
         let session = ClientSession::new(
@@ -194,6 +194,23 @@ impl Client {
     /// Observes resource lifecycle without probing signer, store or network.
     pub fn state(&self) -> SessionState {
         self.session.state()
+    }
+    pub(crate) fn journal(
+        &self,
+    ) -> crate::Result<Shared<dyn radroots_storage::command::OperationJournal>> {
+        self.workspace.clone().ok_or(MISSING_WORKSPACE)
+    }
+    /// Accesses private inquiry execution. Access alone performs no work.
+    pub const fn inbox(&self) -> crate::inbox::Inbox<'_> {
+        crate::inbox::Inbox::new(self)
+    }
+    /// Selects an explicitly authenticated scope for original-operation reads.
+    /// Every query checks that this client owns the attachment and current grant.
+    pub fn operations(
+        &self,
+        scope: &radroots_execution::workspace::WorkspaceSession,
+    ) -> crate::operations::Operations<'_> {
+        crate::operations::Operations::new(self, scope.clone())
     }
     /// Enables the selected local resource host. No background runtime,
     /// transport, command writer or stock authority is implicitly constructed.

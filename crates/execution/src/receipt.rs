@@ -3,10 +3,12 @@
 use crate::{Admission, Error};
 use alloc::boxed::Box;
 use core::{fmt, num::NonZeroU64};
+#[cfg(feature = "receipts")]
+use radroots_domain::ChatMessage;
 use radroots_domain::{
-    ChatMessage, CheckpointDigest, CheckpointRef, CommandContextData, CommandDigest,
-    EnvelopeEventId, IssuanceWindow, MessageId, PublicKey, RecordId, SigningAttemptId, SourceId,
-    TransactionId, UnixSeconds,
+    CheckpointDigest, CheckpointRef, CommandContextData, CommandDigest, EnvelopeEventId,
+    IssuanceWindow, MessageId, PublicKey, RecordId, SigningAttemptId, SourceId, TransactionId,
+    UnixSeconds,
 };
 use radroots_protocol::intent::ArtifactRole;
 

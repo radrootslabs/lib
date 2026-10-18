@@ -21,6 +21,9 @@ pub mod session;
 #[cfg(feature = "workspace_session")]
 pub mod workspace;
 
+#[cfg(feature = "workspace_session")]
+pub mod inbox;
+
 pub use diagnostic::{Detail, Field, Reason};
 pub use error::{Admission, Code, Error, InvalidErrorContext, OperationContext, RetryClass};
 

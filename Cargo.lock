@@ -3180,6 +3180,7 @@ dependencies = [
  "radroots_protocol",
  "radroots_signing",
  "radroots_storage",
+ "radroots_transport",
 ]
 
 [[package]]

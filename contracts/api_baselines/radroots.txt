@@ -23,7 +23,9 @@ impl radroots::client::Client
 pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
 pub async fn radroots::client::Client::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::close(&self) -> radroots_execution::Result<radroots::client::CloseReceipt>
+pub const fn radroots::client::Client::inbox(&self) -> radroots::inbox::Inbox<'_>
 pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
+pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
 pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::start(&self, radroots::client::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
@@ -83,6 +85,12 @@ pub use radroots::identity::Profile
 pub use radroots::identity::PublicIdentity
 pub use radroots::identity::PublicKey
 pub use radroots::identity::Username
+pub mod radroots::inbox
+pub use radroots::inbox::InquireInput
+pub use radroots::inbox::ListingRevisionRef
+pub struct radroots::inbox::Inbox<'a>
+impl<'a> radroots::inbox::Inbox<'a>
+pub async fn radroots::inbox::Inbox<'a>::inquire(&self, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>
 pub mod radroots::knowledge
 pub use radroots::knowledge::AddressableRef
 pub use radroots::knowledge::KnowledgeClaim
@@ -114,6 +122,11 @@ pub use radroots::listing::PrepareError
 pub use radroots::listing::PrepareErrorKind
 pub use radroots::listing::PrepareRequest
 pub use radroots::listing::prepare
+pub mod radroots::operations
+pub struct radroots::operations::Operations<'a>
+impl<'a> radroots::operations::Operations<'a>
+pub async fn radroots::operations::Operations<'a>::get(&self, radroots_domain::identifier::OperationId) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>>
+pub async fn radroots::operations::Operations<'a>::get_matching(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>>
 pub mod radroots::signing
 pub use radroots::signing::ArtifactRole
 pub use radroots::signing::AuthorizationHeader
@@ -191,7 +204,9 @@ impl radroots::client::Client
 pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
 pub async fn radroots::client::Client::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::close(&self) -> radroots_execution::Result<radroots::client::CloseReceipt>
+pub const fn radroots::client::Client::inbox(&self) -> radroots::inbox::Inbox<'_>
 pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
+pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
 pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::start(&self, radroots::client::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>

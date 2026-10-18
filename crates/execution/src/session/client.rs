@@ -6,6 +6,10 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 
+#[cfg(feature = "workspace_session")]
+#[path = "client_commands.rs"]
+mod commands;
+
 struct Resources<H> {
     host: H,
     signer: Shared<Mutex<Option<SignerSession>>>,

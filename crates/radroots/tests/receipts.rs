@@ -3,6 +3,9 @@
 #[path = "support/receipt_plans.rs"]
 mod plans;
 
+#[path = "support/receipt_client.rs"]
+mod ordinary;
+
 use radroots_domain::{
     CommandContextData, CommandDigest, CorrelationId, OperationId, PublicKey, UnixSeconds,
 };

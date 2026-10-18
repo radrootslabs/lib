@@ -66,6 +66,31 @@ pub struct WorkspaceSession {
     attached: Shared<Attached>,
 }
 impl WorkspaceSession {
+    pub(crate) fn owns_context(&self, context: &CommandContext) -> bool {
+        Shared::ptr_eq(&self.attached, &context.attached)
+    }
+    pub(crate) fn same_scope(&self, other: &Self) -> bool {
+        Shared::ptr_eq(&self.attached, &other.attached)
+    }
+    pub(crate) fn captured_input(
+        &self,
+    ) -> Result<(WorkspaceBinding, AttachmentProof), WorkspaceError> {
+        if self.is_closed() {
+            return Err(WorkspaceError::Closed);
+        }
+        let proof = self
+            .attached
+            .proof
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .ok_or(WorkspaceError::Closed)?
+            .with_secret(|secret| AttachmentProof::from_protected_input(secret))?;
+        if self.is_closed() {
+            return Err(WorkspaceError::Closed);
+        }
+        Ok((self.attached.binding.clone(), proof))
+    }
     /// Authenticates the protected credential through a qualified host adapter.
     /// Supplying a custom adapter is an explicit host trust boundary; metadata
     /// returned by an unqualified adapter cannot qualify native SQL authority.
@@ -182,6 +207,14 @@ pub struct CommandContext {
     attached: Shared<Attached>,
 }
 impl CommandContext {
+    pub(crate) fn captured_input(
+        &self,
+    ) -> Result<(WorkspaceBinding, AttachmentProof), WorkspaceError> {
+        WorkspaceSession {
+            attached: self.attached.clone(),
+        }
+        .captured_input()
+    }
     /// Borrows the exact captured descriptor without transferring authority.
     pub const fn data(&self) -> &CommandContextData {
         &self.data

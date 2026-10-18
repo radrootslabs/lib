@@ -17,7 +17,7 @@ default = []
 session = ["dep:futures"]
 signer_session = ["session", "dep:radroots_signing"]
 client_session = ["signer_session"]
-workspace_session = ["client_session", "receipts"]
+workspace_session = ["client_session", "receipts", "radroots_protocol/commands"]
 receipts = ["dep:radroots_storage", "radroots_storage/command_journal"]
 
 [dependencies]
@@ -28,6 +28,7 @@ radroots_signing = { workspace = true, default-features = false, optional = true
 radroots_storage = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]
+radroots_transport = { workspace = true }
 futures = { workspace = true }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
