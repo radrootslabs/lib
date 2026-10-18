@@ -1,11 +1,13 @@
 use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
-    WorkspaceError, admission::Journal, fs::Namespace, operation, plan, record::GrantRecord,
+    WorkspaceError, admission::Journal, attempt, evidence, fs::Namespace, operation, plan,
+    record::GrantRecord,
 };
 use radroots_domain::{CommandDigest, OperationId};
 use radroots_storage::command::{
-    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, ChatSigningPlan, CommitAttempt,
-    OperationError, PlanBindingOutcome, PreparedOperation,
+    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSeal, ChatSigningPlan,
+    ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt, EvidenceCaptureOutcome,
+    OperationError, PlanBindingOutcome, PreparedOperation, SealEvidence, SigningAttempt,
 };
 use sqlx::{
     Connection, Row, SqliteConnection,
@@ -30,6 +32,27 @@ const QUEUE_CAPACITY: usize = 32;
 const TABLE: &str = "CREATE TABLE workspace_grant (singleton INTEGER PRIMARY KEY CHECK(singleton=1), workspace BLOB NOT NULL CHECK(length(workspace)=32), grant_id BLOB NOT NULL CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    Claim(
+        Box<ClaimAttemptRequest>,
+        AttachmentProof,
+        Reply<ClaimAttemptOutcome, OperationError>,
+    ),
+    Attempt(
+        Box<ClaimAttemptRequest>,
+        AttachmentProof,
+        Reply<Option<SigningAttempt>, OperationError>,
+    ),
+    Capture(
+        Box<AttachmentInput>,
+        AttachmentProof,
+        Box<SealEvidence>,
+        Reply<EvidenceCaptureOutcome, OperationError>,
+    ),
+    Captured(
+        Box<ClaimAttemptRequest>,
+        AttachmentProof,
+        Reply<Option<CapturedSeal>, OperationError>,
+    ),
     BindPlan(
         Box<WorkspaceBinding>,
         ChatSigningPlan,
@@ -148,6 +171,58 @@ impl Handle {
                     if ready.send(Ok(())).is_ok() {
                         while let Ok(Queued { job, _budget }) = requests.recv() {
                             match job {
+                                Job::Claim(request, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .claim_issuance(*request, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
+                                Job::Attempt(request, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .query_issuance(*request, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
+                                Job::Capture(selected, proof, evidence, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .capture_issuance(*selected, proof, *evidence)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
+                                Job::Captured(request, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .query_captured(*request, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
                                 Job::BindPlan(binding, plan, proof, reply) => {
                                     let result = Journal {
                                         connection: &mut connection,
@@ -269,6 +344,7 @@ impl Handle {
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
             Job::BindPlan(..) => 1024 * 1024,
+            Job::Capture(..) => 256 * 1024,
             Job::Admit(..) => 96 * 1024,
             _ => 16 * 1024,
         };
@@ -295,6 +371,62 @@ impl Handle {
                 mpsc::TrySendError::Full(_) => WorkspaceError::Unavailable,
                 mpsc::TrySendError::Disconnected(_) => WorkspaceError::Closed,
             })
+    }
+    pub(super) async fn claim_attempt(
+        &self,
+        request: ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> Result<ClaimAttemptOutcome, OperationError> {
+        let anchor = request.identity();
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Claim(Box::new(request), proof, reply))?;
+        match result.await {
+            Ok(result) => result,
+            Err(_) => Ok(ClaimAttemptOutcome::Unknown(anchor)),
+        }
+    }
+    pub(super) async fn signing_attempt(
+        &self,
+        request: ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<SigningAttempt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Attempt(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn capture_evidence(
+        &self,
+        input: AttachmentInput,
+        proof: &AttachmentProof,
+        evidence: &SealEvidence,
+    ) -> Result<EvidenceCaptureOutcome, OperationError> {
+        let anchor = CommitAttempt::new(
+            evidence.workspace_id(),
+            evidence.operation_id(),
+            evidence.command_digest(),
+            None,
+        );
+        let copied = proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Capture(
+            Box::new(input),
+            copied,
+            Box::new(evidence.retained_copy()),
+            reply,
+        ))?;
+        match result.await {
+            Ok(result) => result,
+            Err(_) => Ok(EvidenceCaptureOutcome::Unknown(anchor)),
+        }
+    }
+    pub(super) async fn obtained_evidence(
+        &self,
+        request: ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<CapturedSeal>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Captured(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
     pub(super) async fn bind_plan(
         &self,
@@ -475,7 +607,20 @@ async fn initialize(
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
-        sqlx::query("PRAGMA user_version=4")
+        for definition in [
+            attempt::TABLE,
+            attempt::ID_INDEX,
+            attempt::TX_INDEX,
+            evidence::TABLE,
+            evidence::PARTS,
+            evidence::TX_INDEX,
+        ] {
+            sqlx::raw_sql(definition)
+                .execute(&mut *transaction)
+                .await
+                .map_err(|_| WorkspaceError::StorageFailure)?;
+        }
+        sqlx::query("PRAGMA user_version=5")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -497,11 +642,11 @@ async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if version != 4 {
+    if version != 5 {
         return Err(WorkspaceError::RecoveryRequired);
     }
-    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=5 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 ELSE 0 END)=5 THEN 1 ELSE 0 END FROM sqlite_schema")
-        .bind(TABLE).bind(operation::TABLE).bind(plan::TABLE).bind(plan::PARTS).bind(operation::INDEX).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=11 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='table' AND name='signing_attempts' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_transaction_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence_parts' AND tbl_name='seal_evidence_parts' AND sql=? THEN 1 WHEN type='index' AND name='seal_evidence_transaction_identity' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 ELSE 0 END)=11 THEN 1 ELSE 0 END FROM sqlite_schema")
+        .bind(TABLE).bind(operation::TABLE).bind(plan::TABLE).bind(plan::PARTS).bind(attempt::TABLE).bind(attempt::ID_INDEX).bind(attempt::TX_INDEX).bind(evidence::TABLE).bind(evidence::PARTS).bind(evidence::TX_INDEX).bind(operation::INDEX).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
     if catalog_matches != 1 {
         return Err(WorkspaceError::RecoveryRequired);
     }

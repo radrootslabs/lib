@@ -92,12 +92,17 @@ fn root_exports_are_exact_and_implementation_types_do_not_leak() {
 
     let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut source = String::new();
-    for entry in fs::read_dir(source_root).expect("source directory") {
-        let path = entry.expect("source entry").path();
-        if path.extension().and_then(|value| value.to_str()) == Some("rs") {
-            source.push_str(&fs::read_to_string(path).expect("source file"));
+    fn collect(source_root: &std::path::Path, source: &mut String) {
+        for entry in fs::read_dir(source_root).expect("source directory") {
+            let path = entry.expect("source entry").path();
+            if path.is_dir() {
+                collect(&path, source);
+            } else if path.extension().and_then(|value| value.to_str()) == Some("rs") {
+                source.push_str(&fs::read_to_string(path).expect("source file"));
+            }
         }
     }
+    collect(&source_root, &mut source);
     for forbidden in [
         "sqlx::",
         "rusqlite::",

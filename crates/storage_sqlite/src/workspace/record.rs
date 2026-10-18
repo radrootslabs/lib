@@ -86,23 +86,7 @@ impl GrantRecord {
         proof: &AttachmentProof,
         now: UnixSeconds,
     ) -> Result<WorkspaceBinding, WorkspaceError> {
-        // Check the complete secret commitment before projecting detailed state.
-        let observed = Zeroizing::new(verifier(&self.input, proof));
-        if !bool::from(observed.as_ref().ct_eq(&self.verifier)) {
-            return Err(WorkspaceError::Unauthorized);
-        }
-        if self.input.workspace_id() != input.workspace_id() {
-            return Err(WorkspaceError::WrongNamespace);
-        }
-        if self.input.authority() != input.authority() {
-            return Err(WorkspaceError::StaleAuthority);
-        }
-        if self.input.checkpoint() != input.checkpoint() {
-            return Err(WorkspaceError::StaleCheckpoint);
-        }
-        if &self.input != input {
-            return Err(WorkspaceError::Unauthorized);
-        }
+        self.authenticate_retained_capture(input, proof)?;
         if self.revoked {
             return Err(WorkspaceError::GrantRevoked);
         }
@@ -121,6 +105,33 @@ impl GrantRecord {
             self.expires_at,
             now,
         )
+    }
+    /// Checks only the original protected credential and exact namespace scope.
+    /// This path is exclusively for appending a matching already obtained
+    /// artifact to an actual existing claim, never for new issuance or reads.
+    pub(super) fn authenticate_retained_capture(
+        &self,
+        input: &AttachmentInput,
+        proof: &AttachmentProof,
+    ) -> Result<(), WorkspaceError> {
+        // Check the complete secret commitment before projecting detailed state.
+        let observed = Zeroizing::new(verifier(&self.input, proof));
+        if !bool::from(observed.as_ref().ct_eq(&self.verifier)) {
+            return Err(WorkspaceError::Unauthorized);
+        }
+        if self.input.workspace_id() != input.workspace_id() {
+            return Err(WorkspaceError::WrongNamespace);
+        }
+        if self.input.authority() != input.authority() {
+            return Err(WorkspaceError::StaleAuthority);
+        }
+        if self.input.checkpoint() != input.checkpoint() {
+            return Err(WorkspaceError::StaleCheckpoint);
+        }
+        if &self.input != input {
+            return Err(WorkspaceError::Unauthorized);
+        }
+        self.validate()
     }
     pub(super) fn revoke(&mut self) -> Result<(), WorkspaceError> {
         self.revoked = true;

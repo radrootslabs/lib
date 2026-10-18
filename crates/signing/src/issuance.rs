@@ -25,46 +25,13 @@ pub const SIGNED_EVENT_MAX_BYTES: usize = 65_536;
 /// Maximum supported authored timestamp in seconds (year 9999).
 pub const MAX_EVENT_UNIX_SECONDS: u64 = 253_402_300_799;
 const MAX_OBSERVATION_UNIX_MS: u64 = MAX_EVENT_UNIX_SECONDS * 1000 + 999;
-const INTENT_DOMAIN: &[u8] = b"radroots.exact_signing_intent.v1\0";
 
 #[cfg(feature = "chat")]
 mod dm_relays;
 #[cfg(feature = "chat")]
 pub use dm_relays::VerifiedDmRelayAdvertisement;
 
-/// Transport artifact role, separate from a participant's command permission.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum ArtifactRole {
-    /// A public authored event, without private-carrier or rumor kinds.
-    PublicEvent,
-    /// An encrypted NIP-59 seal (kind 13) for one exact recipient.
-    BusinessSeal,
-    /// An outer NIP-59 gift wrap (kind 1059) for one exact recipient.
-    GiftWrap,
-}
-
-/// Fixed provenance of one captured signing intent. This value grants nothing.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IntentBinding {
-    operation_id: OperationId,
-    command_digest: [u8; 32],
-    digest: [u8; 32],
-}
-impl IntentBinding {
-    /// Returns the full canonical operation identity, never a truncated alias.
-    pub const fn operation_id(self) -> OperationId {
-        self.operation_id
-    }
-    /// Returns the captured command digest.
-    pub const fn command_digest(&self) -> &[u8; 32] {
-        &self.command_digest
-    }
-    /// Returns the domain-separated exact intent commitment.
-    pub const fn digest(&self) -> &[u8; 32] {
-        &self.digest
-    }
-}
+pub use radroots_protocol::intent::{ArtifactRole, IntentBinding};
 
 /// Bounded exact preimage and immutable provenance. It is neither an
 /// authenticated command context nor evidence of T0/T1 admission.
@@ -119,34 +86,21 @@ impl SigningIntent {
                             && recipients.next().is_none()
                     })
             }
+            _ => return Err(ProviderError::UnsupportedVersion),
         };
         if !role_valid {
             return Err(ProviderError::InvalidInput);
         }
         let signed_json_bytes = signed_json_len(&plan)?;
-        let mut digest = Sha256::new();
-        digest.update(INTENT_DOMAIN);
-        digest.update(operation_id.as_bytes());
-        digest.update(command_digest);
-        digest.update(plan.digest().as_bytes());
-        digest.update([match role {
-            ArtifactRole::PublicEvent => 0,
-            ArtifactRole::BusinessSeal => 1,
-            ArtifactRole::GiftWrap => 2,
-        }]);
-        match recipient {
-            Some(peer) => {
-                digest.update([1]);
-                digest.update(peer.as_bytes());
-            }
-            None => digest.update([0]),
-        }
-        digest.update(call.deadline_unix_ms().get().to_be_bytes());
-        let binding = IntentBinding {
+        let binding = IntentBinding::from_components(
             operation_id,
             command_digest,
-            digest: digest.finalize().into(),
-        };
+            *plan.digest().as_bytes(),
+            role,
+            recipient,
+            call.deadline_unix_ms(),
+        )
+        .map_err(|_| ProviderError::InvalidInput)?;
         Ok(Self {
             binding,
             plan,

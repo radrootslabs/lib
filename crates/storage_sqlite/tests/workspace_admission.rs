@@ -763,7 +763,7 @@ async fn predecessor_grant_only_schema_is_preserved_for_explicit_cutover() {
     store.close().await.unwrap();
     let mut database = fixture.database().await;
     sqlx::raw_sql(
-        "DROP TABLE signing_plan_parts; DROP TABLE signing_plans; DROP INDEX operation_transaction_identity; DROP TABLE operations; PRAGMA user_version=1",
+        "DROP TABLE seal_evidence_parts; DROP TABLE seal_evidence; DROP TABLE signing_attempts; DROP TABLE signing_plan_parts; DROP TABLE signing_plans; DROP INDEX operation_transaction_identity; DROP TABLE operations; PRAGMA user_version=1",
     )
     .execute(&mut database)
     .await

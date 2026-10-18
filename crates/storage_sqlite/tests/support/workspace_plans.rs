@@ -1,4 +1,6 @@
 //! Native storage tests use real synthetic NIP-44 data, never host custody.
+#[path = "workspace_issuance.rs"]
+mod issuance;
 use super::*;
 use nostr::{JsonUtil, nips::nip44};
 use radroots_domain::EnvelopeEventId;

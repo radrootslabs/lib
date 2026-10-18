@@ -20,7 +20,7 @@ pub use context::{
 };
 pub use identifier::{
     ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId, ExecutorId, GrantId,
-    IdentifierError, MessageId, OperationId, OrderId, RecordId, RouteDigest, SourceId, ThreadId,
-    TransactionId, WorkspaceId,
+    IdentifierError, MessageId, OperationId, OrderId, RecordId, RouteDigest, SigningAttemptId,
+    SourceId, ThreadId, TransactionId, WorkspaceId,
 };
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};

@@ -9,7 +9,7 @@ features = ["session", "signer_session", "client_session", "workspace_session"]
 test_threads = 1
 
 [profiles.crates."radroots_protocol"]
-features = ["chat"]
+features = ["chat", "intent"]
 
 [profiles.crates."radroots_signing"]
 features = ["chat"]

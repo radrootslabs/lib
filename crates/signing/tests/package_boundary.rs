@@ -24,7 +24,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
         "radroots_event = { workspace = true, default-features = false }",
         "radroots_event_codec = { workspace = true, default-features = false }",
         "radroots_identity = { workspace = true, default-features = false }",
-        "radroots_protocol = { workspace = true, default-features = false, features = [\"nip01\"] }",
+        "radroots_protocol = { workspace = true, default-features = false, features = [\"nip01\", \"intent\"] }",
     ] {
         assert!(
             MANIFEST.contains(required),

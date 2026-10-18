@@ -11,6 +11,12 @@ pub use radroots_protocol::chat::ChatSigningPlan;
 use radroots_protocol::command::CapturedChatCommand;
 use radroots_transport::BoxFuture;
 
+mod issuance;
+pub use issuance::{
+    CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome,
+    EvidenceReceipt, SealEvidence, SigningAttempt,
+};
+
 /// Fixed operation-store failures known before a successful admission commit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -19,6 +25,8 @@ pub enum OperationError {
     Workspace(WorkspaceError),
     /// Captured fields do not match the selected authenticated scope.
     InvalidCommand,
+    /// Obtained bytes do not authenticate against the exact retained seal.
+    InvalidEvidence,
     /// This concrete authority cannot execute the requested action.
     Unauthorized,
     /// Required authenticated thread/order history is unavailable.
@@ -40,6 +48,7 @@ impl OperationError {
         match self {
             Self::Workspace(e) => e.code(),
             Self::InvalidCommand => "invalid_command",
+            Self::InvalidEvidence => "invalid_evidence",
             Self::Unauthorized => "unauthorized",
             Self::MissingHistory => "missing_history",
             Self::UnverifiedApproval => "unverified_approval",
@@ -245,6 +254,34 @@ impl fmt::Debug for AdmissionOutcome {
 /// Typed transaction port, implemented by actual shared storage adapters.
 /// Applications do not implement a second orchestration or stock engine here.
 pub trait OperationJournal: WorkspaceStore {
+    /// Commits a first claim before dispatch. Retained/unknown outcomes never
+    /// authorize another invocation; the concrete executor owns that decision.
+    fn claim_attempt(
+        &self,
+        request: ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<ClaimAttemptOutcome, OperationError>>;
+    /// Reads a retained potential invocation under current workspace access.
+    fn signing_attempt(
+        &self,
+        request: ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<SigningAttempt>, OperationError>>;
+    /// Appends matching authenticated obtained bytes to the actual original
+    /// claim, without a fresh-issuance deadline or observation clock. Borrowed
+    /// input remains caller-owned through error, lost wait or unknown completion.
+    fn capture_evidence<'a>(
+        &'a self,
+        input: crate::workspace::AttachmentInput,
+        proof: &'a AttachmentProof,
+        evidence: &'a SealEvidence,
+    ) -> BoxFuture<'a, Result<EvidenceCaptureOutcome, OperationError>>;
+    /// Reads original exact captured bytes under current workspace access.
+    fn obtained_evidence(
+        &self,
+        request: ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<CapturedSeal>, OperationError>>;
     /// Atomically retains the complete immutable plan under current access and
     /// the original first-issue window. No signer invocation happens here.
     fn bind_signing_intents(

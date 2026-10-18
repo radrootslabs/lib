@@ -19,7 +19,7 @@ pub(super) struct Journal<'a> {
     pub uncertain: &'a mut bool,
 }
 impl Journal<'_> {
-    async fn access(
+    pub(super) async fn access(
         &mut self,
         binding: &WorkspaceBinding,
         proof: &AttachmentProof,
@@ -403,7 +403,7 @@ impl Journal<'_> {
     }
 }
 
-fn same_binding(
+pub(super) fn same_binding(
     captured: &WorkspaceBinding,
     current: &WorkspaceBinding,
 ) -> Result<(), OperationError> {
@@ -422,7 +422,7 @@ fn same_binding(
     clippy::too_many_arguments,
     reason = "Private transaction recheck borrows only the existing owner inputs"
 )]
-async fn recheck(
+pub(super) async fn recheck(
     transaction: &mut Transaction<'_, Sqlite>,
     namespace: &Namespace,
     selected: &AttachmentInput,

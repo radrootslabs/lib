@@ -288,9 +288,20 @@ WARRANTIES, see LICENSE included in the `radroots_storage` distribution.
 ## Protected command and signing-plan transactions
 
 With `command_journal`, `command::OperationJournal` defines admission/query and
-complete immutable signing-plan bind/query transactions. Concrete adapters own
+complete immutable signing-plan bind/query, first-claim and obtained-evidence
+capture/query transactions. Concrete adapters own
 current authentication, exact indexed-fact comparisons, fixed first-issue
 windows and observed commit/rollback completion. `PlanBindingOutcome::Unknown`
 retains the original workspace, operation and command anchor for reconciliation;
 a missing observer cannot establish rollback. `BoundSigningPlan` is a structural
 store report, separate from signature, business installation and delivery.
+
+
+`ClaimAttemptOutcome::Claimed` reports an actual newly committed claim;
+`Retained` and `Unknown` never establish permission to invoke again. Structural
+constructors do not qualify an adapter's persistence or dispatch behavior.
+`SealEvidence::verify` authenticates the bounded original signature bytes and
+every expected field; native capture must additionally compare its own retained
+claim. Capture borrows the caller's evidence and credential so failure cannot
+consume the sole obtained copy. It preserves the first optional observation and
+does not apply a new issuance deadline. Queries still require current access.

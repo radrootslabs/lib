@@ -21,6 +21,7 @@ numbers embedded in wire and schema contracts.
 | `schema` | schema IDs, module generations, descriptors, and aggregate registries |
 | `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
+| `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |
 | `chat` (`chat` feature) | bounded kind-14/13 data, complete immutable signing-plan codec and observed DM route descriptors |
 
 Versioned DTOs live below an explicit generation module. The command codec
@@ -38,6 +39,7 @@ they use.
 | `serde` | yes | derives serialization and deserialization for wire-contract types |
 | `commands` | no | enables the portable closed chat codec, domain values, SHA-256 and zeroizing private command buffers |
 | `nip01` | no | enables pure exact NIP-01 serialization and complete byte counting |
+| `intent` | no | enables pure domain-separated v1 signing commitment data |
 | `chat` | no | enables commands, NIP-01 and the bounded known-kind chat/plan data profile |
 
 Disabling default features leaves the catalog and structural validation APIs

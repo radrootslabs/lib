@@ -214,7 +214,7 @@ under `BEGIN IMMEDIATE`, with provider work outside that transaction. A fixed
 first-issue window never restarts on replay. Already-bound bytes remain queryable
 and replayable after expiry under current access; this grants no new issuance.
 
-The current workspace schema is version 4. Older namespaces are preserved and
+The current workspace schema is version 5. Older namespaces are preserved and
 refused for explicit cutover, without an automatic state rewrite. Complete plans
 use a protected manifest and at most twenty-four 16 KiB protected data parts,
 with context binding the full workspace/operation/plan identity and part index.
@@ -222,3 +222,17 @@ Existing secret-material/envelope bounds remain intact. Queued and in-flight
 request reservations share a 4 MiB byte cap alongside the 32-slot queue limit.
 Known rollback, confirmed commit and unknown completion remain distinct.
 This component performs no signer dispatch, business installation or delivery.
+
+
+Native first claims retain a full-width attempt identity and exact command,
+plan, recipient, intent, original deadline and transaction bindings before any
+signer invocation. A retained claim reports potential issuance and cannot permit
+another invocation. Signing remains outside this storage owner.
+
+Obtained seal capture independently verifies the signature and every signed
+field against the actual protected claim. Its original scoped credential may
+append already obtained matching bytes after revocation or expiry without an
+observation clock; this grants no new issuance or read rights. The first raw
+representation and optional observation are immutable. Borrowed capture input
+keeps the caller's original through error or unknown completion. Evidence uses
+a protected manifest and at most four 16 KiB data parts, bounded before reads.

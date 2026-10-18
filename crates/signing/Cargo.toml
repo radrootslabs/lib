@@ -53,7 +53,7 @@ radroots_domain = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
-radroots_protocol = { workspace = true, default-features = false, features = ["nip01"] }
+radroots_protocol = { workspace = true, default-features = false, features = ["nip01", "intent"] }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 sha2 = { workspace = true, default-features = false }
 zeroize = { workspace = true, default-features = false, features = ["alloc"] }

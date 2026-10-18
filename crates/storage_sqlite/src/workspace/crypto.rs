@@ -12,6 +12,20 @@ use std::{fmt, sync::Arc};
 pub(super) const PRIVATE_PAYLOAD_MAX_BYTES: usize = 16 * 1024;
 pub(super) const PROTECTED_MAX_BYTES: usize = ENVELOPE_MAX_BYTES;
 
+#[derive(Clone, Copy)]
+pub(super) struct IssuanceScope {
+    pub workspace: WorkspaceId,
+    pub operation: OperationId,
+    pub plan_digest: [u8; 32],
+    pub attempt: radroots_domain::SigningAttemptId,
+    pub recipient: radroots_domain::PublicKey,
+}
+#[derive(Clone, Copy)]
+pub(super) enum IssuancePayload {
+    Attempt,
+    Evidence,
+}
+
 /// Explicit host-owned encryption material. This is a data-encryption key,
 /// independent of the participant signer and the scoped bearer credential.
 /// The host chooses its qualified provider and access policy; no fallback or
@@ -89,6 +103,34 @@ impl WorkspaceCrypto {
     ) -> Result<SecretMaterial, WorkspaceError> {
         self.open_bound(
             plan_context(workspace, operation, digest, part)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
+    pub(super) async fn seal_issuance(
+        &self,
+        scope: IssuanceScope,
+        payload: IssuancePayload,
+        part: u8,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            issuance_context(scope, payload, part)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            plaintext,
+        )
+        .await
+    }
+    pub(super) async fn open_issuance(
+        &self,
+        scope: IssuanceScope,
+        payload: IssuancePayload,
+        part: u8,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            issuance_context(scope, payload, part)?,
             PRIVATE_PAYLOAD_MAX_BYTES,
             protected,
         )
@@ -243,5 +285,40 @@ fn plan_context(
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse("radroots.workspace.signing_plan.v1")
             .map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+fn issuance_context(
+    scope: IssuanceScope,
+    payload: IssuancePayload,
+    part: u8,
+) -> Result<EnvelopeContext, WorkspaceError> {
+    use sha2::{Digest, Sha256};
+    let (tag, purpose, schema) = match payload {
+        IssuancePayload::Attempt => (
+            0u8,
+            "radroots.workspace.signing_attempt",
+            "radroots.workspace.signing_attempt.v1",
+        ),
+        IssuancePayload::Evidence => (
+            1u8,
+            "radroots.workspace.seal_evidence",
+            "radroots.workspace.seal_evidence.v1",
+        ),
+    };
+    let mut hash = Sha256::new();
+    hash.update(b"radroots.workspace.issuance.context.v1\0");
+    hash.update([tag, part]);
+    hash.update(scope.workspace.as_bytes());
+    hash.update(scope.operation.as_bytes());
+    hash.update(scope.plan_digest);
+    hash.update(scope.attempt.as_bytes());
+    hash.update(scope.recipient.as_bytes());
+    let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("workspace_issuance", subject.to_string())
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }

@@ -9,6 +9,10 @@ extern crate alloc;
 #[cfg(feature = "commands")]
 pub mod command;
 
+/// Pure exact v1 signing-commitment data, without execution authority.
+#[cfg(feature = "intent")]
+pub mod intent;
+
 /// Exact canonical NIP-01 bytes and complete serialization budgets.
 #[cfg(feature = "nip01")]
 pub mod nip01;

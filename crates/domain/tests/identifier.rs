@@ -28,6 +28,7 @@ fn captured_context_identities_preserve_full_width_and_canonical_encoding() {
             }
         }};
     }
+    check!(radroots_domain::SigningAttemptId);
     check!(radroots_domain::GrantId);
     check!(radroots_domain::RecordId);
     check!(radroots_domain::SourceId);

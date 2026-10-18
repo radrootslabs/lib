@@ -233,6 +233,9 @@ new signer adapter or advanced host composition.
 
 `issuance::SigningIntent` binds the canonical 256-bit domain operation ID,
 command digest, exact authored preimage, role/recipient and captured deadline.
+`issuance::ArtifactRole` and `issuance::IntentBinding` reexport the portable
+Protocol data definitions; the exact v1 commitment bytes remain unchanged.
+Constructing a binding proves no retained claim or dispatch authority.
 Its generic complete-event limit is 64 KiB, including escaped content, tags,
 keys and signature. Executor chat/record/rumor limits remain tighter. Values and
 bindings are neither authenticated command contexts nor durable admission.

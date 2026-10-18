@@ -445,6 +445,21 @@ pub const radroots_protocol::event::v1::TRADE_STATE_VOCABULARY: &[radroots_proto
 pub fn radroots_protocol::event::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
 pub fn radroots_protocol::event::v1::validate_catalog(&[radroots_protocol::event::v1::EventDescriptor]) -> core::result::Result<(), radroots_protocol::event::v1::Error>
 pub fn radroots_protocol::event::v1::validate_trade_state_vocabulary(&[radroots_protocol::event::v1::TradeState]) -> core::result::Result<(), radroots_protocol::event::v1::Error>
+pub mod radroots_protocol::intent
+#[non_exhaustive] pub enum radroots_protocol::intent::ArtifactRole
+pub radroots_protocol::intent::ArtifactRole::BusinessSeal
+pub radroots_protocol::intent::ArtifactRole::GiftWrap
+pub radroots_protocol::intent::ArtifactRole::PublicEvent
+pub struct radroots_protocol::intent::IntentBinding
+impl radroots_protocol::intent::IntentBinding
+pub const fn radroots_protocol::intent::IntentBinding::command_digest(&self) -> &[u8; 32]
+pub const fn radroots_protocol::intent::IntentBinding::digest(&self) -> &[u8; 32]
+pub fn radroots_protocol::intent::IntentBinding::from_components(radroots_domain::identifier::OperationId, [u8; 32], [u8; 32], radroots_protocol::intent::ArtifactRole, core::option::Option<radroots_identity::key::PublicKey>, core::num::nonzero::NonZeroU64) -> core::result::Result<Self, radroots_protocol::intent::InvalidIntentBinding>
+pub const fn radroots_protocol::intent::IntentBinding::operation_id(self) -> radroots_domain::identifier::OperationId
+pub struct radroots_protocol::intent::InvalidIntentBinding
+impl core::error::Error for radroots_protocol::intent::InvalidIntentBinding
+impl core::fmt::Display for radroots_protocol::intent::InvalidIntentBinding
+pub fn radroots_protocol::intent::InvalidIntentBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_protocol::nip01
 pub enum radroots_protocol::nip01::WireError
 pub radroots_protocol::nip01::WireError::InvalidInput

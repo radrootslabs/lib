@@ -162,3 +162,8 @@ identifier!(
     ApprovalIntentDigest,
     "A commitment to the exact intent presented for approval."
 );
+
+identifier!(
+    SigningAttemptId,
+    "An exact 256-bit retained signing invocation identity, distinct from an operation or artifact."
+);

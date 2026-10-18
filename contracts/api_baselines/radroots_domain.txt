@@ -337,6 +337,20 @@ impl serde_core::ser::Serialize for radroots_domain::Sequence
 pub fn radroots_domain::Sequence::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Sequence
 pub fn radroots_domain::Sequence::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::SigningAttemptId(_)
+impl radroots_domain::SigningAttemptId
+pub const fn radroots_domain::SigningAttemptId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::SigningAttemptId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::SigningAttemptId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::SigningAttemptId
+pub fn radroots_domain::SigningAttemptId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::SigningAttemptId
+pub type radroots_domain::SigningAttemptId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::SigningAttemptId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::SigningAttemptId
+pub fn radroots_domain::SigningAttemptId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::SigningAttemptId
+pub fn radroots_domain::SigningAttemptId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::SourceId(_)
 impl radroots_domain::SourceId
 pub const fn radroots_domain::SourceId::as_bytes(&self) -> &[u8; 32]

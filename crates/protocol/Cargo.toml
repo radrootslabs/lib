@@ -35,6 +35,7 @@ default = ["std", "serde"]
 serde = ["dep:serde"]
 std = ["serde?/std"]
 commands = ["serde", "dep:radroots_domain", "dep:serde_json", "dep:sha2", "dep:zeroize"]
+intent = ["dep:radroots_domain", "dep:sha2"]
 nip01 = ["dep:radroots_identity", "dep:sha2", "dep:zeroize"]
 chat = ["commands", "nip01"]
 

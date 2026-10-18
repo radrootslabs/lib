@@ -73,7 +73,7 @@
       "59.md"
     ]
   },
-  "remaining": "Complete owned native execution route/capability approval, signer attempt ownership, obtained evidence capture, install/outbox, exact per-recipient wrapping/delivery, full receipts, browser/bindings and final acceptance",
+  "remaining": "Complete owned native execution route/capability approval and ordinary client job orchestration, install/outbox, exact per-recipient wrapping/delivery, full receipts, browser/bindings and final acceptance",
   "structured_commerce_authoring_enabled": false,
   "package_publication_authorized": false,
   "recipient_dm_routes": {
@@ -95,11 +95,29 @@
     "protected_data_part_max_bytes": 16384,
     "max_data_parts": 24,
     "protected_total_max_bytes": 2097152,
-    "native_workspace_schema": 4,
+    "native_workspace_schema": 5,
     "predecessors": "Preserve and refuse; no inferred timestamps or automatic namespace rewrite",
     "queue": "32 slots plus conservative queued and in-flight reservations under 4194304 bytes",
     "transaction": "Current protected grant, original preparation, all indexed facts and fixed first-issue window rechecked under BEGIN IMMEDIATE; crypto work before transaction",
     "completion": "Confirmed commit, known rollback and original anchored unknown are distinct; accepted owner work survives observer loss",
-    "remaining": "Execution route/capability approval, attempt ownership and S/T2/D, complete receipts, supported consumer adoption, browser/binding runtime and final acceptance"
+    "remaining": "Execution route/capability approval, owned ordinary execution, T2/D, complete receipts, supported consumer adoption, browser/binding runtime and final acceptance"
+  },
+  "native_issuance": {
+    "state": "native_claim_and_obtained_capture_component_implemented",
+    "attempt_identity": "Full 256-bit Domain SigningAttemptId; immutable original command, plan, recipient, exact v1 intent, first-issue window and transaction provenance",
+    "intent_data_owner": "radroots_protocol::intent; Signing reexports preserve the exact existing v1 byte layout",
+    "fresh_claim": "Current protected grant, complete original facts and deadline rechecked under BEGIN IMMEDIATE before dispatch; no signer invocation inside SQLite",
+    "retained_or_unknown_claim": "Potential issuance; never infer safe reissue",
+    "obtained_capture": "Append only independently verified original bytes matching the actual protected claim; original credential and scope without fresh deadline, revocation or observation-clock admission",
+    "caller_ownership": "Borrowed original retained by caller through error, lost observer or unknown completion",
+    "observation": "First original optional time is immutable; missing time remains null",
+    "evidence_max_bytes": 65536,
+    "protected_data_part_max_bytes": 16384,
+    "max_data_parts": 4,
+    "protected_total_max_bytes": 1048576,
+    "capture_queue_reservation_bytes": 262144,
+    "schema": 5,
+    "schema_objects": 11,
+    "remaining": "Ordinary client-owned orchestration and full operation receipts, route/provider approval, installation/outbox/delivery, target graph retirement and all consumer/final gates"
   }
 }

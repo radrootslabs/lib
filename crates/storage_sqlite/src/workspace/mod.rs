@@ -6,8 +6,11 @@
 //! Losing an observer never drops that lock ahead of the SQLite connection.
 
 mod admission;
+mod attempt;
 mod crypto;
+mod evidence;
 mod fs;
+mod issuance;
 mod operation;
 mod plan;
 mod record;
@@ -214,6 +217,60 @@ impl WorkspaceStore for NativeWorkspace {
     }
 }
 impl radroots_storage::command::OperationJournal for NativeWorkspace {
+    fn claim_attempt(
+        &self,
+        request: radroots_storage::command::ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            radroots_storage::command::ClaimAttemptOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.claim_attempt(request, proof))
+    }
+    fn signing_attempt(
+        &self,
+        request: radroots_storage::command::ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::command::SigningAttempt>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.signing_attempt(request, proof))
+    }
+    fn capture_evidence<'a>(
+        &'a self,
+        input: AttachmentInput,
+        proof: &'a AttachmentProof,
+        evidence: &'a radroots_storage::command::SealEvidence,
+    ) -> BoxFuture<
+        'a,
+        Result<
+            radroots_storage::command::EvidenceCaptureOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.capture_evidence(input, proof, evidence))
+    }
+    fn obtained_evidence(
+        &self,
+        request: radroots_storage::command::ClaimAttemptRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::command::CapturedSeal>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.obtained_evidence(request, proof))
+    }
+
     fn bind_signing_intents(
         &self,
         binding: WorkspaceBinding,
