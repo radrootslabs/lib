@@ -44,9 +44,9 @@ fn manifest_has_final_identity_and_required_radroots_dependencies() {
             "radroots_protocol",
         ])
     );
-    assert!(
-        MANIFEST.contains("radroots_protocol = { workspace = true, default-features = false }")
-    );
+    assert!(MANIFEST.contains(
+        "radroots_protocol = { workspace = true, default-features = false, features = [\"nip01\"] }"
+    ));
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
         BTreeSet::from(["default", "knowledge", "serde", "std"]),

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots.protocol.chat.v1",
+  "state": "known_kind_codec_component_implemented",
+  "owner": "radroots_protocol",
+  "signing_conversion_owner": "radroots_signing",
+  "kinds": {
+    "rumor": 14,
+    "seal": 13,
+    "gift_wrap": 1059,
+    "recipient_dm_relays": 10050
+  },
+  "rumor": {
+    "content": "Exact plain UTF-8 text, never a JSON commerce record",
+    "required_tags_in_order": [
+      [
+        "p",
+        "peer"
+      ],
+      [
+        "radroots",
+        "thread",
+        "thread_id"
+      ]
+    ],
+    "optional_tags_in_order": [
+      [
+        "radroots",
+        "source",
+        "30402",
+        "author",
+        "d",
+        "event_id"
+      ],
+      [
+        "e",
+        "reply_parent_message_id"
+      ]
+    ],
+    "unsigned": true,
+    "complete_max_bytes": 24576,
+    "plain_text_max_bytes": 4096,
+    "recipient_set": "Sorted unique author and peer; one exact rumor for every per-recipient seal, including a deduplicated self-conversation",
+    "authorization": "Codec descriptors verify no source, parent, history, grant, consent, route or participant authority"
+  },
+  "canonical": {
+    "preimage": "NIP-01 [0,pubkey,created_at,kind,tags,content], exact tag order and Unicode, lowercase control escapes, no Unicode normalization",
+    "legacy": "Event wire-v1 delegates canonical serialization while retaining its full accepted u64 timestamp/u32 kind range and public parse/error behavior",
+    "private_buffers": "Bound complete serialization before copying; clear owned rumor and temporary preimage text; no payload-bearing automatic diagnostics",
+    "unsigned_json": "Exact id/pubkey/created_at/kind/tags/content with no signature; complete unsigned length equals canonical preimage length plus 116 bytes",
+    "signed_json_length": "The supported exact complete signed object length equals canonical preimage length plus 253 bytes"
+  },
+  "seal": {
+    "tags": [],
+    "timestamp": "Explicit positive time no later than rumor time and at most 172800 seconds earlier; runtime supplies checked randomized input",
+    "ciphertext": "Canonical base64 shape, version-2 prefix, exact predicted padded payload size; structural checks do not authenticate a MAC",
+    "complete_signed_max_bytes": 65536,
+    "signing": "Convert validated known-kind fields through the existing exact-intent signer; no command or durable-admission authority is created"
+  },
+  "nested_budget": {
+    "profile": "Size calculations cover the standard two-byte NIP-44 v2 length prefix for lengths 1 through 65535; no extended-prefix support is claimed.",
+    "provider_caps": "A size calculation does not advertise encryption capability for every counted input. Both selected chat layers must fit the concrete provider's 65536-byte text/ciphertext boundary and the complete signed-event bounds.",
+    "measurement": "Before business seal signing, count complete rumor, padded/base64 rumor ciphertext, worst supported-timestamp signed seal, padded/base64 outer ciphertext and complete signed 1059 envelope",
+    "qualification": "Independent ECMAScript JSON/SHA-256/base64 vectors plus actual Rust encryption/signature/decryption conversion; structural vectors deliberately carry no valid MAC"
+  },
+  "source": {
+    "repository": "https://github.com/nostr-protocol/nips",
+    "commit": "37db639582d857e12468dcccd99b2c7f1d657da9",
+    "documents": [
+      "01.md",
+      "17.md",
+      "44.md",
+      "59.md"
+    ]
+  },
+  "remaining": "Actual native T1 commit of complete plans, authenticated current access and advertised routes, issuance attempt ownership, obtained evidence capture, install/outbox, exact per-recipient wrapping/delivery, full receipts, browser/bindings and final acceptance",
+  "structured_commerce_authoring_enabled": false,
+  "package_publication_authorized": false
+}

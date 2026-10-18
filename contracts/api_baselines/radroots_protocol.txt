@@ -62,6 +62,36 @@ pub const radroots_protocol::capability::v1::MAX_TRANSPORT_KIND_BYTES: usize
 pub const radroots_protocol::capability::v1::SCHEMAS: &[radroots_protocol::schema::Metadata]
 pub fn radroots_protocol::capability::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
 pub fn radroots_protocol::capability::v1::validate_catalog(&[radroots_protocol::capability::v1::TransportDescriptor]) -> core::result::Result<(), radroots_protocol::capability::v1::Error>
+pub mod radroots_protocol::chat
+pub struct radroots_protocol::chat::ChatBudget
+impl radroots_protocol::chat::ChatBudget
+pub const fn radroots_protocol::chat::ChatBudget::envelope_ciphertext_max_bytes(self) -> usize
+pub fn radroots_protocol::chat::ChatBudget::for_rumor(usize, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::chat::ChatBudget::rumor_ciphertext_bytes(self) -> usize
+pub const fn radroots_protocol::chat::ChatBudget::signed_envelope_max_bytes(self) -> usize
+pub const fn radroots_protocol::chat::ChatBudget::signed_seal_max_bytes(self) -> usize
+pub struct radroots_protocol::chat::ChatRumor
+impl radroots_protocol::chat::ChatRumor
+pub const fn radroots_protocol::chat::ChatRumor::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_protocol::chat::ChatRumor::budget(&self) -> radroots_protocol::chat::ChatBudget
+pub const fn radroots_protocol::chat::ChatRumor::created_at(&self) -> radroots_domain::context::UnixSeconds
+pub fn radroots_protocol::chat::ChatRumor::from_command(&radroots_protocol::command::CapturedChatCommand, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::chat::ChatRumor::json(&self) -> &str
+pub const fn radroots_protocol::chat::ChatRumor::message_id(&self) -> radroots_domain::identifier::MessageId
+pub fn radroots_protocol::chat::ChatRumor::recipients(&self) -> &[radroots_identity::key::PublicKey]
+impl core::fmt::Debug for radroots_protocol::chat::ChatRumor
+pub fn radroots_protocol::chat::ChatRumor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::chat::ChatSeal
+impl radroots_protocol::chat::ChatSeal
+pub const fn radroots_protocol::chat::ChatSeal::event_id(&self) -> [u8; 32]
+pub fn radroots_protocol::chat::ChatSeal::fields(&self) -> radroots_protocol::nip01::EventFields<'_>
+pub fn radroots_protocol::chat::ChatSeal::new(&radroots_protocol::chat::ChatRumor, radroots_identity::key::PublicKey, radroots_domain::context::UnixSeconds, &str) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::chat::ChatSeal::recipient(&self) -> radroots_identity::key::PublicKey
+impl core::fmt::Debug for radroots_protocol::chat::ChatSeal
+pub fn radroots_protocol::chat::ChatSeal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_protocol::chat::RUMOR_MAX_BYTES: usize
+pub const radroots_protocol::chat::SIGNED_MAX_BYTES: usize
+pub fn radroots_protocol::chat::nip44_v2_payload_len(usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub mod radroots_protocol::command
 pub enum radroots_protocol::command::ChatKind
 pub radroots_protocol::command::ChatKind::Inquire
@@ -375,6 +405,31 @@ pub const radroots_protocol::event::v1::TRADE_STATE_VOCABULARY: &[radroots_proto
 pub fn radroots_protocol::event::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
 pub fn radroots_protocol::event::v1::validate_catalog(&[radroots_protocol::event::v1::EventDescriptor]) -> core::result::Result<(), radroots_protocol::event::v1::Error>
 pub fn radroots_protocol::event::v1::validate_trade_state_vocabulary(&[radroots_protocol::event::v1::TradeState]) -> core::result::Result<(), radroots_protocol::event::v1::Error>
+pub mod radroots_protocol::nip01
+pub enum radroots_protocol::nip01::WireError
+pub radroots_protocol::nip01::WireError::InvalidInput
+pub radroots_protocol::nip01::WireError::LimitExceeded
+impl core::error::Error for radroots_protocol::nip01::WireError
+impl core::fmt::Display for radroots_protocol::nip01::WireError
+pub fn radroots_protocol::nip01::WireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::nip01::EventFields<'a>
+pub radroots_protocol::nip01::EventFields::author: radroots_identity::key::PublicKey
+pub radroots_protocol::nip01::EventFields::content: &'a str
+pub radroots_protocol::nip01::EventFields::created_at: u64
+pub radroots_protocol::nip01::EventFields::kind: u32
+pub radroots_protocol::nip01::EventFields::tags: &'a [alloc::vec::Vec<alloc::string::String>]
+impl core::fmt::Debug for radroots_protocol::nip01::EventFields<'_>
+pub fn radroots_protocol::nip01::EventFields<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::nip01::UnsignedEvent
+impl radroots_protocol::nip01::UnsignedEvent
+pub fn radroots_protocol::nip01::UnsignedEvent::encode(&radroots_protocol::nip01::EventFields<'_>, usize) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::nip01::UnsignedEvent::event_id(&self) -> [u8; 32]
+pub fn radroots_protocol::nip01::UnsignedEvent::json(&self) -> &str
+impl core::fmt::Debug for radroots_protocol::nip01::UnsignedEvent
+pub fn radroots_protocol::nip01::UnsignedEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn radroots_protocol::nip01::canonical_preimage(&radroots_protocol::nip01::EventFields<'_>) -> alloc::string::String
+pub fn radroots_protocol::nip01::preimage_len(&radroots_protocol::nip01::EventFields<'_>, usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::nip01::signed_json_len(&radroots_protocol::nip01::EventFields<'_>, usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub mod radroots_protocol::radrootsd
 pub mod radroots_protocol::radrootsd::transport_publish
 pub mod radroots_protocol::radrootsd::transport_publish::v5

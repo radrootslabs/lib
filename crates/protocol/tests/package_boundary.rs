@@ -15,6 +15,8 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/runtime/v1.rs"),
     include_str!("../src/schema.rs"),
     include_str!("../src/command.rs"),
+    include_str!("../src/nip01.rs"),
+    include_str!("../src/chat.rs"),
 ];
 
 #[test]
@@ -26,11 +28,18 @@ fn manifest_has_approved_data_only_features_and_dependencies() {
     assert!(MANIFEST.contains("default = [\"std\", \"serde\"]"));
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
-        BTreeSet::from(["commands", "default", "serde", "std"])
+        BTreeSet::from(["chat", "commands", "default", "nip01", "serde", "std"])
     );
     assert_eq!(
         table_keys(MANIFEST, "[dependencies]"),
-        BTreeSet::from(["radroots_domain", "serde", "serde_json", "sha2", "zeroize"])
+        BTreeSet::from([
+            "radroots_domain",
+            "radroots_identity",
+            "serde",
+            "serde_json",
+            "sha2",
+            "zeroize"
+        ])
     );
     assert_eq!(
         table_keys(MANIFEST, "[dev-dependencies]"),
@@ -45,9 +54,11 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
         root_declarations("pub mod "),
         BTreeSet::from([
             "capability",
+            "chat",
             "command",
             "error",
             "event",
+            "nip01",
             "radrootsd",
             "runtime",
             "schema"

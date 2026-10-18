@@ -151,6 +151,40 @@ impl SigningIntent {
             signed_json_bytes,
         })
     }
+    /// Converts one bounded known-kind seal into the existing exact signer
+    /// contract. This codec conversion grants no command, route or journal
+    /// authority; the executor must retain the full plan before dispatch.
+    #[cfg(feature = "chat")]
+    pub fn from_chat_seal(
+        operation_id: OperationId,
+        command_digest: radroots_domain::CommandDigest,
+        seal: &radroots_protocol::chat::ChatSeal,
+        call: ProviderCall,
+    ) -> Result<Self, ProviderError> {
+        let fields = seal.fields();
+        let draft = radroots_event::GenericEventDraft::new(
+            "radroots.message.seal.v1",
+            fields.kind,
+            fields.created_at,
+            core::iter::empty().collect(),
+            fields.content,
+            fields.author.to_hex(),
+        )
+        .map_err(|_| ProviderError::InvalidInput)?;
+        let plan =
+            AuthoredEventPlan::from_generic(draft).map_err(|_| ProviderError::InvalidInput)?;
+        if plan.expected_event_id().as_bytes() != &seal.event_id() {
+            return Err(ProviderError::InvalidInput);
+        }
+        Self::new(
+            operation_id,
+            *command_digest.as_bytes(),
+            plan,
+            ArtifactRole::BusinessSeal,
+            Some(seal.recipient()),
+            call,
+        )
+    }
     /// Returns the original immutable binding.
     pub const fn binding(&self) -> IntentBinding {
         self.binding
@@ -185,31 +219,6 @@ impl SigningIntent {
     }
 }
 
-struct Size(usize);
-impl Size {
-    fn add(&mut self, n: usize) -> Result<(), ProviderError> {
-        self.0 = self
-            .0
-            .checked_add(n)
-            .filter(|n| *n <= SIGNED_EVENT_MAX_BYTES)
-            .ok_or(ProviderError::LimitExceeded)?;
-        Ok(())
-    }
-    fn string(&mut self, value: &str) -> Result<(), ProviderError> {
-        self.add(2)?;
-        if value.len() > SIGNED_EVENT_MAX_BYTES {
-            return Err(ProviderError::LimitExceeded);
-        }
-        for byte in value.bytes() {
-            self.add(match byte {
-                b'"' | b'\\' | b'\n' | b'\r' | b'\t' | 8 | 12 => 2,
-                0..=31 => 6,
-                _ => 1,
-            })?;
-        }
-        Ok(())
-    }
-}
 fn signed_json_len(plan: &AuthoredEventPlan) -> Result<usize, ProviderError> {
     if plan.body().kind() > u32::from(u16::MAX) {
         return Err(ProviderError::UnsupportedVersion);
@@ -220,26 +229,12 @@ fn signed_json_len(plan: &AuthoredEventPlan) -> Result<usize, ProviderError> {
     if plan.body().tags().len() > limits.max_tag_count {
         return Err(ProviderError::LimitExceeded);
     }
-    let mut size = Size(0);
-    size.add(b"{\"id\":".len() + 66 + b",\"pubkey\":".len() + 66 + b",\"created_at\":".len())?;
-    size.add(plan.created_at().checked_ilog10().unwrap_or(0) as usize + 1)?;
-    size.add(
-        b",\"kind\":".len()
-            + plan.body().kind().checked_ilog10().unwrap_or(0) as usize
-            + 1
-            + b",\"tags\":".len()
-            + 2,
-    )?;
-    for (index, tag) in plan.body().tags().iter().enumerate() {
-        if index != 0 {
-            size.add(1)?;
-        }
-        size.add(2)?;
+    for tag in plan.body().tags() {
         elements = elements
             .checked_add(tag.len())
             .filter(|n| *n <= limits.max_total_tag_elements)
             .ok_or(ProviderError::LimitExceeded)?;
-        for (index, field) in tag.iter().enumerate() {
+        for field in tag {
             if field.len() > limits.max_tag_element_bytes {
                 return Err(ProviderError::LimitExceeded);
             }
@@ -247,16 +242,19 @@ fn signed_json_len(plan: &AuthoredEventPlan) -> Result<usize, ProviderError> {
                 .checked_add(field.len())
                 .filter(|n| *n <= limits.max_total_tag_bytes)
                 .ok_or(ProviderError::LimitExceeded)?;
-            if index != 0 {
-                size.add(1)?;
-            }
-            size.string(field)?;
         }
     }
-    size.add(b",\"content\":".len())?;
-    size.string(plan.body().content())?;
-    size.add(b",\"sig\":".len() + 130 + 1)?;
-    Ok(size.0)
+    radroots_protocol::nip01::signed_json_len(
+        &radroots_protocol::nip01::EventFields {
+            author: *plan.author(),
+            created_at: plan.created_at(),
+            kind: plan.body().kind(),
+            tags: plan.body().tags(),
+            content: plan.body().content(),
+        },
+        SIGNED_EVENT_MAX_BYTES,
+    )
+    .map_err(|_| ProviderError::LimitExceeded)
 }
 
 /// Scope of a forensic digest. A prefix digest never claims full coverage.

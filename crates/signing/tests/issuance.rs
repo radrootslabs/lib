@@ -160,6 +160,10 @@ fn malformed_wrong_field_signature_and_oversized_output_are_bounded_forensics() 
     let raw = signed(&intent);
     let mut signature: serde_json::Value = serde_json::from_str(&raw).unwrap();
     signature["sig"] = "00".repeat(64).into();
+    // The callback can preserve every expected field while substituting only
+    // the returned event ID. That response is not authenticated exact evidence.
+    let mut wrong_id: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    wrong_id["id"] = "11".repeat(32).into();
     let different = signed(&self::intent("other", vec![], 1, 2));
     for (raw, reason) in [
         (
@@ -167,6 +171,7 @@ fn malformed_wrong_field_signature_and_oversized_output_are_bounded_forensics() 
             RejectionReason::InvalidArtifact,
         ),
         (different, RejectionReason::InvalidArtifact),
+        (wrong_id.to_string(), RejectionReason::InvalidArtifact),
         (signature.to_string(), RejectionReason::InvalidSignature),
         (
             "x".repeat(SIGNED_EVENT_MAX_BYTES + 1),
@@ -380,6 +385,23 @@ fn intent_binding_preserves_low_operation_bytes_deadline_role_and_recipient() {
             .unwrap(),
         )
         .unwrap();
+        // A valid private carrier still requires its separate exact recipient
+        // binding; public seal bytes deliberately contain no recipient tag.
+        assert!(matches!(
+            SigningIntent::new(
+                OperationId::from_bytes([1; 32]),
+                [2; 32],
+                opaque.clone(),
+                role,
+                None,
+                ProviderCall::new(
+                    PublicKey::from_str(AUTHOR).unwrap(),
+                    NonZeroU64::new(CREATED * 1000 + 10_000).unwrap(),
+                    CancellationSignal::new(),
+                ),
+            ),
+            Err(ProviderError::InvalidInput)
+        ));
         let input = SigningIntent::new(
             OperationId::from_bytes([1; 32]),
             [2; 32],

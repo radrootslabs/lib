@@ -35,8 +35,11 @@ default = ["std", "serde"]
 serde = ["dep:serde"]
 std = ["serde?/std"]
 commands = ["serde", "dep:radroots_domain", "dep:serde_json", "dep:sha2", "dep:zeroize"]
+nip01 = ["dep:radroots_identity", "dep:sha2", "dep:zeroize"]
+chat = ["commands", "nip01"]
 
 [dependencies]
+radroots_identity = { workspace = true, default-features = false, optional = true }
 radroots_domain = { workspace = true, default-features = false, features = ["serde"], optional = true }
 serde_json = { workspace = true, default-features = false, features = ["alloc", "raw_value"], optional = true }
 sha2 = { workspace = true, default-features = false, optional = true }

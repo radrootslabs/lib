@@ -32,6 +32,7 @@ name = "radroots_signing"
 
 [features]
 default = ["std", "serde"]
+chat = ["radroots_protocol/chat"]
 std = [
   "radroots_domain/std",
   "radroots_event/std",
@@ -52,7 +53,7 @@ radroots_domain = { workspace = true, default-features = false }
 radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
-radroots_protocol = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false, features = ["nip01"] }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 sha2 = { workspace = true, default-features = false }
 zeroize = { workspace = true, default-features = false, features = ["alloc"] }
@@ -66,7 +67,7 @@ radroots_blossom = { workspace = true, default-features = false, features = [
   "std",
 ] }
 serde_json = { workspace = true, features = ["std"] }
-nostr = { workspace = true, features = ["std"] }
+nostr = { workspace = true, features = ["std", "nip44"] }
 
 [lints]
 workspace = true

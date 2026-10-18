@@ -410,33 +410,16 @@ pub fn canonical_nip01_event_id_preimage_v1(
     tags: &[Vec<String>],
     content: &str,
 ) -> Result<String, CanonicalEventIdError> {
-    let pubkey = parse_public_key(pubkey).map_err(CanonicalEventIdError::InvalidPubkey)?;
-    let pubkey = pubkey.to_hex();
-    let mut preimage = String::new();
-    preimage.push_str("[0,");
-    push_canonical_json_string(&mut preimage, pubkey.as_str());
-    preimage.push(',');
-    preimage.push_str(created_at.to_string().as_str());
-    preimage.push(',');
-    preimage.push_str(kind.to_string().as_str());
-    preimage.push_str(",[");
-    for (tag_index, tag) in tags.iter().enumerate() {
-        if tag_index > 0 {
-            preimage.push(',');
-        }
-        preimage.push('[');
-        for (value_index, value) in tag.iter().enumerate() {
-            if value_index > 0 {
-                preimage.push(',');
-            }
-            push_canonical_json_string(&mut preimage, value);
-        }
-        preimage.push(']');
-    }
-    preimage.push_str("],");
-    push_canonical_json_string(&mut preimage, content);
-    preimage.push(']');
-    Ok(preimage)
+    let author = parse_public_key(pubkey).map_err(CanonicalEventIdError::InvalidPubkey)?;
+    Ok(radroots_protocol::nip01::canonical_preimage(
+        &radroots_protocol::nip01::EventFields {
+            author,
+            created_at,
+            kind,
+            tags,
+            content,
+        },
+    ))
 }
 
 pub fn compute_canonical_nip01_event_id(
@@ -648,32 +631,6 @@ fn serialized_json_value_len(value: &Value) -> usize {
     serde_json::to_vec(value)
         .expect("JSON values always serialize")
         .len()
-}
-
-fn push_canonical_json_string(target: &mut String, value: &str) {
-    target.push('"');
-    for character in value.chars() {
-        match character {
-            '"' => target.push_str("\\\""),
-            '\\' => target.push_str("\\\\"),
-            '\n' => target.push_str("\\n"),
-            '\r' => target.push_str("\\r"),
-            '\t' => target.push_str("\\t"),
-            '\u{08}' => target.push_str("\\b"),
-            '\u{0c}' => target.push_str("\\f"),
-            '\u{00}'..='\u{1f}' => push_unicode_escape(target, character),
-            _ => target.push(character),
-        }
-    }
-    target.push('"');
-}
-
-fn push_unicode_escape(target: &mut String, character: char) {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let value = character as u32;
-    target.push_str("\\u00");
-    target.push(HEX[((value >> 4) & 0x0f) as usize] as char);
-    target.push(HEX[(value & 0x0f) as usize] as char);
 }
 
 // This policy guard does not interpret event values. The existing JSON and

@@ -9,6 +9,14 @@ extern crate alloc;
 #[cfg(feature = "commands")]
 pub mod command;
 
+/// Exact canonical NIP-01 bytes and complete serialization budgets.
+#[cfg(feature = "nip01")]
+pub mod nip01;
+
+/// Bounded known-kind private-chat data; no admission or route authority.
+#[cfg(feature = "chat")]
+pub mod chat;
+
 #[cfg(all(test, not(feature = "std")))]
 extern crate std;
 

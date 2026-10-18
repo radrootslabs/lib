@@ -186,6 +186,7 @@ impl radroots_signing::issuance::SigningIntent
 pub const fn radroots_signing::issuance::SigningIntent::author(&self) -> radroots_identity::key::PublicKey
 pub const fn radroots_signing::issuance::SigningIntent::binding(&self) -> radroots_signing::issuance::IntentBinding
 pub fn radroots_signing::issuance::SigningIntent::check_before_effect(&self, radroots_identity::key::PublicKey, u64) -> core::result::Result<(), radroots_signing::provider::ProviderError>
+pub fn radroots_signing::issuance::SigningIntent::from_chat_seal(radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, &radroots_protocol::chat::ChatSeal, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
 pub fn radroots_signing::issuance::SigningIntent::new(radroots_domain::identifier::OperationId, [u8; 32], radroots_event_codec::authoring::AuthoredEventPlan, radroots_signing::issuance::ArtifactRole, core::option::Option<radroots_identity::key::PublicKey>, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
 pub const fn radroots_signing::issuance::SigningIntent::recipient(&self) -> core::option::Option<radroots_identity::key::PublicKey>
 pub const fn radroots_signing::issuance::SigningIntent::role(&self) -> radroots_signing::issuance::ArtifactRole
