@@ -14,6 +14,7 @@ use alloc::{
     vec::Vec,
 };
 use radroots_event::SignedEvent;
+use sha2::{Digest, Sha256};
 
 pub use crate::status::SinkStatus;
 
@@ -25,6 +26,7 @@ pub const DELIVERY_REQUEST_ID_MAX_BYTES: usize = 256;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SinkFailure {
     request_id: DeliveryRequestId,
+    exact_payload_sha256: [u8; 32],
     target_set: TargetSet,
     code: String,
     retryability: Retryability,
@@ -216,6 +218,7 @@ impl DeliveryTargetReceipt {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeliveryReceipt {
     request_id: DeliveryRequestId,
+    exact_payload_sha256: [u8; 32],
     target_set: TargetSet,
     target_receipts: Vec<DeliveryTargetReceipt>,
 }
@@ -228,6 +231,7 @@ impl DeliveryReceipt {
     ) -> Result<Self, Error> {
         Self::new(
             request.request_id.clone(),
+            exact_payload_sha256(request),
             request.target_set.clone(),
             target_receipts,
         )
@@ -235,6 +239,7 @@ impl DeliveryReceipt {
 
     fn new(
         request_id: DeliveryRequestId,
+        exact_payload_sha256: [u8; 32],
         target_set: TargetSet,
         target_receipts: Vec<DeliveryTargetReceipt>,
     ) -> Result<Self, Error> {
@@ -263,15 +268,19 @@ impl DeliveryReceipt {
         }
         Ok(Self {
             request_id,
+            exact_payload_sha256,
             target_set,
             target_receipts: ordered,
         })
     }
 
-    /// Validates the receipt against the exact request identity and targets.
+    /// Validates the original request identity, exact payload bytes and targets.
     pub fn validate_for_request(&self, request: &DeliveryRequest) -> Result<(), Error> {
         if &self.request_id != request.request_id() {
             return Err(Error::DeliveryReceiptRequestIdMismatch);
+        }
+        if self.exact_payload_sha256 != exact_payload_sha256(request) {
+            return Err(Error::DeliveryReceiptPayloadMismatch);
         }
         if self.target_set != *request.target_set() {
             return Err(Error::DeliveryReceiptTargetSetMismatch);
@@ -372,6 +381,7 @@ impl SinkFailure {
     ) -> Result<Self, Error> {
         let failure = Self {
             request_id: request.request_id.clone(),
+            exact_payload_sha256: exact_payload_sha256(request),
             target_set: request.target_set.clone(),
             code: code.into(),
             retryability,
@@ -396,10 +406,13 @@ impl SinkFailure {
         .expect("static sink failure is valid")
     }
 
-    /// Validates identity, retry timing, and bounded partial evidence.
+    /// Validates identity, exact payload bytes, retry timing and partial evidence.
     pub fn validate_for_request(&self, request: &DeliveryRequest) -> Result<(), Error> {
         if self.request_id != *request.request_id() {
             return Err(Error::DeliveryReceiptRequestIdMismatch);
+        }
+        if self.exact_payload_sha256 != exact_payload_sha256(request) {
+            return Err(Error::DeliveryReceiptPayloadMismatch);
         }
         if self.target_set != *request.target_set() {
             return Err(Error::DeliveryReceiptTargetSetMismatch);
@@ -455,6 +468,10 @@ impl SinkFailure {
     pub fn partial_evidence(&self) -> &[DeliveryTargetReceipt] {
         self.partial_evidence.as_slice()
     }
+}
+
+fn exact_payload_sha256(request: &DeliveryRequest) -> [u8; 32] {
+    Sha256::digest(request.payload().event().raw_json().as_bytes()).into()
 }
 
 /// Host SPI for outbound event delivery.
@@ -589,6 +606,7 @@ mod serde_impl {
     #[serde(deny_unknown_fields)]
     struct DeliveryReceiptWire {
         request_id: DeliveryRequestId,
+        exact_payload_sha256: [u8; 32],
         target_set: TargetSet,
         target_receipts: Vec<DeliveryTargetReceipt>,
     }
@@ -599,8 +617,13 @@ mod serde_impl {
             D: serde::Deserializer<'de>,
         {
             let wire = DeliveryReceiptWire::deserialize(deserializer)?;
-            Self::new(wire.request_id, wire.target_set, wire.target_receipts)
-                .map_err(serde::de::Error::custom)
+            Self::new(
+                wire.request_id,
+                wire.exact_payload_sha256,
+                wire.target_set,
+                wire.target_receipts,
+            )
+            .map_err(serde::de::Error::custom)
         }
     }
 
@@ -608,6 +631,7 @@ mod serde_impl {
     #[serde(deny_unknown_fields)]
     struct SinkFailureWire {
         request_id: DeliveryRequestId,
+        exact_payload_sha256: [u8; 32],
         target_set: TargetSet,
         code: String,
         retryability: Retryability,
@@ -624,6 +648,7 @@ mod serde_impl {
             let wire = SinkFailureWire::deserialize(deserializer)?;
             let failure = Self {
                 request_id: wire.request_id,
+                exact_payload_sha256: wire.exact_payload_sha256,
                 target_set: wire.target_set,
                 code: wire.code,
                 retryability: wire.retryability,

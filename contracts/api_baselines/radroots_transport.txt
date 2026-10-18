@@ -90,6 +90,7 @@ pub const radroots_transport::endpoint::TARGET_LABEL_MAX_BYTES: usize
 pub const radroots_transport::endpoint::TARGET_SCOPE_MAX_BYTES: usize
 pub mod radroots_transport::error
 pub enum radroots_transport::error::Error
+pub radroots_transport::error::Error::DeliveryReceiptPayloadMismatch
 pub radroots_transport::error::Error::DeliveryReceiptRequestIdMismatch
 pub radroots_transport::error::Error::DeliveryReceiptTargetSetMismatch
 pub radroots_transport::error::Error::DeliveryTargetReceiptAttemptMismatch
@@ -525,6 +526,7 @@ pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::T
 pub fn radroots_transport::target::Target::label(&self) -> core::option::Option<&radroots_transport::target::TargetLabel>
 pub fn radroots_transport::target::Target::local(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::local_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::target::Target::matches_nostr_relay(&self, &str) -> core::result::Result<bool, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::new(radroots_transport::TransportId, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::new_with_metadata(radroots_transport::TransportId, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::nostr_relay(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
@@ -594,6 +596,7 @@ impl<'de> serde_core::de::Deserialize<'de> for radroots_transport::target::Targe
 pub fn radroots_transport::target::TargetSet::deserialize<D>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error> where D: serde_core::de::Deserializer<'de>
 pub const radroots_transport::target::TARGET_SET_MAX_ITEMS: usize
 pub enum radroots_transport::Error
+pub radroots_transport::Error::DeliveryReceiptPayloadMismatch
 pub radroots_transport::Error::DeliveryReceiptRequestIdMismatch
 pub radroots_transport::Error::DeliveryReceiptTargetSetMismatch
 pub radroots_transport::Error::DeliveryTargetReceiptAttemptMismatch
@@ -798,6 +801,7 @@ pub fn radroots_transport::target::Target::kind(&self) -> &radroots_transport::T
 pub fn radroots_transport::target::Target::label(&self) -> core::option::Option<&radroots_transport::target::TargetLabel>
 pub fn radroots_transport::target::Target::local(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::local_with_metadata(impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
+pub fn radroots_transport::target::Target::matches_nostr_relay(&self, &str) -> core::result::Result<bool, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::new(radroots_transport::TransportId, impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::new_with_metadata(radroots_transport::TransportId, impl core::convert::AsRef<str>, core::option::Option<radroots_transport::target::TargetScope>, core::option::Option<radroots_transport::target::TargetLabel>) -> core::result::Result<Self, radroots_transport::error::Error>
 pub fn radroots_transport::target::Target::nostr_relay(impl core::convert::AsRef<str>) -> core::result::Result<Self, radroots_transport::error::Error>

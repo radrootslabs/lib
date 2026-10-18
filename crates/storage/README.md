@@ -323,3 +323,26 @@ may carry the owned bounded message reconstructed from the original protected
 command and plan, with validated installation/basis/work reports. Structural
 constructors supply no authentication or persistence guarantee. Uncertain T2
 completion never releases claims or obtained evidence.
+
+Delivery preparation retains an exact outer representation and complete bounded
+target intent against actual original publication work before transport. Only
+an actual fresh confirmed claim may proceed once through its qualified owner;
+replay and unknown outcomes grant no dispatch right. Retries retain new attempt
+identities while reusing original exact bytes. Canonical endpoint budgets cannot
+be reset by changing a target scope.
+
+The first full target identity set and completion policy stay fixed for each
+recipient's work. Each attempt independently retains a nonempty exact subset;
+only those endpoints spend attempt slots. Shared acceptance evaluation accumulates
+original target facts across retries without weakening the full criterion.
+An exhausted optional endpoint cannot block a required endpoint. A distinct
+current-access attempt may retain a new delivery deadline, while replay keeps
+its original deadline and never repeats participant issuance.
+
+`record_delivery_observation` appends independently scoped accepted, rejected,
+timeout, disconnect, unknown and unattempted facts. Original credential and
+actual retained attempt linkage are required; late capture grants no new lease
+or read rights. The first original optional time in each class remains unchanged.
+Snapshots carry bounded summaries and original observations without duplicating
+raw outer bytes. Their v3 progress digest includes these facts; structural
+construction and an adapter's report establish no backend qualification.

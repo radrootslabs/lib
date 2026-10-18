@@ -30,6 +30,7 @@ features = []
 name = "radroots_storage_sqlite"
 
 [dependencies]
+nostr = { workspace = true, default-features = false, features = ["std", "nip44"] }
 fs2 = { workspace = true }
 getrandom = { workspace = true }
 radroots_domain = { workspace = true, features = ["std", "serde"] }

@@ -1,8 +1,8 @@
 //! Coherent retained graph reports. Values are not persistence qualification or
 //! dispatch permission; concrete owners must authenticate and compare all facts.
 use super::{
-    BoundSigningPlan, ChatInstallation, EvidenceReceipt, OperationError, PreparedOperation,
-    PublicationWork, SigningAttempt,
+    BoundSigningPlan, ChatInstallation, DeliveryAttemptSummary, DeliveryObservation,
+    EvidenceReceipt, OperationError, PreparedOperation, PublicationWork, SigningAttempt,
 };
 use core::fmt;
 use radroots_domain::{
@@ -11,7 +11,12 @@ use radroots_domain::{
 };
 use radroots_protocol::intent::IntentBinding;
 use sha2::{Digest, Sha256};
-use std::{boxed::Box, vec, vec::Vec};
+use std::{
+    boxed::Box,
+    collections::{BTreeMap, BTreeSet},
+    vec,
+    vec::Vec,
+};
 
 /// Fixed original claim facts, without another copy of its complete private plan.
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -178,6 +183,8 @@ pub struct OperationSnapshot {
     installation: Option<ChatInstallation>,
     message: Option<ChatMessage>,
     publications: Box<[PublicationWork]>,
+    deliveries: Box<[DeliveryAttemptSummary]>,
+    observations: Box<[DeliveryObservation]>,
 }
 impl OperationSnapshot {
     /// Stable scoped progress identity over original transaction, command,
@@ -187,7 +194,7 @@ impl OperationSnapshot {
         let prepared = self.prepared();
         let identity = prepared.identity();
         let mut digest = Sha256::new();
-        digest.update(b"radroots.operation.snapshot.v2\0");
+        digest.update(b"radroots.operation.snapshot.v3\0");
         digest.update(identity.workspace_id().as_bytes());
         digest.update(identity.operation_id().as_bytes());
         digest.update(identity.command_digest().as_bytes());
@@ -261,6 +268,63 @@ impl OperationSnapshot {
             digest.update(work.evidence().recipient().as_bytes());
             digest.update(work.transaction_id().as_bytes());
             digest.update(work.queued_at().get().to_be_bytes());
+        }
+        for attempt in self.delivery_attempts() {
+            digest.update(attempt.work().evidence().recipient().as_bytes());
+            digest.update(attempt.intent().digest());
+            digest.update(attempt.envelope_digest());
+            digest.update(attempt.transaction_id().as_bytes());
+            digest.update(attempt.retained_at().get().to_be_bytes());
+            digest.update(attempt.target_ordinals());
+        }
+        for observation in self.delivery_observations() {
+            digest.update(observation.work().evidence().recipient().as_bytes());
+            digest.update(observation.request_id().as_str().as_bytes());
+            digest.update(observation.event_id().as_bytes());
+            digest.update(observation.envelope_digest());
+            digest.update(
+                observation
+                    .target_receipt()
+                    .target()
+                    .fingerprint()
+                    .as_str()
+                    .as_bytes(),
+            );
+            digest.update([observation.kind().code()]);
+            digest.update([
+                observation.target_ordinal(),
+                u8::from(observation.target_receipt().was_attempted()),
+            ]);
+            let outcome = observation.target_receipt().outcome();
+            digest.update([match outcome.kind() {
+                radroots_transport::outcome::DeliveryOutcomeKind::Accepted => 0,
+                radroots_transport::outcome::DeliveryOutcomeKind::Delivered => 1,
+                radroots_transport::outcome::DeliveryOutcomeKind::Rejected => 2,
+                radroots_transport::outcome::DeliveryOutcomeKind::Unavailable => 3,
+                radroots_transport::outcome::DeliveryOutcomeKind::Failed => 4,
+            }]);
+            digest.update([match outcome.retryability() {
+                radroots_transport::outcome::Retryability::NotApplicable => 0,
+                radroots_transport::outcome::Retryability::Retryable => 1,
+                radroots_transport::outcome::Retryability::Terminal => 2,
+            }]);
+            for value in [outcome.code(), outcome.message()] {
+                match value {
+                    Some(value) => {
+                        digest.update([1]);
+                        digest.update((value.len() as u32).to_be_bytes());
+                        digest.update(value.as_bytes());
+                    }
+                    None => digest.update([0]),
+                }
+            }
+            match observation.observed_at_unix_ms() {
+                Some(time) => {
+                    digest.update([1]);
+                    digest.update(time.get().to_be_bytes());
+                }
+                None => digest.update([0]),
+            }
         }
         radroots_domain::CheckpointDigest::from_bytes(digest.finalize().into())
     }
@@ -342,6 +406,8 @@ impl OperationSnapshot {
             installation: None,
             message: None,
             publications: Vec::new().into_boxed_slice(),
+            deliveries: Vec::new().into_boxed_slice(),
+            observations: Vec::new().into_boxed_slice(),
         })
     }
     /// Adds structurally checked T2 reports to this data snapshot. The concrete
@@ -352,6 +418,9 @@ impl OperationSnapshot {
         installation: Option<ChatInstallation>,
         publications: Vec<PublicationWork>,
     ) -> Result<Self, OperationError> {
+        if !self.deliveries.is_empty() || !self.observations.is_empty() {
+            return Err(OperationError::RecoveryRequired);
+        }
         let Some(installed) = installation else {
             if !publications.is_empty() {
                 return Err(OperationError::RecoveryRequired);
@@ -438,6 +507,163 @@ impl OperationSnapshot {
     /// relay observation is inferred from these references.
     pub fn publications(&self) -> &[PublicationWork] {
         &self.publications
+    }
+    /// Adds bounded original D references and append-only target observations.
+    /// The native owner must authenticate and fence the complete actual graph;
+    /// constructing these values proves neither execution nor permission.
+    pub fn with_delivery(
+        mut self,
+        mut attempts: Vec<DeliveryAttemptSummary>,
+        mut observations: Vec<DeliveryObservation>,
+    ) -> Result<Self, OperationError> {
+        if attempts.len() > 384 || observations.len() > 2304 {
+            return Err(OperationError::RecoveryRequired);
+        }
+        attempts.sort_by(|a, b| {
+            (
+                a.work().evidence().recipient(),
+                a.intent().request_id().as_str(),
+            )
+                .cmp(&(
+                    b.work().evidence().recipient(),
+                    b.intent().request_id().as_str(),
+                ))
+        });
+        let mut keys = BTreeSet::new();
+        let mut transactions = BTreeSet::new();
+        let mut counters = BTreeMap::<(PublicKey, &str), BTreeSet<u8>>::new();
+        let mut slots = 0usize;
+        let mut policies = BTreeMap::new();
+        for attempt in &attempts {
+            let recipient = attempt.work().evidence().recipient();
+            slots = slots
+                .checked_add(attempt.intent().selection().len())
+                .filter(|n| *n <= 384)
+                .ok_or(OperationError::RecoveryRequired)?;
+            if !self.publications.contains(&attempt.work())
+                || !keys.insert((recipient, attempt.intent().request_id().as_str()))
+                || !transactions.insert(attempt.transaction_id())
+                || attempt.target_ordinals().len() != attempt.intent().selection().len()
+                || policies
+                    .insert(recipient, *attempt.intent().publication_policy_digest())
+                    .is_some_and(|previous| {
+                        previous != *attempt.intent().publication_policy_digest()
+                    })
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+            for (target, ordinal) in attempt
+                .intent()
+                .selected_targets()
+                .zip(attempt.target_ordinals())
+            {
+                if !(1..=12).contains(ordinal)
+                    || !counters
+                        .entry((recipient, target.uri().as_str()))
+                        .or_default()
+                        .insert(*ordinal)
+                {
+                    return Err(OperationError::RecoveryRequired);
+                }
+            }
+        }
+        if counters
+            .values()
+            .any(|values| values.iter().copied().ne(1..=values.len() as u8))
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        observations.sort_by(|a, b| {
+            (
+                a.work().evidence().recipient(),
+                a.request_id().as_str(),
+                a.target_receipt().target().fingerprint().as_str(),
+                a.kind().code(),
+            )
+                .cmp(&(
+                    b.work().evidence().recipient(),
+                    b.request_id().as_str(),
+                    b.target_receipt().target().fingerprint().as_str(),
+                    b.kind().code(),
+                ))
+        });
+        let mut seen = BTreeSet::new();
+        for observation in &observations {
+            let attempt = attempts
+                .iter()
+                .find(|attempt| {
+                    attempt.work() == observation.work()
+                        && attempt.intent().request_id() == observation.request_id()
+                })
+                .ok_or(OperationError::RecoveryRequired)?;
+            let ordinal = attempt
+                .intent()
+                .selection()
+                .iter()
+                .position(|target| target == observation.target_receipt().target().fingerprint())
+                .and_then(|index| attempt.target_ordinals().get(index))
+                .copied();
+            if ordinal != Some(observation.target_ordinal()) {
+                return Err(OperationError::RecoveryRequired);
+            }
+            if observation.event_id() != attempt.intent().event_id()
+                || observation.envelope_digest() != attempt.envelope_digest()
+                || !attempt
+                    .intent()
+                    .targets()
+                    .targets()
+                    .contains(observation.target_receipt().target())
+                || !seen.insert((
+                    observation.work().evidence().recipient(),
+                    observation.request_id().as_str(),
+                    observation.target_receipt().target().fingerprint().as_str(),
+                    observation.kind().code(),
+                ))
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+        }
+        self.deliveries = attempts.into_boxed_slice();
+        self.observations = observations.into_boxed_slice();
+        Ok(self)
+    }
+    /// Original exact-envelope/target intent references, with no duplicated raw payload.
+    pub fn delivery_attempts(&self) -> &[DeliveryAttemptSummary] {
+        &self.deliveries
+    }
+    /// Individual original per-attempt target facts; absence is never an ACK.
+    pub fn delivery_observations(&self) -> &[DeliveryObservation] {
+        &self.observations
+    }
+    /// Evaluates the original full publication criterion across all exact
+    /// attempts for this work. Retry selection never narrows the criterion;
+    /// an earlier acceptance remains authoritative across later failures.
+    pub fn publication_accepted(&self, work: PublicationWork) -> Result<bool, OperationError> {
+        if !self.publications.contains(&work) {
+            return Err(OperationError::InvalidEvidence);
+        }
+        let Some(original) = self
+            .deliveries
+            .iter()
+            .find(|attempt| attempt.work() == work)
+        else {
+            return Ok(false);
+        };
+        radroots_transport::policy::evaluate_satisfaction(
+            original.intent().policy(),
+            original.intent().targets(),
+            self.observations
+                .iter()
+                .filter(|value| value.work() == work)
+                .map(|value| {
+                    (
+                        value.target_receipt().target().fingerprint(),
+                        value.target_receipt().outcome(),
+                    )
+                }),
+        )
+        .map(|state| state == radroots_transport::policy::SatisfactionState::Satisfied)
+        .map_err(|_| OperationError::RecoveryRequired)
     }
     /// Original preparation, without a fabricated installed business result.
     pub fn prepared(&self) -> &PreparedOperation {

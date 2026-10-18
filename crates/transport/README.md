@@ -11,6 +11,11 @@ outbox claiming, retry loops, schedulers, timers, or fallback policy. Concrete
 adapters such as `radroots_transport_nostr` implement the SPI; applications
 compose those adapters in `radroots_sdk` or their own host layer.
 
+`Target::matches_nostr_relay` compares a captured relay identifier using the
+target's original construction policy and shared canonical endpoint rules.
+Callers preserve original signed source bytes and approve the exact selected
+route separately; a canonical match grants no network permission.
+
 The authoritative package charter is the
 [`radroots_transport` section of the Release V1 specification](../../contracts/crates/release_v1/radroots_crates_release_v1.toml).
 
@@ -28,6 +33,12 @@ The authoritative package charter is the
 5. The caller validates [`FetchPage`] or [`DeliveryReceipt`] against the
    originating request and decides whether normalized retryable outcomes merit
    another explicit operation.
+
+Delivery receipts and sink-wide partial failures retain the SHA-256 digest of
+the exact original signed JSON bytes. Validation refuses another payload even
+when request identity and targets match, including a different representation
+of the same event ID. Serialized receipts require that digest; decoding alone
+does not authenticate an adapter or establish a remote acknowledgement.
 
 [`TransportId`]: crate::TransportId
 [`Target`]: crate::Target

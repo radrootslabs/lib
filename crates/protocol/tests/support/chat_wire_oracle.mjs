@@ -29,7 +29,7 @@ commands.push(self);
 const vectors = commands.map(({ name, command }) => {
   const input = command.input;
   const author = command.context.actor.participant;
-  const tags = [["p", input.peer], ["radroots", "thread", input.thread_id]];
+  const tags = [["p", input.peer], ["radroots", "thread", input.thread_id], ["radroots", "operation", command.context.operation_id]];
   if (input.source) tags.push(["radroots", "source", "30402", input.source.coordinate.author, input.source.coordinate.d, input.source.event_id]);
   if (input.parent) tags.push(["e", input.parent]);
   const event = { pubkey: author, created_at: 1700000000, kind: 14, tags, content: input.text };

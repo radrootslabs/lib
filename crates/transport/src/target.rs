@@ -434,6 +434,21 @@ impl Target {
         &self.uri
     }
 
+    /// Compares a captured Nostr relay identifier using this target's original
+    /// construction policy and canonical endpoint rules. Scope and labels are
+    /// separate. Matching supplies no route approval or network permission.
+    pub fn matches_nostr_relay(&self, raw: &str) -> Result<bool, TransportError> {
+        if self.kind != TransportId::NOSTR {
+            return Ok(false);
+        }
+        let policy = if self.private_device_cleartext {
+            TargetNetworkPolicy::PrivateDevice
+        } else {
+            TargetNetworkPolicy::TlsOrLoopback
+        };
+        Ok(EndpointUri::parse_nostr_relay(raw, policy)? == self.uri)
+    }
+
     pub fn scope(&self) -> Option<&TargetScope> {
         self.scope.as_ref()
     }

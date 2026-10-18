@@ -25,6 +25,7 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
         BTreeSet::from([
             "fs2",
             "getrandom",
+            "nostr",
             "radroots_domain",
             "radroots_event",
             "radroots_event_codec",
@@ -40,6 +41,25 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "tokio",
             "zeroize",
         ])
+    );
+    let manifest: toml::Value = toml::from_str(MANIFEST).expect("checked manifest");
+    let crypto = manifest["dependencies"]["nostr"]
+        .as_table()
+        .expect("explicit crypto dependency");
+    assert_eq!(
+        crypto.keys().map(String::as_str).collect::<BTreeSet<_>>(),
+        BTreeSet::from(["workspace", "default-features", "features"])
+    );
+    assert_eq!(crypto["workspace"].as_bool(), Some(true));
+    assert_eq!(crypto["default-features"].as_bool(), Some(false));
+    assert_eq!(
+        crypto["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["std", "nip44"])
     );
     assert!(!ROOT.contains("SqlitePool"));
     assert!(!ROOT.contains("sqlx"));

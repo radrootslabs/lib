@@ -93,6 +93,8 @@ pub enum TargetObservation {
     Disconnected,
     /// Completion requires reconciliation.
     Unknown,
+    /// The adapter explicitly reports that it did not attempt this target.
+    NotAttempted,
 }
 macro_rules! copied {
     ($name:ident, $ty:ty, $field:ident, $doc:literal) => {
@@ -198,6 +200,9 @@ pub struct DeliveryObservation {
     event: EnvelopeEventId,
     recipient: Option<PublicKey>,
     target: Box<str>,
+    request: Box<str>,
+    target_fingerprint: Box<str>,
+    ordinal: u8,
     outcome: TargetObservation,
     observed_at: Option<NonZeroU64>,
 }
@@ -229,6 +234,18 @@ impl DeliveryObservation {
     /// Borrows the exact retained target for authorized presentation.
     pub fn target(&self) -> &str {
         &self.target
+    }
+    /// Full original retained potential invocation identity.
+    pub fn request_id(&self) -> &str {
+        &self.request
+    }
+    /// Exact canonical target identity, independent of display labels.
+    pub fn target_fingerprint(&self) -> &str {
+        &self.target_fingerprint
+    }
+    /// Original endpoint potential invocation number, from one through twelve.
+    pub const fn target_ordinal(&self) -> u8 {
+        self.ordinal
     }
 }
 impl fmt::Debug for DeliveryObservation {
@@ -262,11 +279,19 @@ pub struct OperationReceipt<T> {
     issuance: Issuance,
     delivery: Delivery,
     delivery_observations: Box<[DeliveryObservation]>,
+    #[cfg(feature = "receipts")]
+    delivery_attempts: Box<[radroots_storage::command::DeliveryAttemptSummary]>,
     wait_termination: WaitTermination,
     recovery: Box<[RecoveryRequirement]>,
     error: Option<Error>,
 }
 impl<T> OperationReceipt<T> {
+    /// Complete original outer/target intent references. These contain no raw
+    /// payload and grant no dispatch permission or adapter qualification.
+    #[cfg(feature = "receipts")]
+    pub fn delivery_attempts(&self) -> &[radroots_storage::command::DeliveryAttemptSummary] {
+        &self.delivery_attempts
+    }
     /// Original captured data; this is not an authenticated executable context.
     pub const fn context(&self) -> &CommandContextData {
         &self.context
@@ -477,19 +502,68 @@ impl OperationReceipt<ChatMessage> {
             && issuance != Issuance::Obtained
             && snapshot.observed_at() >= prepared.issuance_window().first_issue_not_after();
         let mut recovery = Vec::new();
+        let observations = snapshot.delivery_observations();
+        let attempts = snapshot.delivery_attempts();
+        let delivery_pending = snapshot
+            .publications()
+            .iter()
+            .any(|work| snapshot.publication_accepted(*work) != Ok(true));
+        let delivery_unknown = attempts.iter().any(|attempt| {
+            attempt.intent().selected_targets().any(|target| {
+                !observations.iter().any(|value| {
+                    value.work() == attempt.work()
+                        && value.request_id() == attempt.intent().request_id()
+                        && value.target_receipt().target() == target
+                        && value.kind()
+                            != radroots_storage::command::DeliveryObservationKind::Unknown
+                })
+            })
+        });
+        let projected = observations
+            .iter()
+            .map(|value| {
+                use radroots_storage::command::DeliveryObservationKind as Kind;
+                DeliveryObservation {
+                    event: value.event_id(),
+                    recipient: Some(value.work().evidence().recipient()),
+                    target: value.target_receipt().target().uri().as_str().into(),
+                    request: value.request_id().as_str().into(),
+                    target_fingerprint: value
+                        .target_receipt()
+                        .target()
+                        .fingerprint()
+                        .as_str()
+                        .into(),
+                    ordinal: value.target_ordinal(),
+                    observed_at: value.observed_at_unix_ms(),
+                    outcome: match value.kind() {
+                        Kind::Accepted => TargetObservation::Accepted,
+                        Kind::Rejected => TargetObservation::Rejected,
+                        Kind::TimedOut => TargetObservation::TimedOut,
+                        Kind::Disconnected => TargetObservation::Disconnected,
+                        Kind::Unknown => TargetObservation::Unknown,
+                        Kind::NotAttempted => TargetObservation::NotAttempted,
+                    },
+                }
+            })
+            .collect::<Vec<_>>();
         if unknown {
             recovery.push(RecoveryRequirement::ReconcileIssuance);
         }
         if install_pending {
             recovery.push(RecoveryRequirement::InstallObtainedEvidence);
         }
-        if !snapshot.publications().is_empty() {
+        if delivery_pending {
             recovery.push(RecoveryRequirement::ResumeDelivery);
         }
         if expired {
             recovery.push(RecoveryRequirement::ManualReconciliation);
         }
-        if recovery.is_empty() {
+        if recovery.is_empty()
+            && (snapshot.installation().is_none()
+                || issuance == Issuance::Pending
+                || issuance == Issuance::None)
+        {
             recovery.push(RecoveryRequirement::ContinueOriginalOperation);
         }
         Self {
@@ -518,10 +592,20 @@ impl OperationReceipt<ChatMessage> {
             issuance,
             delivery: if snapshot.publications().is_empty() {
                 Delivery::NotStarted
-            } else {
+            } else if delivery_unknown {
+                Delivery::Unknown
+            } else if attempts.is_empty()
+                || snapshot
+                    .publications()
+                    .iter()
+                    .any(|work| !attempts.iter().any(|attempt| attempt.work() == *work))
+            {
                 Delivery::Pending
+            } else {
+                Delivery::Observed
             },
-            delivery_observations: vec![].into_boxed_slice(),
+            delivery_observations: projected.into_boxed_slice(),
+            delivery_attempts: attempts.to_vec().into_boxed_slice(),
             wait_termination: WaitTermination::Returned,
             recovery: recovery.into_boxed_slice(),
             error: if unknown {

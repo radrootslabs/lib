@@ -70,6 +70,7 @@ pub enum Error {
     DeliveryTargetReceiptAttemptMismatch,
     TransportOutcomeStatusMismatch,
     DeliveryReceiptRequestIdMismatch,
+    DeliveryReceiptPayloadMismatch,
     DeliveryReceiptTargetSetMismatch,
     EmptyPayloadId,
     InvalidPayloadId,
@@ -226,6 +227,9 @@ impl fmt::Display for Error {
             }
             Self::DeliveryReceiptRequestIdMismatch => {
                 f.write_str("transport delivery receipt request id does not match its request")
+            }
+            Self::DeliveryReceiptPayloadMismatch => {
+                f.write_str("transport delivery receipt exact payload does not match its request")
             }
             Self::DeliveryReceiptTargetSetMismatch => {
                 f.write_str("transport delivery receipt target set does not match its request")

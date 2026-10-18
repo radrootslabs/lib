@@ -145,6 +145,11 @@ impl ChatRumor {
                 String::from("thread"),
                 command.thread_id().to_string(),
             ],
+            vec![
+                String::from("radroots"),
+                String::from("operation"),
+                command.context().operation_id().to_string(),
+            ],
         ];
         if let Some(source) = command.source() {
             tags.push(vec![

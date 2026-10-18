@@ -1,4 +1,6 @@
 //! Native storage tests use real synthetic NIP-44 data, never host custody.
+#[path = "receipt_delivery.rs"]
+mod delivery;
 #[path = "receipt_installation.rs"]
 mod installation;
 #[path = "receipt_issuance.rs"]
@@ -28,6 +30,14 @@ fn plan(
     created: u64,
     suffix: &str,
 ) -> ChatSigningPlan {
+    plan_with_routes(command, created, suffix, None)
+}
+fn plan_with_routes(
+    command: &radroots_protocol::command::CapturedChatCommand,
+    created: u64,
+    suffix: &str,
+    selected: Option<&[String]>,
+) -> ChatSigningPlan {
     let rumor = ChatRumor::from_command(command, UnixSeconds::new(created).unwrap()).unwrap();
     let author = keys(1);
     let mut seals = Vec::new();
@@ -55,13 +65,20 @@ fn plan(
         } else {
             keys(2)
         };
-        let url = format!("wss://relay.example/{suffix}");
+        let urls = selected.map_or_else(
+            || vec![format!("wss://relay.example/{suffix}")],
+            <[String]>::to_vec,
+        );
         let source = nostr::UnsignedEvent {
             id: None,
             pubkey: signer.public_key(),
             created_at: nostr::Timestamp::from_secs(created - 1),
             kind: nostr::Kind::Custom(10050),
-            tags: nostr::Tags::from_list(vec![nostr::Tag::parse(["relay", &url]).unwrap()]),
+            tags: nostr::Tags::from_list(
+                urls.iter()
+                    .map(|url| nostr::Tag::parse(["relay", url]).unwrap())
+                    .collect(),
+            ),
             content: "public signed route provenance ".repeat(1000),
         }
         .sign_with_keys(&signer)
@@ -72,7 +89,7 @@ fn plan(
                 *recipient,
                 EnvelopeEventId::from_bytes(*source.id.as_bytes()),
                 &source.as_json(),
-                &[url],
+                &urls,
             )
             .unwrap(),
         );

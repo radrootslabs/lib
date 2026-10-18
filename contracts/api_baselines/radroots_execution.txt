@@ -177,6 +177,7 @@ pub const fn radroots_execution::RetryClass::as_str(self) -> &'static str
 #[non_exhaustive] pub enum radroots_execution::TargetObservation
 pub radroots_execution::TargetObservation::Accepted
 pub radroots_execution::TargetObservation::Disconnected
+pub radroots_execution::TargetObservation::NotAttempted
 pub radroots_execution::TargetObservation::Rejected
 pub radroots_execution::TargetObservation::TimedOut
 pub radroots_execution::TargetObservation::Unknown
@@ -206,7 +207,10 @@ pub const fn radroots_execution::DeliveryObservation::event_id(&self) -> radroot
 pub const fn radroots_execution::DeliveryObservation::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
 pub const fn radroots_execution::DeliveryObservation::outcome(&self) -> radroots_execution::TargetObservation
 pub const fn radroots_execution::DeliveryObservation::recipient(&self) -> core::option::Option<radroots_identity::key::PublicKey>
+pub fn radroots_execution::DeliveryObservation::request_id(&self) -> &str
 pub fn radroots_execution::DeliveryObservation::target(&self) -> &str
+pub fn radroots_execution::DeliveryObservation::target_fingerprint(&self) -> &str
+pub const fn radroots_execution::DeliveryObservation::target_ordinal(&self) -> u8
 impl core::fmt::Debug for radroots_execution::DeliveryObservation
 pub fn radroots_execution::DeliveryObservation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_execution::Detail
@@ -246,6 +250,7 @@ pub fn radroots_execution::OperationReceipt<T>::conflicting_records(&self) -> &[
 pub fn radroots_execution::OperationReceipt<T>::conflicting_sources(&self) -> &[radroots_domain::identifier::SourceId]
 pub const fn radroots_execution::OperationReceipt<T>::context(&self) -> &radroots_domain::context::CommandContextData
 pub const fn radroots_execution::OperationReceipt<T>::delivery(&self) -> radroots_execution::Delivery
+pub fn radroots_execution::OperationReceipt<T>::delivery_attempts(&self) -> &[radroots_storage::command::delivery_summary::DeliveryAttemptSummary]
 pub fn radroots_execution::OperationReceipt<T>::delivery_observations(&self) -> &[radroots_execution::DeliveryObservation]
 pub const fn radroots_execution::OperationReceipt<T>::durable(&self) -> bool
 pub const fn radroots_execution::OperationReceipt<T>::error(&self) -> core::option::Option<radroots_execution::Error>

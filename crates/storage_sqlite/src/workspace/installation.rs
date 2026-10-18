@@ -30,7 +30,7 @@ pub(super) const WORK: &str = "CREATE TABLE chat_publication_work (workspace BLO
 
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
-struct EvidenceRef {
+pub(super) struct EvidenceRef {
     workspace: WorkspaceId,
     operation: OperationId,
     command: CommandDigest,
@@ -42,7 +42,7 @@ struct EvidenceRef {
     observed_at: Option<u64>,
 }
 impl EvidenceRef {
-    fn new(value: EvidenceReceipt) -> Self {
+    pub(super) fn new(value: EvidenceReceipt) -> Self {
         Self {
             workspace: value.workspace_id(),
             operation: value.operation_id(),

@@ -24,6 +24,105 @@ struct Issued {
     evidence: SealEvidence,
     path: std::path::PathBuf,
 }
+
+/// Codec-only data fixture. Structural reports and encrypted records here do
+/// not establish native T2/D authorization; the facade owns those runtime cases.
+#[cfg(test)]
+pub(in crate::workspace) struct DeliveryData {
+    _issued: Issued,
+    pub(in crate::workspace) database: SqliteConnection,
+    pub(in crate::workspace) crypto: WorkspaceCrypto,
+    pub(in crate::workspace) report: radroots_storage::command::DeliveryAttempt,
+}
+#[cfg(test)]
+impl DeliveryData {
+    pub(in crate::workspace) fn selection(&self) -> AttachmentInput {
+        self._issued.selected.clone()
+    }
+    pub(in crate::workspace) async fn bound(&mut self) -> BoundSigningPlan {
+        self._issued.bound(&mut self.database).await
+    }
+}
+#[cfg(test)]
+pub(in crate::workspace) async fn delivery_data() -> DeliveryData {
+    use radroots_storage::command::{
+        ChatInstallation, DeliveryAttempt, DeliveryIntent, EvidenceReceipt, PublicationWork,
+    };
+    use radroots_transport::{
+        Target, TargetSet,
+        policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+    };
+    let issued = Issued::new().await;
+    let mut database = issued.database().await;
+    let bound = issued.bound(&mut database).await;
+    let evidence = EvidenceReceipt::from_committed_store(
+        &issued.evidence,
+        TransactionId::from_bytes([70; 32]),
+    );
+    let time = UnixSeconds::new(100).unwrap();
+    let installed = ChatInstallation::from_committed_store(
+        &bound,
+        evidence,
+        TransactionId::from_bytes([71; 32]),
+        time,
+    )
+    .unwrap();
+    let work = PublicationWork::from_committed_store(
+        &bound,
+        installed,
+        evidence,
+        TransactionId::from_bytes([72; 32]),
+        time,
+    )
+    .unwrap();
+    let mut scalar = [0; 32];
+    scalar[31] = 3;
+    let keys = nostr::Keys::new(nostr::SecretKey::from_slice(&scalar).unwrap());
+    let recipient = nostr::PublicKey::from_slice(work.evidence().recipient().as_bytes()).unwrap();
+    let raw = nostr::UnsignedEvent {
+        id: None,
+        pubkey: keys.public_key(),
+        created_at: nostr::Timestamp::from_secs(99),
+        kind: nostr::Kind::Custom(1059),
+        tags: nostr::Tags::from_list(vec![nostr::Tag::public_key(recipient)]),
+        content: nip44::encrypt(
+            keys.secret_key(),
+            &recipient,
+            "codec private record ".repeat(1200),
+            nip44::Version::V2,
+        )
+        .unwrap(),
+    }
+    .sign_with_keys(&keys)
+    .unwrap()
+    .as_json();
+    let targets =
+        TargetSet::new(vec![Target::nostr_relay("wss://route.example/").unwrap()]).unwrap();
+    let intent = DeliveryIntent::new(
+        &"01".repeat(32),
+        EnvelopeEventId::from_bytes(*nostr::Event::from_json(&raw).unwrap().id.as_bytes()),
+        &targets,
+        &SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+        core::num::NonZeroU64::new(110_000).unwrap(),
+    )
+    .unwrap();
+    let report = DeliveryAttempt::from_store_report(
+        work,
+        intent,
+        &raw,
+        TransactionId::from_bytes([73; 32]),
+        time,
+        vec![1],
+    )
+    .unwrap();
+    let crypto = issued.fixture.crypto();
+    DeliveryData {
+        _issued: issued,
+        database,
+        crypto,
+        report,
+    }
+}
 impl Issued {
     async fn new() -> Self {
         let fixture = CryptoFixture::new();

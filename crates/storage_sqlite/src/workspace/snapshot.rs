@@ -4,6 +4,7 @@ use super::{
     admission::{Journal, recheck, same_binding},
     attempt,
     crypto::IssuanceScope,
+    delivery::{graph::Graph as DeliveryGraph, observation::Observations},
     evidence::{self, ProtectedEvidence},
     installation::Records,
     issuance::absent_claim,
@@ -12,8 +13,8 @@ use super::{
 };
 use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, PublicKey, UnixSeconds};
 use radroots_storage::command::{
-    BoundSigningPlan, ClaimSnapshot, OperationError, OperationSnapshot, RecipientSnapshot,
-    RetainedOperation, SigningAttempt,
+    BoundSigningPlan, ClaimSnapshot, DeliveryAttemptSummary, OperationError, OperationSnapshot,
+    RecipientSnapshot, RetainedOperation, SealEvidence, SigningAttempt,
 };
 use sqlx::{Connection, SqliteConnection};
 
@@ -21,6 +22,7 @@ struct SeenRecipient {
     report: RecipientSnapshot,
     claim: Option<Vec<u8>>,
     evidence: Option<ProtectedEvidence>,
+    obtained: Option<SealEvidence>,
 }
 pub(super) struct RetainedGraph {
     retained: Option<(RetainedOperation, Vec<u8>)>,
@@ -28,6 +30,12 @@ pub(super) struct RetainedGraph {
     recipients: Vec<SeenRecipient>,
 }
 impl RetainedGraph {
+    pub(super) fn obtained(&self, recipient: PublicKey) -> Option<&SealEvidence> {
+        self.recipients
+            .iter()
+            .find(|seen| seen.report.recipient() == recipient)
+            .and_then(|seen| seen.obtained.as_ref())
+    }
     pub(super) fn bound_plan(&self) -> Option<&BoundSigningPlan> {
         self.retained
             .as_ref()
@@ -81,9 +89,11 @@ impl RetainedGraph {
                         )?;
                         let captured = evidence::read(connection, &attempt, crypto).await?;
                         let claim = ClaimSnapshot::from_store_report(&attempt);
-                        let (obtained, evidence) = match captured {
-                            Some((_, protected)) => (Some(protected.receipt), Some(protected)),
-                            None => (None, None),
+                        let (obtained, evidence, original) = match captured {
+                            Some((value, protected)) => {
+                                (Some(protected.receipt), Some(protected), Some(value))
+                            }
+                            None => (None, None, None),
                         };
                         recipients.push(SeenRecipient {
                             report: RecipientSnapshot::from_store_report(
@@ -94,6 +104,7 @@ impl RetainedGraph {
                             ),
                             claim: Some(protected),
                             evidence,
+                            obtained: original,
                         });
                         bound = attempt.into_bound_plan();
                     } else {
@@ -106,6 +117,7 @@ impl RetainedGraph {
                             ),
                             claim: None,
                             evidence: None,
+                            obtained: None,
                         });
                         bound = returned;
                     }
@@ -121,6 +133,7 @@ impl RetainedGraph {
                         report: RecipientSnapshot::from_store_report(recipient, None, None, None),
                         claim: None,
                         evidence: None,
+                        obtained: None,
                     });
                 }
                 RetainedOperation::Prepared(prepared)
@@ -220,6 +233,23 @@ impl Journal<'_> {
             self.crypto,
         )
         .await?;
+        let deliveries = DeliveryGraph::read(
+            self.connection,
+            self.selected,
+            operation_id,
+            &graph,
+            &records,
+            self.crypto,
+        )
+        .await?;
+        let observations = Observations::read(
+            self.connection,
+            &deliveries,
+            self.selected,
+            operation_id,
+            self.crypto,
+        )
+        .await?;
         // Provider and signature verification work precedes the transaction.
         let mut transaction = self
             .connection
@@ -244,6 +274,12 @@ impl Journal<'_> {
             records
                 .unchanged(&mut transaction, self.selected, operation_id)
                 .await?;
+            deliveries
+                .unchanged(&mut transaction, self.selected, operation_id)
+                .await?;
+            observations
+                .unchanged(&mut transaction, self.selected, operation_id)
+                .await?;
             Ok::<_, OperationError>(observed.observed_at())
         }
         .await;
@@ -254,10 +290,19 @@ impl Journal<'_> {
         graph
             .into_snapshot(checked?)?
             .map(|snapshot| {
-                snapshot.with_installation(
-                    records.message.map(|value| value.report),
-                    records.work.into_iter().map(|value| value.report).collect(),
-                )
+                snapshot
+                    .with_installation(
+                        records.message.map(|value| value.report),
+                        records.work.into_iter().map(|value| value.report).collect(),
+                    )?
+                    .with_delivery(
+                        deliveries
+                            .attempts
+                            .iter()
+                            .map(DeliveryAttemptSummary::from_attempt)
+                            .collect(),
+                        observations.reports,
+                    )
             })
             .transpose()
     }

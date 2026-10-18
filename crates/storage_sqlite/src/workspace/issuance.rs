@@ -288,7 +288,7 @@ impl Journal<'_> {
     /// Original-scope append admission deliberately does not consult a clock,
     /// revocation flag or fresh command permission. The actual existing claim,
     /// immutable plan and authenticated exact bytes are independently required.
-    async fn capture_access(
+    pub(super) async fn capture_access(
         &mut self,
         input: &AttachmentInput,
         proof: &AttachmentProof,

@@ -214,7 +214,7 @@ under `BEGIN IMMEDIATE`, with provider work outside that transaction. A fixed
 first-issue window never restarts on replay. Already-bound bytes remain queryable
 and replayable after expiry under current access; this grants no new issuance.
 
-The current workspace schema is version 6. Older namespaces are preserved and
+The current workspace schema is version 7. Older namespaces are preserved and
 refused for explicit cutover, without an automatic state rewrite. Complete plans
 use a protected manifest and at most twenty-four 16 KiB protected data parts,
 with context binding the full workspace/operation/plan identity and part index.
@@ -244,7 +244,7 @@ lock. It rechecks current access, all retained and absent facts and whole-graph
 counts under one `BEGIN IMMEDIATE`, rejecting extra or orphan rows. It performs
 no signing or graph mutation and confirms rollback before returning. Window
 expiry does not erase retained facts. The existing owner drains accepted reads
-after a lost observer and closes explicitly. Schema 6 has sixteen exact objects
+after a lost observer and closes explicitly. Schema 7 has twenty exact objects
 and preserves/refuses predecessors without automatic rewriting.
 
 Native T2 uses that same connection owner. It authenticates the complete original
@@ -262,5 +262,34 @@ records cap protected materialization below 1 MiB; excess sentinels reject more
 than one message or two work rows without unbounded scans. Exact replay preserves
 original ciphertext and transaction identities. Known rollback, confirmed commit
 and anchored unknown completion remain distinct, and accepted work survives
-observer loss. Outer wrapping, transport observations and ordinary owned inbox
-orchestration remain separate requirements.
+observer loss.
+
+Native D uses the same owner. Before retention it authenticates the original
+work, selected signed DM routes and outer signature, derives the temporary key's
+public identity and decrypts the outer against exact original retained seal
+bytes. Original actor, peer and selected-recipient keys are refused as temporary
+authors, including for a self copy. The temporary wrapping key is never
+persisted. Each protected frame is
+bounded to 393216 bytes in at most twenty-four 16 KiB parts, with a manifest,
+full original work linkage, exact representation digest, complete target intent
+and immutable endpoint attempt numbers. Its protected aggregate is at most
+2 MiB. Twelve potential invocations per recipient/canonical endpoint and at most
+384 operation target slots bound retention; replay spends no additional slot.
+
+The first full target set and completion policy remain fixed per recipient work.
+Each exact attempt retains a separate subset, and only that subset spends slots
+or may be passed to selected delivery. Original acceptance facts accumulate
+across retries under the full policy, without optional exhausted targets blocking
+required targets. A distinct current-access attempt may use a fresh delivery
+deadline; it changes neither an older attempt nor participant issuance.
+
+Only those exact retained bytes can become transport input. Original per-target
+observations append independently in at most six classes per slot, each in a
+bounded protected record. Missing ACKs and uncertain transport outcomes never
+reverse installation or release participant claims. Late capture authenticates
+the original credential and protected attempt without acquiring a fresh deadline,
+clock observation, scheduling lease or read permission. The first original time,
+including null, remains immutable. Current-access snapshots fence the complete
+T0/T1/S/T2/D graph and all target observations before projecting bounded summaries.
+Reopen performs no publication. Ordinary library-owned inbox orchestration,
+browser/bindings, consumer adoption and final qualification remain separate work.

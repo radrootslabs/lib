@@ -11,9 +11,17 @@ pub use radroots_protocol::chat::ChatSigningPlan;
 use radroots_protocol::command::CapturedChatCommand;
 use radroots_transport::BoxFuture;
 
+mod delivery;
+mod delivery_summary;
 mod installation;
 mod issuance;
+mod observation;
 mod snapshot;
+pub use delivery::{
+    DeliveryAttempt, DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryIntent,
+    EnvelopeCandidate,
+};
+pub use delivery_summary::DeliveryAttemptSummary;
 pub use installation::{
     ChatInstallation, InstallationOutcome, InstallationRequest, PublicationWork,
 };
@@ -21,6 +29,7 @@ pub use issuance::{
     CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome,
     EvidenceReceipt, SealEvidence, SigningAttempt,
 };
+pub use observation::{DeliveryObservation, DeliveryObservationKind, DeliveryObservationOutcome};
 pub use snapshot::{ClaimSnapshot, OperationSnapshot, RecipientSnapshot, RetainedOperation};
 
 /// Fixed operation-store failures known before a successful admission commit.
@@ -47,6 +56,8 @@ pub enum OperationError {
     StorageFailure,
     /// State, completion or decoding requires explicit reconciliation.
     RecoveryRequired,
+    /// The retained target's twelve potential attempts require operator review.
+    DeliveryAttemptLimit,
 }
 impl OperationError {
     /// Returns an input-free diagnostic code.
@@ -62,6 +73,7 @@ impl OperationError {
             Self::IdempotencyConflict => "idempotency_conflict",
             Self::StorageFailure => "storage_failure",
             Self::RecoveryRequired => "recovery_required",
+            Self::DeliveryAttemptLimit => "delivery_attempt_limit",
         }
     }
 }
@@ -260,6 +272,46 @@ impl fmt::Debug for AdmissionOutcome {
 /// Typed transaction port, implemented by actual shared storage adapters.
 /// Applications do not implement a second orchestration or stock engine here.
 pub trait OperationJournal: WorkspaceStore {
+    /// Appends obtained target evidence against the actual original retained
+    /// attempt. Original credential authentication is required; late capture
+    /// does not acquire a fresh lease, deadline, grant or dispatch permission.
+    fn record_delivery_observation(
+        &self,
+        binding: WorkspaceBinding,
+        proof: AttachmentProof,
+        observation: DeliveryObservation,
+    ) -> BoxFuture<'_, Result<DeliveryObservationOutcome, OperationError>>;
+    /// Returns original per-target observations under current access. Startup
+    /// and query never initiate delivery or imply a missing acknowledgement.
+    fn delivery_observations(
+        &self,
+        binding: WorkspaceBinding,
+        operation: radroots_domain::OperationId,
+        digest: radroots_domain::CommandDigest,
+        recipient: radroots_domain::PublicKey,
+        request: radroots_transport::sink::DeliveryRequestId,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Vec<DeliveryObservation>, OperationError>>;
+    /// Atomically retains exact outer bytes and every selected target intent
+    /// before transport. A fresh actual commit may be dispatched once by its
+    /// qualified owner. Restored or unknown claims never permit replay.
+    fn prepare_delivery_attempt<'a>(
+        &'a self,
+        request: DeliveryAttemptRequest,
+        proof: AttachmentProof,
+        candidate: Option<&'a EnvelopeCandidate>,
+    ) -> BoxFuture<'a, Result<DeliveryAttemptOutcome, OperationError>>;
+    /// Reads an original attempt under current access, including after expiry;
+    /// the returned report supplies no dispatch or safe-nonissuance proof.
+    fn delivery_attempt(
+        &self,
+        binding: WorkspaceBinding,
+        operation: OperationId,
+        digest: CommandDigest,
+        recipient: radroots_domain::PublicKey,
+        request: radroots_transport::sink::DeliveryRequestId,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<DeliveryAttempt>, OperationError>>;
     /// Atomically installs the original logical chat result and retains distinct
     /// publication work for actual obtained recipients. No signing or transport
     /// occurs here; unknown completion retains all original claims and evidence.

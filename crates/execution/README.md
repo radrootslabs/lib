@@ -116,3 +116,13 @@ Expired remaining first issuance is blocked while obtained and unknown facts
 remain retained. Changing a wait observation cannot change those facts.
 Default receipt values remain usable without an async runtime on noStd targets;
 the Storage-backed projection is a separately selected host feature.
+
+The D projection retains original outer/target intent summaries and independent
+target observations, including the full request ID, target fingerprint and
+endpoint attempt number. Unobserved retained potential invocations remain
+unknown; observed rejection or timeout does not become acceptance. Accepted
+evidence is evaluated with the shared original target policy, independently for
+each publication work item and across its independently selected retries,
+without erasing another recipient's pending state or weakening the full policy.
+These projections perform no transport or participant signer invocation and
+never renew a scheduling lease.

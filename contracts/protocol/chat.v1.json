@@ -21,6 +21,11 @@
         "radroots",
         "thread",
         "thread_id"
+      ],
+      [
+        "radroots",
+        "operation",
+        "operation_id"
       ]
     ],
     "optional_tags_in_order": [
@@ -38,6 +43,7 @@
       ]
     ],
     "unsigned": true,
+    "logical_identity": "The exact captured full operation ID is an unsigned-rumor discriminator inside the private encrypted message. Distinct operations with identical author/text/thread/time remain distinct; replay uses the original operation and captured time. The tag grants no authority.",
     "complete_max_bytes": 24576,
     "plain_text_max_bytes": 4096,
     "recipient_set": "Sorted unique author and peer; one exact rumor for every per-recipient seal, including a deduplicated self-conversation",
@@ -95,7 +101,7 @@
     "protected_data_part_max_bytes": 16384,
     "max_data_parts": 24,
     "protected_total_max_bytes": 2097152,
-    "native_workspace_schema": 6,
+    "native_workspace_schema": 7,
     "predecessors": "Preserve and refuse; no inferred timestamps or automatic namespace rewrite",
     "queue": "32 slots plus conservative queued and in-flight reservations under 4194304 bytes",
     "transaction": "Current protected grant, original preparation, all indexed facts and fixed first-issue window rechecked under BEGIN IMMEDIATE; crypto work before transaction",
@@ -116,8 +122,8 @@
     "max_data_parts": 4,
     "protected_total_max_bytes": 1048576,
     "capture_queue_reservation_bytes": 262144,
-    "schema": 6,
-    "schema_objects": 16,
+    "schema": 7,
+    "schema_objects": 20,
     "remaining": "Ordinary client-owned orchestration and full operation receipts, route/provider approval, installation/outbox/delivery, target graph retirement and all consumer/final gates"
   },
   "native_operation_snapshot": {
@@ -125,11 +131,11 @@
     "snapshot_owner": "radroots_storage::command::OperationSnapshot",
     "query": "OperationJournal::operation_snapshot on the existing native owner",
     "receipt_owner": "radroots_execution::OperationReceipt; ordinary facade reexports",
-    "native_schema": 6,
-    "transaction": "Authenticate complete original T0/T1/S and protected T2 records outside transaction; recheck current grant, all retained and absent facts and complete bounded graph counts under BEGIN IMMEDIATE; confirmed rollback before reporting",
+    "native_schema": 7,
+    "transaction": "Authenticate complete original T0/T1/S/T2/D and protected target observations outside transaction; recheck current grant, retained and absent facts and every bounded graph count under BEGIN IMMEDIATE; confirmed rollback before reporting",
     "extra_or_orphan_rows": "Recovery required; never silently omitted from a complete report",
-    "memory": "One complete owned plan and at most two sorted unique boxed recipient reports; no private raw bytes or automatic payload serialization in receipt diagnostics",
-    "progress_digest": "SHA-256 with radroots.operation.snapshot.v2 NUL separator; original v1 fact dimensions plus optional installation transaction/time/basis capture and each recipient publication-work transaction/time; excludes query time and diagnostic correlation",
+    "memory": "One complete owned plan, at most two recipients, bounded original delivery summaries and target observations. Snapshot/receipt references omit duplicate raw envelope bytes; owning graph verification remains bounded. Diagnostics are redacted.",
+    "progress_digest": "SHA-256 with radroots.operation.snapshot.v3 NUL separator; original v2 dimensions plus complete original delivery intent, exact outer representation digest, transaction/time/target ordinals, and original target outcome/retry/detail/nullable time. Query time and diagnostic correlation remain excluded.",
     "dimensions": [
       "durable_admission",
       "business_installation",
@@ -141,8 +147,8 @@
     "first_issue_expiry": "Remaining unrequested work is blocked; obtained and unknown classifications are preserved. Expiry proves no nonissuance.",
     "scope": "Original actor/workspace/authority/route, command/transactions/window, authority evidence checkpoint, logical-message and structured-record namespaces, protected artifact references and nullable original observations",
     "construction_authority": "Pure values do not authenticate a principal, qualify a custom adapter, permit dispatch or prove installation/delivery",
-    "remaining": "Exact outer wrapping/delivery, library-owned ordinary inbox jobs, complete browser/binding/consumer closure and final acceptance",
-    "count_bounds": "Whole-operation extra-recipient count checks stop at excess sentinels 3 claims, 3 obtained manifests and 9 parts; absent-operation checks use EXISTS. Existing protected per-recipient part bounds and authentication remain mandatory. T2 sentinels stop at 2 messages and 3 publication-work rows."
+    "remaining": "Library-owned ordinary inbox jobs, complete browser/binding/consumer closure and final acceptance",
+    "count_bounds": "Whole-operation extra-recipient count checks stop at excess sentinels 3 claims, 3 obtained manifests and 9 parts; absent-operation checks use EXISTS. Existing protected per-recipient part bounds and authentication remain mandatory. T2 sentinels stop at 2 messages and 3 publication-work rows. D excess sentinels are 385 attempts, 9217 frame parts and 2305 target observations; at most 384 actual target slots and 2304 independent observation classes."
   },
   "native_installation": {
     "state": "native_t2_component_implemented",
@@ -160,12 +166,12 @@
     "protected_row_max_bytes": 262144,
     "protected_aggregate_upper_bound_bytes": 786432,
     "live_queue": "Existing 32 slots and 4194304 accepted/in-flight input bytes; 16384-byte installation input reservation",
-    "schema": 6,
-    "schema_objects": 16,
+    "schema": 7,
+    "schema_objects": 20,
     "cutover": "Preserve and refuse all predecessor namespaces, including actual schema5 claims/evidence; no automatic upgrade or state deletion",
-    "reporting": "Owned message only with scoped actual installation report; independent original installation and recipient work transactions; delivery pending and zero inferred relay observations",
+    "reporting": "Owned message only with scoped actual installation report; original installation and independent recipient work transactions. Actual D observations remain separate; no relay fact is inferred from T2.",
     "qualification": "Separate exact-source executed evidence; declarations and data constructors are not qualification",
-    "remaining": "Exact outer-envelope retention and per-target D observations, ordinary library-owned inbox jobs, browser/bindings, supported consumer adoption and all final gates"
+    "remaining": "Ordinary library-owned inbox jobs, browser/bindings, supported consumer adoption and all final gates"
   },
   "outer_wrapping": {
     "state": "retained_seal_crypto_component_implemented",
@@ -183,5 +189,50 @@
     },
     "authority": "Construction authenticates a seal and creates an outer representation; it proves no grant, route, operation linkage, durable capture, scheduling lease or delivery",
     "remaining": "Protected native exact-envelope and target-intent retention before transport, bound observations, ordinary owned inbox jobs, browser/binding runtime and final acceptance"
+  },
+  "native_delivery": {
+    "state": "native_retention_and_observation_component_implemented",
+    "owner": "Existing bounded native workspace connection worker; no additional engine",
+    "schema": 7,
+    "schema_objects": 20,
+    "retention": "Verify actual T0/T1/S/T2 and selected signed kind10050 provenance. Derive and verify temporary outer key, decrypt the signed kind1059 against exact original retained seal bytes, then atomically protect exact signed outer and complete target intent before any transport.",
+    "temporary_material": "Borrowed temporary wrapping key is used only for independent containment verification; it is never persisted or treated as participant commitment authority. Original actor, peer and selected-recipient keys are all refused as temporary outer authors, including for self-copy publication work.",
+    "route_identity": "Authenticate the original signed kind10050 source and exact selected strings without replacement. Compare actual retained Nostr targets with those captured strings through Target::matches_nostr_relay, using the target's original construction policy and shared canonical URI rules. Root slash, host case and default-port aliases preserve endpoint identity; matching grants no network permission or new route.",
+    "intent": "Full 256-bit delivery request ID, original actual publication/capture/plan linkage, exact outer ID and representation digest, full original canonical target set and Accepted-only satisfaction policy, original per-attempt deadline, independent nonempty exact target selection and selected-endpoint potential invocation ordinals.",
+    "attempts": "At most twelve potential invocations per recipient/canonical endpoint. Changing target scope does not reset this budget. Exact replay returns retained original data with no dispatch right or budget increment. A newly retained retry may reuse only the original exact bytes, with no new participant signature.",
+    "observation": "Original credential and actual attempt/target/event/representation linkage required. No fresh clock, deadline, revocation or scheduling lease admission. First original observation of each independent class is immutable, including null time; later classes append.",
+    "classes": [
+      "accepted",
+      "rejected",
+      "timed_out",
+      "disconnected",
+      "unknown",
+      "not_attempted"
+    ],
+    "receipt_binding": "Generic successful and partial-failure receipts require SHA-256 of exact original signed JSON bytes in addition to original request ID and targets. Relay acceptance never proves recipient delivery.",
+    "bounds": {
+      "signed_outer_bytes": 65536,
+      "targets": 16,
+      "endpoint_bytes": 2048,
+      "attempts_per_endpoint": 12,
+      "operation_target_slots": 384,
+      "observation_classes_per_slot": 6,
+      "operation_observations": 2304,
+      "frame_bytes": 393216,
+      "frame_parts": 24,
+      "private_part_bytes": 16384,
+      "protected_row_bytes": 262144,
+      "protected_frame_aggregate_bytes": 2097152,
+      "live_queue_bytes": 4194304,
+      "prepare_input_reservation_bytes": 1048576,
+      "observation_input_reservation_bytes": 98304
+    },
+    "completion": "Confirmed commit, known rollback and original anchored unknown remain distinct. Accepted owner work survives lost observers and drains before close. Missing ACKs, transport errors and uncertain D completion never reverse T0/T2 or release S claims.",
+    "startup": "Current access is required for coherent queries. Reopen and restored projections never publish automatically or renew scheduling rights. Preserve and refuse predecessor schema6 namespaces without automatic upgrade.",
+    "qualification": "Exact-source executed owning checks are required separately; constructors, declarations, valid metadata and a custom adapter report confer no qualification.",
+    "remaining": "Ordinary library-owned inbox job orchestration, complete provider/route approval at dispatch, browser/bindings, supported consumer adoption and final acceptance",
+    "publication_policy": "Freeze the first full target identity set and satisfaction criterion per actual recipient work. A retry or rewrapping cannot narrow or replace it. Evaluate original full-target acceptance across all retained exact attempt observations; an earlier acceptance remains authoritative.",
+    "selection": "Only selected endpoints spend potential-invocation slots or produce bound target observations. The host uses EventSink::deliver_selected with the full original request and exact retained subset; unselected endpoints are not invoked. Exhausted optional endpoints do not starve required endpoints. Quorum success may accumulate across selected retries.",
+    "deadline": "A matching request ID retains its original deadline. A distinct current-access attempt may capture a new delivery deadline without altering the full publication criterion, original operation installation or participant issuance facts."
   }
 }

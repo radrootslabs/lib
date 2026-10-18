@@ -27,6 +27,19 @@ pub(super) enum IssuancePayload {
     Publication,
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct DeliveryScope {
+    pub workspace: WorkspaceId,
+    pub operation: OperationId,
+    pub recipient: radroots_domain::PublicKey,
+    pub request: [u8; 32],
+}
+#[derive(Clone, Copy)]
+pub(super) enum DeliveryPayload {
+    Attempt,
+    Observation,
+}
+
 /// Explicit host-owned encryption material. This is a data-encryption key,
 /// independent of the participant signer and the scoped bearer credential.
 /// The host chooses its qualified provider and access policy; no fallback or
@@ -37,6 +50,34 @@ pub struct WorkspaceCrypto {
     key: SecretMaterial,
 }
 impl WorkspaceCrypto {
+    pub(super) async fn seal_delivery(
+        &self,
+        scope: DeliveryScope,
+        payload: DeliveryPayload,
+        part: u8,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            delivery_context(scope, payload, part)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            plaintext,
+        )
+        .await
+    }
+    pub(super) async fn open_delivery(
+        &self,
+        scope: DeliveryScope,
+        payload: DeliveryPayload,
+        part: u8,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            delivery_context(scope, payload, part)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
     pub(super) async fn seal_message(
         &self,
         workspace: WorkspaceId,
@@ -259,6 +300,40 @@ impl WorkspaceCrypto {
         }
         Ok(plaintext)
     }
+}
+
+fn delivery_context(
+    scope: DeliveryScope,
+    payload: DeliveryPayload,
+    part: u8,
+) -> Result<EnvelopeContext, WorkspaceError> {
+    use sha2::{Digest, Sha256};
+    let (tag, purpose, schema) = match payload {
+        DeliveryPayload::Attempt => (
+            0u8,
+            "radroots.workspace.delivery_attempt",
+            "radroots.workspace.delivery_attempt.v1",
+        ),
+        DeliveryPayload::Observation => (
+            1u8,
+            "radroots.workspace.delivery_observation",
+            "radroots.workspace.delivery_observation.v1",
+        ),
+    };
+    let mut hash = Sha256::new();
+    hash.update(b"radroots.workspace.delivery.context.v1\0");
+    hash.update([tag, part]);
+    hash.update(scope.workspace.as_bytes());
+    hash.update(scope.operation.as_bytes());
+    hash.update(scope.recipient.as_bytes());
+    hash.update(scope.request);
+    let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("workspace_delivery", subject.to_string())
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
 }
 impl fmt::Debug for WorkspaceCrypto {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

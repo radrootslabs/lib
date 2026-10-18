@@ -8,6 +8,7 @@
 mod admission;
 mod attempt;
 mod crypto;
+mod delivery;
 mod evidence;
 mod fs;
 mod installation;
@@ -219,6 +220,77 @@ impl WorkspaceStore for NativeWorkspace {
     }
 }
 impl radroots_storage::command::OperationJournal for NativeWorkspace {
+    fn record_delivery_observation(
+        &self,
+        binding: WorkspaceBinding,
+        proof: AttachmentProof,
+        observation: radroots_storage::command::DeliveryObservation,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            radroots_storage::command::DeliveryObservationOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .capture_delivery_observation(binding, proof, observation),
+        )
+    }
+    fn delivery_observations(
+        &self,
+        binding: WorkspaceBinding,
+        operation: radroots_domain::OperationId,
+        digest: radroots_domain::CommandDigest,
+        recipient: PublicKey,
+        request: radroots_transport::sink::DeliveryRequestId,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            Vec<radroots_storage::command::DeliveryObservation>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .query_delivery_observations(binding, operation, digest, recipient, request, proof),
+        )
+    }
+    fn prepare_delivery_attempt<'a>(
+        &'a self,
+        request: radroots_storage::command::DeliveryAttemptRequest,
+        proof: AttachmentProof,
+        candidate: Option<&'a radroots_storage::command::EnvelopeCandidate>,
+    ) -> BoxFuture<
+        'a,
+        Result<
+            radroots_storage::command::DeliveryAttemptOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.prepare_delivery(request, proof, candidate))
+    }
+    fn delivery_attempt(
+        &self,
+        binding: WorkspaceBinding,
+        operation: radroots_domain::OperationId,
+        digest: radroots_domain::CommandDigest,
+        recipient: PublicKey,
+        request: radroots_transport::sink::DeliveryRequestId,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::command::DeliveryAttempt>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .query_delivery(binding, operation, digest, recipient, request, proof),
+        )
+    }
     fn install_transition_and_outbox(
         &self,
         request: radroots_storage::command::InstallationRequest,

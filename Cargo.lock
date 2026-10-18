@@ -3057,10 +3057,12 @@ dependencies = [
  "radroots_storage_sqlite",
  "radroots_trade",
  "radroots_transport",
+ "radroots_transport_nostr",
  "serde_json",
  "sqlx",
  "tempfile",
  "tokio",
+ "tokio-tungstenite",
  "toml 0.8.23",
 ]
 

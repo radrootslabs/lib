@@ -11,6 +11,49 @@ use radroots_transport::{
 use serde_json::Value;
 
 #[test]
+fn captured_relay_matching_preserves_canonical_identity_and_original_network_policy() {
+    let target = Target::nostr_relay("wss://relay.example").unwrap();
+    for raw in [
+        "wss://relay.example/",
+        "WSS://RELAY.EXAMPLE:443/",
+        "wss://relay.example:443",
+    ] {
+        assert!(target.matches_nostr_relay(raw).unwrap());
+    }
+    for raw in [
+        "wss://other.example/",
+        "wss://relay.example:444/",
+        "wss://relay.example/path",
+    ] {
+        assert!(!target.matches_nostr_relay(raw).unwrap());
+    }
+    for raw in [
+        "ws://relay.example/",
+        "wss://relay.example/?q=1",
+        "wss://relay.example/#fragment",
+        "wss://user@relay.example/",
+    ] {
+        assert!(target.matches_nostr_relay(raw).is_err());
+    }
+    let private =
+        Target::nostr_relay_with_policy("ws://192.168.1.2", TargetNetworkPolicy::PrivateDevice)
+            .unwrap();
+    assert!(private.matches_nostr_relay("WS://192.168.1.2:80/").unwrap());
+    assert!(private.matches_nostr_relay("ws://public.example/").is_err());
+    let ipv6 = Target::nostr_relay("wss://[2001:db8::1]").unwrap();
+    assert!(
+        ipv6.matches_nostr_relay("wss://[2001:0DB8:0:0:0:0:0:1]:443/")
+            .unwrap()
+    );
+    assert!(
+        !Target::local("local:preview")
+            .unwrap()
+            .matches_nostr_relay("wss://relay.example/")
+            .unwrap()
+    );
+}
+
+#[test]
 fn endpoint_scope_and_label_values_are_canonical_and_bounded() {
     let endpoint = EndpointUri::from_str("MESH://Node.Example/path").expect("endpoint");
     assert_eq!(endpoint.as_ref(), "mesh://node.example/path");

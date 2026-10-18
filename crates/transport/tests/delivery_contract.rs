@@ -55,6 +55,112 @@ fn mixed_receipt(request: &DeliveryRequest) -> DeliveryReceipt {
     .expect("mixed receipt")
 }
 
+fn different_payload_with_same_request_scope(original: &DeliveryRequest) -> DeliveryRequest {
+    let mut wire = Nip01EventWire::parse_json(original.payload().event().raw_json()).unwrap();
+    wire.content = "different exact event".into();
+    wire.id = wire.computed_event_id().unwrap().to_string();
+    let raw = serde_json::to_string(&wire).unwrap();
+    let event = SignedEvent::from_wire_verified_id(wire, raw).unwrap();
+    DeliveryRequest::new(
+        original.request_id().as_str(),
+        DeliveryPayload::new(event),
+        original.target_set().clone(),
+        original.satisfaction().clone(),
+        original.deadline_unix_ms(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn receipt_scope_includes_the_exact_payload_even_when_request_id_and_targets_match() {
+    let original = request(SatisfactionPolicy::new(
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    ));
+    let different = different_payload_with_same_request_scope(&original);
+    let receipt = mixed_receipt(&original);
+    receipt.validate_for_request(&original).unwrap();
+    assert!(receipt.validate_for_request(&different).is_err());
+}
+
+#[test]
+fn partial_failure_scope_includes_the_exact_payload() {
+    let original = request(SatisfactionPolicy::new(
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    ));
+    let different = different_payload_with_same_request_scope(&original);
+    let failure = SinkFailure::for_request(
+        &original,
+        "partial",
+        Retryability::Retryable,
+        None,
+        None,
+        vec![DeliveryTargetReceipt::attempted(
+            original.target_set().targets()[0].clone(),
+            DeliveryOutcome::accepted(),
+        )],
+    )
+    .unwrap();
+    failure.validate_for_request(&original).unwrap();
+    assert!(failure.validate_for_request(&different).is_err());
+}
+
+#[test]
+fn receipt_scope_preserves_exact_representation_and_serialized_binding() {
+    let original = request(SatisfactionPolicy::new(
+        SatisfactionClass::Accepted,
+        TargetPolicy::all(),
+    ));
+    let raw = format!(" \n{}\n", original.payload().event().raw_json());
+    let wire = Nip01EventWire::parse_json(&raw).unwrap();
+    let event = SignedEvent::from_wire_verified_id(wire, raw).unwrap();
+    let changed = DeliveryRequest::new(
+        original.request_id().as_str(),
+        DeliveryPayload::new(event),
+        original.target_set().clone(),
+        original.satisfaction().clone(),
+        original.deadline_unix_ms(),
+    )
+    .unwrap();
+    assert_eq!(
+        original.payload().event().envelope().id(),
+        changed.payload().event().envelope().id()
+    );
+    let receipt = mixed_receipt(&original);
+    assert_eq!(
+        receipt.validate_for_request(&changed),
+        Err(Error::DeliveryReceiptPayloadMismatch)
+    );
+    let failure = SinkFailure::transport_closed(&original);
+    assert_eq!(
+        failure.validate_for_request(&changed),
+        Err(Error::DeliveryReceiptPayloadMismatch)
+    );
+    #[cfg(feature = "serde")]
+    {
+        let mut value = serde_json::to_value(&receipt).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("exact_payload_sha256");
+        assert!(serde_json::from_value::<DeliveryReceipt>(value).is_err());
+        let mut digest_only = serde_json::to_value(&original).unwrap();
+        digest_only.as_object_mut().unwrap().remove("payload");
+        digest_only["exact_payload_sha256"] =
+            serde_json::to_value(&receipt).unwrap()["exact_payload_sha256"].clone();
+        assert!(serde_json::from_value::<DeliveryRequest>(digest_only).is_err());
+        let mut value = serde_json::to_value(&failure).unwrap();
+        let original_byte = value["exact_payload_sha256"][0].as_u64().unwrap();
+        value["exact_payload_sha256"][0] = serde_json::json!(original_byte ^ 1);
+        let altered: SinkFailure = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            altered.validate_for_request(&original),
+            Err(Error::DeliveryReceiptPayloadMismatch)
+        );
+    }
+}
+
 #[test]
 fn target_selection_is_exact_and_default_adapter_never_widens_it() {
     use radroots_transport::{BoxFuture, EventSink, SinkStatus};
