@@ -44,9 +44,14 @@ pub const fn radroots::client::knowledge_enabled() -> bool
 pub const fn radroots::client::local_only() -> radroots_sdk::transport::Profile
 pub mod radroots::domain
 pub use radroots::domain::AmountError
+pub use radroots::domain::CHAT_MAX_BYTES
+pub use radroots::domain::ChatMessage
+pub use radroots::domain::ChatRelation
 pub use radroots::domain::Decimal
 pub use radroots::domain::ExecutorId
 pub use radroots::domain::IdentifierError
+pub use radroots::domain::MessageError
+pub use radroots::domain::MessageId
 pub use radroots::domain::OperationId
 pub use radroots::domain::OrderId
 pub use radroots::domain::PositiveDecimal

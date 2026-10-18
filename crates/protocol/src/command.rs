@@ -18,8 +18,8 @@ use zeroize::Zeroizing;
 
 /// Maximum raw or canonical command bytes accepted by this closed boundary.
 pub const COMMAND_MAX_BYTES: usize = 65_536;
-/// Maximum plain chat text in UTF-8 bytes, before JSON/encryption expansion.
-pub const CHAT_MAX_BYTES: usize = 4096;
+/// Shared plain chat text budget, before JSON/encryption expansion.
+pub use radroots_domain::CHAT_MAX_BYTES;
 const JSON_MAX_DEPTH: usize = 16;
 
 /// Fixed input-free command data failures.

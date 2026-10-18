@@ -1,14 +1,16 @@
 //! One authenticated coherent observation of the complete retained T0/T1/S graph.
 use super::{
-    AttachmentProof, WorkspaceBinding,
+    AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceCrypto,
     admission::{Journal, recheck, same_binding},
     attempt,
     crypto::IssuanceScope,
     evidence::{self, ProtectedEvidence},
+    installation::Records,
     issuance::absent_claim,
     operation, plan,
+    plan::ProtectedPlan,
 };
-use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, PublicKey};
+use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, PublicKey, UnixSeconds};
 use radroots_storage::command::{
     BoundSigningPlan, ClaimSnapshot, OperationError, OperationSnapshot, RecipientSnapshot,
     RetainedOperation, SigningAttempt,
@@ -20,24 +22,35 @@ struct SeenRecipient {
     claim: Option<Vec<u8>>,
     evidence: Option<ProtectedEvidence>,
 }
-impl Journal<'_> {
-    pub(super) async fn query_snapshot(
-        &mut self,
-        binding: WorkspaceBinding,
+pub(super) struct RetainedGraph {
+    retained: Option<(RetainedOperation, Vec<u8>)>,
+    protected_plan: Option<ProtectedPlan>,
+    recipients: Vec<SeenRecipient>,
+}
+impl RetainedGraph {
+    pub(super) fn bound_plan(&self) -> Option<&BoundSigningPlan> {
+        self.retained
+            .as_ref()
+            .and_then(|(value, _)| value.bound_plan())
+    }
+    pub(super) fn reports(&self) -> impl Iterator<Item = RecipientSnapshot> + '_ {
+        self.recipients.iter().map(|value| value.report)
+    }
+    pub(super) async fn read(
+        connection: &mut SqliteConnection,
+        selected: &AttachmentInput,
+        binding: &WorkspaceBinding,
         operation_id: OperationId,
         expected_digest: Option<CommandDigest>,
-        proof: AttachmentProof,
-    ) -> Result<Option<OperationSnapshot>, OperationError> {
-        let (record, grant, _) = self.access(&binding, &proof).await?;
-        let original =
-            operation::read(self.connection, self.selected, operation_id, self.crypto).await?;
+        crypto: &WorkspaceCrypto,
+    ) -> Result<Self, OperationError> {
+        let original = operation::read(connection, selected, operation_id, crypto).await?;
         let mut recipients = Vec::new();
         let mut protected_plan = None;
         let retained = if let Some((prepared, protected)) = original {
             operation::check_digest(&prepared, binding.actor(), expected_digest)?;
-            same_binding(prepared.request().binding(), &binding)?;
-            let (prepared, bound) =
-                plan::read(self.connection, self.selected, prepared, self.crypto).await?;
+            same_binding(prepared.request().binding(), binding)?;
+            let (prepared, bound) = plan::read(connection, selected, prepared, crypto).await?;
             let source = if let Some((plan, transaction, time, protected)) = bound {
                 protected_plan = Some(protected);
                 let mut bound =
@@ -49,14 +62,8 @@ impl Journal<'_> {
                     .map(|seal| seal.recipient())
                     .collect();
                 for recipient in keys {
-                    let (returned, claim) = attempt::read(
-                        self.connection,
-                        self.selected,
-                        bound,
-                        recipient,
-                        self.crypto,
-                    )
-                    .await?;
+                    let (returned, claim) =
+                        attempt::read(connection, selected, bound, recipient, crypto).await?;
                     let expected = returned
                         .plan()
                         .seals()
@@ -72,8 +79,7 @@ impl Journal<'_> {
                             transaction,
                             time,
                         )?;
-                        let captured =
-                            evidence::read(self.connection, &attempt, self.crypto).await?;
+                        let captured = evidence::read(connection, &attempt, crypto).await?;
                         let claim = ClaimSnapshot::from_store_report(&attempt);
                         let (obtained, evidence) = match captured {
                             Some((_, protected)) => (Some(protected.receipt), Some(protected)),
@@ -123,51 +129,137 @@ impl Journal<'_> {
         } else {
             None
         };
-        // No provider or signature verification work occurs under this lock.
+        Ok(Self {
+            retained,
+            protected_plan,
+            recipients,
+        })
+    }
+    pub(super) async fn unchanged(
+        &self,
+        connection: &mut SqliteConnection,
+        selected: &AttachmentInput,
+        operation_id: OperationId,
+    ) -> Result<(), OperationError> {
+        if let Some((source, protected)) = &self.retained {
+            operation::unchanged(connection, source.prepared(), protected).await?;
+            plan::unchanged(connection, source.prepared(), self.protected_plan.as_ref()).await?;
+            for seen in &self.recipients {
+                if let (Some(claim), Some(protected)) = (seen.report.claim(), &seen.claim) {
+                    attempt::unchanged_snapshot(connection, claim, protected).await?;
+                    let scope = IssuanceScope {
+                        workspace: claim.workspace_id(),
+                        operation: claim.operation_id(),
+                        plan_digest: *claim.plan_digest(),
+                        attempt: claim.attempt_id(),
+                        recipient: claim.recipient(),
+                    };
+                    evidence::unchanged_scope(connection, scope, seen.evidence.as_ref()).await?;
+                } else {
+                    absent_claim(connection, selected, operation_id, seen.report.recipient())
+                        .await?;
+                }
+            }
+            graph_counts(
+                connection,
+                selected.workspace_id().as_bytes(),
+                operation_id.as_bytes(),
+                &self.recipients,
+            )
+            .await?;
+        } else {
+            let count:i64=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM operations WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plans WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plan_parts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_attempts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2)")
+                    .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation_id.as_bytes().as_slice()).fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
+            if count != 0 {
+                return Err(OperationError::RecoveryRequired);
+            }
+        }
+        Ok(())
+    }
+    pub(super) fn into_snapshot(
+        self,
+        observed: UnixSeconds,
+    ) -> Result<Option<OperationSnapshot>, OperationError> {
+        match self.retained {
+            Some((source, _)) => OperationSnapshot::from_store_report(
+                source,
+                self.recipients
+                    .into_iter()
+                    .map(|seen| seen.report)
+                    .collect(),
+                observed,
+            )
+            .map(Some),
+            None => Ok(None),
+        }
+    }
+}
+impl Journal<'_> {
+    pub(super) async fn query_snapshot(
+        &mut self,
+        binding: WorkspaceBinding,
+        operation_id: OperationId,
+        expected_digest: Option<CommandDigest>,
+        proof: AttachmentProof,
+    ) -> Result<Option<OperationSnapshot>, OperationError> {
+        let (record, grant, _) = self.access(&binding, &proof).await?;
+        let graph = RetainedGraph::read(
+            self.connection,
+            self.selected,
+            &binding,
+            operation_id,
+            expected_digest,
+            self.crypto,
+        )
+        .await?;
+        let records = Records::read(
+            self.connection,
+            self.selected,
+            operation_id,
+            &graph,
+            self.crypto,
+        )
+        .await?;
+        // Provider and signature verification work precedes the transaction.
         let mut transaction = self
             .connection
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|_| OperationError::StorageFailure)?;
         let checked = async {
-            let observed = recheck(&mut transaction, self.namespace, self.selected, &grant, &record, &binding, &proof, self.clock).await?;
-            if let Some((source, protected)) = &retained {
-                operation::unchanged(&mut transaction, source.prepared(), protected).await?;
-                plan::unchanged(&mut transaction, source.prepared(), protected_plan.as_ref()).await?;
-                for seen in &recipients {
-                    if let (Some(claim), Some(protected)) = (seen.report.claim(), &seen.claim) {
-                        attempt::unchanged_snapshot(&mut transaction, claim, protected).await?;
-                        let scope = IssuanceScope {
-                            workspace: claim.workspace_id(), operation: claim.operation_id(),
-                            plan_digest: *claim.plan_digest(), attempt: claim.attempt_id(), recipient: claim.recipient(),
-                        };
-                        evidence::unchanged_scope(&mut transaction, scope, seen.evidence.as_ref()).await?;
-                    } else {
-                        absent_claim(&mut transaction, self.selected, operation_id, seen.report.recipient()).await?;
-                    }
-                }
-                graph_counts(&mut transaction, self.selected.workspace_id().as_bytes(), operation_id.as_bytes(), &recipients).await?;
-            } else {
-                let count:i64=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM operations WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plans WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plan_parts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_attempts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2)")
-                    .bind(self.selected.workspace_id().as_bytes().as_slice()).bind(operation_id.as_bytes().as_slice()).fetch_one(&mut *transaction).await.map_err(|_|OperationError::RecoveryRequired)?;
-                if count != 0 { return Err(OperationError::RecoveryRequired); }
-            }
-            Ok::<_,OperationError>(observed.observed_at())
-        }.await;
+            let observed = recheck(
+                &mut transaction,
+                self.namespace,
+                self.selected,
+                &grant,
+                &record,
+                &binding,
+                &proof,
+                self.clock,
+            )
+            .await?;
+            graph
+                .unchanged(&mut transaction, self.selected, operation_id)
+                .await?;
+            records
+                .unchanged(&mut transaction, self.selected, operation_id)
+                .await?;
+            Ok::<_, OperationError>(observed.observed_at())
+        }
+        .await;
         if transaction.rollback().await.is_err() {
             *self.uncertain = true;
             return Err(OperationError::RecoveryRequired);
         }
-        let observed = checked?;
-        match retained {
-            Some((source, _)) => OperationSnapshot::from_store_report(
-                source,
-                recipients.into_iter().map(|seen| seen.report).collect(),
-                observed,
-            )
-            .map(Some),
-            None => Ok(None),
-        }
+        graph
+            .into_snapshot(checked?)?
+            .map(|snapshot| {
+                snapshot.with_installation(
+                    records.message.map(|value| value.report),
+                    records.work.into_iter().map(|value| value.report).collect(),
+                )
+            })
+            .transpose()
     }
 }
 async fn graph_counts(

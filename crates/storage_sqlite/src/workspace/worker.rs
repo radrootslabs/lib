@@ -1,14 +1,14 @@
 use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
-    WorkspaceError, admission::Journal, attempt, evidence, fs::Namespace, operation, plan,
-    record::GrantRecord,
+    WorkspaceError, admission::Journal, attempt, evidence, fs::Namespace, installation, operation,
+    plan, record::GrantRecord,
 };
 use radroots_domain::{CommandDigest, OperationId};
 use radroots_storage::command::{
     AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSeal, ChatSigningPlan,
     ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt, EvidenceCaptureOutcome,
-    OperationError, OperationSnapshot, PlanBindingOutcome, PreparedOperation, SealEvidence,
-    SigningAttempt,
+    InstallationOutcome, InstallationRequest, OperationError, OperationSnapshot,
+    PlanBindingOutcome, PreparedOperation, SealEvidence, SigningAttempt,
 };
 use sqlx::{
     Connection, Row, SqliteConnection,
@@ -33,6 +33,11 @@ const QUEUE_CAPACITY: usize = 32;
 const TABLE: &str = "CREATE TABLE workspace_grant (singleton INTEGER PRIMARY KEY CHECK(singleton=1), workspace BLOB NOT NULL CHECK(length(workspace)=32), grant_id BLOB NOT NULL CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    Install(
+        Box<InstallationRequest>,
+        AttachmentProof,
+        Reply<InstallationOutcome, OperationError>,
+    ),
     Snapshot(
         Box<WorkspaceBinding>,
         OperationId,
@@ -179,6 +184,19 @@ impl Handle {
                     if ready.send(Ok(())).is_ok() {
                         while let Ok(Queued { job, _budget }) = requests.recv() {
                             match job {
+                                Job::Install(request, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .install_chat(*request, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
                                 Job::Snapshot(binding, operation, digest, proof, reply) => {
                                     let result = Journal {
                                         connection: &mut connection,
@@ -409,6 +427,19 @@ impl Handle {
             reply,
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn install_chat(
+        &self,
+        request: InstallationRequest,
+        proof: AttachmentProof,
+    ) -> Result<InstallationOutcome, OperationError> {
+        let anchor = request.identity();
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Install(Box::new(request), proof, reply))?;
+        match result.await {
+            Ok(result) => result,
+            Err(_) => Ok(InstallationOutcome::Unknown(anchor)),
+        }
     }
     pub(super) async fn claim_attempt(
         &self,
@@ -652,13 +683,18 @@ async fn initialize(
             evidence::TABLE,
             evidence::PARTS,
             evidence::TX_INDEX,
+            installation::TABLE,
+            installation::OP_INDEX,
+            installation::TX_INDEX,
+            installation::THREAD_INDEX,
+            installation::WORK,
         ] {
             sqlx::raw_sql(definition)
                 .execute(&mut *transaction)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
         }
-        sqlx::query("PRAGMA user_version=5")
+        sqlx::query("PRAGMA user_version=6")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -680,11 +716,11 @@ async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if version != 5 {
+    if version != 6 {
         return Err(WorkspaceError::RecoveryRequired);
     }
-    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=11 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='table' AND name='signing_attempts' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_transaction_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence_parts' AND tbl_name='seal_evidence_parts' AND sql=? THEN 1 WHEN type='index' AND name='seal_evidence_transaction_identity' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 ELSE 0 END)=11 THEN 1 ELSE 0 END FROM sqlite_schema")
-        .bind(TABLE).bind(operation::TABLE).bind(plan::TABLE).bind(plan::PARTS).bind(attempt::TABLE).bind(attempt::ID_INDEX).bind(attempt::TX_INDEX).bind(evidence::TABLE).bind(evidence::PARTS).bind(evidence::TX_INDEX).bind(operation::INDEX).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=16 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='table' AND name='signing_attempts' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_transaction_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence_parts' AND tbl_name='seal_evidence_parts' AND sql=? THEN 1 WHEN type='index' AND name='seal_evidence_transaction_identity' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='chat_messages' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_operation_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_transaction_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_thread' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='table' AND name='chat_publication_work' AND tbl_name='chat_publication_work' AND sql=? THEN 1 ELSE 0 END)=16 THEN 1 ELSE 0 END FROM sqlite_schema")
+        .bind(TABLE).bind(operation::TABLE).bind(plan::TABLE).bind(plan::PARTS).bind(attempt::TABLE).bind(attempt::ID_INDEX).bind(attempt::TX_INDEX).bind(evidence::TABLE).bind(evidence::PARTS).bind(evidence::TX_INDEX).bind(operation::INDEX).bind(installation::TABLE).bind(installation::OP_INDEX).bind(installation::TX_INDEX).bind(installation::THREAD_INDEX).bind(installation::WORK).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
     if catalog_matches != 1 {
         return Err(WorkspaceError::RecoveryRequired);
     }

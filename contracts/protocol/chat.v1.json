@@ -95,7 +95,7 @@
     "protected_data_part_max_bytes": 16384,
     "max_data_parts": 24,
     "protected_total_max_bytes": 2097152,
-    "native_workspace_schema": 5,
+    "native_workspace_schema": 6,
     "predecessors": "Preserve and refuse; no inferred timestamps or automatic namespace rewrite",
     "queue": "32 slots plus conservative queued and in-flight reservations under 4194304 bytes",
     "transaction": "Current protected grant, original preparation, all indexed facts and fixed first-issue window rechecked under BEGIN IMMEDIATE; crypto work before transaction",
@@ -116,8 +116,8 @@
     "max_data_parts": 4,
     "protected_total_max_bytes": 1048576,
     "capture_queue_reservation_bytes": 262144,
-    "schema": 5,
-    "schema_objects": 11,
+    "schema": 6,
+    "schema_objects": 16,
     "remaining": "Ordinary client-owned orchestration and full operation receipts, route/provider approval, installation/outbox/delivery, target graph retirement and all consumer/final gates"
   },
   "native_operation_snapshot": {
@@ -125,11 +125,11 @@
     "snapshot_owner": "radroots_storage::command::OperationSnapshot",
     "query": "OperationJournal::operation_snapshot on the existing native owner",
     "receipt_owner": "radroots_execution::OperationReceipt; ordinary facade reexports",
-    "native_schema": 5,
-    "transaction": "Authenticate complete original preparation/plan/expected claims and obtained evidence outside transaction; recheck current grant, all retained and absent facts and complete graph counts under BEGIN IMMEDIATE; confirmed rollback before reporting",
+    "native_schema": 6,
+    "transaction": "Authenticate complete original T0/T1/S and protected T2 records outside transaction; recheck current grant, all retained and absent facts and complete bounded graph counts under BEGIN IMMEDIATE; confirmed rollback before reporting",
     "extra_or_orphan_rows": "Recovery required; never silently omitted from a complete report",
     "memory": "One complete owned plan and at most two sorted unique boxed recipient reports; no private raw bytes or automatic payload serialization in receipt diagnostics",
-    "progress_digest": "SHA-256 with radroots.operation.snapshot.v1 NUL separator; workspace/operation/command, T0 transaction/revision/window, authority checkpoint digest, optional T1 plan/transaction/time, each recipient claim/intent/time and obtained transaction/event/raw digest/optional time; excludes query time and diagnostic correlation",
+    "progress_digest": "SHA-256 with radroots.operation.snapshot.v2 NUL separator; original v1 fact dimensions plus optional installation transaction/time/basis capture and each recipient publication-work transaction/time; excludes query time and diagnostic correlation",
     "dimensions": [
       "durable_admission",
       "business_installation",
@@ -141,7 +141,30 @@
     "first_issue_expiry": "Remaining unrequested work is blocked; obtained and unknown classifications are preserved. Expiry proves no nonissuance.",
     "scope": "Original actor/workspace/authority/route, command/transactions/window, authority evidence checkpoint, logical-message and structured-record namespaces, protected artifact references and nullable original observations",
     "construction_authority": "Pure values do not authenticate a principal, qualify a custom adapter, permit dispatch or prove installation/delivery",
-    "remaining": "Native T2 installation/publication work, exact wrapping/delivery, library-owned ordinary inbox jobs, complete browser/binding/consumer closure and final acceptance",
-    "count_bounds": "Whole-operation extra-recipient count checks stop at excess sentinels 3 claims, 3 obtained manifests and 9 parts; absent-operation checks use EXISTS. Existing protected per-recipient part bounds and authentication remain mandatory."
+    "remaining": "Exact outer wrapping/delivery, library-owned ordinary inbox jobs, complete browser/binding/consumer closure and final acceptance",
+    "count_bounds": "Whole-operation extra-recipient count checks stop at excess sentinels 3 claims, 3 obtained manifests and 9 parts; absent-operation checks use EXISTS. Existing protected per-recipient part bounds and authentication remain mandatory. T2 sentinels stop at 2 messages and 3 publication-work rows."
+  },
+  "native_installation": {
+    "state": "native_t2_component_implemented",
+    "transaction_owner": "Existing bounded native workspace connection worker; no second engine",
+    "operation": "OperationJournal::install_transition_and_outbox",
+    "business_view": "radroots_domain::ChatMessage; original captured text/relations and original logical message time, independently owned and diagnostically redacted",
+    "plain_text_max_bytes": 4096,
+    "body_retention": "Original authenticated T0 command; fixed protected T2 records reference it and the exact complete T1 plan without duplicate private text",
+    "atomic_effect": "One logical chat_messages installation plus eligible actual-recipient chat_publication_work in one IMMEDIATE transaction; complete current grant and all retained/absent T0/T1/S/T2 facts compared before writes",
+    "partial_and_late": "Any actual matching obtained recipient artifact may establish the original installation. Later capture adds only its missing publication work; original installation transaction/time and earlier links stay unchanged.",
+    "window": "Original first-issue window constrains new signatures, not installation of matching already obtained evidence. Current access still gates T2.",
+    "outcomes": "Confirmed commit, known rollback and original anchored unknown; unknown latches until safe reopen. Claims/evidence are never released by T2 failures or observer loss.",
+    "replay": "Compare original retained graph before fresh work; no replacement installation, new entropy/protection or signature on exact replay",
+    "protected_plaintext_max_bytes": 16384,
+    "protected_row_max_bytes": 262144,
+    "protected_aggregate_upper_bound_bytes": 786432,
+    "live_queue": "Existing 32 slots and 4194304 accepted/in-flight input bytes; 16384-byte installation input reservation",
+    "schema": 6,
+    "schema_objects": 16,
+    "cutover": "Preserve and refuse all predecessor namespaces, including actual schema5 claims/evidence; no automatic upgrade or state deletion",
+    "reporting": "Owned message only with scoped actual installation report; independent original installation and recipient work transactions; delivery pending and zero inferred relay observations",
+    "qualification": "Separate exact-source executed evidence; declarations and data constructors are not qualification",
+    "remaining": "Exact outer-envelope retention and per-target D observations, ordinary library-owned inbox jobs, browser/bindings, supported consumer adoption and all final gates"
   }
 }

@@ -94,7 +94,7 @@ Closing the attachment invalidates its contexts. A custom adapter is an explicit
 host trust boundary and requires its own qualification; its observation cannot
 establish native SQL authority. An approval descriptor is not consent proof.
 
-Package upload is not authorized. Actual durable command transactions, outbox
+Package upload is not authorized. Ordinary durable command orchestration, outbox
 workers, inventory authority, public listing/private chat execution, browser
 attachment and new bindings remain separate requirements. Revalidating a context
 is not durable admission; the authoritative transaction must recheck its scope.
@@ -106,7 +106,12 @@ It separates installation, per-recipient issuance, delivery and caller waiting.
 Its diagnostics contain no private command text or ciphertext. The optional
 `receipts` feature projects a Storage operation snapshot without I/O; the
 concrete adapter must qualify the underlying authenticated coherent query.
-The current native T0/T1/S profile reports no business installation or delivery.
+The native T2 profile projects an owned bounded `ChatMessage` when the concrete
+owner reports a matching installed result. It preserves the original installation
+transaction/time separately from later recipient publication-work transactions.
+Pending wrapping/publication work does not establish transport acknowledgement.
+Newly captured recipient evidence may require T2 continuation while the original
+message remains installed; unknown issuance remains independently unknown.
 Expired remaining first issuance is blocked while obtained and unknown facts
 remain retained. Changing a wait observation cannot change those facts.
 Default receipt values remain usable without an async runtime on noStd targets;

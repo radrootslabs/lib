@@ -4,6 +4,6 @@
 //! participant, select an executor or prove durable command admission.
 
 pub use radroots_domain::{
-    AmountError, Decimal, ExecutorId, IdentifierError, OperationId, OrderId, PositiveDecimal,
-    ThreadId, WorkspaceId,
+    AmountError, CHAT_MAX_BYTES, ChatMessage, ChatRelation, Decimal, ExecutorId, IdentifierError,
+    MessageError, MessageId, OperationId, OrderId, PositiveDecimal, ThreadId, WorkspaceId,
 };

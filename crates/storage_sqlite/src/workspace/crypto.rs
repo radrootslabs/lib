@@ -24,6 +24,7 @@ pub(super) struct IssuanceScope {
 pub(super) enum IssuancePayload {
     Attempt,
     Evidence,
+    Publication,
 }
 
 /// Explicit host-owned encryption material. This is a data-encryption key,
@@ -36,6 +37,34 @@ pub struct WorkspaceCrypto {
     key: SecretMaterial,
 }
 impl WorkspaceCrypto {
+    pub(super) async fn seal_message(
+        &self,
+        workspace: WorkspaceId,
+        operation: OperationId,
+        plan: &[u8; 32],
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            message_context(workspace, operation, plan)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            plaintext,
+        )
+        .await
+    }
+    pub(super) async fn open_message(
+        &self,
+        workspace: WorkspaceId,
+        operation: OperationId,
+        plan: &[u8; 32],
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            message_context(workspace, operation, plan)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
     /// Binds protected host input to one exact persistent provider/ref. Actual
     /// provider access and context authentication still execute at seal/open.
     pub fn new(
@@ -305,6 +334,11 @@ fn issuance_context(
             "radroots.workspace.seal_evidence",
             "radroots.workspace.seal_evidence.v1",
         ),
+        IssuancePayload::Publication => (
+            2u8,
+            "radroots.workspace.chat_publication_work",
+            "radroots.workspace.chat_publication_work.v1",
+        ),
     };
     let mut hash = Sha256::new();
     hash.update(b"radroots.workspace.issuance.context.v1\0");
@@ -320,5 +354,27 @@ fn issuance_context(
         EnvelopeSubject::parse("workspace_issuance", subject.to_string())
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+fn message_context(
+    workspace: WorkspaceId,
+    operation: OperationId,
+    plan: &[u8; 32],
+) -> Result<EnvelopeContext, WorkspaceError> {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"radroots.workspace.chat_message.context.v1\0");
+    hash.update(workspace.as_bytes());
+    hash.update(operation.as_bytes());
+    hash.update(plan);
+    let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse("radroots.workspace.chat_message")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("workspace_chat_message", subject.to_string())
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse("radroots.workspace.chat_message.v1")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }

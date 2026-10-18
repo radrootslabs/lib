@@ -9,6 +9,7 @@ mod amount;
 mod context;
 mod identifier;
 mod issuance;
+mod message;
 
 /// The identity-owned validated participant key; no second key type is defined.
 pub use radroots_identity::PublicKey;
@@ -24,3 +25,4 @@ pub use identifier::{
     SourceId, ThreadId, TransactionId, WorkspaceId,
 };
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};
+pub use message::{CHAT_MAX_BYTES, ChatMessage, ChatRelation, MessageError};

@@ -11,8 +11,12 @@ pub use radroots_protocol::chat::ChatSigningPlan;
 use radroots_protocol::command::CapturedChatCommand;
 use radroots_transport::BoxFuture;
 
+mod installation;
 mod issuance;
 mod snapshot;
+pub use installation::{
+    ChatInstallation, InstallationOutcome, InstallationRequest, PublicationWork,
+};
 pub use issuance::{
     CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome,
     EvidenceReceipt, SealEvidence, SigningAttempt,
@@ -256,6 +260,14 @@ impl fmt::Debug for AdmissionOutcome {
 /// Typed transaction port, implemented by actual shared storage adapters.
 /// Applications do not implement a second orchestration or stock engine here.
 pub trait OperationJournal: WorkspaceStore {
+    /// Atomically installs the original logical chat result and retains distinct
+    /// publication work for actual obtained recipients. No signing or transport
+    /// occurs here; unknown completion retains all original claims and evidence.
+    fn install_transition_and_outbox(
+        &self,
+        request: InstallationRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<InstallationOutcome, OperationError>>;
     /// Queries one coherent original preparation/plan/per-recipient evidence
     /// graph under current access. Reported absence grants no safe reissue.
     fn operation_snapshot(

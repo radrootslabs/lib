@@ -14,6 +14,13 @@ pub radroots_domain::AmountError::ScaleOutOfRange
 impl core::error::Error for radroots_domain::AmountError
 impl core::fmt::Display for radroots_domain::AmountError
 pub fn radroots_domain::AmountError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::ChatRelation
+pub radroots_domain::ChatRelation::Inquire
+pub radroots_domain::ChatRelation::Inquire::source: core::option::Option<radroots_domain::SourceId>
+pub radroots_domain::ChatRelation::Reply
+pub radroots_domain::ChatRelation::Reply::parent: radroots_domain::MessageId
+impl core::fmt::Debug for radroots_domain::ChatRelation
+pub fn radroots_domain::ChatRelation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::ContextError
 pub radroots_domain::ContextError::InconsistentCoverage
 pub radroots_domain::ContextError::InvalidInteger
@@ -32,6 +39,11 @@ pub radroots_domain::IdentifierError::InvalidLength
 impl core::error::Error for radroots_domain::IdentifierError
 impl core::fmt::Display for radroots_domain::IdentifierError
 pub fn radroots_domain::IdentifierError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_domain::MessageError
+pub radroots_domain::MessageError::LimitExceeded
+impl core::error::Error for radroots_domain::MessageError
+impl core::fmt::Display for radroots_domain::MessageError
+pub fn radroots_domain::MessageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ActorRef
 impl radroots_domain::ActorRef
 pub const fn radroots_domain::ActorRef::grant_id(self) -> core::option::Option<radroots_domain::GrantId>
@@ -70,6 +82,18 @@ impl radroots_domain::AuthorityRef
 pub const fn radroots_domain::AuthorityRef::executor_id(self) -> radroots_domain::ExecutorId
 pub const fn radroots_domain::AuthorityRef::generation(self) -> radroots_domain::Generation
 pub const fn radroots_domain::AuthorityRef::new(radroots_domain::ExecutorId, radroots_domain::Generation) -> Self
+pub struct radroots_domain::ChatMessage
+impl radroots_domain::ChatMessage
+pub const fn radroots_domain::ChatMessage::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::ChatMessage::created_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::ChatMessage::id(&self) -> radroots_domain::MessageId
+pub fn radroots_domain::ChatMessage::new(radroots_domain::MessageId, radroots_domain::ThreadId, radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, radroots_domain::UnixSeconds, radroots_domain::ChatRelation, &str) -> core::result::Result<Self, radroots_domain::MessageError>
+pub const fn radroots_domain::ChatMessage::peer(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::ChatMessage::relation(&self) -> radroots_domain::ChatRelation
+pub fn radroots_domain::ChatMessage::text(&self) -> &str
+pub const fn radroots_domain::ChatMessage::thread_id(&self) -> radroots_domain::ThreadId
+impl core::fmt::Debug for radroots_domain::ChatMessage
+pub fn radroots_domain::ChatMessage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::CheckpointDigest(_)
 impl radroots_domain::CheckpointDigest
 pub const fn radroots_domain::CheckpointDigest::as_bytes(&self) -> &[u8; 32]
@@ -420,4 +444,5 @@ impl serde_core::ser::Serialize for radroots_domain::WorkspaceId
 pub fn radroots_domain::WorkspaceId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::WorkspaceId
 pub fn radroots_domain::WorkspaceId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub const radroots_domain::CHAT_MAX_BYTES: usize
 pub const radroots_domain::FIRST_ISSUANCE_MAX_SECONDS: u64

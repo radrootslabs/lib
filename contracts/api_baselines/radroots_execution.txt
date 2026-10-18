@@ -195,6 +195,7 @@ pub const fn radroots_execution::ArtifactObservation::intent_digest(&self) -> co
 pub const fn radroots_execution::ArtifactObservation::issuance(&self) -> radroots_execution::Issuance
 pub const fn radroots_execution::ArtifactObservation::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
 pub const fn radroots_execution::ArtifactObservation::obtained_digest(&self) -> core::option::Option<[u8; 32]>
+pub const fn radroots_execution::ArtifactObservation::publication_transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
 pub const fn radroots_execution::ArtifactObservation::recipient(&self) -> core::option::Option<radroots_identity::key::PublicKey>
 pub const fn radroots_execution::ArtifactObservation::role(&self) -> radroots_protocol::intent::ArtifactRole
 impl core::fmt::Debug for radroots_execution::ArtifactObservation
@@ -231,8 +232,8 @@ pub const fn radroots_execution::OperationContext::operation_id(self) -> core::o
 pub const fn radroots_execution::OperationContext::proposed(core::option::Option<radroots_domain::identifier::OperationId>) -> Self
 pub const fn radroots_execution::OperationContext::retained(radroots_domain::identifier::OperationId) -> Self
 pub struct radroots_execution::OperationReceipt<T>
-impl radroots_execution::OperationReceipt<()>
-pub fn radroots_execution::OperationReceipt<()>::from_snapshot(&radroots_storage::command::snapshot::OperationSnapshot) -> Self
+impl radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>
+pub fn radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>::from_snapshot(&radroots_storage::command::snapshot::OperationSnapshot) -> Self
 impl<T> radroots_execution::OperationReceipt<T>
 pub const fn radroots_execution::OperationReceipt<T>::admission(&self) -> radroots_execution::Admission
 pub const fn radroots_execution::OperationReceipt<T>::admission_transaction_id(&self) -> radroots_domain::identifier::TransactionId
@@ -248,6 +249,8 @@ pub const fn radroots_execution::OperationReceipt<T>::delivery(&self) -> radroot
 pub fn radroots_execution::OperationReceipt<T>::delivery_observations(&self) -> &[radroots_execution::DeliveryObservation]
 pub const fn radroots_execution::OperationReceipt<T>::durable(&self) -> bool
 pub const fn radroots_execution::OperationReceipt<T>::error(&self) -> core::option::Option<radroots_execution::Error>
+pub const fn radroots_execution::OperationReceipt<T>::installation_transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub const fn radroots_execution::OperationReceipt<T>::installed_at(&self) -> core::option::Option<radroots_domain::context::UnixSeconds>
 pub const fn radroots_execution::OperationReceipt<T>::issuance(&self) -> radroots_execution::Issuance
 pub const fn radroots_execution::OperationReceipt<T>::issuance_window(&self) -> radroots_domain::issuance::IssuanceWindow
 pub const fn radroots_execution::OperationReceipt<T>::message_id(&self) -> core::option::Option<radroots_domain::identifier::MessageId>

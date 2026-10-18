@@ -44,4 +44,11 @@ sources retain full digests independently of structured-record identity.
 `CommandContextData` is untrusted data; only an authenticated execution session
 can construct the opaque executable context.
 
+`ChatMessage` owns a bounded logical participant view, with separate message,
+thread, author, peer, creation time and inquiry/source or reply relation. Plain
+text has the shared 4,096 UTF-8 byte limit before JSON/encryption expansion;
+empty text and Unicode contents are preserved exactly. Private text uses
+zeroizing owned storage and redacted diagnostics, with no automatic payload
+serialization. Constructing a value proves no signature, history or installation.
+
 Licensed under MIT OR Apache-2.0; see LICENSE-MIT and LICENSE-APACHE.

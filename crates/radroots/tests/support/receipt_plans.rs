@@ -1,4 +1,6 @@
 //! Native storage tests use real synthetic NIP-44 data, never host custody.
+#[path = "receipt_installation.rs"]
+mod installation;
 #[path = "receipt_issuance.rs"]
 mod issuance;
 #[path = "receipt_snapshots.rs"]

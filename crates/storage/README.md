@@ -313,4 +313,13 @@ obtained artifact, then compares both presence and absence together before
 returning. Per-recipient reports share one owned plan; bounded boxed collections
 discard spare caller capacity. The scoped progress digest excludes query time
 and diagnostic correlation. Structural snapshot construction supplies no
-backend qualification, dispatch permission or installed business result.
+proof of backend qualification, dispatch permission or business installation.
+
+`install_transition_and_outbox` requires original operation/command/plan
+selectors. Concrete owners atomically install one logical chat result and retain
+separate publication work for actual obtained recipient artifacts. Original
+installation and later work transactions remain distinct. A coherent snapshot
+may carry the owned bounded message reconstructed from the original protected
+command and plan, with validated installation/basis/work reports. Structural
+constructors supply no authentication or persistence guarantee. Uncertain T2
+completion never releases claims or obtained evidence.

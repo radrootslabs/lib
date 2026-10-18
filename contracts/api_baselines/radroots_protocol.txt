@@ -133,6 +133,7 @@ pub const radroots_protocol::chat::RUMOR_MAX_BYTES: usize
 pub const radroots_protocol::chat::SIGNED_MAX_BYTES: usize
 pub fn radroots_protocol::chat::nip44_v2_payload_len(usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub mod radroots_protocol::command
+pub use radroots_protocol::command::CHAT_MAX_BYTES
 pub enum radroots_protocol::command::ChatKind
 pub radroots_protocol::command::ChatKind::Inquire
 pub radroots_protocol::command::ChatKind::Reply
@@ -190,7 +191,6 @@ pub fn radroots_protocol::command::ReplyInput::text(&self) -> &str
 pub const fn radroots_protocol::command::ReplyInput::thread_id(&self) -> radroots_domain::identifier::ThreadId
 impl core::fmt::Debug for radroots_protocol::command::ReplyInput
 pub fn radroots_protocol::command::ReplyInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub const radroots_protocol::command::CHAT_MAX_BYTES: usize
 pub const radroots_protocol::command::COMMAND_MAX_BYTES: usize
 pub mod radroots_protocol::error
 pub mod radroots_protocol::error::v1

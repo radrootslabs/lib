@@ -1,10 +1,13 @@
 //! Coherent retained graph reports. Values are not persistence qualification or
 //! dispatch permission; concrete owners must authenticate and compare all facts.
-use super::{BoundSigningPlan, EvidenceReceipt, OperationError, PreparedOperation, SigningAttempt};
+use super::{
+    BoundSigningPlan, ChatInstallation, EvidenceReceipt, OperationError, PreparedOperation,
+    PublicationWork, SigningAttempt,
+};
 use core::fmt;
 use radroots_domain::{
-    CommandDigest, EnvelopeEventId, MessageId, OperationId, PublicKey, SigningAttemptId,
-    TransactionId, UnixSeconds, WorkspaceId,
+    ChatMessage, ChatRelation, CommandDigest, EnvelopeEventId, MessageId, OperationId, PublicKey,
+    SigningAttemptId, TransactionId, UnixSeconds, WorkspaceId,
 };
 use radroots_protocol::intent::IntentBinding;
 use sha2::{Digest, Sha256};
@@ -172,6 +175,9 @@ pub struct OperationSnapshot {
     retained: RetainedOperation,
     recipients: Box<[RecipientSnapshot]>,
     observed_at: UnixSeconds,
+    installation: Option<ChatInstallation>,
+    message: Option<ChatMessage>,
+    publications: Box<[PublicationWork]>,
 }
 impl OperationSnapshot {
     /// Stable scoped progress identity over original transaction, command,
@@ -181,7 +187,7 @@ impl OperationSnapshot {
         let prepared = self.prepared();
         let identity = prepared.identity();
         let mut digest = Sha256::new();
-        digest.update(b"radroots.operation.snapshot.v1\0");
+        digest.update(b"radroots.operation.snapshot.v2\0");
         digest.update(identity.workspace_id().as_bytes());
         digest.update(identity.operation_id().as_bytes());
         digest.update(identity.command_digest().as_bytes());
@@ -241,6 +247,20 @@ impl OperationSnapshot {
                 }
                 None => digest.update([0]),
             }
+        }
+        match self.installation() {
+            Some(installed) => {
+                digest.update([1]);
+                digest.update(installed.transaction_id().as_bytes());
+                digest.update(installed.installed_at().get().to_be_bytes());
+                digest.update(installed.basis().transaction_id().as_bytes());
+            }
+            None => digest.update([0]),
+        }
+        for work in self.publications() {
+            digest.update(work.evidence().recipient().as_bytes());
+            digest.update(work.transaction_id().as_bytes());
+            digest.update(work.queued_at().get().to_be_bytes());
         }
         radroots_domain::CheckpointDigest::from_bytes(digest.finalize().into())
     }
@@ -319,7 +339,105 @@ impl OperationSnapshot {
             retained,
             recipients: recipients.into_boxed_slice(),
             observed_at,
+            installation: None,
+            message: None,
+            publications: Vec::new().into_boxed_slice(),
         })
+    }
+    /// Adds structurally checked T2 reports to this data snapshot. The concrete
+    /// owner must authenticate and atomically compare these records with the
+    /// complete original graph. This transformation performs no installation.
+    pub fn with_installation(
+        mut self,
+        installation: Option<ChatInstallation>,
+        publications: Vec<PublicationWork>,
+    ) -> Result<Self, OperationError> {
+        let Some(installed) = installation else {
+            if !publications.is_empty() {
+                return Err(OperationError::RecoveryRequired);
+            }
+            self.installation = None;
+            self.message = None;
+            self.publications = Vec::new().into_boxed_slice();
+            return Ok(self);
+        };
+        let bound = self.bound_plan().ok_or(OperationError::RecoveryRequired)?;
+        let checked = ChatInstallation::from_committed_store(
+            bound,
+            installed.basis(),
+            installed.transaction_id(),
+            installed.installed_at(),
+        )?;
+        if checked != installed
+            || !self
+                .recipients()
+                .iter()
+                .any(|recipient| recipient.obtained() == Some(installed.basis()))
+            || publications.is_empty()
+            || publications.len() > self.recipients().len()
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let mut previous = None;
+        let mut basis_linked = false;
+        for work in &publications {
+            let recipient = work.evidence().recipient();
+            if previous.is_some_and(|key| key >= recipient)
+                || PublicationWork::from_committed_store(
+                    bound,
+                    installed,
+                    work.evidence(),
+                    work.transaction_id(),
+                    work.queued_at(),
+                )? != *work
+                || !self
+                    .recipients()
+                    .iter()
+                    .any(|value| value.obtained() == Some(work.evidence()))
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+            previous = Some(recipient);
+            basis_linked |= work.evidence() == installed.basis();
+        }
+        if !basis_linked {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let command = bound.prepared().request().command();
+        let relation = match command.parent() {
+            Some(parent) => ChatRelation::Reply { parent },
+            None => ChatRelation::Inquire {
+                source: command.source().map(|source| source.event_id()),
+            },
+        };
+        let message = ChatMessage::new(
+            installed.message_id(),
+            command.thread_id(),
+            command.context().actor().participant(),
+            command.peer(),
+            bound.plan().created_at(),
+            relation,
+            command.text(),
+        )
+        .map_err(|_| OperationError::RecoveryRequired)?;
+        self.installation = Some(installed);
+        self.message = Some(message);
+        self.publications = publications.into_boxed_slice();
+        Ok(self)
+    }
+    /// Actual retained installation report, when supplied by the concrete owner.
+    pub const fn installation(&self) -> Option<ChatInstallation> {
+        self.installation
+    }
+    /// Owned bounded logical business result, reconstructed from the original
+    /// protected command and complete plan, never a caller's replacement body.
+    pub fn installed_message(&self) -> Option<&ChatMessage> {
+        self.message.as_ref()
+    }
+    /// Independent retained recipient publication work. No outer envelope or
+    /// relay observation is inferred from these references.
+    pub fn publications(&self) -> &[PublicationWork] {
+        &self.publications
     }
     /// Original preparation, without a fabricated installed business result.
     pub fn prepared(&self) -> &PreparedOperation {

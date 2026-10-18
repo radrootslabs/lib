@@ -214,14 +214,14 @@ under `BEGIN IMMEDIATE`, with provider work outside that transaction. A fixed
 first-issue window never restarts on replay. Already-bound bytes remain queryable
 and replayable after expiry under current access; this grants no new issuance.
 
-The current workspace schema is version 5. Older namespaces are preserved and
+The current workspace schema is version 6. Older namespaces are preserved and
 refused for explicit cutover, without an automatic state rewrite. Complete plans
 use a protected manifest and at most twenty-four 16 KiB protected data parts,
 with context binding the full workspace/operation/plan identity and part index.
 Existing secret-material/envelope bounds remain intact. Queued and in-flight
 request reservations share a 4 MiB byte cap alongside the 32-slot queue limit.
 Known rollback, confirmed commit and unknown completion remain distinct.
-This component performs no signer dispatch, business installation or delivery.
+Plan binding performs no signer dispatch, business installation or delivery.
 
 
 Native first claims retain a full-width attempt identity and exact command,
@@ -244,4 +244,23 @@ lock. It rechecks current access, all retained and absent facts and whole-graph
 counts under one `BEGIN IMMEDIATE`, rejecting extra or orphan rows. It performs
 no signing or graph mutation and confirms rollback before returning. Window
 expiry does not erase retained facts. The existing owner drains accepted reads
-after a lost observer and closes explicitly. Workspace schema 5 stays unchanged.
+after a lost observer and closes explicitly. Schema 6 has sixteen exact objects
+and preserves/refuses predecessors without automatic rewriting.
+
+Native T2 uses that same connection owner. It authenticates the complete original
+graph, protects fixed installation/work records before the transaction, then
+rechecks current access and every retained/absent fact under `BEGIN IMMEDIATE`.
+It atomically retains one `chat_messages` entry and distinct recipient work in
+`chat_publication_work`, referencing exact retained seals and original routes.
+The original private body stays protected in T0 instead of being duplicated.
+Later recipient capture may append missing work without replacing the original
+message installation. Already obtained evidence may install after the original
+first-issue window, under current access; no new signature is requested.
+
+Each T2 protected plaintext is at most 16 KiB. One message plus at most two work
+records cap protected materialization below 1 MiB; excess sentinels reject more
+than one message or two work rows without unbounded scans. Exact replay preserves
+original ciphertext and transaction identities. Known rollback, confirmed commit
+and anchored unknown completion remain distinct, and accepted work survives
+observer loss. Outer wrapping, transport observations and ordinary owned inbox
+orchestration remain separate requirements.

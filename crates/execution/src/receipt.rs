@@ -4,9 +4,9 @@ use crate::{Admission, Error};
 use alloc::boxed::Box;
 use core::{fmt, num::NonZeroU64};
 use radroots_domain::{
-    CheckpointDigest, CheckpointRef, CommandContextData, CommandDigest, EnvelopeEventId,
-    IssuanceWindow, MessageId, PublicKey, RecordId, SigningAttemptId, SourceId, TransactionId,
-    UnixSeconds,
+    ChatMessage, CheckpointDigest, CheckpointRef, CommandContextData, CommandDigest,
+    EnvelopeEventId, IssuanceWindow, MessageId, PublicKey, RecordId, SigningAttemptId, SourceId,
+    TransactionId, UnixSeconds,
 };
 use radroots_protocol::intent::ArtifactRole;
 
@@ -115,6 +115,7 @@ pub struct ArtifactObservation {
     claim_transaction: Option<TransactionId>,
     intent_digest: Option<[u8; 32]>,
     capture_transaction: Option<TransactionId>,
+    publication_transaction: Option<TransactionId>,
     obtained_digest: Option<[u8; 32]>,
     observed_at: Option<NonZeroU64>,
 }
@@ -172,6 +173,12 @@ impl ArtifactObservation {
         Option<[u8; 32]>,
         obtained_digest,
         "Digest of the exact original obtained representation."
+    );
+    copied!(
+        publication_transaction_id,
+        Option<TransactionId>,
+        publication_transaction,
+        "Original transaction retaining this recipient's exact publication work."
     );
     copied!(
         observed_at_unix_ms,
@@ -239,6 +246,8 @@ pub struct OperationReceipt<T> {
     admission: Admission,
     admission_transaction: TransactionId,
     plan_transaction: Option<TransactionId>,
+    installation_transaction: Option<TransactionId>,
+    installed_at: Option<UnixSeconds>,
     issuance_window: IssuanceWindow,
     authority_checkpoint: CheckpointRef,
     operation_checkpoint: CheckpointDigest,
@@ -295,6 +304,18 @@ impl<T> OperationReceipt<T> {
         IssuanceWindow,
         issuance_window,
         "Original first-issue bounds; never restarted by a receipt."
+    );
+    copied!(
+        installation_transaction_id,
+        Option<TransactionId>,
+        installation_transaction,
+        "Original exactly-once logical installation transaction."
+    );
+    copied!(
+        installed_at,
+        Option<UnixSeconds>,
+        installed_at,
+        "Actual original installation observation, separate from message creation."
     );
     /// Authority/evidence checkpoint originally captured by the operation.
     pub const fn authority_checkpoint(&self) -> &CheckpointRef {
@@ -396,8 +417,8 @@ impl<T> fmt::Debug for OperationReceipt<T> {
 }
 
 #[cfg(feature = "receipts")]
-impl OperationReceipt<()> {
-    /// Projects a structurally validated T0/T1/S report. Only the concrete
+impl OperationReceipt<ChatMessage> {
+    /// Projects a structurally validated retained operation report. Only the concrete
     /// adapter's actual authenticated coherent query qualifies the facts. This
     /// conversion performs no I/O, issuance, installation or publication.
     pub fn from_snapshot(snapshot: &radroots_storage::command::OperationSnapshot) -> Self {
@@ -425,6 +446,11 @@ impl OperationReceipt<()> {
                 claim_transaction: claim.map(|value| value.transaction_id()),
                 intent_digest: claim.map(|value| *value.intent().digest()),
                 capture_transaction: obtained.map(|value| value.transaction_id()),
+                publication_transaction: snapshot
+                    .publications()
+                    .iter()
+                    .find(|value| Some(value.evidence()) == obtained)
+                    .map(|value| value.transaction_id()),
                 obtained_digest: obtained.map(|value| *value.digest()),
                 observed_at: obtained.and_then(|value| value.observed_at_unix_ms()),
             });
@@ -432,9 +458,9 @@ impl OperationReceipt<()> {
         let unknown = artifacts
             .iter()
             .any(|value| value.issuance == Issuance::Unknown);
-        let obtained = artifacts
-            .iter()
-            .any(|value| value.issuance == Issuance::Obtained);
+        let install_pending = artifacts.iter().any(|value| {
+            value.issuance == Issuance::Obtained && value.publication_transaction.is_none()
+        });
         let issuance = if unknown {
             Issuance::Unknown
         } else if artifacts
@@ -454,8 +480,11 @@ impl OperationReceipt<()> {
         if unknown {
             recovery.push(RecoveryRequirement::ReconcileIssuance);
         }
-        if obtained {
+        if install_pending {
             recovery.push(RecoveryRequirement::InstallObtainedEvidence);
+        }
+        if !snapshot.publications().is_empty() {
+            recovery.push(RecoveryRequirement::ResumeDelivery);
         }
         if expired {
             recovery.push(RecoveryRequirement::ManualReconciliation);
@@ -469,19 +498,29 @@ impl OperationReceipt<()> {
             admission: Admission::Confirmed,
             admission_transaction: prepared.transaction_id(),
             plan_transaction: snapshot.bound_plan().map(|value| value.transaction_id()),
+            installation_transaction: snapshot.installation().map(|value| value.transaction_id()),
+            installed_at: snapshot.installation().map(|value| value.installed_at()),
             issuance_window: prepared.issuance_window(),
             authority_checkpoint: prepared.request().binding().input().checkpoint().clone(),
             operation_checkpoint: snapshot.checkpoint_digest(),
             conflicting_records: vec![].into_boxed_slice(),
             conflicting_sources: vec![].into_boxed_slice(),
             observed_at: snapshot.observed_at(),
-            business_installation: BusinessInstallation::NotInstalled,
-            business_result: None,
+            business_installation: if snapshot.installation().is_some() {
+                BusinessInstallation::Installed
+            } else {
+                BusinessInstallation::NotInstalled
+            },
+            business_result: snapshot.installed_message().cloned(),
             message_id: snapshot.message_id(),
             record_ids: vec![].into_boxed_slice(),
             artifacts: artifacts.into_boxed_slice(),
             issuance,
-            delivery: Delivery::NotStarted,
+            delivery: if snapshot.publications().is_empty() {
+                Delivery::NotStarted
+            } else {
+                Delivery::Pending
+            },
             delivery_observations: vec![].into_boxed_slice(),
             wait_termination: WaitTermination::Returned,
             recovery: recovery.into_boxed_slice(),

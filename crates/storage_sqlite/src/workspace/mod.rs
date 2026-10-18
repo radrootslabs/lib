@@ -10,6 +10,7 @@ mod attempt;
 mod crypto;
 mod evidence;
 mod fs;
+mod installation;
 mod issuance;
 mod operation;
 mod plan;
@@ -218,6 +219,19 @@ impl WorkspaceStore for NativeWorkspace {
     }
 }
 impl radroots_storage::command::OperationJournal for NativeWorkspace {
+    fn install_transition_and_outbox(
+        &self,
+        request: radroots_storage::command::InstallationRequest,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            radroots_storage::command::InstallationOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.install_chat(request, proof))
+    }
     fn operation_snapshot(
         &self,
         binding: WorkspaceBinding,

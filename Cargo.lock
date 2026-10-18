@@ -3103,6 +3103,7 @@ dependencies = [
  "radroots_identity",
  "serde",
  "serde_json",
+ "zeroize",
 ]
 
 [[package]]

@@ -86,6 +86,9 @@ The approved successor ownership and host contracts live in
 The common `OperationReceipt<T>` types are exported by this facade. Their owned
 observations preserve original identities and independent issuance, installation,
 delivery and caller-wait dimensions. The advanced native journal can supply a
-coherent T0/T1/S snapshot for this projection. Ordinary inbox job orchestration,
-T2 business installation/outbox and exact delivery remain required before the
-complete native submission workflow is available.
+coherent retained snapshot for this projection. Native T2 can install a bounded
+logical chat result and retain independent recipient publication work; its
+original installation time/transaction remain separate from later work and
+unknown issuance. `domain::ChatMessage` is the owned private business view.
+Ordinary inbox job orchestration and exact wrapping/delivery remain required
+before the complete native submission workflow is available.
