@@ -61,10 +61,14 @@ knowledge = ["client", "radroots_sdk/knowledge"]
 full = ["native", "radroots_sdk/full"]
 
 [dev-dependencies]
+radroots_protocol = { workspace = true, default-features = false, features = ["chat"] }
+radroots_signing = { workspace = true, features = ["chat"] }
+nostr = { workspace = true, default-features = false, features = ["std", "nip44"] }
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
 radroots_secrets = { workspace = true, features = ["file"] }
 futures = { workspace = true }
 radroots_event_codec = { workspace = true, default-features = false }
-radroots_nostr = { workspace = true, features = ["signing"] }
+radroots_nostr = { workspace = true, features = ["signing", "nip17"] }
 serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt"] }

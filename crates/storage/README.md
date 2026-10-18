@@ -305,3 +305,12 @@ every expected field; native capture must additionally compare its own retained
 claim. Capture borrows the caller's evidence and credential so failure cannot
 consume the sole obtained copy. It preserves the first optional observation and
 does not apply a new issuance deadline. Queries still require current access.
+
+
+`OperationJournal::operation_snapshot` queries the complete original T0/T1/S
+graph coherently. The concrete adapter authenticates every retained claim and
+obtained artifact, then compares both presence and absence together before
+returning. Per-recipient reports share one owned plan; bounded boxed collections
+discard spare caller capacity. The scoped progress digest excludes query time
+and diagnostic correlation. Structural snapshot construction supplies no
+backend qualification, dispatch permission or installed business result.

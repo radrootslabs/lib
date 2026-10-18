@@ -63,7 +63,10 @@ fn root_has_exact_exports_and_no_sdk_namespace() {
     assert!(
         ROOT.contains("pub use radroots_storage::workspace::{AttachmentInput, AttachmentProof};")
     );
-    assert_eq!(ROOT.matches("pub use ").count(), 6);
+    assert!(ROOT.contains(
+        "pub use radroots_execution::{\n    ArtifactObservation, BusinessInstallation, Delivery, DeliveryObservation, Issuance,\n    OperationReceipt, RecoveryRequirement, TargetObservation, WaitTermination,\n};"
+    ));
+    assert_eq!(ROOT.matches("pub use ").count(), 7);
     assert!(README.contains("```compile_fail\nuse radroots::sdk;\n```"));
 }
 

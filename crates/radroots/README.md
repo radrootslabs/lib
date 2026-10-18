@@ -81,3 +81,11 @@ The reviewed Rust API lives in
 [`contracts/api_baselines/radroots.txt`](../../contracts/api_baselines/radroots.txt).
 The approved successor ownership and host contracts live in
 [`shared_sdk_refactor.v1.json`](../../contracts/architecture/decisions/shared_sdk_refactor.v1.json).
+
+
+The common `OperationReceipt<T>` types are exported by this facade. Their owned
+observations preserve original identities and independent issuance, installation,
+delivery and caller-wait dimensions. The advanced native journal can supply a
+coherent T0/T1/S snapshot for this projection. Ordinary inbox job orchestration,
+T2 business installation/outbox and exact delivery remain required before the
+complete native submission workflow is available.

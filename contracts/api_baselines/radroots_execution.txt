@@ -71,10 +71,16 @@ pub fn radroots_execution::workspace::WorkspaceSession::fmt(&self, &mut core::fm
 pub radroots_execution::Admission::Confirmed
 pub radroots_execution::Admission::NotAdmitted
 pub radroots_execution::Admission::Unknown
+#[non_exhaustive] pub enum radroots_execution::BusinessInstallation
+pub radroots_execution::BusinessInstallation::Installed
+pub radroots_execution::BusinessInstallation::NotApplicable
+pub radroots_execution::BusinessInstallation::NotInstalled
+pub radroots_execution::BusinessInstallation::Uncertain
 #[non_exhaustive] pub enum radroots_execution::Code
 pub radroots_execution::Code::AuthorityConflict
 pub radroots_execution::Code::CapabilityUnavailable
 pub radroots_execution::Code::CommitUnknown
+pub radroots_execution::Code::DeadlineExceeded
 pub radroots_execution::Code::Deficit
 pub radroots_execution::Code::DeliveryPending
 pub radroots_execution::Code::GrantRevoked
@@ -103,6 +109,11 @@ impl radroots_execution::Code
 pub const radroots_execution::Code::ALL: &'static [Self]
 pub const fn radroots_execution::Code::as_str(self) -> &'static str
 pub const fn radroots_execution::Code::message(self) -> &'static str
+#[non_exhaustive] pub enum radroots_execution::Delivery
+pub radroots_execution::Delivery::NotStarted
+pub radroots_execution::Delivery::Observed
+pub radroots_execution::Delivery::Pending
+pub radroots_execution::Delivery::Unknown
 #[non_exhaustive] pub enum radroots_execution::Field
 pub radroots_execution::Field::Approval
 pub radroots_execution::Field::Authority
@@ -131,6 +142,12 @@ pub radroots_execution::InvalidErrorContext::RetainedRetryRequired
 impl core::error::Error for radroots_execution::InvalidErrorContext
 impl core::fmt::Display for radroots_execution::InvalidErrorContext
 pub fn radroots_execution::InvalidErrorContext::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_execution::Issuance
+pub radroots_execution::Issuance::None
+pub radroots_execution::Issuance::Obtained
+pub radroots_execution::Issuance::Pending
+pub radroots_execution::Issuance::ProvablyUnissued
+pub radroots_execution::Issuance::Unknown
 #[non_exhaustive] pub enum radroots_execution::Reason
 pub radroots_execution::Reason::Conflict
 pub radroots_execution::Reason::InvalidEncoding
@@ -144,6 +161,12 @@ pub const radroots_execution::Reason::ALL: &'static [Self]
 pub const fn radroots_execution::Reason::as_str(self) -> &'static str
 impl core::fmt::Display for radroots_execution::Reason
 pub fn radroots_execution::Reason::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_execution::RecoveryRequirement
+pub radroots_execution::RecoveryRequirement::ContinueOriginalOperation
+pub radroots_execution::RecoveryRequirement::InstallObtainedEvidence
+pub radroots_execution::RecoveryRequirement::ManualReconciliation
+pub radroots_execution::RecoveryRequirement::ReconcileIssuance
+pub radroots_execution::RecoveryRequirement::ResumeDelivery
 #[non_exhaustive] pub enum radroots_execution::RetryClass
 pub radroots_execution::RetryClass::AfterStateRefresh
 pub radroots_execution::RetryClass::ManualReconciliation
@@ -151,6 +174,40 @@ pub radroots_execution::RetryClass::Never
 pub radroots_execution::RetryClass::SafeSameOperation
 impl radroots_execution::RetryClass
 pub const fn radroots_execution::RetryClass::as_str(self) -> &'static str
+#[non_exhaustive] pub enum radroots_execution::TargetObservation
+pub radroots_execution::TargetObservation::Accepted
+pub radroots_execution::TargetObservation::Disconnected
+pub radroots_execution::TargetObservation::Rejected
+pub radroots_execution::TargetObservation::TimedOut
+pub radroots_execution::TargetObservation::Unknown
+#[non_exhaustive] pub enum radroots_execution::WaitTermination
+pub radroots_execution::WaitTermination::Cancelled
+pub radroots_execution::WaitTermination::ClientClosed
+pub radroots_execution::WaitTermination::DeadlineExceeded
+pub radroots_execution::WaitTermination::Returned
+pub struct radroots_execution::ArtifactObservation
+impl radroots_execution::ArtifactObservation
+pub const fn radroots_execution::ArtifactObservation::attempt_id(&self) -> core::option::Option<radroots_domain::identifier::SigningAttemptId>
+pub const fn radroots_execution::ArtifactObservation::capture_transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub const fn radroots_execution::ArtifactObservation::claim_transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub const fn radroots_execution::ArtifactObservation::expected_event(&self) -> core::option::Option<radroots_domain::identifier::EnvelopeEventId>
+pub const fn radroots_execution::ArtifactObservation::intent_digest(&self) -> core::option::Option<[u8; 32]>
+pub const fn radroots_execution::ArtifactObservation::issuance(&self) -> radroots_execution::Issuance
+pub const fn radroots_execution::ArtifactObservation::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
+pub const fn radroots_execution::ArtifactObservation::obtained_digest(&self) -> core::option::Option<[u8; 32]>
+pub const fn radroots_execution::ArtifactObservation::recipient(&self) -> core::option::Option<radroots_identity::key::PublicKey>
+pub const fn radroots_execution::ArtifactObservation::role(&self) -> radroots_protocol::intent::ArtifactRole
+impl core::fmt::Debug for radroots_execution::ArtifactObservation
+pub fn radroots_execution::ArtifactObservation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_execution::DeliveryObservation
+impl radroots_execution::DeliveryObservation
+pub const fn radroots_execution::DeliveryObservation::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
+pub const fn radroots_execution::DeliveryObservation::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
+pub const fn radroots_execution::DeliveryObservation::outcome(&self) -> radroots_execution::TargetObservation
+pub const fn radroots_execution::DeliveryObservation::recipient(&self) -> core::option::Option<radroots_identity::key::PublicKey>
+pub fn radroots_execution::DeliveryObservation::target(&self) -> &str
+impl core::fmt::Debug for radroots_execution::DeliveryObservation
+pub fn radroots_execution::DeliveryObservation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_execution::Detail
 impl radroots_execution::Detail
 pub const fn radroots_execution::Detail::field(self) -> radroots_execution::Field
@@ -173,4 +230,35 @@ pub const fn radroots_execution::OperationContext::admission_unknown(radroots_do
 pub const fn radroots_execution::OperationContext::operation_id(self) -> core::option::Option<radroots_domain::identifier::OperationId>
 pub const fn radroots_execution::OperationContext::proposed(core::option::Option<radroots_domain::identifier::OperationId>) -> Self
 pub const fn radroots_execution::OperationContext::retained(radroots_domain::identifier::OperationId) -> Self
+pub struct radroots_execution::OperationReceipt<T>
+impl radroots_execution::OperationReceipt<()>
+pub fn radroots_execution::OperationReceipt<()>::from_snapshot(&radroots_storage::command::snapshot::OperationSnapshot) -> Self
+impl<T> radroots_execution::OperationReceipt<T>
+pub const fn radroots_execution::OperationReceipt<T>::admission(&self) -> radroots_execution::Admission
+pub const fn radroots_execution::OperationReceipt<T>::admission_transaction_id(&self) -> radroots_domain::identifier::TransactionId
+pub fn radroots_execution::OperationReceipt<T>::artifacts(&self) -> &[radroots_execution::ArtifactObservation]
+pub const fn radroots_execution::OperationReceipt<T>::authority_checkpoint(&self) -> &radroots_domain::context::CheckpointRef
+pub const fn radroots_execution::OperationReceipt<T>::business_installation(&self) -> radroots_execution::BusinessInstallation
+pub fn radroots_execution::OperationReceipt<T>::business_result(&self) -> core::option::Option<&T>
+pub const fn radroots_execution::OperationReceipt<T>::command_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub fn radroots_execution::OperationReceipt<T>::conflicting_records(&self) -> &[radroots_domain::identifier::RecordId]
+pub fn radroots_execution::OperationReceipt<T>::conflicting_sources(&self) -> &[radroots_domain::identifier::SourceId]
+pub const fn radroots_execution::OperationReceipt<T>::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_execution::OperationReceipt<T>::delivery(&self) -> radroots_execution::Delivery
+pub fn radroots_execution::OperationReceipt<T>::delivery_observations(&self) -> &[radroots_execution::DeliveryObservation]
+pub const fn radroots_execution::OperationReceipt<T>::durable(&self) -> bool
+pub const fn radroots_execution::OperationReceipt<T>::error(&self) -> core::option::Option<radroots_execution::Error>
+pub const fn radroots_execution::OperationReceipt<T>::issuance(&self) -> radroots_execution::Issuance
+pub const fn radroots_execution::OperationReceipt<T>::issuance_window(&self) -> radroots_domain::issuance::IssuanceWindow
+pub const fn radroots_execution::OperationReceipt<T>::message_id(&self) -> core::option::Option<radroots_domain::identifier::MessageId>
+pub fn radroots_execution::OperationReceipt<T>::missing_sources(&self) -> &[radroots_domain::identifier::SourceId]
+pub const fn radroots_execution::OperationReceipt<T>::observed_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_execution::OperationReceipt<T>::operation_checkpoint(&self) -> radroots_domain::identifier::CheckpointDigest
+pub const fn radroots_execution::OperationReceipt<T>::plan_transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub fn radroots_execution::OperationReceipt<T>::record_ids(&self) -> &[radroots_domain::identifier::RecordId]
+pub fn radroots_execution::OperationReceipt<T>::recovery(&self) -> &[radroots_execution::RecoveryRequirement]
+pub const fn radroots_execution::OperationReceipt<T>::wait_termination(&self) -> radroots_execution::WaitTermination
+pub fn radroots_execution::OperationReceipt<T>::with_wait_termination(self, radroots_execution::WaitTermination) -> Self
+impl<T> core::fmt::Debug for radroots_execution::OperationReceipt<T>
+pub fn radroots_execution::OperationReceipt<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub type radroots_execution::Result<T> = core::result::Result<T, radroots_execution::Error>

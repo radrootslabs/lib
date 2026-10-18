@@ -17,10 +17,12 @@ default = []
 session = ["dep:futures"]
 signer_session = ["session", "dep:radroots_signing"]
 client_session = ["signer_session"]
-workspace_session = ["client_session", "dep:radroots_storage"]
+workspace_session = ["client_session", "receipts"]
+receipts = ["dep:radroots_storage", "radroots_storage/command_journal"]
 
 [dependencies]
 radroots_domain = { workspace = true, default-features = false }
+radroots_protocol = { workspace = true, default-features = false, features = ["intent"] }
 futures = { workspace = true, optional = true }
 radroots_signing = { workspace = true, default-features = false, optional = true }
 radroots_storage = { workspace = true, default-features = false, optional = true }

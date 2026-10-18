@@ -119,5 +119,29 @@
     "schema": 5,
     "schema_objects": 11,
     "remaining": "Ordinary client-owned orchestration and full operation receipts, route/provider approval, installation/outbox/delivery, target graph retirement and all consumer/final gates"
+  },
+  "native_operation_snapshot": {
+    "state": "native_snapshot_and_receipt_component_implemented",
+    "snapshot_owner": "radroots_storage::command::OperationSnapshot",
+    "query": "OperationJournal::operation_snapshot on the existing native owner",
+    "receipt_owner": "radroots_execution::OperationReceipt; ordinary facade reexports",
+    "native_schema": 5,
+    "transaction": "Authenticate complete original preparation/plan/expected claims and obtained evidence outside transaction; recheck current grant, all retained and absent facts and complete graph counts under BEGIN IMMEDIATE; confirmed rollback before reporting",
+    "extra_or_orphan_rows": "Recovery required; never silently omitted from a complete report",
+    "memory": "One complete owned plan and at most two sorted unique boxed recipient reports; no private raw bytes or automatic payload serialization in receipt diagnostics",
+    "progress_digest": "SHA-256 with radroots.operation.snapshot.v1 NUL separator; workspace/operation/command, T0 transaction/revision/window, authority checkpoint digest, optional T1 plan/transaction/time, each recipient claim/intent/time and obtained transaction/event/raw digest/optional time; excludes query time and diagnostic correlation",
+    "dimensions": [
+      "durable_admission",
+      "business_installation",
+      "per_recipient_issuance",
+      "delivery",
+      "caller_wait_termination",
+      "recovery"
+    ],
+    "first_issue_expiry": "Remaining unrequested work is blocked; obtained and unknown classifications are preserved. Expiry proves no nonissuance.",
+    "scope": "Original actor/workspace/authority/route, command/transactions/window, authority evidence checkpoint, logical-message and structured-record namespaces, protected artifact references and nullable original observations",
+    "construction_authority": "Pure values do not authenticate a principal, qualify a custom adapter, permit dispatch or prove installation/delivery",
+    "remaining": "Native T2 installation/publication work, exact wrapping/delivery, library-owned ordinary inbox jobs, complete browser/binding/consumer closure and final acceptance",
+    "count_bounds": "Whole-operation extra-recipient count checks stop at excess sentinels 3 claims, 3 obtained manifests and 9 parts; absent-operation checks use EXISTS. Existing protected per-recipient part bounds and authentication remain mandatory."
   }
 }

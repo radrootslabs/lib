@@ -7,7 +7,7 @@ use radroots_domain::{
     CommandDigest, EnvelopeEventId, GrantId, OperationId, PublicKey, SigningAttemptId,
     TransactionId, UnixSeconds, WorkspaceId,
 };
-use radroots_storage::command::{BoundSigningPlan, OperationError, SigningAttempt};
+use radroots_storage::command::{BoundSigningPlan, ClaimSnapshot, OperationError, SigningAttempt};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqliteConnection};
 use zeroize::Zeroizing;
@@ -184,9 +184,20 @@ pub(super) async fn unchanged(
     attempt: &SigningAttempt,
     protected: &[u8],
 ) -> Result<(), OperationError> {
-    let identity = attempt.bound_plan().prepared().identity();
+    unchanged_snapshot(
+        connection,
+        ClaimSnapshot::from_store_report(attempt),
+        protected,
+    )
+    .await
+}
+pub(super) async fn unchanged_snapshot(
+    connection: &mut SqliteConnection,
+    snapshot: ClaimSnapshot,
+    protected: &[u8],
+) -> Result<(), OperationError> {
     let count:i64=sqlx::query_scalar("SELECT count(*) FROM signing_attempts WHERE workspace=? AND operation_id=? AND recipient=? AND attempt_id=? AND transaction_id=? AND plan_digest=? AND intent_digest=? AND protected=?")
-        .bind(identity.workspace_id().as_bytes().as_slice()).bind(identity.operation_id().as_bytes().as_slice()).bind(attempt.seal().recipient().as_bytes().as_slice()).bind(attempt.attempt_id().as_bytes().as_slice()).bind(attempt.transaction_id().as_bytes().as_slice()).bind(attempt.bound_plan().plan().digest().as_slice()).bind(attempt.binding().digest().as_slice()).bind(protected).fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
+        .bind(snapshot.workspace_id().as_bytes().as_slice()).bind(snapshot.operation_id().as_bytes().as_slice()).bind(snapshot.recipient().as_bytes().as_slice()).bind(snapshot.attempt_id().as_bytes().as_slice()).bind(snapshot.transaction_id().as_bytes().as_slice()).bind(snapshot.plan_digest().as_slice()).bind(snapshot.intent().digest().as_slice()).bind(protected).fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
     if count != 1 {
         return Err(OperationError::RecoveryRequired);
     }

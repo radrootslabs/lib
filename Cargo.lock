@@ -3041,6 +3041,7 @@ name = "radroots"
 version = "0.1.0-alpha"
 dependencies = [
  "futures",
+ "nostr 0.44.7",
  "radroots_core",
  "radroots_domain",
  "radroots_event",
@@ -3048,6 +3049,7 @@ dependencies = [
  "radroots_execution",
  "radroots_identity",
  "radroots_nostr",
+ "radroots_protocol",
  "radroots_sdk",
  "radroots_secrets",
  "radroots_signing",
@@ -3056,6 +3058,7 @@ dependencies = [
  "radroots_trade",
  "radroots_transport",
  "serde_json",
+ "sqlx",
  "tempfile",
  "tokio",
  "toml 0.8.23",
@@ -3171,6 +3174,7 @@ dependencies = [
  "radroots_event",
  "radroots_event_codec",
  "radroots_identity",
+ "radroots_protocol",
  "radroots_signing",
  "radroots_storage",
 ]

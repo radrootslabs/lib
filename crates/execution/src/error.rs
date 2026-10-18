@@ -40,6 +40,7 @@ codes! {
     GrantRevoked => ("grant_revoked", "The authorizing grant was revoked", false),
     MissingAuthority => ("missing_authority", "Selected execution authority is missing", false),
     StaleState => ("stale_state", "Expected state must be refreshed and approved", false),
+    DeadlineExceeded => ("deadline_exceeded", "The captured first-issue deadline has elapsed", false),
     MissingSource => ("missing_source", "Required source evidence is missing", false),
     MissingHistory => ("missing_history", "Required authenticated history is missing", false),
     UnsupportedVersion => ("unsupported_version", "The version is unsupported", false),
@@ -191,6 +192,27 @@ pub struct Error {
 }
 
 impl Error {
+    #[cfg(feature = "receipts")]
+    pub(crate) const fn retained_deadline_exceeded(operation: OperationId) -> Self {
+        Self {
+            code: Code::DeadlineExceeded,
+            context: OperationContext::retained(operation),
+            retry: RetryClass::ManualReconciliation,
+            detail: Some(Detail::new(
+                crate::Field::Operation,
+                crate::Reason::OutOfRange,
+            )),
+        }
+    }
+    #[cfg(feature = "receipts")]
+    pub(crate) const fn retained_signing_unknown(operation: OperationId) -> Self {
+        Self {
+            code: Code::SigningUnknown,
+            context: OperationContext::retained(operation),
+            retry: RetryClass::ManualReconciliation,
+            detail: Some(Detail::new(crate::Field::Signer, crate::Reason::Unknown)),
+        }
+    }
     #[cfg(feature = "workspace_session")]
     pub(crate) const fn workspace(
         error: radroots_storage::workspace::WorkspaceError,

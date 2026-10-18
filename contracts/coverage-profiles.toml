@@ -5,7 +5,8 @@ test_threads = 1
 
 [profiles.crates."radroots_execution"]
 no_default_features = false
-features = ["session", "signer_session", "client_session", "workspace_session"]
+features = ["session", "signer_session", "client_session", "workspace_session", "radroots/native"]
+test_packages = ["radroots"]
 test_threads = 1
 
 [profiles.crates."radroots_protocol"]
@@ -45,5 +46,9 @@ features = ["full"]
 test_threads = 1
 
 [profiles.crates."radroots_storage"]
-features = ["command_journal"]
-test_packages = ["radroots_storage_sqlite"]
+features = ["command_journal", "radroots/native"]
+test_packages = ["radroots_storage_sqlite", "radroots"]
+
+[profiles.crates."radroots_storage_sqlite"]
+features = ["radroots/native"]
+test_packages = ["radroots"]

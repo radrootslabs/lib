@@ -12,10 +12,12 @@ use radroots_protocol::command::CapturedChatCommand;
 use radroots_transport::BoxFuture;
 
 mod issuance;
+mod snapshot;
 pub use issuance::{
     CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome,
     EvidenceReceipt, SealEvidence, SigningAttempt,
 };
+pub use snapshot::{ClaimSnapshot, OperationSnapshot, RecipientSnapshot, RetainedOperation};
 
 /// Fixed operation-store failures known before a successful admission commit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -254,6 +256,15 @@ impl fmt::Debug for AdmissionOutcome {
 /// Typed transaction port, implemented by actual shared storage adapters.
 /// Applications do not implement a second orchestration or stock engine here.
 pub trait OperationJournal: WorkspaceStore {
+    /// Queries one coherent original preparation/plan/per-recipient evidence
+    /// graph under current access. Reported absence grants no safe reissue.
+    fn operation_snapshot(
+        &self,
+        binding: WorkspaceBinding,
+        operation_id: OperationId,
+        expected_digest: Option<CommandDigest>,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<OperationSnapshot>, OperationError>>;
     /// Commits a first claim before dispatch. Retained/unknown outcomes never
     /// authorize another invocation; the concrete executor owns that decision.
     fn claim_attempt(

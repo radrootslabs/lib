@@ -98,3 +98,16 @@ Package upload is not authorized. Actual durable command transactions, outbox
 workers, inventory authority, public listing/private chat execution, browser
 attachment and new bindings remain separate requirements. Revalidating a context
 is not durable admission; the authoritative transaction must recheck its scope.
+
+
+`OperationReceipt<T>` owns the original captured scope, command and transaction
+identities, issuance window, authority checkpoint and coherent progress digest.
+It separates installation, per-recipient issuance, delivery and caller waiting.
+Its diagnostics contain no private command text or ciphertext. The optional
+`receipts` feature projects a Storage operation snapshot without I/O; the
+concrete adapter must qualify the underlying authenticated coherent query.
+The current native T0/T1/S profile reports no business installation or delivery.
+Expired remaining first issuance is blocked while obtained and unknown facts
+remain retained. Changing a wait observation cannot change those facts.
+Default receipt values remain usable without an async runtime on noStd targets;
+the Storage-backed projection is a separately selected host feature.

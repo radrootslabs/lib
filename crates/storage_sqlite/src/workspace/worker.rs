@@ -7,7 +7,8 @@ use radroots_domain::{CommandDigest, OperationId};
 use radroots_storage::command::{
     AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSeal, ChatSigningPlan,
     ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt, EvidenceCaptureOutcome,
-    OperationError, PlanBindingOutcome, PreparedOperation, SealEvidence, SigningAttempt,
+    OperationError, OperationSnapshot, PlanBindingOutcome, PreparedOperation, SealEvidence,
+    SigningAttempt,
 };
 use sqlx::{
     Connection, Row, SqliteConnection,
@@ -32,6 +33,13 @@ const QUEUE_CAPACITY: usize = 32;
 const TABLE: &str = "CREATE TABLE workspace_grant (singleton INTEGER PRIMARY KEY CHECK(singleton=1), workspace BLOB NOT NULL CHECK(length(workspace)=32), grant_id BLOB NOT NULL CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    Snapshot(
+        Box<WorkspaceBinding>,
+        OperationId,
+        Option<CommandDigest>,
+        AttachmentProof,
+        Reply<Option<OperationSnapshot>, OperationError>,
+    ),
     Claim(
         Box<ClaimAttemptRequest>,
         AttachmentProof,
@@ -171,6 +179,19 @@ impl Handle {
                     if ready.send(Ok(())).is_ok() {
                         while let Ok(Queued { job, _budget }) = requests.recv() {
                             match job {
+                                Job::Snapshot(binding, operation, digest, proof, reply) => {
+                                    let result = Journal {
+                                        connection: &mut connection,
+                                        namespace: &namespace,
+                                        selected: &input,
+                                        crypto: &crypto,
+                                        clock: clock.as_ref(),
+                                        uncertain: &mut uncertain,
+                                    }
+                                    .query_snapshot(*binding, operation, digest, proof)
+                                    .await;
+                                    let _ = reply.send(result);
+                                }
                                 Job::Claim(request, proof, reply) => {
                                     let result = Journal {
                                         connection: &mut connection,
@@ -371,6 +392,23 @@ impl Handle {
                 mpsc::TrySendError::Full(_) => WorkspaceError::Unavailable,
                 mpsc::TrySendError::Disconnected(_) => WorkspaceError::Closed,
             })
+    }
+    pub(super) async fn operation_snapshot(
+        &self,
+        binding: WorkspaceBinding,
+        operation: OperationId,
+        digest: Option<CommandDigest>,
+        proof: AttachmentProof,
+    ) -> Result<Option<OperationSnapshot>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Snapshot(
+            Box::new(binding),
+            operation,
+            digest,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
     pub(super) async fn claim_attempt(
         &self,

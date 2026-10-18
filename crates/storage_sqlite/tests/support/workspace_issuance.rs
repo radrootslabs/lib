@@ -513,6 +513,17 @@ async fn actual_claim_commit_uncertainty_latches_and_reopen_never_infers_a_safe_
     }
     assert!(matches!(
         store
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                None,
+                copy(&proof)
+            )
+            .await,
+        Err(OperationError::RecoveryRequired)
+    ));
+    assert!(matches!(
+        store
             .signing_attempt(
                 selection(&binding, &prepared, digest, recipients[0]),
                 copy(&proof)

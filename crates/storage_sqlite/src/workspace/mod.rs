@@ -14,6 +14,7 @@ mod issuance;
 mod operation;
 mod plan;
 mod record;
+mod snapshot;
 mod worker;
 
 #[cfg(test)]
@@ -217,6 +218,24 @@ impl WorkspaceStore for NativeWorkspace {
     }
 }
 impl radroots_storage::command::OperationJournal for NativeWorkspace {
+    fn operation_snapshot(
+        &self,
+        binding: WorkspaceBinding,
+        operation_id: radroots_domain::OperationId,
+        expected_digest: Option<radroots_domain::CommandDigest>,
+        proof: AttachmentProof,
+    ) -> BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::command::OperationSnapshot>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .operation_snapshot(binding, operation_id, expected_digest, proof),
+        )
+    }
     fn claim_attempt(
         &self,
         request: radroots_storage::command::ClaimAttemptRequest,

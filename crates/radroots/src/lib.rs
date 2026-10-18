@@ -21,5 +21,9 @@ pub use client::NativeConfig;
 pub use client::{Client, CloseReceipt, SessionStatus, StartMode};
 pub use radroots_domain::OperationId;
 pub use radroots_execution::workspace::{CommandContext, WorkspaceSession};
+pub use radroots_execution::{
+    ArtifactObservation, BusinessInstallation, Delivery, DeliveryObservation, Issuance,
+    OperationReceipt, RecoveryRequirement, TargetObservation, WaitTermination,
+};
 pub use radroots_execution::{Error, Result};
 pub use radroots_storage::workspace::{AttachmentInput, AttachmentProof};

@@ -1,7 +1,7 @@
 //! Append-only protected obtained bytes and exact original observation data.
 use super::{
     attempt,
-    crypto::{IssuancePayload, PRIVATE_PAYLOAD_MAX_BYTES, WorkspaceCrypto},
+    crypto::{IssuancePayload, IssuanceScope, PRIVATE_PAYLOAD_MAX_BYTES, WorkspaceCrypto},
 };
 use core::num::NonZeroU64;
 use radroots_domain::{
@@ -242,7 +242,13 @@ pub(super) async fn unchanged(
     attempt: &SigningAttempt,
     value: Option<&ProtectedEvidence>,
 ) -> Result<(), OperationError> {
-    let scope = attempt::scope(attempt);
+    unchanged_scope(connection, attempt::scope(attempt), value).await
+}
+pub(super) async fn unchanged_scope(
+    connection: &mut SqliteConnection,
+    scope: IssuanceScope,
+    value: Option<&ProtectedEvidence>,
+) -> Result<(), OperationError> {
     let count: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM seal_evidence WHERE workspace=? AND operation_id=? AND recipient=?",
     )

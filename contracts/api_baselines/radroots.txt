@@ -1,10 +1,19 @@
 pub mod radroots
+pub use radroots::ArtifactObservation
 pub use radroots::AttachmentInput
 pub use radroots::AttachmentProof
+pub use radroots::BusinessInstallation
 pub use radroots::CommandContext
+pub use radroots::Delivery
+pub use radroots::DeliveryObservation
 pub use radroots::Error
+pub use radroots::Issuance
 pub use radroots::OperationId
+pub use radroots::OperationReceipt
+pub use radroots::RecoveryRequirement
 pub use radroots::Result
+pub use radroots::TargetObservation
+pub use radroots::WaitTermination
 pub use radroots::WorkspaceSession
 pub mod radroots::client
 #[non_exhaustive] pub enum radroots::client::StartMode

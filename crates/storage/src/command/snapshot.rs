@@ -1,0 +1,350 @@
+//! Coherent retained graph reports. Values are not persistence qualification or
+//! dispatch permission; concrete owners must authenticate and compare all facts.
+use super::{BoundSigningPlan, EvidenceReceipt, OperationError, PreparedOperation, SigningAttempt};
+use core::fmt;
+use radroots_domain::{
+    CommandDigest, EnvelopeEventId, MessageId, OperationId, PublicKey, SigningAttemptId,
+    TransactionId, UnixSeconds, WorkspaceId,
+};
+use radroots_protocol::intent::IntentBinding;
+use sha2::{Digest, Sha256};
+use std::{boxed::Box, vec, vec::Vec};
+
+/// Fixed original claim facts, without another copy of its complete private plan.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct ClaimSnapshot {
+    workspace: WorkspaceId,
+    operation: OperationId,
+    command: CommandDigest,
+    plan: [u8; 32],
+    recipient: PublicKey,
+    attempt: SigningAttemptId,
+    transaction: TransactionId,
+    claimed_at: UnixSeconds,
+    event: EnvelopeEventId,
+    intent: IntentBinding,
+}
+impl ClaimSnapshot {
+    /// Copies a structural store report; no backend claim or nonissuance proof
+    /// is created by this conversion.
+    pub fn from_store_report(attempt: &SigningAttempt) -> Self {
+        let identity = attempt.bound_plan().prepared().identity();
+        Self {
+            workspace: identity.workspace_id(),
+            operation: identity.operation_id(),
+            command: identity.command_digest(),
+            plan: *attempt.bound_plan().plan().digest(),
+            recipient: attempt.seal().recipient(),
+            attempt: attempt.attempt_id(),
+            transaction: attempt.transaction_id(),
+            claimed_at: attempt.claimed_at(),
+            event: EnvelopeEventId::from_bytes(attempt.seal().event_id()),
+            intent: attempt.binding(),
+        }
+    }
+    /// Original workspace identity.
+    pub const fn workspace_id(self) -> WorkspaceId {
+        self.workspace
+    }
+    /// Original operation identity.
+    pub const fn operation_id(self) -> OperationId {
+        self.operation
+    }
+    /// Original semantic command commitment.
+    pub const fn command_digest(self) -> CommandDigest {
+        self.command
+    }
+    /// Original complete plan commitment.
+    pub const fn plan_digest(&self) -> &[u8; 32] {
+        &self.plan
+    }
+    /// Exact intended recipient.
+    pub const fn recipient(self) -> PublicKey {
+        self.recipient
+    }
+    /// Full-width retained attempt identity.
+    pub const fn attempt_id(self) -> SigningAttemptId {
+        self.attempt
+    }
+    /// Original claim transaction.
+    pub const fn transaction_id(self) -> TransactionId {
+        self.transaction
+    }
+    /// Original claim observation, never a fresh deadline.
+    pub const fn claimed_at(self) -> UnixSeconds {
+        self.claimed_at
+    }
+    /// Expected exact signed seal ID, not a logical record identity.
+    pub const fn event_id(self) -> EnvelopeEventId {
+        self.event
+    }
+    /// Exact original intent commitment.
+    pub const fn intent(self) -> IntentBinding {
+        self.intent
+    }
+}
+impl fmt::Debug for ClaimSnapshot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ClaimSnapshot(<redacted>)")
+    }
+}
+
+/// One expected recipient's independent retained facts. Absence of obtained
+/// evidence for a retained claim never establishes safe reissue.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct RecipientSnapshot {
+    recipient: PublicKey,
+    expected_event: Option<EnvelopeEventId>,
+    claim: Option<ClaimSnapshot>,
+    obtained: Option<EvidenceReceipt>,
+}
+impl RecipientSnapshot {
+    /// Structural report; the complete snapshot constructor checks its scope.
+    pub const fn from_store_report(
+        recipient: PublicKey,
+        expected_event: Option<EnvelopeEventId>,
+        claim: Option<ClaimSnapshot>,
+        obtained: Option<EvidenceReceipt>,
+    ) -> Self {
+        Self {
+            recipient,
+            expected_event,
+            claim,
+            obtained,
+        }
+    }
+    /// Exact expected recipient.
+    pub const fn recipient(self) -> PublicKey {
+        self.recipient
+    }
+    /// Expected retained seal ID, when a complete plan exists.
+    pub const fn expected_event(self) -> Option<EnvelopeEventId> {
+        self.expected_event
+    }
+    /// Original potential invocation; not permission to invoke again.
+    pub const fn claim(self) -> Option<ClaimSnapshot> {
+        self.claim
+    }
+    /// Original protected obtained-artifact reference and optional observation.
+    pub const fn obtained(self) -> Option<EvidenceReceipt> {
+        self.obtained
+    }
+}
+impl fmt::Debug for RecipientSnapshot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("RecipientSnapshot(<redacted>)")
+    }
+}
+
+/// One owned preparation and at most one complete plan, shared by all recipient
+/// reports without duplicating protected private plan data per recipient.
+pub enum RetainedOperation {
+    /// Confirmed preparation without a bound complete plan.
+    Prepared(PreparedOperation),
+    /// Confirmed preparation and complete immutable plan.
+    Planned(Box<BoundSigningPlan>),
+}
+impl RetainedOperation {
+    /// Borrows original committed preparation.
+    pub fn prepared(&self) -> &PreparedOperation {
+        match self {
+            Self::Prepared(value) => value,
+            Self::Planned(value) => value.prepared(),
+        }
+    }
+    /// Borrows the complete plan, if retained.
+    pub fn bound_plan(&self) -> Option<&BoundSigningPlan> {
+        match self {
+            Self::Prepared(_) => None,
+            Self::Planned(value) => Some(value),
+        }
+    }
+}
+impl fmt::Debug for RetainedOperation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("RetainedOperation(<redacted>)")
+    }
+}
+
+/// Bounded coherent T0/T1/S graph report. Construction checks data relationships
+/// only. It grants no authentication, backend qualification or installation fact.
+pub struct OperationSnapshot {
+    retained: RetainedOperation,
+    recipients: Box<[RecipientSnapshot]>,
+    observed_at: UnixSeconds,
+}
+impl OperationSnapshot {
+    /// Stable scoped progress identity over original transaction, command,
+    /// plan, claim and obtained references. Query time and diagnostic correlation
+    /// are excluded. Hashing grants no backend authority.
+    pub fn checkpoint_digest(&self) -> radroots_domain::CheckpointDigest {
+        let prepared = self.prepared();
+        let identity = prepared.identity();
+        let mut digest = Sha256::new();
+        digest.update(b"radroots.operation.snapshot.v1\0");
+        digest.update(identity.workspace_id().as_bytes());
+        digest.update(identity.operation_id().as_bytes());
+        digest.update(identity.command_digest().as_bytes());
+        digest.update(prepared.transaction_id().as_bytes());
+        digest.update(prepared.revision().get().to_be_bytes());
+        digest.update(prepared.issuance_window().prepared_at().get().to_be_bytes());
+        digest.update(
+            prepared
+                .issuance_window()
+                .first_issue_not_after()
+                .get()
+                .to_be_bytes(),
+        );
+        digest.update(
+            prepared
+                .request()
+                .binding()
+                .input()
+                .checkpoint()
+                .digest()
+                .as_bytes(),
+        );
+        match self.bound_plan() {
+            Some(bound) => {
+                digest.update([1]);
+                digest.update(bound.plan().digest());
+                digest.update(bound.transaction_id().as_bytes());
+                digest.update(bound.bound_at().get().to_be_bytes());
+            }
+            None => digest.update([0]),
+        }
+        for recipient in self.recipients() {
+            digest.update(recipient.recipient().as_bytes());
+            match recipient.claim() {
+                Some(claim) => {
+                    digest.update([1]);
+                    digest.update(claim.attempt_id().as_bytes());
+                    digest.update(claim.transaction_id().as_bytes());
+                    digest.update(claim.intent().digest());
+                    digest.update(claim.claimed_at().get().to_be_bytes());
+                }
+                None => digest.update([0]),
+            }
+            match recipient.obtained() {
+                Some(obtained) => {
+                    digest.update([1]);
+                    digest.update(obtained.transaction_id().as_bytes());
+                    digest.update(obtained.event_id().as_bytes());
+                    digest.update(obtained.digest());
+                    match obtained.observed_at_unix_ms() {
+                        Some(time) => {
+                            digest.update([1]);
+                            digest.update(time.get().to_be_bytes());
+                        }
+                        None => digest.update([0]),
+                    }
+                }
+                None => digest.update([0]),
+            }
+        }
+        radroots_domain::CheckpointDigest::from_bytes(digest.finalize().into())
+    }
+    /// Checks the exact complete recipient set, original claim scope and obtained
+    /// references. Concrete adapters must independently authenticate all rows and
+    /// compare both retained and absent facts in one coherent transaction.
+    pub fn from_store_report(
+        retained: RetainedOperation,
+        recipients: Vec<RecipientSnapshot>,
+        observed_at: UnixSeconds,
+    ) -> Result<Self, OperationError> {
+        if recipients.is_empty() || recipients.len() > 2 || observed_at.get() == 0 {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let prepared = retained.prepared();
+        let command = prepared.request().command();
+        let mut expected = vec![command.context().actor().participant(), command.peer()];
+        expected.sort_unstable();
+        expected.dedup();
+        if recipients.len() != expected.len() {
+            return Err(OperationError::RecoveryRequired);
+        }
+        for (recipient, expected) in recipients.iter().zip(expected) {
+            if recipient.recipient != expected {
+                return Err(OperationError::RecoveryRequired);
+            }
+            let Some(bound) = retained.bound_plan() else {
+                if recipient.expected_event.is_some()
+                    || recipient.claim.is_some()
+                    || recipient.obtained.is_some()
+                {
+                    return Err(OperationError::RecoveryRequired);
+                }
+                continue;
+            };
+            let seal = bound
+                .plan()
+                .seals()
+                .iter()
+                .find(|seal| seal.recipient() == expected)
+                .ok_or(OperationError::RecoveryRequired)?;
+            let event = EnvelopeEventId::from_bytes(seal.event_id());
+            if recipient.expected_event != Some(event) {
+                return Err(OperationError::RecoveryRequired);
+            }
+            if let Some(claim) = recipient.claim {
+                let identity = prepared.identity();
+                if claim.workspace != identity.workspace_id()
+                    || claim.operation != identity.operation_id()
+                    || claim.command != identity.command_digest()
+                    || &claim.plan != bound.plan().digest()
+                    || claim.recipient != expected
+                    || claim.event != event
+                    || claim.intent.operation_id() != identity.operation_id()
+                    || claim.intent.command_digest() != identity.command_digest().as_bytes()
+                    || claim.claimed_at < bound.bound_at()
+                    || claim.claimed_at >= prepared.issuance_window().first_issue_not_after()
+                {
+                    return Err(OperationError::RecoveryRequired);
+                }
+                if let Some(obtained) = recipient.obtained
+                    && (obtained.workspace_id() != claim.workspace
+                        || obtained.operation_id() != claim.operation
+                        || obtained.command_digest() != claim.command
+                        || obtained.attempt_id() != claim.attempt
+                        || obtained.recipient() != expected
+                        || obtained.event_id() != event)
+                {
+                    return Err(OperationError::RecoveryRequired);
+                }
+            } else if recipient.obtained.is_some() {
+                return Err(OperationError::RecoveryRequired);
+            }
+        }
+        Ok(Self {
+            retained,
+            recipients: recipients.into_boxed_slice(),
+            observed_at,
+        })
+    }
+    /// Original preparation, without a fabricated installed business result.
+    pub fn prepared(&self) -> &PreparedOperation {
+        self.retained.prepared()
+    }
+    /// Complete retained plan, when present.
+    pub fn bound_plan(&self) -> Option<&BoundSigningPlan> {
+        self.retained.bound_plan()
+    }
+    /// Exact original logical message identity, separate from seal event IDs.
+    pub fn message_id(&self) -> Option<MessageId> {
+        self.bound_plan().map(|bound| bound.plan().message_id())
+    }
+    /// Complete sorted unique recipient set and independent outcomes.
+    pub fn recipients(&self) -> &[RecipientSnapshot] {
+        &self.recipients
+    }
+    /// Actual query clock observation; never an issuance restart or global
+    /// freshness guarantee.
+    pub const fn observed_at(&self) -> UnixSeconds {
+        self.observed_at
+    }
+}
+impl fmt::Debug for OperationSnapshot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("OperationSnapshot(<redacted>)")
+    }
+}

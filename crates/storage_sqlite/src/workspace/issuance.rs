@@ -542,7 +542,7 @@ impl Journal<'_> {
         }
     }
 }
-async fn absent_claim(
+pub(super) async fn absent_claim(
     connection: &mut SqliteConnection,
     selected: &AttachmentInput,
     operation: OperationId,

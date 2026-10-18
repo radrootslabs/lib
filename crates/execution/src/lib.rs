@@ -5,6 +5,12 @@
 
 mod diagnostic;
 mod error;
+extern crate alloc;
+mod receipt;
+pub use receipt::{
+    ArtifactObservation, BusinessInstallation, Delivery, DeliveryObservation, Issuance,
+    OperationReceipt, RecoveryRequirement, TargetObservation, WaitTermination,
+};
 
 #[cfg(feature = "session")]
 extern crate std;

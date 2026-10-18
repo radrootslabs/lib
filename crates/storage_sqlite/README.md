@@ -236,3 +236,12 @@ observation clock; this grants no new issuance or read rights. The first raw
 representation and optional observation are immutable. Borrowed capture input
 keeps the caller's original through error or unknown completion. Evidence uses
 a protected manifest and at most four 16 KiB data parts, bounded before reads.
+
+
+The native operation snapshot reads and authenticates the original preparation,
+optional plan and complete expected peer/self outcomes before taking a write
+lock. It rechecks current access, all retained and absent facts and whole-graph
+counts under one `BEGIN IMMEDIATE`, rejecting extra or orphan rows. It performs
+no signing or graph mutation and confirms rollback before returning. Window
+expiry does not erase retained facts. The existing owner drains accepted reads
+after a lost observer and closes explicitly. Workspace schema 5 stays unchanged.
