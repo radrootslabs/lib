@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "radroots.execution.workspace.v1",
-  "state": "native_buyer_chat_preparation_component_implemented",
+  "state": "native_buyer_preparation_window_implemented",
   "ownership": {
     "domain": "Validated actor, authority, checkpoint and captured-context descriptors; descriptors grant no rights",
     "execution": "Owned authenticated workspace session and opaque captured command context",
@@ -63,7 +63,9 @@
     "Independent canonical command and approval-intent vectors and closed shape/byte/depth refusals",
     "Actual inquiry commit/reopen/replay, original correlation, digest conflict, proof/revocation/deadline and transaction-time grant checks",
     "Actual SQLite statement failure/confirmed rollback, deferred-constraint commit failure/unknown latch, lost observer and bounded queue/drain",
-    "Protected operation-context substitution refusal and predecessor-schema byte preservation"
+    "Protected operation-context substitution refusal and predecessor-schema byte preservation",
+    "Exact retained preparation/issuance timing bounds and invalid restored-window refusal",
+    "Actual first-window expiry/clock rollback between checked observation and T0, plus replay/reopen preserving the original window"
   ],
   "remaining": [
     "Complete operation receipts, authenticated reply/history and actual known-kind listing/chat T1/S/T2/D execution",
@@ -72,7 +74,7 @@
     "Actual browser/platform providers, generated bindings, coherent consumers and final acceptance"
   ],
   "implementation_claimed": true,
-  "implementation_scope": "Fresh protected local buyer attachment/context and actual inquiry Prepared admission/query only; no installed message, issuance/delivery, complete receipt, seller stock, remote pairing or general recovery qualification.",
+  "implementation_scope": "Fresh protected local buyer attachment/context and actual inquiry Prepared admission/query, including the retained checked preparation observation and fixed first-issue window. No installed message, issuance/delivery, complete receipt, seller stock, remote pairing or general recovery qualification.",
   "package_publication_authorized": false,
   "command_data": {
     "types": [
@@ -88,7 +90,7 @@
     "private_buffers": "Zeroizing retained canonical command and decoded private text; borrowed raw private JSON during parsing"
   },
   "prepared_journal": {
-    "schema_user_version": 2,
+    "schema_user_version": 3,
     "catalog": [
       "workspace_grant",
       "operations",
@@ -104,7 +106,10 @@
     "known_failure": "No write was attempted, or actual rollback completed; commit/rollback uncertainty never becomes a known failure",
     "unavailable_history": "Reply parents and order expectations are refused until authenticated history is implemented",
     "approval": "Caller-provided approval descriptors are refused without a qualified protected consent origin",
-    "predecessor_schema": "Preserve and refuse the prior grant-only namespace; no implicit rewrite, deletion, re-enrollment or import",
-    "transaction_recheck": "The short transaction matches complete workspace/operation, participant/grant, command type/digest, original transaction, prepared phase/revision and exact retained protected bytes; matching ciphertext alone cannot hide changed indexed facts."
+    "predecessor_schema": "Preserve and refuse grant-only schema 1 and preparation-without-window schema 2; no inferred timestamp, implicit rewrite, deletion, re-enrollment or import.",
+    "transaction_recheck": "The short transaction matches complete workspace/operation, participant/grant, command type/digest, original transaction, prepared phase/revision and exact retained protected bytes; matching ciphertext alone cannot hide changed indexed facts.",
+    "protected_payload_schema": "radroots.workspace.operation.v2",
+    "preparation_observation": "Retain the actual checked grant-authentication clock observation before protected command preparation; this is distinct from the earlier captured attachment observation.",
+    "first_issuance_window": "Immutable exclusive deadline, at most 120 seconds after preparation and no later than captured authorization expiry. Transaction-time clock rollback or expiry blocks new preparation. Exact replay/reopen preserves the original window, including after expiry. Expiry never proves nonissuance."
   }
 }

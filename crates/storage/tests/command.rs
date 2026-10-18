@@ -43,6 +43,9 @@ fn binding() -> WorkspaceBinding {
     .unwrap()
 }
 fn request() -> AdmissionRequest {
+    request_until(150)
+}
+fn request_until(not_after: u64) -> AdmissionRequest {
     let binding = binding();
     let input = binding.input();
     let context = CommandContextData::new(
@@ -53,7 +56,7 @@ fn request() -> AdmissionRequest {
         input.route_digest(),
         None,
         None,
-        UnixSeconds::new(150).unwrap(),
+        UnixSeconds::new(not_after).unwrap(),
         None,
     )
     .unwrap();
@@ -72,6 +75,26 @@ fn request() -> AdmissionRequest {
 }
 
 #[test]
+fn retained_window_cannot_precede_attachment_or_exceed_command_or_grant() {
+    for (prepared, deadline, authorization) in [(99, 150, 150), (100, 151, 150), (100, 201, 300)] {
+        let window = radroots_domain::IssuanceWindow::new(
+            UnixSeconds::new(prepared).unwrap(),
+            UnixSeconds::new(deadline).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            PreparedOperation::from_committed_store(
+                request_until(authorization),
+                TransactionId::from_bytes([8; 32]),
+                Sequence::new(1).unwrap(),
+                window,
+            ),
+            Err(OperationError::RecoveryRequired)
+        ));
+    }
+}
+
+#[test]
 fn structural_reports_preserve_full_original_anchor_without_minting_commit_proof() {
     let captured = request();
     let digest = captured.command().digest();
@@ -81,12 +104,29 @@ fn structural_reports_preserve_full_original_anchor_without_minting_commit_proof
     let parsed = AdmissionRequest::from_protected_wire(binding, &wire).unwrap();
     let transaction = TransactionId::from_bytes([8; 32]);
     assert!(matches!(
-        PreparedOperation::from_committed_store(request(), transaction, Sequence::new(0).unwrap()),
+        PreparedOperation::from_committed_store(
+            request(),
+            transaction,
+            Sequence::new(0).unwrap(),
+            radroots_domain::IssuanceWindow::capture(
+                UnixSeconds::new(100).unwrap(),
+                UnixSeconds::new(150).unwrap()
+            )
+            .unwrap()
+        ),
         Err(OperationError::RecoveryRequired)
     ));
-    let reported =
-        PreparedOperation::from_committed_store(parsed, transaction, Sequence::new(1).unwrap())
-            .unwrap();
+    let reported = PreparedOperation::from_committed_store(
+        parsed,
+        transaction,
+        Sequence::new(1).unwrap(),
+        radroots_domain::IssuanceWindow::capture(
+            UnixSeconds::new(100).unwrap(),
+            UnixSeconds::new(150).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
     let anchor = reported.identity();
     assert_eq!(reported.transaction_id(), transaction);
     assert_eq!(reported.revision().get(), 1);

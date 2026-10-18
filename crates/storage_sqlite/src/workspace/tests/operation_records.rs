@@ -72,7 +72,11 @@ async fn protected_operation_read_refuses_each_inconsistent_payload_and_sql_proj
         .unwrap();
     let value: Value = opened.expose_secret(|bytes| serde_json::from_slice(bytes).unwrap());
     for (pointer, replacement) in [
-        ("/version", json!(2)),
+        ("/version", json!(3)),
+        ("/prepared_at", json!("0")),
+        ("/prepared_at", json!("99")),
+        ("/first_issue_not_after", json!("100")),
+        ("/first_issue_not_after", json!("151")),
         ("/revision", json!("0")),
         ("/revision", json!("2")),
         ("/selection/endpoint", json!("local://changed")),

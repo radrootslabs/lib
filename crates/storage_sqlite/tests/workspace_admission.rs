@@ -133,13 +133,24 @@ impl Fixture {
         AttachmentProof,
         WorkspaceBinding,
     ) {
+        self.create_with_expiry(200).await
+    }
+    async fn create_with_expiry(
+        &self,
+        expiry: u64,
+    ) -> (
+        Arc<NativeWorkspace>,
+        AttachmentInput,
+        AttachmentProof,
+        WorkspaceBinding,
+    ) {
         let (store, input, proof) = NativeWorkspace::initialize_local_outbox(
             &self.path,
             LocalOutboxConfig::new(
                 key(),
                 key(),
                 "synthetic-device",
-                UnixSeconds::new(200).unwrap(),
+                UnixSeconds::new(expiry).unwrap(),
             )
             .unwrap(),
             self.crypto(),
@@ -179,6 +190,15 @@ fn copy(proof: &AttachmentProof) -> AttachmentProof {
     proof.with_secret(|secret| AttachmentProof::from_protected_input(secret).unwrap())
 }
 fn request(binding: &WorkspaceBinding, id: u8, text: &str, correlation: &str) -> AdmissionRequest {
+    request_until(binding, id, text, correlation, 150)
+}
+fn request_until(
+    binding: &WorkspaceBinding,
+    id: u8,
+    text: &str,
+    correlation: &str,
+    not_after: u64,
+) -> AdmissionRequest {
     let input = binding.input();
     let context = CommandContextData::new(
         OperationId::from_bytes([id; 32]),
@@ -188,7 +208,7 @@ fn request(binding: &WorkspaceBinding, id: u8, text: &str, correlation: &str) ->
         input.route_digest(),
         None,
         None,
-        UnixSeconds::new(150).unwrap(),
+        UnixSeconds::new(not_after).unwrap(),
         Some(CorrelationId::new(correlation).unwrap()),
     )
     .unwrap();
@@ -803,4 +823,156 @@ async fn bounded_admission_queue_refuses_overflow_and_drains_every_accepted_requ
             .await,
         Err(OperationError::Workspace(WorkspaceError::Closed))
     ));
+}
+
+#[tokio::test]
+async fn retained_first_issue_window_never_restarts_on_reopen_or_replay() {
+    let fixture = Fixture::new();
+    let (store, input, proof, binding) = fixture.create_with_expiry(2000).await;
+    let original = committed(
+        store
+            .admit_command_and_hold(
+                request_until(&binding, 66, "fixed window", "one", 900),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    let anchor = original.identity();
+    assert_eq!(original.issuance_window().prepared_at().get(), 100);
+    assert_eq!(
+        original.issuance_window().first_issue_not_after().get(),
+        220
+    );
+    store.close().await.unwrap();
+    fixture.clock.now.store(500, Ordering::SeqCst);
+    let reopened = fixture.reopen(input).await;
+    let recovered = reopened
+        .operation(
+            binding.clone(),
+            anchor.operation_id(),
+            Some(anchor.command_digest()),
+            copy(&proof),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered.issuance_window(), original.issuance_window());
+    let replay = committed(
+        reopened
+            .admit_command_and_hold(
+                request_until(&binding, 66, "fixed window", "retry", 900),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    assert_eq!(replay.identity(), anchor);
+    assert_eq!(replay.issuance_window(), original.issuance_window());
+    let fresh = committed(
+        reopened
+            .admit_command_and_hold(
+                request_until(&binding, 67, "new operation", "new", 900),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    assert_eq!(fresh.issuance_window().prepared_at().get(), 500);
+    assert_eq!(fresh.issuance_window().first_issue_not_after().get(), 620);
+    reopened.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn predecessor_preparation_schema_marker_is_preserved_without_inferring_a_window() {
+    let fixture = Fixture::new();
+    let (store, input, proof, binding) = fixture.create().await;
+    committed(
+        store
+            .admit_command_and_hold(request(&binding, 70, "retained", "one"), copy(&proof))
+            .await
+            .unwrap(),
+    );
+    store.close().await.unwrap();
+    let mut database = fixture.database().await;
+    sqlx::query("PRAGMA user_version=2")
+        .execute(&mut database)
+        .await
+        .unwrap();
+    database.close().await.unwrap();
+    let path = fixture.path.join("execution_v1.sqlite");
+    let before = std::fs::read(&path).unwrap();
+    assert!(matches!(
+        NativeWorkspace::open_existing(
+            &fixture.path,
+            input,
+            fixture.crypto(),
+            fixture.clock.clone()
+        )
+        .await,
+        Err(WorkspaceError::RecoveryRequired)
+    ));
+    assert_eq!(std::fs::read(path).unwrap(), before);
+}
+
+#[tokio::test]
+async fn transaction_checks_first_window_expiry_and_clock_rollback_after_preparation() {
+    let fixture = Fixture::new();
+    let (store, _, proof, binding) = fixture.create_with_expiry(2000).await;
+    for (id, changed_clock) in [(68, 220), (69, 90)] {
+        fixture.clock.now.store(100, Ordering::SeqCst);
+        let request = request_until(&binding, id, "clock boundary", "one", 900);
+        let (arrived, resume) = fixture.clock.arm(1);
+        let owner = store.clone();
+        let secret = copy(&proof);
+        let task = tokio::spawn(async move { owner.admit_command_and_hold(request, secret).await });
+        reached(arrived).await;
+        fixture.clock.now.store(changed_clock, Ordering::SeqCst);
+        resume.send(()).unwrap();
+        let result = task.await.unwrap();
+        if changed_clock == 220 {
+            assert!(matches!(result, Err(OperationError::DeadlineExceeded)));
+        } else {
+            assert!(matches!(
+                result,
+                Err(OperationError::Workspace(WorkspaceError::Unavailable))
+            ));
+        }
+        fixture.clock.now.store(100, Ordering::SeqCst);
+        assert!(
+            store
+                .operation(
+                    binding.clone(),
+                    OperationId::from_bytes([id; 32]),
+                    None,
+                    copy(&proof)
+                )
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+    store.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn new_preparation_refuses_clock_rollback_before_its_first_observation() {
+    let fixture = Fixture::new();
+    let (store, _, proof, binding) = fixture.create().await;
+    fixture.clock.now.store(90, Ordering::SeqCst);
+    assert!(matches!(
+        store
+            .admit_command_and_hold(request(&binding, 71, "clock rollback", "one"), copy(&proof))
+            .await,
+        Err(OperationError::Workspace(WorkspaceError::Unavailable))
+    ));
+    fixture.clock.now.store(100, Ordering::SeqCst);
+    assert!(
+        store
+            .operation(binding, OperationId::from_bytes([71; 32]), None, proof)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    store.close().await.unwrap();
 }

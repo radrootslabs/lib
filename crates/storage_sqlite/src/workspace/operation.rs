@@ -1,7 +1,9 @@
 //! Retained non-stock command preparation. No signing or delivery occurs here.
 
 use super::{AttachmentInput, WorkspaceBinding, crypto::WorkspaceCrypto};
-use radroots_domain::{CommandDigest, OperationId, Sequence, TransactionId, UnixSeconds};
+use radroots_domain::{
+    CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId, UnixSeconds,
+};
 use radroots_storage::command::{AdmissionRequest, OperationError, PreparedOperation};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqliteConnection};
@@ -21,6 +23,8 @@ struct Encoded<'a> {
     captured_observed_at: UnixSeconds,
     transaction_id: TransactionId,
     revision: Sequence,
+    prepared_at: UnixSeconds,
+    first_issue_not_after: UnixSeconds,
     command: &'a serde_json::value::RawValue,
 }
 #[derive(Deserialize)]
@@ -34,6 +38,8 @@ struct Decoded<'a> {
     captured_observed_at: UnixSeconds,
     transaction_id: TransactionId,
     revision: Sequence,
+    prepared_at: UnixSeconds,
+    first_issue_not_after: UnixSeconds,
     #[serde(borrow)]
     command: &'a serde_json::value::RawValue,
 }
@@ -41,11 +47,12 @@ struct Decoded<'a> {
 pub(super) async fn protect(
     request: &AdmissionRequest,
     transaction_id: TransactionId,
+    window: IssuanceWindow,
     crypto: &WorkspaceCrypto,
 ) -> Result<Vec<u8>, OperationError> {
     let binding = request.binding();
     let encoded = Encoded {
-        version: 1,
+        version: 2,
         selection: binding.input(),
         principal: binding.principal_id(),
         grant_revision: binding.grant_revision(),
@@ -53,6 +60,8 @@ pub(super) async fn protect(
         captured_observed_at: binding.observed_at(),
         transaction_id,
         revision: Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?,
+        prepared_at: window.prepared_at(),
+        first_issue_not_after: window.first_issue_not_after(),
         command: serde_json::from_slice(request.command().protected_wire())
             .map_err(|_| OperationError::InvalidCommand)?,
     };
@@ -109,7 +118,7 @@ pub(super) async fn read(
     let snapshot = plaintext.expose_secret(|bytes| {
         let decoded: Decoded<'_> =
             serde_json::from_slice(bytes).map_err(|_| OperationError::RecoveryRequired)?;
-        if decoded.version != 1
+        if decoded.version != 2
             || decoded.revision.get() == 0
             || phase != "prepared"
             || revision != 1
@@ -154,6 +163,8 @@ pub(super) async fn read(
             request,
             decoded.transaction_id,
             decoded.revision,
+            IssuanceWindow::new(decoded.prepared_at, decoded.first_issue_not_after)
+                .map_err(|_| OperationError::RecoveryRequired)?,
         )?;
         Ok::<_, OperationError>(snapshot)
     })?;

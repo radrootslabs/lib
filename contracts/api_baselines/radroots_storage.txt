@@ -797,8 +797,9 @@ pub const fn radroots_storage::command::CommitAttempt::transaction_id(self) -> c
 pub const fn radroots_storage::command::CommitAttempt::workspace_id(self) -> radroots_domain::identifier::WorkspaceId
 pub struct radroots_storage::command::PreparedOperation
 impl radroots_storage::command::PreparedOperation
-pub fn radroots_storage::command::PreparedOperation::from_committed_store(radroots_storage::command::AdmissionRequest, radroots_domain::identifier::TransactionId, radroots_domain::context::Sequence) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::PreparedOperation::from_committed_store(radroots_storage::command::AdmissionRequest, radroots_domain::identifier::TransactionId, radroots_domain::context::Sequence, radroots_domain::issuance::IssuanceWindow) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::PreparedOperation::identity(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::command::PreparedOperation::issuance_window(&self) -> radroots_domain::issuance::IssuanceWindow
 pub const fn radroots_storage::command::PreparedOperation::request(&self) -> &radroots_storage::command::AdmissionRequest
 pub const fn radroots_storage::command::PreparedOperation::revision(&self) -> radroots_domain::context::Sequence
 pub const fn radroots_storage::command::PreparedOperation::transaction_id(&self) -> radroots_domain::identifier::TransactionId

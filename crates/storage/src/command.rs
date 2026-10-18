@@ -4,7 +4,9 @@
 
 use crate::workspace::{AttachmentProof, WorkspaceBinding, WorkspaceError, WorkspaceStore};
 use core::fmt;
-use radroots_domain::{CommandDigest, OperationId, Sequence, TransactionId, WorkspaceId};
+use radroots_domain::{
+    CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId, WorkspaceId,
+};
 use radroots_protocol::command::CapturedChatCommand;
 use radroots_transport::BoxFuture;
 
@@ -163,6 +165,7 @@ pub struct PreparedOperation {
     request: Box<AdmissionRequest>,
     transaction_id: TransactionId,
     revision: Sequence,
+    issuance_window: IssuanceWindow,
 }
 impl PreparedOperation {
     /// Validates a concrete store's structural report. The adapter must first
@@ -171,14 +174,20 @@ impl PreparedOperation {
         request: AdmissionRequest,
         transaction_id: TransactionId,
         revision: Sequence,
+        issuance_window: IssuanceWindow,
     ) -> Result<Self, OperationError> {
-        if revision.get() == 0 {
+        if revision.get() == 0
+            || issuance_window.prepared_at() < request.binding().observed_at()
+            || issuance_window.first_issue_not_after() > request.command().context().not_after()
+            || issuance_window.first_issue_not_after() > request.binding().expires_at()
+        {
             return Err(OperationError::RecoveryRequired);
         }
         Ok(Self {
             request: Box::new(request),
             transaction_id,
             revision,
+            issuance_window,
         })
     }
     /// Borrows the captured original request, including its diagnostic correlation.
@@ -192,6 +201,11 @@ impl PreparedOperation {
     /// Returns the retained monotonic operation revision.
     pub const fn revision(&self) -> Sequence {
         self.revision
+    }
+    /// Returns the original preparation observation and first-issue deadline.
+    /// It remains historical after expiry and never establishes nonissuance.
+    pub const fn issuance_window(&self) -> IssuanceWindow {
+        self.issuance_window
     }
     /// Returns the exact retained identity/commitment anchor.
     pub fn identity(&self) -> CommitAttempt {

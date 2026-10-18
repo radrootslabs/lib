@@ -2,7 +2,7 @@ use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
     fs::Namespace, operation, record::GrantRecord, worker,
 };
-use radroots_domain::{CommandDigest, OperationId, TransactionId};
+use radroots_domain::{CommandDigest, IssuanceWindow, OperationId, TransactionId};
 use radroots_storage::command::{
     AdmissionOutcome, AdmissionRequest, CommitAttempt, OperationError, PreparedOperation,
 };
@@ -22,7 +22,7 @@ impl Journal<'_> {
         &mut self,
         binding: &WorkspaceBinding,
         proof: &AttachmentProof,
-    ) -> Result<(GrantRecord, Vec<u8>), OperationError> {
+    ) -> Result<(GrantRecord, Vec<u8>, WorkspaceBinding), OperationError> {
         if *self.uncertain {
             return Err(OperationError::RecoveryRequired);
         }
@@ -40,7 +40,7 @@ impl Journal<'_> {
         let current = record.authenticate(binding.input(), proof, self.clock.now()?)?;
         same_binding(binding, &current)?;
         self.namespace.validate()?;
-        Ok((record, protected))
+        Ok((record, protected, current))
     }
 
     pub(super) async fn admit(
@@ -48,7 +48,7 @@ impl Journal<'_> {
         request: AdmissionRequest,
         proof: AttachmentProof,
     ) -> Result<AdmissionOutcome, OperationError> {
-        let (record, grant) = self.access(request.binding(), &proof).await?;
+        let (record, grant, observed) = self.access(request.binding(), &proof).await?;
         let context = request.command().context();
         let workspace = context.workspace_id();
         let operation_id = context.operation_id();
@@ -95,10 +95,15 @@ impl Journal<'_> {
         if context.approval().is_some() {
             return Err(OperationError::UnverifiedApproval);
         }
+        if observed.observed_at() < request.binding().observed_at() {
+            return Err(super::WorkspaceError::Unavailable.into());
+        }
+        let window = IssuanceWindow::capture(observed.observed_at(), context.not_after())
+            .map_err(|_| OperationError::DeadlineExceeded)?;
         let transaction_id = TransactionId::from_bytes(super::random()?);
         let anchor = CommitAttempt::new(workspace, operation_id, digest, Some(transaction_id));
         // Encryption/provider work finishes before opening the write transaction.
-        let protected = operation::protect(&request, transaction_id, self.crypto).await?;
+        let protected = operation::protect(&request, transaction_id, window, self.crypto).await?;
         let mut transaction = self
             .connection
             .begin_with("BEGIN IMMEDIATE")
@@ -116,7 +121,10 @@ impl Journal<'_> {
                 self.clock,
             )
             .await?;
-            if context.not_after() <= current.observed_at()
+            if current.observed_at() < window.prepared_at() {
+                return Err(super::WorkspaceError::Unavailable.into());
+            }
+            if window.first_issue_not_after() <= current.observed_at()
                 || context.not_after() > current.expires_at()
             {
                 return Err(OperationError::DeadlineExceeded);
@@ -140,6 +148,7 @@ impl Journal<'_> {
                 request,
                 transaction_id,
                 radroots_domain::Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?,
+                window,
             )?,
         ))
     }
@@ -151,7 +160,7 @@ impl Journal<'_> {
         digest: Option<CommandDigest>,
         proof: AttachmentProof,
     ) -> Result<Option<PreparedOperation>, OperationError> {
-        let (record, grant) = self.access(&binding, &proof).await?;
+        let (record, grant, _) = self.access(&binding, &proof).await?;
         let result =
             operation::read(self.connection, self.selected, operation_id, self.crypto).await?;
         if let Some((snapshot, _)) = &result {

@@ -357,7 +357,7 @@ async fn initialize(
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
-        sqlx::query("PRAGMA user_version=2")
+        sqlx::query("PRAGMA user_version=3")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -379,7 +379,7 @@ async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if version != 2 {
+    if version != 3 {
         return Err(WorkspaceError::RecoveryRequired);
     }
     let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=3 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 ELSE 0 END)=3 THEN 1 ELSE 0 END FROM sqlite_schema")

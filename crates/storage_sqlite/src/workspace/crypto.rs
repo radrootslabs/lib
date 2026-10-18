@@ -187,7 +187,7 @@ fn operation_context(
             .map_err(|_| WorkspaceError::InvalidInput)?,
         EnvelopeSubject::parse("workspace_operation", format!("{workspace}{operation}"))
             .map_err(|_| WorkspaceError::InvalidInput)?,
-        PayloadSchemaId::parse("radroots.workspace.operation.v1")
+        PayloadSchemaId::parse("radroots.workspace.operation.v2")
             .map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }

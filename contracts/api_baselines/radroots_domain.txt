@@ -230,6 +230,12 @@ impl serde_core::ser::Serialize for radroots_domain::GrantId
 pub fn radroots_domain::GrantId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::GrantId
 pub fn radroots_domain::GrantId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::IssuanceWindow
+impl radroots_domain::IssuanceWindow
+pub fn radroots_domain::IssuanceWindow::capture(radroots_domain::UnixSeconds, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::ContextError>
+pub const fn radroots_domain::IssuanceWindow::first_issue_not_after(self) -> radroots_domain::UnixSeconds
+pub fn radroots_domain::IssuanceWindow::new(radroots_domain::UnixSeconds, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::ContextError>
+pub const fn radroots_domain::IssuanceWindow::prepared_at(self) -> radroots_domain::UnixSeconds
 pub struct radroots_domain::MessageId(_)
 impl radroots_domain::MessageId
 pub const fn radroots_domain::MessageId::as_bytes(&self) -> &[u8; 32]
@@ -400,3 +406,4 @@ impl serde_core::ser::Serialize for radroots_domain::WorkspaceId
 pub fn radroots_domain::WorkspaceId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::WorkspaceId
 pub fn radroots_domain::WorkspaceId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub const radroots_domain::FIRST_ISSUANCE_MAX_SECONDS: u64

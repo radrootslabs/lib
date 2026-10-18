@@ -8,6 +8,7 @@ extern crate alloc;
 mod amount;
 mod context;
 mod identifier;
+mod issuance;
 
 /// The identity-owned validated participant key; no second key type is defined.
 pub use radroots_identity::PublicKey;
@@ -22,3 +23,4 @@ pub use identifier::{
     IdentifierError, MessageId, OperationId, OrderId, RecordId, RouteDigest, SourceId, ThreadId,
     TransactionId, WorkspaceId,
 };
+pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};
