@@ -16,8 +16,25 @@ pub const SECRET_MATERIAL_MAX_BYTES: usize = 64 * 1024;
 /// Maximum protected value accepted by the generic wrapping boundary.
 pub const WRAPPED_SECRET_MAX_BYTES: usize = 128 * 1024;
 
-/// A sendable provider future that does not prescribe an executor.
+/// Native providers retain thread-safe ownership; browser providers may retain
+/// local objects. This marker grants no residency or security capability.
+#[cfg(not(target_arch = "wasm32"))]
+pub trait HostBound: Send + Sync {}
+#[cfg(not(target_arch = "wasm32"))]
+impl<T: Send + Sync + ?Sized> HostBound for T {}
+/// Native providers retain thread-safe ownership; browser providers may retain
+/// local objects. This marker grants no residency or security capability.
+#[cfg(target_arch = "wasm32")]
+pub trait HostBound {}
+#[cfg(target_arch = "wasm32")]
+impl<T: ?Sized> HostBound for T {}
+
+/// Native provider future without a prescribed executor.
+#[cfg(not(target_arch = "wasm32"))]
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+/// Browser-local provider future without a prescribed executor.
+#[cfg(target_arch = "wasm32")]
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 /// Opaque, single-owner plaintext material that zeroizes on drop.
 ///
@@ -237,7 +254,7 @@ impl<'a> UnwrapRequest<'a> {
 }
 
 /// Executor-neutral, dyn-compatible data-key wrapping.
-pub trait KeyWrapping: Send + Sync {
+pub trait KeyWrapping: HostBound {
     /// Wraps explicit caller-owned plaintext for the selected reference.
     fn wrap<'a>(&'a self, request: WrapRequest<'a>) -> BoxFuture<'a, Result<WrappedSecret, Error>>;
 

@@ -104,6 +104,14 @@ are native host adapters; `memory` is available on standard-library targets.
 No feature installs a global provider, starts a runtime, generates key
 material, selects a fallback, opens storage, or performs a credential prompt.
 
+Provider and wrapping ownership is target-aware through
+`wrapping::HostBound`: native hosts retain `Send + Sync` and sendable futures;
+WASM hosts may retain local objects and local futures, including scoped
+`Rc`/`RefCell` callbacks. This changes no residency, presence or hardware claim.
+Envelope migration validators follow the same host boundary. Hosts still own
+accepted work and callback lifetimes; the SPI starts no executor or background
+task and supplies no unsafe thread bridge.
+
 ## Security and serialization contract
 
 `SecretMaterial` is bounded, single-owner, zeroizing plaintext. It implements

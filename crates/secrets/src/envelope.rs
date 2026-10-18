@@ -349,7 +349,7 @@ impl EncryptedEnvelope {
         material: SealMaterial,
     ) -> Result<LegacyV1ResealResult, Error>
     where
-        V: Fn(&[u8]) -> bool + Send + Sync,
+        V: Fn(&[u8]) -> bool + crate::wrapping::HostBound,
     {
         if material.nonce == self.nonce {
             return Err(Error::LegacyEntropyReuse);

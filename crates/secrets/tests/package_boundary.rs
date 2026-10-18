@@ -77,7 +77,7 @@ fn production_sources_publish_only_the_approved_traits() {
 
     assert_eq!(
         public_traits,
-        ["KeyWrapping", "SecretProvider"]
+        ["HostBound", "KeyWrapping", "SecretProvider"]
             .into_iter()
             .map(str::to_owned)
             .collect()

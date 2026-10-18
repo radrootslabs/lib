@@ -5,6 +5,9 @@ use radroots_storage_indexeddb::{
 };
 use wasm_bindgen::prelude::*;
 
+mod protected;
+pub use protected::protected_round_trip;
+
 fn failure(error: Error) -> JsValue {
     JsValue::from_str(error.code())
 }

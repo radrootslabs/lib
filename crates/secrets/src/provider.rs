@@ -185,7 +185,7 @@ impl SecretCapabilities {
 }
 
 /// A wrapping provider selected and owned by the host.
-pub trait SecretProvider: KeyWrapping + Send + Sync {
+pub trait SecretProvider: KeyWrapping {
     /// Returns the adapter family implemented by this provider.
     fn backend_kind(&self) -> BackendKind;
 

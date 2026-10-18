@@ -20,9 +20,9 @@ const server = createServer(async (req,res) => {
     }
     if (path.endsWith('/worker.js')) {
       res.setHeader('content-type','text/javascript');
-      res.end(`import init, {Fixture} from './fixture.js';
+      res.end(`import init, {Fixture,protected_round_trip} from './fixture.js';
         await init();
-        self.onmessage=async()=>{try{const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
+        self.onmessage=async()=>{try{await protected_round_trip(79);const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
         self.postMessage({ready:true});`); return;
     }
     res.setHeader('content-type',path.endsWith('.wasm') ? 'application/wasm' : 'text/javascript');
@@ -40,7 +40,7 @@ try {
   page.on('console',message=>{if(message.type()==='log')console.log(message.text());});
   await page.goto(`http://127.0.0.1:${server.address().port}/index.html`);
   const result=await page.evaluate(async()=>{
-    const {default:init,Fixture}=await import('./fixture.js'); await init();
+    const {default:init,Fixture,protected_round_trip}=await import('./fixture.js'); await init();
     console.log('STEP wasm_initialized');
     const events=[];
     const nativeTransaction=IDBDatabase.prototype.transaction;
@@ -56,6 +56,7 @@ try {
     const tests=[];
     const passed=name=>{tests.push(name);console.log('PASS '+name);};
     try {
+      await protected_round_trip(78);passed('local provider and migration validator across real protected IndexedDB reopen');
       await rejects(()=>Fixture.open(12,false),'missing_namespace');
       console.log('STEP missing_existing_refused');
       const db=await Fixture.open(12,true);

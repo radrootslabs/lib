@@ -143,6 +143,22 @@ fn provider_traits_are_dyn_compatible_and_round_trip_opaque_material() {
     assert_eq!(format!("{wrapped:?}"), "WrappedSecret(<redacted>)");
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn native_provider_objects_and_borrowed_futures_retain_thread_bounds() {
+    fn thread_safe<T: Send + Sync + ?Sized>() {}
+    fn send<T: Send>(_: T) {}
+    thread_safe::<dyn KeyWrapping>();
+    thread_safe::<dyn SecretProvider>();
+    let provider = provider(BackendKind::Memory, SecretCapabilities::unavailable());
+    let reference = reference(BackendKind::Memory);
+    let context = context();
+    let plaintext = SecretMaterial::from_slice(&[1; 32]).unwrap();
+    let wrapped = WrappedSecret::from_bytes(vec![1; 32]).unwrap();
+    send(provider.wrap(WrapRequest::new(&reference, &context, &plaintext)));
+    send(provider.unwrap(UnwrapRequest::new(&reference, &context, &wrapped)));
+}
+
 #[test]
 fn exact_selection_never_falls_back_to_another_backend() {
     let memory = provider(
