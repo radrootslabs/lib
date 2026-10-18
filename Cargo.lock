@@ -3648,6 +3648,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_storage_indexeddb"
+version = "0.1.0-alpha"
+dependencies = [
+ "futures",
+ "js-sys",
+ "radroots_storage",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "radroots_storage_sqlite"
 version = "0.1.0-alpha"
 dependencies = [

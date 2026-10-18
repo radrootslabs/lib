@@ -14,6 +14,7 @@ members = [
   "crates/secrets",
   "crates/storage",
   "crates/storage_sqlite",
+  "crates/storage_indexeddb",
   "crates/sync",
   "crates/geonames",
   "crates/nostrdb",
@@ -153,6 +154,7 @@ radroots_secrets = { package = "radroots_secrets", path = "crates/secrets", vers
 radroots_signing = { package = "radroots_signing", path = "crates/signing", version = "=0.1.0-alpha", default-features = false }
 radroots_storage = { package = "radroots_storage", path = "crates/storage", version = "=0.1.0-alpha", default-features = false }
 radroots_storage_sqlite = { package = "radroots_storage_sqlite", path = "crates/storage_sqlite", version = "=0.1.0-alpha", default-features = false }
+radroots_storage_indexeddb = { path = "crates/storage_indexeddb", version = "=0.1.0-alpha" }
 radroots_sync = { package = "radroots_sync", path = "crates/sync", version = "=0.1.0-alpha", default-features = false }
 radroots_trade = { package = "radroots_trade", path = "crates/trade", version = "=0.1.0-alpha", default-features = false }
 radroots_transport = { package = "radroots_transport", path = "crates/transport", version = "=0.1.0-alpha", default-features = false }
@@ -273,7 +275,9 @@ url_nostd = { package = "url", version = "2", default-features = false }
 uuid = { version = "1.22.0", features = ["v4", "v7"] }
 uniffi = { version = "0.29.4" }
 wasm-bindgen = { version = "0.2" }
+wasm-bindgen-futures = { version = "0.4" }
 wasm-bindgen-test = { version = "0.3" }
+web-sys = { version = "0.3" }
 webpki-roots = { version = "0.26.11" }
 walkdir = { version = "2" }
 x509-parser = { version = "0.17", default-features = false }

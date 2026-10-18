@@ -7,7 +7,7 @@ rust_version = "1.99.0"
 edition = "2024"
 resolver = "3"
 public_package_count = 21
-package_count = 53
+package_count = 54
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
 native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
@@ -346,6 +346,24 @@ source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/nostr_connect"
 source_tree_sha256 = "10cb6c86a37d11fdf09aa8f47486e504b7ad94d2e0ba92f241442ec10a4578b5"
 compatibility = ["rust_api", "wire", "security", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_storage_indexeddb"
+path = "crates/storage_indexeddb"
+state = "active"
+tier = "adapter"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["wasm32"]
+groups = ["coverage_required", "wasm"]
+owners = ["storage"]
+permitted_dependency_tiers = ["spi"]
+provenance_kind = "native"
+introduction_tree_sha256 = "82fc3620ff91692beab1d10d0f5384dc48fa236f0fe14d506ec12f28c9759b6c"
+compatibility = ["package_private", "rust_api"]
 replaces = []
 
 [[package]]

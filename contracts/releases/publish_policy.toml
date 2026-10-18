@@ -63,6 +63,7 @@ private = [
   "radroots_service_host",
   "radroots_service_sqlite",
   "radroots_sql_core",
+  "radroots_storage_indexeddb",
 ]
 build_codegen = [
   "radroots_core_bindings",

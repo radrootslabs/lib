@@ -1,5 +1,5 @@
 schema = "radroots.workspace.platform-inventory.v1"
-catalog_sha256 = "407a02944413642b772593c6bfd23967daccd0a21cb2daabef509aafa49f311a"
+catalog_sha256 = "a64c4056370fcd715f6f13df879c71cf34f22520f29a53c0b8b17c7e9d17bde7"
 
 [[platform]]
 id = "any"
@@ -11,4 +11,4 @@ packages = ["radroots_core_bindings", "radroots_event_bindings", "radroots_geona
 
 [[platform]]
 id = "wasm32"
-packages = ["radroots_event_codec_wasm", "radroots_replica_store_wasm", "radroots_replica_sync_wasm", "radroots_sdk_sql_wasm_runtime", "radroots_sql_core"]
+packages = ["radroots_event_codec_wasm", "radroots_replica_store_wasm", "radroots_replica_sync_wasm", "radroots_sdk_sql_wasm_runtime", "radroots_sql_core", "radroots_storage_indexeddb"]
