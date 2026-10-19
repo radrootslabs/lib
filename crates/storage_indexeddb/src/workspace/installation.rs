@@ -276,7 +276,7 @@ impl BrowserWorkspace {
             {
                 Ok(()) => Ok(InstallationOutcome::Committed(Box::new(installed))),
                 Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                    state.stop();
+                    state.mark_unknown();
                     Ok(InstallationOutcome::Unknown(anchor))
                 }
                 Err(error) => Err(error),
@@ -285,7 +285,7 @@ impl BrowserWorkspace {
         .await;
         match result {
             Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                self.state.stop();
+                self.state.mark_unknown();
                 Ok(InstallationOutcome::Unknown(fallback))
             }
             other => other,

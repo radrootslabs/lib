@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "radroots.storage.browser_workspace.v2",
-  "state": "implemented_verified_delivery_observation_component",
+  "state": "implemented_verified_operation_journal_component",
   "owner": "radroots_storage_indexeddb",
   "feature": "workspace",
   "target": "wasm32-unknown-unknown",
@@ -12,7 +12,6 @@
   "scope": "fresh_unrelated_buyer_outbox",
   "stock_authority": false,
   "participant_key_is_workspace_proof": false,
-  "full_operation_journal_or_client_claim": false,
   "storage": {
     "namespace_domain": "radroots.browser.local_outbox.namespace.v2",
     "grant_key_domain": "radroots.browser.local_outbox.grant.v1",
@@ -202,7 +201,10 @@
     "prepare_delivery_attempt",
     "delivery_attempt",
     "record_delivery_observation",
-    "delivery_observations"
+    "delivery_observations",
+    "reconcile_unknown",
+    "admit_command_and_hold",
+    "bind_signing_intents"
   ],
   "delivery_frame": {
     "phase": "D_attempt",
@@ -245,5 +247,29 @@
     "retained_or_unknown_authorizes_dispatch": false,
     "capture_only_owner_allows_fresh_authentication_or_commands": false,
     "actual_remote_acceptance_or_full_client_claim": false
+  },
+  "full_operation_journal_implemented_and_verified": true,
+  "full_browser_client_or_transport_execution_qualified": false,
+  "general_storage_spi_implemented": false,
+  "shared_operation_journal": "radroots_storage::command::OperationJournal",
+  "retained_capture_recovery": {
+    "ordinary_admission_while_uncertain": "denied",
+    "writer_held_through_connection_close_and_reopen": true,
+    "open_mode": "same_existing_namespace_and_schema_only",
+    "original_proof_authenticated_before_connection_disposal": true,
+    "cached_original_grant_after_confirmed_close": true,
+    "cached_grant_clear_bytes_max": 16384,
+    "raw_proof_retained_in_handle": false,
+    "current_grant_and_actual_original_claim_or_attempt_revalidated": true,
+    "old_witness_replayed_after_reopen": false,
+    "refcell_borrow_held_across_await": false,
+    "confirmation_clears_only_matching_original_capture_identity": true,
+    "unrelated_capture_clears_uncertainty": false,
+    "general_or_multiple_unrelated_uncertainty": "explicit_close_and_reopen_required",
+    "fresh_grant_clock_or_dispatch_authority_acquired": false,
+    "namespace_initialization_migration_or_damaged_state_repair": false,
+    "failed_recovery_keeps_uncertainty_and_writer": true,
+    "accepted_recovery_survives_lost_observer": true,
+    "final_close_drains_recovery_before_writer_release": true
   }
 }

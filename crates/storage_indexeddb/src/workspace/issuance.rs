@@ -334,7 +334,7 @@ impl BrowserWorkspace {
                     ClaimAttemptOutcome::Retained(attempt)
                 }),
                 Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                    state.stop();
+                    state.mark_unknown();
                     Ok(ClaimAttemptOutcome::Unknown(anchor))
                 }
                 Err(error) => Err(error),
@@ -343,7 +343,7 @@ impl BrowserWorkspace {
         .await;
         match result {
             Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                self.state.stop();
+                self.state.mark_unknown();
                 Ok(ClaimAttemptOutcome::Unknown(fallback))
             }
             other => other,
@@ -412,18 +412,20 @@ impl BrowserWorkspace {
         proof: &AttachmentProof,
         supplied: &SealEvidence,
     ) -> Result<EvidenceCaptureOutcome, OperationError> {
+        let capture_identity = super::recovery::CaptureIdentity::seal(supplied);
+        let owned_identity = capture_identity.clone();
         let fallback = CommitAttempt::new(
             supplied.workspace_id(),
             supplied.operation_id(),
             supplied.command_digest(),
             None,
         );
-        let work = self.state.admit()?;
+        let work = self.state.admit_capture()?;
         let state = self.state.clone();
         let proof = proof.with_secret(|raw| AttachmentProof::from_protected_input(raw))?;
         let supplied = supplied.retained_copy();
         let result = owned(work, async move {
-            let (grant, protected) = state.capture_grant(&input, &proof).await?;
+            let (grant, protected) = state.capture_retained(&input, &proof).await?;
             if supplied.workspace_id() != state.selected.workspace_id() {
                 return Err(OperationError::InvalidEvidence);
             }
@@ -490,9 +492,12 @@ impl BrowserWorkspace {
                 })
                 .await
             {
-                Ok(()) => Ok(EvidenceCaptureOutcome::Committed(receipt)),
+                Ok(()) => {
+                    state.capture_confirmed(&owned_identity);
+                    Ok(EvidenceCaptureOutcome::Committed(receipt))
+                }
                 Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                    state.stop();
+                    state.mark_capture_unknown(owned_identity);
                     Ok(EvidenceCaptureOutcome::Unknown(anchor))
                 }
                 Err(error) => Err(error),
@@ -501,7 +506,7 @@ impl BrowserWorkspace {
         .await;
         match result {
             Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                self.state.stop();
+                self.state.mark_capture_unknown(capture_identity);
                 Ok(EvidenceCaptureOutcome::Unknown(fallback))
             }
             other => other,

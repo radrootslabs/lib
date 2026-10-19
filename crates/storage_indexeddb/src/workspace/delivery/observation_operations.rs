@@ -20,12 +20,14 @@ impl BrowserWorkspace {
         proof: AttachmentProof,
         supplied: DeliveryObservation,
     ) -> Result<DeliveryObservationOutcome, OperationError> {
+        let capture_identity = crate::workspace::recovery::CaptureIdentity::observation(&supplied);
+        let owned_identity = capture_identity.clone();
         let fallback = supplied.clone();
-        let work = self.state.admit()?;
+        let work = self.state.admit_capture()?;
         let state = self.state.clone();
         let result = owned(work, async move {
             let input = binding.input().clone();
-            let (grant, protected) = state.capture_grant(&input, &proof).await?;
+            let (grant, protected) = state.capture_retained(&input, &proof).await?;
             let actual_work = supplied.work();
             let evidence = actual_work.evidence();
             let operation = evidence.operation_id();
@@ -98,9 +100,12 @@ impl BrowserWorkspace {
                 })
                 .await
             {
-                Ok(()) => Ok(DeliveryObservationOutcome::Committed(retained)),
+                Ok(()) => {
+                    state.capture_confirmed(&owned_identity);
+                    Ok(DeliveryObservationOutcome::Committed(retained))
+                }
                 Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                    state.stop();
+                    state.mark_capture_unknown(owned_identity);
                     Ok(DeliveryObservationOutcome::Unknown(retained))
                 }
                 Err(error) => Err(error),
@@ -109,7 +114,7 @@ impl BrowserWorkspace {
         .await;
         match result {
             Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                self.state.stop();
+                self.state.mark_capture_unknown(capture_identity);
                 Ok(DeliveryObservationOutcome::Unknown(fallback))
             }
             other => other,

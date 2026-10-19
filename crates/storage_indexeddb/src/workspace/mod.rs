@@ -9,6 +9,8 @@ mod issuance;
 mod journal;
 mod lease;
 mod plans;
+mod ports;
+mod recovery;
 mod retained;
 
 use super::{Batch, Database, Error, Mutation, Namespace, OpenMode, RecordKey};
@@ -141,7 +143,7 @@ enum AccessMode {
 }
 struct State {
     // Database drops before the lease if an unobserved owner is discarded.
-    db: Database,
+    db: RefCell<Database>,
     provider: Rc<dyn SecretProvider>,
     reference: SecretRef,
     selected: AttachmentInput,
@@ -150,12 +152,28 @@ struct State {
     lease: RefCell<Option<lease::Lease>>,
     serial: Mutex<()>,
     jobs: Cell<usize>,
+    uncertain: Cell<bool>,
+    capture_scope: RefCell<Option<recovery::CaptureIdentity>>,
+    recovery: RefCell<Option<recovery::Authorization>>,
     closing: Cell<bool>,
     closed: Cell<Option<Result<(), WorkspaceError>>>,
     drain: RefCell<Option<Waker>>,
     waiters: RefCell<Vec<Weak<Signal>>>,
 }
 impl State {
+    fn database(&self) -> Database {
+        self.db.borrow().clone()
+    }
+    fn mark_unknown(&self) {
+        self.uncertain.set(true);
+    }
+    fn mark_capture_unknown(&self, identity: recovery::CaptureIdentity) {
+        if !self.uncertain.replace(true) {
+            *self.capture_scope.borrow_mut() = Some(identity);
+        } else if self.capture_scope.borrow().as_ref() != Some(&identity) {
+            self.capture_scope.borrow_mut().take();
+        }
+    }
     fn active(&self) -> Result<Rc<Cell<bool>>, WorkspaceError> {
         let active = self
             .lease
@@ -169,7 +187,13 @@ impl State {
         Ok(active)
     }
     fn admit(self: &Rc<Self>) -> Result<Work, WorkspaceError> {
-        if self.closing.get() {
+        self.admit_mode(false)
+    }
+    fn admit_capture(self: &Rc<Self>) -> Result<Work, WorkspaceError> {
+        self.admit_mode(true)
+    }
+    fn admit_mode(self: &Rc<Self>, capture: bool) -> Result<Work, WorkspaceError> {
+        if self.closing.get() || (self.uncertain.get() && !capture) {
             return Err(WorkspaceError::Closed);
         }
         if self.active().is_err() {
@@ -180,7 +204,7 @@ impl State {
             return Err(WorkspaceError::Capacity);
         }
         self.jobs.set(self.jobs.get() + 1);
-        Ok(Work(self.clone()))
+        Ok(Work(self.clone(), self.uncertain.get()))
     }
     fn stop(self: &Rc<Self>) {
         if self.closing.replace(true) {
@@ -197,7 +221,7 @@ impl State {
                 }
             })
             .await;
-            let database = state.db.close().await.map_err(stored);
+            let database = state.database().close().await.map_err(stored);
             let lease = state.lease.borrow_mut().take();
             let released = match lease {
                 Some(lease) => lease.release().await,
@@ -239,7 +263,7 @@ impl State {
             return Err(WorkspaceError::Unauthorized);
         }
         let protected = self
-            .db
+            .database()
             .get(grant_key())
             .await
             .map_err(stored)?
@@ -258,7 +282,7 @@ impl State {
         Ok((record, protected))
     }
 }
-struct Work(Rc<State>);
+struct Work(Rc<State>, bool);
 impl Drop for Work {
     fn drop(&mut self) {
         self.0.jobs.set(self.0.jobs.get() - 1);
@@ -293,18 +317,22 @@ async fn owned<T: 'static, E: JobError + 'static>(
     let (send, observe) = oneshot::channel();
     spawn_local(async move {
         let state = work.0.clone();
+        let recovery = work.1;
         let _work = work;
         let _serial = state.serial.lock().await;
         let result = future.await;
-        if matches!(
-            result.as_ref().err().and_then(JobError::workspace_failure),
+        let failure = result.as_ref().err().and_then(JobError::workspace_failure);
+        if failure == Some(WorkspaceError::CommitUnknown) {
+            state.mark_unknown();
+        } else if matches!(
+            failure,
             Some(
                 WorkspaceError::Closed
                     | WorkspaceError::Unavailable
                     | WorkspaceError::RecoveryRequired
-                    | WorkspaceError::CommitUnknown
             )
-        ) {
+        ) && (!recovery || state.active().is_err())
+        {
             state.stop();
         }
         let _ = send.send(result);
@@ -377,7 +405,7 @@ impl BrowserWorkspace {
                     ])
                     .map_err(stored)?;
                     commit_current(
-                        &owner.state.db,
+                        &owner.state.database(),
                         batch,
                         owner.state.clock.clone(),
                         binding.observed_at(),
@@ -496,7 +524,7 @@ impl BrowserWorkspace {
     ) -> Self {
         Self {
             state: Rc::new(State {
-                db,
+                db: RefCell::new(db),
                 provider,
                 reference,
                 selected,
@@ -505,6 +533,9 @@ impl BrowserWorkspace {
                 lease: RefCell::new(Some(lease)),
                 serial: Mutex::new(()),
                 jobs: Cell::new(0),
+                uncertain: Cell::new(false),
+                capture_scope: RefCell::new(None),
+                recovery: RefCell::new(None),
                 closing: Cell::new(false),
                 closed: Cell::new(None),
                 drain: RefCell::new(None),
@@ -538,7 +569,7 @@ impl BrowserWorkspace {
             ])
             .map_err(stored)?;
             commit_current(
-                &state.db,
+                &state.database(),
                 batch,
                 state.clock.clone(),
                 current.observed_at(),

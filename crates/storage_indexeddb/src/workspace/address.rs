@@ -117,7 +117,7 @@ impl State {
         operation: OperationId,
     ) -> Result<ReadSnapshot, OperationError> {
         let view = self
-            .db
+            .database()
             .read_snapshot(prefix(operation))
             .await
             .map_err(super::journal::storage_error)?;
@@ -135,7 +135,7 @@ impl State {
             return Ok(None);
         }
         let value = self
-            .db
+            .database()
             .get(key)
             .await
             .map_err(super::journal::storage_error)?;

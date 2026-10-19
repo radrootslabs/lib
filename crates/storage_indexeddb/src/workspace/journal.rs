@@ -309,7 +309,7 @@ impl State {
         let failure = Rc::new(Cell::new(None));
         let refused = failure.clone();
         let result = self
-            .db
+            .database()
             .compare_exchange_snapshot_checked(batch, view, move || {
                 if let Err(error) = check() {
                     refused.set(Some(error));
@@ -411,7 +411,7 @@ impl BrowserWorkspace {
             {
                 Ok(()) => Ok(AdmissionOutcome::Committed(prepared)),
                 Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                    state.stop();
+                    state.mark_unknown();
                     Ok(AdmissionOutcome::Unknown(attempt))
                 }
                 Err(error) => Err(error),
@@ -420,7 +420,7 @@ impl BrowserWorkspace {
         .await;
         match result {
             Err(OperationError::Workspace(WorkspaceError::CommitUnknown)) => {
-                self.state.stop();
+                self.state.mark_unknown();
                 Ok(AdmissionOutcome::Unknown(fallback))
             }
             other => other,

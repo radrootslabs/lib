@@ -57,7 +57,7 @@ impl WorkspaceFixture {
         recipients.sort_unstable();
         recipients.dedup();
         let attempt = self
-            .owner
+            .journal()
             .delivery_attempt(
                 request.binding().clone(),
                 OperationId::from_bytes([n; 32]),
@@ -107,7 +107,7 @@ impl WorkspaceFixture {
         } else {
             copied(&self.proof)
         };
-        self.owner
+        self.journal()
             .record_delivery_observation(original.binding.clone(), proof, original.value.clone())
             .await
             .map(result)
@@ -119,7 +119,7 @@ impl WorkspaceFixture {
         hook: js_sys::Function,
     ) -> Result<String, JsValue> {
         hook.call0(&JsValue::NULL)?;
-        self.owner
+        self.journal()
             .record_delivery_observation(
                 original.binding.clone(),
                 copied(&self.proof),
@@ -131,7 +131,7 @@ impl WorkspaceFixture {
     }
     pub fn abandon_observation(&self, original: &ObtainedObservation) -> Result<(), JsValue> {
         if self
-            .owner
+            .journal()
             .record_delivery_observation(
                 original.binding.clone(),
                 copied(&self.proof),
@@ -149,7 +149,7 @@ impl WorkspaceFixture {
         let mut recipients = vec![self.input.participant(), request.command().peer()];
         recipients.sort_unstable();
         recipients.dedup();
-        self.owner
+        self.journal()
             .delivery_observations(
                 request.binding().clone(),
                 OperationId::from_bytes([n; 32]),
@@ -168,7 +168,7 @@ impl WorkspaceFixture {
         original: &ObtainedObservation,
     ) -> Result<String, JsValue> {
         let evidence = original.value.work().evidence();
-        self.owner
+        self.journal()
             .delivery_observations(
                 original.binding.clone(),
                 evidence.operation_id(),

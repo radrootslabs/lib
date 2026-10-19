@@ -16,8 +16,9 @@ adds `workspace::BrowserWorkspace`: an authenticated protected local buyer
 outbox using the shared storage enrollment/grant rules and an explicitly
 selected nonvolatile provider. It creates only a fresh unrelated outbox;
 opening existing data requires its retained selection and protected proof.
-It supplies no participant custody, complete operation journal/storage SPI or
-stock authority.
+It implements the shared `OperationJournal` for this protected local buyer
+outbox. Participant custody, general storage SPI and stock authority remain
+separate.
 
 The workspace also executes immutable buyer operation admission and lookup.
 It retains the original command, transaction identity and first-issue window;
@@ -102,8 +103,26 @@ per operation. Reports decode while the original attempt frame is available,
 without retaining every raw outer body. The complete prefix and original grant
 are compared in the actual retention transaction. Uncertain completion returns
 the original observation and stops admission. `delivery_observations` and coherent
-snapshots require current access and do not dispatch. A complete journal/client
-and browser transport execution remain separate phases.
+snapshots require current access and do not dispatch. Browser transport and the
+ordinary client remain separate phases.
+
+All shared journal ports delegate to this actual owner. Uncertainty stops
+ordinary admission while retaining the original namespace and writer lease.
+Already obtained original seals and target observations may reconcile under
+the retained proof. Recovery authenticates the actual grant before connection
+disposal, confirms closure, opens only the same existing namespace/schema and
+rechecks the current grant and actual original claim or attempt. Cached original
+grant authorization survives a failed reopen without retaining raw proof in the
+handle. Fresh connection-bound witnesses are acquired after reopening; no old
+witness or `RefCell` borrow crosses the asynchronous replacement boundary.
+
+Only confirmation matching the original uncertain capture identity clears
+admission. Confirming an unrelated older fact does not resolve another pending
+operation. General or multiple unrelated uncertainty requires explicit closure
+and reopening. Recovery grants no fresh command, grant, clock, signing, network
+or redispatch permission and never initializes, migrates or repairs a namespace.
+Accepted recovery stays owned through lost observation; final close drains it
+before releasing the writer.
 
 An owner-bound read snapshot witnesses at most 16,384 ordered opaque keys,
 lengths and SHA-256 digests, using a conservative 2 MiB scan reservation. Every
@@ -151,7 +170,8 @@ directory, that output directory, `chromium`, `firefox`, or `webkit`, and the
 preserved v1 fixture package directory for actual cross-version refusal checks.
 The optional final argument selects `delivery`, `delivery_limits`,
 `delivery_corruption`, `delivery_faults`, `observations`, `observation_faults`,
-or `observation_corruption`; omission runs the existing base
+`observation_corruption`, `journal`, `journal_observations`, or `journal_reopen`;
+omission runs the existing base
 regressions. Additional profiles preserve that base's bounded deadline.
 Synthetic normalized observation inputs prove concrete storage and linkage
 behavior; they do not establish remote relay execution or acceptance.

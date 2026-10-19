@@ -81,6 +81,11 @@ pub struct WorkspaceFixture {
     proof: AttachmentProof,
     clock: Rc<Clock>,
 }
+impl WorkspaceFixture {
+    fn journal(&self) -> &dyn radroots_storage::command::OperationJournal {
+        &self.owner
+    }
+}
 #[wasm_bindgen]
 impl WorkspaceFixture {
     pub async fn admit_read_unknown(
@@ -92,7 +97,7 @@ impl WorkspaceFixture {
         let digest = request.command().digest();
         hook.call0(&JsValue::NULL)?;
         match self
-            .owner
+            .journal()
             .admit_command_and_hold(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -113,7 +118,7 @@ impl WorkspaceFixture {
         let request = self.request(n, false).await?;
         let digest = request.command().digest();
         match self
-            .owner
+            .journal()
             .admit_command_and_hold(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -133,7 +138,7 @@ impl WorkspaceFixture {
     pub async fn admit(&self, n: u8, changed: bool) -> Result<Vec<u8>, JsValue> {
         let request = self.request(n, changed).await?;
         match self
-            .owner
+            .journal()
             .admit_command_and_hold(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -149,7 +154,7 @@ impl WorkspaceFixture {
             .await
             .map_err(fail)?;
         let result = self
-            .owner
+            .journal()
             .operation(
                 binding,
                 OperationId::from_bytes([n; 32]),
@@ -163,7 +168,7 @@ impl WorkspaceFixture {
     pub async fn admit_expiring(&self, n: u8) -> Result<(), JsValue> {
         let request = self.request(n, false).await?;
         self.clock.after.set(Some(1500));
-        self.owner
+        self.journal()
             .admit_command_and_hold(request, copied(&self.proof))
             .await
             .map(|_| ())
@@ -172,7 +177,7 @@ impl WorkspaceFixture {
     pub async fn abandon_admission(&self, n: u8) -> Result<(), JsValue> {
         let request = self.request(n, false).await?;
         if self
-            .owner
+            .journal()
             .admit_command_and_hold(request, copied(&self.proof))
             .now_or_never()
             .is_some()

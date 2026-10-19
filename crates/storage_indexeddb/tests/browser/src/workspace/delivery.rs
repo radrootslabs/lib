@@ -135,7 +135,7 @@ impl WorkspaceFixture {
     pub async fn envelope(&self, n: u8, index: u8, mode: u8) -> Result<ObtainedEnvelope, JsValue> {
         let request = self.request(n, false).await?;
         let snapshot = self
-            .owner
+            .journal()
             .operation_snapshot(
                 request.binding().clone(),
                 OperationId::from_bytes([n; 32]),
@@ -160,7 +160,7 @@ impl WorkspaceFixture {
             .copied()
             .ok_or(JsValue::from_str("missing_work"))?;
         let retained = self
-            .owner
+            .journal()
             .obtained_evidence(
                 ClaimAttemptRequest::new(
                     request.binding().clone(),
@@ -228,7 +228,7 @@ impl WorkspaceFixture {
             3 => Some(1800),
             _ => None,
         });
-        self.owner
+        self.journal()
             .prepare_delivery_attempt(
                 request,
                 copied(&self.proof),
@@ -252,7 +252,7 @@ impl WorkspaceFixture {
     ) -> Result<String, JsValue> {
         let request = self.delivery_request(n, id, selection, 0, envelope).await?;
         hook.call0(&JsValue::NULL)?;
-        self.owner
+        self.journal()
             .prepare_delivery_attempt(request, copied(&self.proof), Some(&envelope.candidate))
             .await
             .map(|value| outcome(value).to_string())
@@ -267,7 +267,7 @@ impl WorkspaceFixture {
     ) -> Result<(), JsValue> {
         let request = self.delivery_request(n, id, selection, 0, envelope).await?;
         if self
-            .owner
+            .journal()
             .prepare_delivery_attempt(request, copied(&self.proof), Some(&envelope.candidate))
             .now_or_never()
             .is_some()
@@ -284,7 +284,7 @@ impl WorkspaceFixture {
         let recipient: PublicKey = *recipients
             .get(index as usize)
             .ok_or(JsValue::from_str("invalid_recipient"))?;
-        self.owner
+        self.journal()
             .delivery_attempt(
                 request.binding().clone(),
                 OperationId::from_bytes([n; 32]),

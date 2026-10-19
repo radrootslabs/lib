@@ -174,7 +174,7 @@ impl WorkspaceFixture {
         let plan = ChatSigningPlan::parse(request.command(), &wire).unwrap();
         hook.call0(&JsValue::NULL)?;
         match self
-            .owner
+            .journal()
             .bind_signing_intents(request.binding().clone(), plan, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -204,7 +204,7 @@ impl WorkspaceFixture {
             .await
             .map_err(super::fail)?;
         let result = self
-            .owner
+            .journal()
             .bind_signing_intents(foreign, plan, copied(&self.proof))
             .await;
         sibling.close().await?;
@@ -226,7 +226,7 @@ impl WorkspaceFixture {
         let request = self.request(n, false).await?;
         let plan = ChatSigningPlan::parse(request.command(), &wire).unwrap();
         if self
-            .owner
+            .journal()
             .bind_signing_intents(request.binding().clone(), plan, copied(&self.proof))
             .now_or_never()
             .is_some()
@@ -237,7 +237,7 @@ impl WorkspaceFixture {
     }
     pub async fn plan_query(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.request(n, false).await?;
-        self.owner
+        self.journal()
             .signing_plan(
                 request.binding().clone(),
                 request.command().context().operation_id(),
@@ -264,7 +264,7 @@ impl WorkspaceFixture {
             self.clock.after.set(Some(2000));
         }
         let outcome = self
-            .owner
+            .journal()
             .bind_signing_intents(request.binding().clone(), plan, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?;

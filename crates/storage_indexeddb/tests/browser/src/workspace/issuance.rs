@@ -91,7 +91,7 @@ impl WorkspaceFixture {
     async fn claim_request(&self, n: u8, index: u8) -> Result<ClaimAttemptRequest, JsValue> {
         let request = self.request(n, false).await?;
         let bound = self
-            .owner
+            .journal()
             .signing_plan(
                 request.binding().clone(),
                 request.command().context().operation_id(),
@@ -130,7 +130,7 @@ impl WorkspaceFixture {
             *bound.plan().digest(),
             original.attempt.seal().recipient(),
         );
-        self.owner
+        self.journal()
             .obtained_evidence(request, copied(&self.proof))
             .await
             .map(|value| value.map(|v| receipt(v.receipt())).unwrap_or_default())
@@ -139,7 +139,7 @@ impl WorkspaceFixture {
     pub async fn claim(&self, n: u8, index: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.claim_request(n, index).await?;
         match self
-            .owner
+            .journal()
             .claim_attempt(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -168,7 +168,7 @@ impl WorkspaceFixture {
         let digest = request.command_digest();
         hook.call0(&JsValue::NULL)?;
         match self
-            .owner
+            .journal()
             .claim_attempt(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -186,7 +186,7 @@ impl WorkspaceFixture {
     }
     pub async fn attempt(&self, n: u8, index: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.claim_request(n, index).await?;
-        self.owner
+        self.journal()
             .signing_attempt(request, copied(&self.proof))
             .await
             .map(|value| value.as_ref().map(summary).unwrap_or_default())
@@ -200,7 +200,7 @@ impl WorkspaceFixture {
     ) -> Result<ObtainedSeal, JsValue> {
         let request = self.claim_request(n, index).await?;
         let attempt = match self
-            .owner
+            .journal()
             .claim_attempt(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -226,7 +226,7 @@ impl WorkspaceFixture {
     pub async fn capture_alternate(&self, original: &ObtainedSeal) -> Result<(), JsValue> {
         let alternate = signed_output(&original.attempt, None)?;
         assert_ne!(alternate.raw_json(), original.value.raw_json());
-        self.owner
+        self.journal()
             .capture_evidence(self.input.clone(), &self.proof, &alternate)
             .await
             .map(|_| ())
@@ -240,7 +240,7 @@ impl WorkspaceFixture {
         )
         .unwrap();
         match self
-            .owner
+            .journal()
             .capture_evidence(self.input.clone(), &self.proof, &evidence)
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -251,7 +251,7 @@ impl WorkspaceFixture {
     }
     pub async fn capture(&self, original: &ObtainedSeal) -> Result<Vec<u8>, JsValue> {
         match self
-            .owner
+            .journal()
             .capture_evidence(self.input.clone(), &self.proof, &original.value)
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -260,9 +260,40 @@ impl WorkspaceFixture {
             EvidenceCaptureOutcome::Unknown(_) => Err(JsValue::from_str("commit_unknown")),
         }
     }
+    pub async fn reconcile(
+        &self,
+        original: &ObtainedSeal,
+        wrong_proof: bool,
+    ) -> Result<Vec<u8>, JsValue> {
+        let proof = if wrong_proof {
+            radroots_storage::workspace::AttachmentProof::from_protected_input(&[0x31; 32]).unwrap()
+        } else {
+            copied(&self.proof)
+        };
+        match self
+            .journal()
+            .reconcile_unknown(self.input.clone(), &proof, &original.value)
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?
+        {
+            EvidenceCaptureOutcome::Committed(value) => Ok(receipt(value)),
+            EvidenceCaptureOutcome::Unknown(_) => Err(JsValue::from_str("commit_unknown")),
+        }
+    }
+    pub fn abandon_reconcile(&self, original: &ObtainedSeal) -> Result<(), JsValue> {
+        if self
+            .journal()
+            .reconcile_unknown(self.input.clone(), &self.proof, &original.value)
+            .now_or_never()
+            .is_some()
+        {
+            return Err(JsValue::from_str("unexpected_immediate_recovery"));
+        }
+        Ok(())
+    }
     pub async fn capture_unknown(&self, original: &ObtainedSeal) -> Result<Vec<u8>, JsValue> {
         match self
-            .owner
+            .journal()
             .capture_evidence(self.input.clone(), &self.proof, &original.value)
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -280,7 +311,7 @@ impl WorkspaceFixture {
     }
     pub async fn captured(&self, n: u8, index: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.claim_request(n, index).await?;
-        self.owner
+        self.journal()
             .obtained_evidence(request, copied(&self.proof))
             .await
             .map(|value| {
@@ -292,7 +323,7 @@ impl WorkspaceFixture {
     }
     pub fn abandon_capture(&self, original: &ObtainedSeal) -> Result<(), JsValue> {
         if self
-            .owner
+            .journal()
             .capture_evidence(self.input.clone(), &self.proof, &original.value)
             .now_or_never()
             .is_some()

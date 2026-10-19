@@ -26,7 +26,7 @@ impl WorkspaceFixture {
     async fn installation_request(&self, n: u8) -> Result<InstallationRequest, JsValue> {
         let request = self.request(n, false).await?;
         let bound = self
-            .owner
+            .journal()
             .signing_plan(
                 request.binding().clone(),
                 request.command().context().operation_id(),
@@ -47,7 +47,7 @@ impl WorkspaceFixture {
         let request = self.installation_request(n).await?;
         self.clock.after.set(after);
         match self
-            .owner
+            .journal()
             .install_transition_and_outbox(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -74,7 +74,7 @@ impl WorkspaceFixture {
         let digest = request.command_digest();
         hook.call0(&JsValue::NULL)?;
         match self
-            .owner
+            .journal()
             .install_transition_and_outbox(request, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
@@ -93,7 +93,7 @@ impl WorkspaceFixture {
     pub async fn abandon_install(&self, n: u8) -> Result<(), JsValue> {
         let request = self.installation_request(n).await?;
         if self
-            .owner
+            .journal()
             .install_transition_and_outbox(request, copied(&self.proof))
             .now_or_never()
             .is_some()
@@ -104,7 +104,7 @@ impl WorkspaceFixture {
     }
     pub async fn snapshot(&self, n: u8) -> Result<String, JsValue> {
         let request = self.request(n, false).await?;
-        self.owner
+        self.journal()
             .operation_snapshot(
                 request.binding().clone(),
                 request.command().context().operation_id(),
