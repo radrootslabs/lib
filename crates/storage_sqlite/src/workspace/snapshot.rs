@@ -207,6 +207,85 @@ impl RetainedGraph {
         }
     }
 }
+/// Complete authenticated retained facts, read outside a transaction and
+/// compared together inside it. Absence of an earlier phase is not safe to
+/// report or replace while any later phase still depends on that history.
+pub(super) struct RetainedFacts {
+    graph: RetainedGraph,
+    records: Records,
+    deliveries: DeliveryGraph,
+    observations: Observations,
+}
+impl RetainedFacts {
+    pub(super) async fn read(
+        connection: &mut SqliteConnection,
+        selected: &AttachmentInput,
+        binding: &WorkspaceBinding,
+        operation: OperationId,
+        digest: Option<CommandDigest>,
+        crypto: &WorkspaceCrypto,
+    ) -> Result<Self, OperationError> {
+        let graph =
+            RetainedGraph::read(connection, selected, binding, operation, digest, crypto).await?;
+        let records = Records::read(connection, selected, operation, &graph, crypto).await?;
+        let deliveries =
+            DeliveryGraph::read(connection, selected, operation, &graph, &records, crypto).await?;
+        let observations =
+            Observations::read(connection, &deliveries, selected, operation, crypto).await?;
+        Ok(Self {
+            graph,
+            records,
+            deliveries,
+            observations,
+        })
+    }
+    pub(super) async fn unchanged(
+        &self,
+        connection: &mut SqliteConnection,
+        selected: &AttachmentInput,
+        operation: OperationId,
+    ) -> Result<(), OperationError> {
+        self.graph
+            .unchanged(connection, selected, operation)
+            .await?;
+        self.records
+            .unchanged(connection, selected, operation)
+            .await?;
+        self.deliveries
+            .unchanged(connection, selected, operation)
+            .await?;
+        self.observations
+            .unchanged(connection, selected, operation)
+            .await
+    }
+    fn into_snapshot(
+        self,
+        observed: UnixSeconds,
+    ) -> Result<Option<OperationSnapshot>, OperationError> {
+        self.graph
+            .into_snapshot(observed)?
+            .map(|snapshot| {
+                snapshot
+                    .with_installation(
+                        self.records.message.map(|value| value.report),
+                        self.records
+                            .work
+                            .into_iter()
+                            .map(|value| value.report)
+                            .collect(),
+                    )?
+                    .with_delivery(
+                        self.deliveries
+                            .attempts
+                            .iter()
+                            .map(DeliveryAttemptSummary::from_attempt)
+                            .collect(),
+                        self.observations.reports,
+                    )
+            })
+            .transpose()
+    }
+}
 impl Journal<'_> {
     pub(super) async fn query_snapshot(
         &mut self,
@@ -216,37 +295,12 @@ impl Journal<'_> {
         proof: AttachmentProof,
     ) -> Result<Option<OperationSnapshot>, OperationError> {
         let (record, grant, _) = self.access(&binding, &proof).await?;
-        let graph = RetainedGraph::read(
+        let facts = RetainedFacts::read(
             self.connection,
             self.selected,
             &binding,
             operation_id,
             expected_digest,
-            self.crypto,
-        )
-        .await?;
-        let records = Records::read(
-            self.connection,
-            self.selected,
-            operation_id,
-            &graph,
-            self.crypto,
-        )
-        .await?;
-        let deliveries = DeliveryGraph::read(
-            self.connection,
-            self.selected,
-            operation_id,
-            &graph,
-            &records,
-            self.crypto,
-        )
-        .await?;
-        let observations = Observations::read(
-            self.connection,
-            &deliveries,
-            self.selected,
-            operation_id,
             self.crypto,
         )
         .await?;
@@ -268,16 +322,7 @@ impl Journal<'_> {
                 self.clock,
             )
             .await?;
-            graph
-                .unchanged(&mut transaction, self.selected, operation_id)
-                .await?;
-            records
-                .unchanged(&mut transaction, self.selected, operation_id)
-                .await?;
-            deliveries
-                .unchanged(&mut transaction, self.selected, operation_id)
-                .await?;
-            observations
+            facts
                 .unchanged(&mut transaction, self.selected, operation_id)
                 .await?;
             Ok::<_, OperationError>(observed.observed_at())
@@ -287,24 +332,7 @@ impl Journal<'_> {
             *self.uncertain = true;
             return Err(OperationError::RecoveryRequired);
         }
-        graph
-            .into_snapshot(checked?)?
-            .map(|snapshot| {
-                snapshot
-                    .with_installation(
-                        records.message.map(|value| value.report),
-                        records.work.into_iter().map(|value| value.report).collect(),
-                    )?
-                    .with_delivery(
-                        deliveries
-                            .attempts
-                            .iter()
-                            .map(DeliveryAttemptSummary::from_attempt)
-                            .collect(),
-                        observations.reports,
-                    )
-            })
-            .transpose()
+        facts.into_snapshot(checked?)
     }
 }
 async fn graph_counts(

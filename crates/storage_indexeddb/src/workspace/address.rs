@@ -9,6 +9,8 @@ pub(super) const PREPARED: u8 = 1;
 pub(super) const PLAN: u8 = 2;
 pub(super) const CLAIM: u8 = 3;
 pub(super) const EVIDENCE: u8 = 4;
+pub(super) const INSTALLATION: u8 = 5;
+pub(super) const PUBLICATION: u8 = 6;
 
 fn prefix_bytes(operation: OperationId) -> [u8; 16] {
     let digest = Sha256::new()
@@ -44,6 +46,8 @@ pub(super) fn fields(key: RecordKey) -> Result<(u8, u8, u8), OperationError> {
             PLAN => recipient != 0 || part > 24,
             CLAIM => recipient > 1 || part != 0,
             EVIDENCE => recipient > 1 || part > 4,
+            INSTALLATION => recipient != 0 || part != 0,
+            PUBLICATION => recipient > 1 || part != 0,
             // Later reserved families remain unsupported until their actual
             // implementations and proving cohort land. Never ignore them.
             _ => true,

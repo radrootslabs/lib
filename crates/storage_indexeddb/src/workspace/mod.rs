@@ -3,10 +3,12 @@
 //! requires its independently retained selection and protected proof.
 mod address;
 mod crypto;
+mod installation;
 mod issuance;
 mod journal;
 mod lease;
 mod plans;
+mod retained;
 
 use super::{Batch, Database, Error, Mutation, Namespace, OpenMode, RecordKey};
 use futures::{channel::oneshot, lock::Mutex};
@@ -259,10 +261,10 @@ struct Work(Rc<State>);
 impl Drop for Work {
     fn drop(&mut self) {
         self.0.jobs.set(self.0.jobs.get() - 1);
-        if self.0.jobs.get() == 0 {
-            if let Some(waker) = self.0.drain.borrow_mut().take() {
-                waker.wake();
-            }
+        if self.0.jobs.get() == 0
+            && let Some(waker) = self.0.drain.borrow_mut().take()
+        {
+            waker.wake();
         }
     }
 }

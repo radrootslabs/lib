@@ -131,7 +131,7 @@ impl WorkspaceFixture {
             original.attempt.seal().recipient(),
         );
         self.owner
-            .captured_seal(request, copied(&self.proof))
+            .obtained_evidence(request, copied(&self.proof))
             .await
             .map(|value| value.map(|v| receipt(v.receipt())).unwrap_or_default())
             .map_err(|e| JsValue::from_str(e.code()))
@@ -227,7 +227,7 @@ impl WorkspaceFixture {
         let alternate = signed_output(&original.attempt, None)?;
         assert_ne!(alternate.raw_json(), original.value.raw_json());
         self.owner
-            .capture_signed_seal(self.input.clone(), copied(&self.proof), alternate)
+            .capture_evidence(self.input.clone(), &self.proof, &alternate)
             .await
             .map(|_| ())
             .map_err(|e| JsValue::from_str(e.code()))
@@ -241,7 +241,7 @@ impl WorkspaceFixture {
         .unwrap();
         match self
             .owner
-            .capture_signed_seal(self.input.clone(), copied(&self.proof), evidence)
+            .capture_evidence(self.input.clone(), &self.proof, &evidence)
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
         {
@@ -252,11 +252,7 @@ impl WorkspaceFixture {
     pub async fn capture(&self, original: &ObtainedSeal) -> Result<Vec<u8>, JsValue> {
         match self
             .owner
-            .capture_signed_seal(
-                self.input.clone(),
-                copied(&self.proof),
-                original.value.retained_copy(),
-            )
+            .capture_evidence(self.input.clone(), &self.proof, &original.value)
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
         {
@@ -267,11 +263,7 @@ impl WorkspaceFixture {
     pub async fn capture_unknown(&self, original: &ObtainedSeal) -> Result<Vec<u8>, JsValue> {
         match self
             .owner
-            .capture_signed_seal(
-                self.input.clone(),
-                copied(&self.proof),
-                original.value.retained_copy(),
-            )
+            .capture_evidence(self.input.clone(), &self.proof, &original.value)
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
         {
@@ -289,7 +281,7 @@ impl WorkspaceFixture {
     pub async fn captured(&self, n: u8, index: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.claim_request(n, index).await?;
         self.owner
-            .captured_seal(request, copied(&self.proof))
+            .obtained_evidence(request, copied(&self.proof))
             .await
             .map(|value| {
                 value
@@ -301,11 +293,7 @@ impl WorkspaceFixture {
     pub fn abandon_capture(&self, original: &ObtainedSeal) -> Result<(), JsValue> {
         if self
             .owner
-            .capture_signed_seal(
-                self.input.clone(),
-                copied(&self.proof),
-                original.value.retained_copy(),
-            )
+            .capture_evidence(self.input.clone(), &self.proof, &original.value)
             .now_or_never()
             .is_some()
         {

@@ -1,4 +1,5 @@
 //! Synthetic isolated host-effect fixture, never a production custody API.
+mod installation;
 mod issuance;
 mod plans;
 use futures::FutureExt;

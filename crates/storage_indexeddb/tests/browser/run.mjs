@@ -31,6 +31,7 @@ const server = createServer(async (req,res) => {
           if(event.data?.kind==='journal_query'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const preparation=Array.from(await owner.query(65));await owner.close();self.postMessage({preparation});return;}
           if(event.data?.kind==='plan_query'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const plan=Array.from(await owner.plan_query(180));await owner.close();self.postMessage({plan});return;}
           if(event.data?.kind==='issuance_query'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const claim=Array.from(await owner.attempt(190,0)),seal=Array.from(await owner.captured(190,0));await owner.close();self.postMessage({claim,seal});return;}
+          if(event.data?.kind==='installation_query'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const state=JSON.parse(await owner.snapshot(200));await owner.close();self.postMessage({state});return;}
           if(event.data?.kind==='persistent_create'){const provider=await Persistent.create(90);const fingerprint=provider.fingerprint();const encoded=await provider.protect(new Uint8Array([90,91,92]));await provider.close();self.postMessage({fingerprint:Array.from(fingerprint),encoded:Array.from(encoded)});return;}
           if(event.data?.kind==='persistent_open'){const provider=await Persistent.open(90,new Uint8Array(event.data.fingerprint));const plain=await provider.reveal(new Uint8Array(event.data.encoded));await provider.close();self.postMessage({plain:Array.from(plain)});return;}
           await protected_round_trip(79);const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
@@ -42,7 +43,7 @@ const server = createServer(async (req,res) => {
 });
 await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
 let browser;
-const deadline=setTimeout(()=>{void browser?.close();},90000);
+const deadline=setTimeout(()=>{void browser?.close();},180000);
 deadline.unref();
 try {
   browser = await playwright[engine].launch({headless:true});
@@ -566,7 +567,86 @@ try {
       await changeWorkspace({namespace:copiedNamespace},store=>legacyRows.keys.forEach((key,i)=>store.put(legacyRows.values[i],key)));
       const copiedV1Rows=await workspaceBytes({namespace:copiedNamespace});await rejects(()=>openPlanReceipt(legacyReceipt),'recovery_required');sameRows(await workspaceBytes({namespace:copiedNamespace}),copiedV1Rows);sameRows(await workspaceBytes(legacyReceipt),legacyRows);
       passed('actual immutable v1 runtime and v2 refuse cross-version opening and copied-grant reinterpretation while preserving prior bytes');
+      const hex=bytes=>Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+      const snapshotOf=async(owner,n)=>JSON.parse(await owner.snapshot(n));
+      const {owner:installOwner,receipt:installReceipt}=await setupIssuance(200);
+      const beforeInstallation=await workspaceBytes(installReceipt),plannedState=await snapshotOf(installOwner,200);
+      same(plannedState.installation,null);same(plannedState.publications,[]);same(plannedState.message,null);
+      await rejects(()=>installOwner.install(200),'invalid_evidence');sameRows(await workspaceBytes(installReceipt),beforeInstallation);
+      const peerInstallSeal=await installOwner.obtain(200,1,true),peerInstallCapture=Array.from(await installOwner.capture(peerInstallSeal));
+      const originalInstallation=JSON.parse(await installOwner.install(200)),partialInstallation=await snapshotOf(installOwner,200);
+      same(originalInstallation.basis_capture,hex(peerInstallCapture.slice(0,32)));same(partialInstallation.installation,originalInstallation);same(partialInstallation.publications.length,1);
+      same(partialInstallation.claims[0].claim,null);same(partialInstallation.message.id,originalInstallation.message);same(partialInstallation.message.text,'\u0001'.repeat(3000));same(partialInstallation.message.created_at,1000);same(partialInstallation.deliveries,0);same(partialInstallation.observations,0);
+      if(partialInstallation.checkpoint===plannedState.checkpoint)throw Error('T2 did not advance the actual original progress digest');
+      passed('actual T2 requires obtained output and installs one original message plus independent peer publication work');
+      installOwner.set_time(1100);const selfInstallSeal=await installOwner.obtain(200,0,false),selfInstallCapture=Array.from(await installOwner.capture(selfInstallSeal));
+      const obtainedBeforeAppend=await snapshotOf(installOwner,200);same(obtainedBeforeAppend.publications.length,1);same(obtainedBeforeAppend.installation,originalInstallation);
+      installOwner.set_time(1600);same(JSON.parse(await installOwner.install(200)),originalInstallation);
+      const installedState=await snapshotOf(installOwner,200);same(installedState.publications.length,2);same(installedState.message,partialInstallation.message);same(installedState.installation,originalInstallation);
+      const oldPeerWork=installedState.publications.find(work=>work.capture===hex(peerInstallCapture.slice(0,32))),newSelfWork=installedState.publications.find(work=>work.capture===hex(selfInstallCapture.slice(0,32)));
+      same(oldPeerWork.transaction,originalInstallation.transaction);same(newSelfWork.installation,originalInstallation.transaction);same(newSelfWork.at,1600);if(newSelfWork.transaction===originalInstallation.transaction)throw Error('later recipient append invented the original installation transaction');
+      try{Crypto.prototype.getRandomValues=()=>{throw Error('exact T2 replay acquired new entropy');};same(JSON.parse(await installOwner.install(200)),originalInstallation);same(await snapshotOf(installOwner,200),installedState);}
+      finally{Crypto.prototype.getRandomValues=originalRandom;}
+      await installOwner.close();
+      passed('first self claim remains legal after peer installation and late recipient append preserves original message, basis and transaction');
+      const {owner:lateInstallOwner,receipt:lateInstallReceipt}=await setupIssuance(201),lateInstallSeal=await lateInstallOwner.obtain(201,0,false);await lateInstallOwner.capture(lateInstallSeal);lateInstallOwner.set_time(1600);
+      const lateInstallation=JSON.parse(await lateInstallOwner.install(201));same(lateInstallation.at,1600);same((await snapshotOf(lateInstallOwner,201)).message.created_at,1000);await lateInstallOwner.close();
+      const lateInstallReopen=await openPlanReceipt(lateInstallReceipt);same((await snapshotOf(lateInstallReopen,201)).installation,lateInstallation);await lateInstallReopen.close();
+      passed('first installation of retained obtained evidence succeeds after original issuance expiry and reopens unchanged');
+      const {owner:cancelInstallOwner,receipt:cancelInstallReceipt}=await setupIssuance(202),cancelInstallSeal=await cancelInstallOwner.obtain(202,0,true);await cancelInstallOwner.capture(cancelInstallSeal);
+      const message202=await recordKey(202,5),beforeInstallAbort=await workspaceBytes(cancelInstallReceipt);let actualMessageWrite=false;
+      try{IDBObjectStore.prototype.put=function(...args){const r=actualPlanPut.apply(this,args);if(this.transaction.db.name===cancelInstallReceipt.namespace&&JSON.stringify(keyBytes(args[1]))===JSON.stringify(keyBytes(message202)))r.addEventListener('success',()=>{actualMessageWrite=true;this.transaction.abort();},{once:true});return r;};await rejects(()=>cancelInstallOwner.install(202),'storage_failure');}
+      finally{IDBObjectStore.prototype.put=actualPlanPut;}
+      same(actualMessageWrite,true);sameRows(await workspaceBytes(cancelInstallReceipt),beforeInstallAbort);same((await snapshotOf(cancelInstallOwner,202)).installation,null);
+      await cancelInstallOwner.abandon_install(202);same(cancelInstallOwner.abandon_auths(1),0);cancelInstallOwner.abandon_close();await cancelInstallOwner.close();
+      const installAfterCancel=await openPlanReceipt(cancelInstallReceipt);same((await snapshotOf(installAfterCancel,202)).publications.length,1);await installAfterCancel.close();
+      passed('actual message-write abort acknowledges no installation; an unobserved retry remains owned through cancelled close');
+      for(const mode of ['bad_clock','expired_grant']){
+        const n=mode==='bad_clock'?205:206,{owner,receipt}=await setupIssuance(n),seal=await owner.obtain(n,0,false);await owner.capture(seal);const before=await workspaceBytes(receipt);
+        await rejects(()=>mode==='bad_clock'?owner.install_bad_clock(n):owner.install_expired_grant(n),mode==='bad_clock'?'workspace_unavailable':'grant_expired');await owner.close();sameRows(await workspaceBytes(receipt),before);
+        const current=await openPlanReceipt(receipt);same((await snapshotOf(current,n)).installation,null);await current.close();
+      }
+      passed('T2 active callbacks refuse clock rollback and grant expiry after wrapping without changing obtained facts');
+      const stableInstallation=await workspaceBytes(installReceipt),message200=await recordKey(200,5),work200Self=await recordKey(200,6,0),work200Peer=await recordKey(200,6,1);
+      const installationValue=key=>stableInstallation.values[stableInstallation.keys.findIndex(k=>JSON.stringify(keyBytes(k))===JSON.stringify(keyBytes(key)))];
+      for(const mode of ['missing_message','missing_basis_work','tampered_message','swapped_work','complete_s_loss','obtained_s_loss']){
+        await changeWorkspace(installReceipt,store=>{
+          if(mode==='missing_message')store.delete(message200);
+          if(mode==='missing_basis_work')store.delete(work200Peer);
+          if(mode==='tampered_message'){const raw=new Uint8Array(installationValue(message200));raw[raw.length-1]^=1;store.put(raw,message200);}
+          if(mode==='swapped_work')store.put(installationValue(work200Self),work200Peer);
+          if(mode==='complete_s_loss')stableInstallation.keys.filter(k=>[3,4].includes(keyBytes(k)[16])).forEach(key=>store.delete(key));
+          if(mode==='obtained_s_loss')stableInstallation.keys.filter(k=>keyBytes(k)[16]===4).forEach(key=>store.delete(key));
+        });
+        const damaged=await workspaceBytes(installReceipt);let current=await openPlanReceipt(installReceipt);await rejects(()=>current.snapshot(200),'recovery_required');await current.close();
+        current=await openPlanReceipt(installReceipt);await rejects(()=>current.install(200),'recovery_required');await current.close();
+        if(mode==='complete_s_loss'){
+          current=await openPlanReceipt(installReceipt);await rejects(()=>current.claim(200,0),'recovery_required');await current.close();
+          current=await openPlanReceipt(installReceipt);await rejects(()=>current.attempt(200,0),'recovery_required');await current.close();
+          current=await openPlanReceipt(installReceipt);await rejects(()=>current.captured(200,0),'recovery_required');await current.close();
+        }
+        if(mode==='obtained_s_loss'){
+          current=await openPlanReceipt(installReceipt);await rejects(()=>current.captured(200,0),'recovery_required');await current.close();
+        }
+        sameRows(await workspaceBytes(installReceipt),damaged);await changeWorkspace(installReceipt,store=>{store.clear();stableInstallation.keys.forEach((key,i)=>store.put(stableInstallation.values[i],key));});
+      }
+      passed('missing, damaged, foreign-recipient and orphan T2 state refuses query, replacement and reissuance with exact bytes preserved');
+      const {owner:unknownInstallOwner,receipt:unknownInstallReceipt}=await setupIssuance(203),unknownInstallSeal=await unknownInstallOwner.obtain(203,0,false);await unknownInstallOwner.capture(unknownInstallSeal);
+      const unchangedT0Part=await operationKey(203,1);let unknownInstallation;
+      try{unknownInstallation=Array.from(await unknownInstallOwner.install_unknown(203,()=>injectAsyncError(unknownInstallReceipt.namespace,unchangedT0Part)));}
+      finally{IDBObjectStore.prototype.put=actualPlanPut;IDBTransaction.prototype.abort=actualAbort;}
+      same(unknownInstallation.length,96);same(unknownInstallation.slice(0,32),new Array(32).fill(203));await unknownInstallOwner.close();
+      const afterUnknownInstall=await openPlanReceipt(unknownInstallReceipt),unknownInstalledState=await snapshotOf(afterUnknownInstall,203);same(unknownInstalledState.installation.transaction,hex(unknownInstallation.slice(64)));same(unknownInstalledState.publications.length,1);await afterUnknownInstall.close();
+      passed('actual uncertain T2 completion retains its original transaction and reconciles the installed message after reopen');
+      const {owner:partialInstallOwner,receipt:partialInstallReceipt}=await setupIssuance(204),partialInstallSeal=await partialInstallOwner.obtain(204,0,false);await partialInstallOwner.capture(partialInstallSeal);
+      const failedPublication=await recordKey(204,6,0),partialT0Part=await operationKey(204,1);let partialInstallAnchor;
+      try{partialInstallAnchor=Array.from(await partialInstallOwner.install_unknown(204,()=>injectAsyncError(partialInstallReceipt.namespace,failedPublication,partialT0Part)));}
+      finally{IDBObjectStore.prototype.put=actualPlanPut;IDBTransaction.prototype.abort=actualAbort;}
+      same(partialInstallAnchor.length,96);await partialInstallOwner.close();const partialInstallRows=await workspaceBytes(partialInstallReceipt);let partialInstallReopen=await openPlanReceipt(partialInstallReceipt);
+      await rejects(()=>partialInstallReopen.snapshot(204),'recovery_required');await partialInstallReopen.close();partialInstallReopen=await openPlanReceipt(partialInstallReceipt);await rejects(()=>partialInstallReopen.install(204),'recovery_required');await partialInstallReopen.close();sameRows(await workspaceBytes(partialInstallReceipt),partialInstallRows);
+      passed('partial actual T2 completion preserves original uncertainty and refuses orphan message repair or replacement');
       const workCall=message=>new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage(message);return;}worker.terminate();resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
+      same(await workCall({kind:'installation_query',...installReceipt}),{state:installedState});passed('actual worker and fresh WASM reopen the original installation and both publication links');
       same(await workCall({kind:'issuance_query',...signingReceipt}),{claim:originalClaim,seal:originalSeal});passed('actual worker and fresh WASM reopen the original protected claim and captured signature');
       same(await workCall({kind:'plan_query',...planReceipt}),{plan:originalPlan});passed('actual worker reopens and confirms the original protected complete T1');
       same(await workCall({kind:'journal_query',...journalReceipt}),{preparation:originalPreparation});passed('actual worker reopens and queries the original protected preparation');
@@ -608,7 +688,7 @@ try {
       const workerCreated=await workerCall({kind:'persistent_create'});
       same(await workerCall({kind:'persistent_open',...workerCreated}),{plain:[90,91,92]});
       passed('persistent provider survives actual worker termination and new worker instance');
-      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded},workspace:workspaceReceipt,journal:{...journalReceipt,preparation:originalPreparation},plan:{...planReceipt,originalPlan},issuance:{...signingReceipt,originalClaim,originalSeal}};
+      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded},workspace:workspaceReceipt,journal:{...journalReceipt,preparation:originalPreparation},plan:{...planReceipt,originalPlan},issuance:{...signingReceipt,originalClaim,originalSeal},installation:{...installReceipt,installedState}};
     } finally {IDBDatabase.prototype.transaction=nativeTransaction;}
   });
   await page.reload();
@@ -626,6 +706,7 @@ try {
   assert.deepEqual(preparationRestart,result.journal.preparation);result.tests.push('original protected operation survives actual page and WASM restart');delete result.journal;
   const planRestart=await page.evaluate(async r=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(r.n,new Uint8Array(r.fingerprint),new Uint8Array(r.selection),new Uint8Array(r.proof));const plan=Array.from(await owner.plan_query(180));await owner.close();return plan;},result.plan);assert.deepEqual(planRestart,result.plan.originalPlan);result.tests.push('complete original protected T1 survives actual page and WASM restart');delete result.plan;
   delete result.persistent;
+  const installationRestart=await page.evaluate(async r=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(r.n,new Uint8Array(r.fingerprint),new Uint8Array(r.selection),new Uint8Array(r.proof));const state=JSON.parse(await owner.snapshot(200));await owner.close();return state;},result.installation);assert.deepEqual(installationRestart,result.installation.installedState);result.tests.push('original installation and per-recipient work survive actual page and WASM restart');delete result.installation;
   const issuanceRestart=await page.evaluate(async r=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(r.n,new Uint8Array(r.fingerprint),new Uint8Array(r.selection),new Uint8Array(r.proof));const claim=Array.from(await owner.attempt(190,0)),seal=Array.from(await owner.captured(190,0));await owner.close();return {claim,seal};},result.issuance);assert.deepEqual(issuanceRestart,{claim:result.issuance.originalClaim,seal:result.issuance.originalSeal});result.tests.push('original claim and captured signature survive actual page and WASM restart');delete result.issuance;
   console.log(JSON.stringify({engine,version:browser.version(),...result}));
 } finally {

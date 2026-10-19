@@ -65,6 +65,68 @@ async fn snapshot(
 }
 
 #[tokio::test]
+async fn existing_peer_installation_allows_first_self_claim_within_original_window() {
+    let fixture = Fixture::new();
+    let (store, input, proof, binding) = fixture.create().await;
+    let (prepared, digest, recipients) =
+        prepare(&fixture, &store, &binding, &proof, 225, true).await;
+    let peer = *recipients
+        .iter()
+        .find(|recipient| **recipient != key())
+        .unwrap();
+    let peer_claim = claim(
+        store
+            .claim_attempt(selection(&binding, &prepared, digest, peer), copy(&proof))
+            .await
+            .unwrap(),
+    );
+    let peer_capture = capture(&store, &input, &proof, &peer_claim).await;
+    let original = installed(
+        store
+            .install_transition_and_outbox(
+                request_install(&binding, &prepared, digest),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    assert_eq!(original.basis(), peer_capture);
+    let partial = snapshot(&store, &binding, &prepared, &proof).await;
+    assert_eq!(partial.publications().len(), 1);
+    assert!(
+        partial
+            .recipients()
+            .iter()
+            .find(|value| value.recipient() == key())
+            .unwrap()
+            .claim()
+            .is_none()
+    );
+    fixture.clock.now.store(110, Ordering::SeqCst);
+    let own = claim(
+        store
+            .claim_attempt(selection(&binding, &prepared, digest, key()), copy(&proof))
+            .await
+            .unwrap(),
+    );
+    capture(&store, &input, &proof, &own).await;
+    let extended = installed(
+        store
+            .install_transition_and_outbox(
+                request_install(&binding, &prepared, digest),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    assert_eq!(extended, original);
+    let complete = snapshot(&store, &binding, &prepared, &proof).await;
+    assert_eq!(complete.publications().len(), 2);
+    assert_eq!(complete.installed_message(), partial.installed_message());
+    store.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn actual_peer_installation_and_late_self_capture_keep_one_original_message_and_distinct_work()
  {
     let fixture = Fixture::new();

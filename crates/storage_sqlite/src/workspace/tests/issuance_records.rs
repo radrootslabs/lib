@@ -872,3 +872,111 @@ async fn actual_capture_turn_refuses_uncertainty_foreign_scope_and_fabricated_cl
     assert_eq!(retained.0.raw_json(), issued.evidence.raw_json());
     database.close().await.unwrap();
 }
+
+async fn installed_descendant_case(mode: u8) {
+    use radroots_storage::command::{InstallationOutcome, InstallationRequest};
+    let issued = Issued::new().await;
+    let store = NativeWorkspace::open_existing(
+        &issued.path,
+        issued.selected.clone(),
+        issued.fixture.crypto(),
+        Arc::new(FixedClock(100)),
+    )
+    .await
+    .unwrap();
+    let binding = store
+        .authenticate(issued.selected.clone(), &issued.proof)
+        .await
+        .unwrap();
+    let original = issued.attempt.bound_plan().prepared().identity();
+    let plan = *issued.attempt.bound_plan().plan().digest();
+    let copy = || {
+        issued
+            .proof
+            .with_secret(|raw| AttachmentProof::from_protected_input(raw).unwrap())
+    };
+    assert!(matches!(
+        store
+            .install_transition_and_outbox(
+                InstallationRequest::new(
+                    binding.clone(),
+                    original.operation_id(),
+                    original.command_digest(),
+                    plan
+                ),
+                copy()
+            )
+            .await
+            .unwrap(),
+        InstallationOutcome::Committed(_)
+    ));
+    let mut database = issued.database().await;
+    for statement in [
+        "DELETE FROM seal_evidence_parts",
+        "DELETE FROM seal_evidence",
+        "DELETE FROM signing_attempts",
+    ] {
+        if mode == 3 && statement == "DELETE FROM signing_attempts" {
+            continue;
+        }
+        sqlx::query(statement).execute(&mut database).await.unwrap();
+    }
+    let messages: i64 = sqlx::query_scalar("SELECT count(*) FROM chat_messages")
+        .fetch_one(&mut database)
+        .await
+        .unwrap();
+    let work: i64 = sqlx::query_scalar("SELECT count(*) FROM chat_publication_work")
+        .fetch_one(&mut database)
+        .await
+        .unwrap();
+    assert_eq!((messages, work), (1, 1));
+    database.close().await.unwrap();
+    let request = ClaimAttemptRequest::new(
+        binding,
+        original.operation_id(),
+        original.command_digest(),
+        plan,
+        participant(),
+    );
+    let outcome = if mode == 0 {
+        match store.claim_attempt(request, copy()).await {
+            Ok(ClaimAttemptOutcome::Claimed(_)) => "claimed",
+            Ok(ClaimAttemptOutcome::Retained(_)) => "retained",
+            Ok(ClaimAttemptOutcome::Unknown(_)) => "unknown",
+            Err(error) => error.code(),
+        }
+    } else if mode == 1 {
+        match store.signing_attempt(request, copy()).await {
+            Ok(Some(_)) => "found",
+            Ok(None) => "absent",
+            Err(error) => error.code(),
+        }
+    } else {
+        match store.obtained_evidence(request, copy()).await {
+            Ok(Some(_)) => "found",
+            Ok(None) => "absent",
+            Err(error) => error.code(),
+        }
+    };
+    store.close().await.unwrap();
+    assert_eq!(
+        outcome, "recovery_required",
+        "retained T2 descendants must refuse false absence or a new claim after complete S loss"
+    );
+}
+#[tokio::test]
+async fn installed_descendants_prevent_fresh_claim_after_complete_s_loss() {
+    installed_descendant_case(0).await;
+}
+#[tokio::test]
+async fn installed_descendants_prevent_false_claim_absence_after_complete_s_loss() {
+    installed_descendant_case(1).await;
+}
+#[tokio::test]
+async fn installed_descendants_prevent_false_obtained_absence_after_complete_s_loss() {
+    installed_descendant_case(2).await;
+}
+#[tokio::test]
+async fn installed_descendants_prevent_false_obtained_absence_with_retained_claim() {
+    installed_descendant_case(3).await;
+}

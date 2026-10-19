@@ -21,7 +21,7 @@ use radroots_storage::{
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-enum Claim {
+pub(super) enum Claim {
     Absent(BoundSigningPlan, u8),
     Present(SigningAttempt),
 }
@@ -97,37 +97,12 @@ impl State {
         digest: CommandDigest,
         t0: &Records,
     ) -> Result<Option<BoundSigningPlan>, OperationError> {
-        let Some(prepared) = self.preparation(operation, t0).await? else {
-            if !view.is_empty() {
-                return Err(OperationError::RecoveryRequired);
-            }
-            return Ok(None);
-        };
-        if prepared.request().binding().input() != &self.selected
-            || prepared.request().command().context().actor().participant()
-                != self.selected.participant()
-        {
-            return Err(OperationError::Unauthorized);
+        match super::retained::header(self, view, operation, Some(digest), t0).await? {
+            Some(radroots_storage::command::RetainedOperation::Planned(bound)) => Ok(Some(*bound)),
+            _ => Ok(None),
         }
-        protected::check_digest(
-            &prepared,
-            prepared.request().command().context().actor(),
-            Some(digest),
-        )?;
-        let records = self.plan_records(view, operation).await?;
-        let Some((manifest, plan)) = self.retained_plan(&prepared, &records).await? else {
-            self.absent_plans(view, operation).await?;
-            return Ok(None);
-        };
-        for key in view.keys() {
-            let (kind, recipient, _) = address::fields(key)?;
-            if kind >= address::CLAIM && recipient as usize >= plan.seals().len() {
-                return Err(OperationError::RecoveryRequired);
-            }
-        }
-        manifest.bind(prepared, plan).map(Some)
     }
-    async fn claim(
+    pub(super) async fn claim(
         &self,
         view: &ReadSnapshot,
         bound: BoundSigningPlan,
@@ -150,7 +125,7 @@ impl State {
         let attempt = clear.expose_secret(|raw| ClaimRecord::decode(raw, bound, recipient))?;
         Ok(Claim::Present(attempt))
     }
-    async fn evidence(
+    pub(super) async fn evidence(
         &self,
         view: &ReadSnapshot,
         attempt: &SigningAttempt,
@@ -182,8 +157,7 @@ impl State {
         .await?;
         let manifest = raw.expose_secret(|raw| EvidenceManifest::decode(raw, attempt))?;
         let mut clear = Zeroizing::new(Vec::with_capacity(manifest.byte_count()));
-        for part in 1..=4 {
-            let bytes = &records[part];
+        for (part, bytes) in records.iter().enumerate().skip(1) {
             if part > manifest.part_count() {
                 if bytes.is_some() {
                     return Err(OperationError::RecoveryRequired);
@@ -303,6 +277,9 @@ impl BrowserWorkspace {
             {
                 Claim::Present(attempt) => (attempt, false, Vec::new()),
                 Claim::Absent(bound, index) => {
+                    state
+                        .check_claim_absence(&view, operation, request.command_digest(), &t0)
+                        .await?;
                     let now = access.binding.observed_at();
                     if now < bound.bound_at() {
                         return Err(WorkspaceError::Unavailable.into());
@@ -392,7 +369,17 @@ impl BrowserWorkspace {
                         .await?
                     {
                         Claim::Present(attempt) => Some(attempt),
-                        Claim::Absent(_, _) => None,
+                        Claim::Absent(_, _) => {
+                            state
+                                .check_claim_absence(
+                                    &view,
+                                    operation,
+                                    request.command_digest(),
+                                    &t0,
+                                )
+                                .await?;
+                            None
+                        }
                     }
                 } else {
                     None
@@ -409,11 +396,13 @@ impl BrowserWorkspace {
     }
     /// Appends already obtained exact output to an actual original claim.
     /// No current clock or grant revocation can discard that retained fact.
-    pub async fn capture_signed_seal(
+    /// Borrowed original input remains caller-owned through error or lost wait;
+    /// an accepted driver retains only its bounded protected-work copy.
+    pub async fn capture_evidence(
         &self,
         input: AttachmentInput,
-        proof: AttachmentProof,
-        supplied: SealEvidence,
+        proof: &AttachmentProof,
+        supplied: &SealEvidence,
     ) -> Result<EvidenceCaptureOutcome, OperationError> {
         let fallback = CommitAttempt::new(
             supplied.workspace_id(),
@@ -423,6 +412,8 @@ impl BrowserWorkspace {
         );
         let work = self.state.admit()?;
         let state = self.state.clone();
+        let proof = proof.with_secret(|raw| AttachmentProof::from_protected_input(raw))?;
+        let supplied = supplied.retained_copy();
         let result = owned(work, async move {
             let (grant, protected) = state.capture_grant(&input, &proof).await?;
             if supplied.workspace_id() != state.selected.workspace_id() {
@@ -509,7 +500,7 @@ impl BrowserWorkspace {
         }
     }
     /// Reads original verified output under current access; no issuance occurs.
-    pub async fn captured_seal(
+    pub async fn obtained_evidence(
         &self,
         request: ClaimAttemptRequest,
         proof: AttachmentProof,
@@ -534,18 +525,39 @@ impl BrowserWorkspace {
                         .claim(&view, bound, request.recipient(), index)
                         .await?
                     {
-                        Claim::Present(attempt) => state
-                            .evidence(&view, &attempt, index)
-                            .await?
-                            .map(|(evidence, receipt)| {
-                                CapturedSeal::from_committed_store(
-                                    attempt,
-                                    evidence,
-                                    receipt.transaction_id(),
+                        Claim::Present(attempt) => {
+                            let obtained = state.evidence(&view, &attempt, index).await?;
+                            if obtained.is_none() {
+                                state
+                                    .check_claim_absence(
+                                        &view,
+                                        operation,
+                                        request.command_digest(),
+                                        &t0,
+                                    )
+                                    .await?;
+                            }
+                            obtained
+                                .map(|(evidence, receipt)| {
+                                    CapturedSeal::from_committed_store(
+                                        attempt,
+                                        evidence,
+                                        receipt.transaction_id(),
+                                    )
+                                })
+                                .transpose()?
+                        }
+                        Claim::Absent(_, _) => {
+                            state
+                                .check_claim_absence(
+                                    &view,
+                                    operation,
+                                    request.command_digest(),
+                                    &t0,
                                 )
-                            })
-                            .transpose()?,
-                        Claim::Absent(_, _) => None,
+                                .await?;
+                            None
+                        }
                     }
                 } else {
                     None

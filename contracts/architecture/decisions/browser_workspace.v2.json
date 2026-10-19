@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "radroots.storage.browser_workspace.v2",
-  "state": "implemented_verified_issuance_component",
+  "state": "implemented_verified_installation_component",
   "owner": "radroots_storage_indexeddb",
   "feature": "workspace",
   "target": "wasm32-unknown-unknown",
@@ -69,7 +69,9 @@
     "main_thread_and_worker_required": true,
     "actual_worker_termination_and_page_restart_required": true,
     "native_workspace_and_ordinary_inquiry_regressions_required": true,
-    "final_phone_or_full_rcld_claim": false
+    "final_phone_or_full_rcld_claim": false,
+    "expanded_fixture_deadline_seconds": 180,
+    "fixture_deadline_is_product_performance_acceptance": false
   },
   "shared_prepared_codec": "radroots_storage::command::protected",
   "operation_admission": {
@@ -150,8 +152,6 @@
       "delivery_request_index"
     ],
     "reserved_not_yet_implemented_families": [
-      "installation",
-      "publication_work",
       "delivery_frame",
       "delivery_observation",
       "delivery_request_index"
@@ -169,9 +169,39 @@
     "fresh_time_or_revocation_discards_obtained_fact": false,
     "unknown_observation_time": "null",
     "capture_only_open_allows_fresh_authentication_or_commands": false,
-    "each_signed_field_id_and_signature_verified_against_stored_intent": true
+    "each_signed_field_id_and_signature_verified_against_stored_intent": true,
+    "caller_original_proof_and_evidence_borrowed": true,
+    "admitted_driver_retains_bounded_work_copy": true
   },
   "qualification_state": "behavior_verified_native_and_three_browsers",
   "shared_claim_codec": "radroots_storage::command::protected::issuance::ClaimRecord",
-  "shared_obtained_metadata_codec": "radroots_storage::command::protected::issuance::EvidenceManifest"
+  "shared_obtained_metadata_codec": "radroots_storage::command::protected::issuance::EvidenceManifest",
+  "chat_installation": {
+    "phase": "T2",
+    "shared_checked_models": [
+      "ChatInstallation",
+      "PublicationWork",
+      "OperationSnapshot"
+    ],
+    "private_wire": "fixed_binary_v2_468_bytes",
+    "body_in_original_command": true,
+    "one_original_message_and_basis": true,
+    "later_obtained_recipients_append_distinct_work": true,
+    "fresh_current_access_lease_and_clock_required": true,
+    "original_first_issue_window_applied_to_installation": false,
+    "exact_retained_replay_before_entropy": true,
+    "complete_prefix_checked_in_actual_transaction": true,
+    "unknown_original_attempt_retained": true,
+    "delivery_or_full_client_claim": false
+  },
+  "concrete_ports": [
+    "operation",
+    "signing_plan",
+    "claim_attempt",
+    "signing_attempt",
+    "capture_evidence",
+    "obtained_evidence",
+    "install_transition_and_outbox",
+    "operation_snapshot"
+  ]
 }

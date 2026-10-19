@@ -5,6 +5,7 @@ use super::{
     admission::{Journal, recheck, same_binding},
     attempt, evidence, operation, plan,
     record::GrantRecord,
+    snapshot::RetainedFacts,
     worker,
 };
 use radroots_domain::{CommandDigest, OperationId, PublicKey, SigningAttemptId, TransactionId};
@@ -82,6 +83,21 @@ impl Journal<'_> {
             self.crypto,
         )
         .await?;
+        let absence = if existing.is_none() {
+            Some(
+                RetainedFacts::read(
+                    self.connection,
+                    self.selected,
+                    request.binding(),
+                    request.operation_id(),
+                    Some(request.command_digest()),
+                    self.crypto,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
         let (snapshot, protected, fresh) = if let Some((id, transaction, time, protected)) =
             existing
         {
@@ -144,6 +160,11 @@ impl Journal<'_> {
             )
             .await?;
             if fresh {
+                absence
+                    .as_ref()
+                    .ok_or(OperationError::RecoveryRequired)?
+                    .unchanged(&mut transaction, self.selected, request.operation_id())
+                    .await?;
                 if now.observed_at() < snapshot.claimed_at() {
                     return Err(WorkspaceError::Unavailable.into());
                 }
@@ -235,6 +256,21 @@ impl Journal<'_> {
         } else {
             None
         };
+        let absence = if retained.is_none() {
+            Some(
+                RetainedFacts::read(
+                    self.connection,
+                    self.selected,
+                    request.binding(),
+                    request.operation_id(),
+                    Some(request.command_digest()),
+                    self.crypto,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
         let mut transaction = self
             .connection
             .begin_with("BEGIN IMMEDIATE")
@@ -267,6 +303,11 @@ impl Journal<'_> {
                 .await?;
                 attempt::unchanged(&mut transaction, snapshot, protected).await?;
             } else {
+                absence
+                    .as_ref()
+                    .ok_or(OperationError::RecoveryRequired)?
+                    .unchanged(&mut transaction, self.selected, request.operation_id())
+                    .await?;
                 absent_claim(
                     &mut transaction,
                     self.selected,
@@ -476,6 +517,21 @@ impl Journal<'_> {
         } else {
             None
         };
+        let absence = if retained.as_ref().is_none_or(|value| value.4.is_none()) {
+            Some(
+                RetainedFacts::read(
+                    self.connection,
+                    self.selected,
+                    request.binding(),
+                    request.operation_id(),
+                    Some(request.command_digest()),
+                    self.crypto,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
         let mut transaction = self
             .connection
             .begin_with("BEGIN IMMEDIATE")
@@ -493,6 +549,11 @@ impl Journal<'_> {
                 self.clock,
             )
             .await?;
+            if let Some(absence) = &absence {
+                absence
+                    .unchanged(&mut transaction, self.selected, request.operation_id())
+                    .await?;
+            }
             if let Some((snapshot, protected, operation, plan, captured)) = &retained {
                 operation::unchanged(
                     &mut transaction,
