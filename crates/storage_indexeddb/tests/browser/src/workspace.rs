@@ -1,4 +1,5 @@
 //! Synthetic isolated host-effect fixture, never a production custody API.
+mod plans;
 use futures::FutureExt;
 use radroots_domain::{
     ActorRole, CommandContextData, Coverage, OperationId, PublicKey, UnixSeconds, WorkspaceId,
@@ -387,11 +388,20 @@ impl WorkspaceFixture {
         let text = if changed {
             "changed".to_string()
         } else {
-            "\u{0001}".repeat(4096)
+            // T1 additionally constructs the bounded complete rumor, whose
+            // JSON framing must fit alongside the escaped text. Preserve the
+            // earlier T0-only maximum-input cases exactly.
+            "\u{0001}".repeat(if n >= 180 { 3000 } else { 4096 })
+        };
+        let peer = if n >= 180 {
+            PublicKey::from_hex("c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")
+                .unwrap()
+        } else {
+            participant()
         };
         let wire = serde_json::to_vec(
             &serde_json::json!({"type":"inbox.inquire","context":context,
-            "input":{"thread_id":"66".repeat(32),"peer":participant(),"source":null,"text":text}}),
+            "input":{"thread_id":"66".repeat(32),"peer":peer,"source":null,"text":text}}),
         )
         .unwrap();
         AdmissionRequest::from_protected_wire(binding, &wire)

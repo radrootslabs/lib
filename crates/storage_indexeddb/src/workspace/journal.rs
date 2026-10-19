@@ -21,7 +21,24 @@ use zeroize::Zeroizing;
 const PART_BYTES: usize = 16 * 1024;
 const PARTS: usize = protected::PREPARED_BYTES_MAX / PART_BYTES;
 const SLOTS: usize = PARTS + 1;
-type Records = Vec<Option<Vec<u8>>>;
+pub(super) type Records = Vec<Option<Vec<u8>>>;
+
+pub(super) struct OperationChange {
+    pub before: Records,
+    pub after: Option<Records>,
+    pub window: Option<IssuanceWindow>,
+    pub extra: Vec<Mutation>,
+}
+impl OperationChange {
+    pub fn observe(before: Records) -> Self {
+        Self {
+            before,
+            after: None,
+            window: None,
+            extra: Vec::new(),
+        }
+    }
+}
 
 fn key(operation: OperationId, slot: usize) -> RecordKey {
     let mut h = Sha256::new();
@@ -61,7 +78,10 @@ fn context(
     ))
 }
 impl State {
-    async fn operation_records(&self, operation: OperationId) -> Result<Records, OperationError> {
+    pub(super) async fn operation_records(
+        &self,
+        operation: OperationId,
+    ) -> Result<Records, OperationError> {
         let mut records = Vec::with_capacity(SLOTS);
         for slot in 0..SLOTS {
             let value = self
@@ -79,7 +99,7 @@ impl State {
         }
         Ok(records)
     }
-    async fn preparation(
+    pub(super) async fn preparation(
         &self,
         operation: OperationId,
         records: &Records,
@@ -185,22 +205,23 @@ impl State {
         Ok(records)
     }
 }
-fn storage_error(error: Error) -> OperationError {
+pub(super) fn storage_error(error: Error) -> OperationError {
     match error {
         Error::Capacity => WorkspaceError::Capacity.into(),
         Error::Closed => WorkspaceError::Closed.into(),
+        Error::CommitUnknown => WorkspaceError::CommitUnknown.into(),
         Error::Aborted | Error::Unavailable => OperationError::StorageFailure,
         _ => OperationError::RecoveryRequired,
     }
 }
-struct Access {
+pub(super) struct Access {
     grant: LocalOutboxGrant,
     protected: Vec<u8>,
-    binding: WorkspaceBinding,
+    pub binding: WorkspaceBinding,
     proof: AttachmentProof,
 }
 impl State {
-    async fn operation_access(
+    pub(super) async fn operation_access(
         &self,
         binding: &WorkspaceBinding,
         proof: AttachmentProof,
@@ -214,15 +235,19 @@ impl State {
             proof,
         })
     }
-    async fn check_operation(
+    pub(super) async fn check_operation(
         &self,
         access: Access,
         operation: OperationId,
-        before: Records,
-        after: Option<Records>,
-        window: Option<IssuanceWindow>,
+        change: OperationChange,
     ) -> Result<(), OperationError> {
-        let mut mutations = Vec::with_capacity(SLOTS + 1);
+        let OperationChange {
+            before,
+            after,
+            window,
+            extra,
+        } = change;
+        let mut mutations = Vec::with_capacity(SLOTS + 1 + extra.len());
         mutations.push(
             Mutation::new(
                 grant_key(),
@@ -237,6 +262,7 @@ impl State {
                 .map_or_else(|| old.clone(), |r| r[slot].clone());
             mutations.push(Mutation::new(key(operation, slot), old, new).map_err(storage_error)?);
         }
+        mutations.extend(extra);
         let batch = Batch::new(mutations).map_err(storage_error)?;
         let active = self.active()?;
         let clock = self.clock.clone();
@@ -308,6 +334,11 @@ impl BrowserWorkspace {
             let context = request.command().context();
             let operation = context.operation_id();
             let before = state.operation_records(operation).await?;
+            let extra = if before.iter().all(Option::is_none) {
+                state.absent_plans(operation).await?
+            } else {
+                Vec::new()
+            };
             let (prepared, after, fresh) =
                 if let Some(existing) = state.preparation(operation, &before).await? {
                     protected::check_digest(
@@ -349,9 +380,12 @@ impl BrowserWorkspace {
                 .check_operation(
                     access,
                     operation,
-                    before,
-                    after,
-                    fresh.then(|| prepared.issuance_window()),
+                    OperationChange {
+                        before,
+                        after,
+                        window: fresh.then(|| prepared.issuance_window()),
+                        extra,
+                    },
                 )
                 .await
             {
@@ -390,9 +424,11 @@ impl BrowserWorkspace {
             if let Some(prepared) = &result {
                 protected::check_digest(prepared, binding.actor(), digest)?;
             }
-            state
-                .check_operation(access, operation, records, None, None)
-                .await?;
+            let mut change = OperationChange::observe(records);
+            if result.is_none() {
+                change.extra = state.absent_plans(operation).await?;
+            }
+            state.check_operation(access, operation, change).await?;
             Ok(result)
         })
         .await

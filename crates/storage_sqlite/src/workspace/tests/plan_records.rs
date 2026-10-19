@@ -404,5 +404,95 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
             .await
             .is_err()
     );
+    // A missing T0 must not become absence or a replacement operation while
+    // any original protected plan part remains. This is corrupted retained
+    // state, even when the SQL schema itself still passes quick_check.
+    let retained_command = prepared.request().command().protected_wire().to_vec();
+    sqlx::query("DELETE FROM operations")
+        .execute(&mut database)
+        .await
+        .unwrap();
+    let orphaned: Vec<Vec<u8>> =
+        sqlx::query_scalar("SELECT protected FROM signing_plan_parts ORDER BY part")
+            .fetch_all(&mut database)
+            .await
+            .unwrap();
+    assert!(!orphaned.is_empty());
     database.close().await.unwrap();
+    let reopened = NativeWorkspace::open_existing(&path, selected.clone(), fixture.crypto(), clock)
+        .await
+        .unwrap();
+    let binding = reopened
+        .authenticate(selected.clone(), &proof)
+        .await
+        .unwrap();
+    // Absence is operation-scoped: unrelated retained orphan parts must not
+    // turn a genuinely unknown ID into an error or create a replacement.
+    assert!(
+        reopened
+            .signing_plan(
+                binding.clone(),
+                OperationId::from_bytes([52; 32]),
+                radroots_domain::CommandDigest::from_bytes([0; 32]),
+                copied(),
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(matches!(
+        reopened
+            .signing_plan(
+                binding.clone(),
+                operation_id,
+                prepared.identity().command_digest(),
+                copied(),
+            )
+            .await,
+        Err(radroots_storage::command::OperationError::RecoveryRequired)
+    ));
+    let lookup = reopened
+        .operation(binding.clone(), operation_id, None, copied())
+        .await;
+    let admission = reopened
+        .admit_command_and_hold(
+            AdmissionRequest::from_protected_wire(binding, &retained_command).unwrap(),
+            copied(),
+        )
+        .await;
+    reopened.close().await.unwrap();
+    assert!(
+        matches!(
+            lookup,
+            Err(radroots_storage::command::OperationError::RecoveryRequired)
+        ),
+        "orphan lookup must refuse, not report absence"
+    );
+    assert!(
+        matches!(
+            admission,
+            Err(radroots_storage::command::OperationError::RecoveryRequired)
+        ),
+        "orphan state must not acquire a replacement preparation"
+    );
+    let mut unchanged = SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path.join("execution_v1.sqlite"))
+            .create_if_missing(false)
+            .read_only(true),
+    )
+    .await
+    .unwrap();
+    let still_retained: Vec<Vec<u8>> =
+        sqlx::query_scalar("SELECT protected FROM signing_plan_parts ORDER BY part")
+            .fetch_all(&mut unchanged)
+            .await
+            .unwrap();
+    assert_eq!(orphaned, still_retained);
+    let operations: i64 = sqlx::query_scalar("SELECT count(*) FROM operations")
+        .fetch_one(&mut unchanged)
+        .await
+        .unwrap();
+    assert_eq!(operations, 0);
+    unchanged.close().await.unwrap();
 }

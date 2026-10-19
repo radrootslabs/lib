@@ -4,6 +4,7 @@
 mod crypto;
 mod journal;
 mod lease;
+mod plans;
 
 use super::{Batch, Database, Error, Mutation, Namespace, OpenMode, RecordKey};
 use futures::{channel::oneshot, lock::Mutex};
@@ -31,9 +32,10 @@ use std::{
 };
 use wasm_bindgen_futures::spawn_local;
 
-const JOB_BYTES: usize = 512 * 1024;
+const JOB_BYTES: usize = 4 * 1024 * 1024;
 const LIVE_BYTES: usize = 4 * 1024 * 1024;
 const JOBS: usize = LIVE_BYTES / JOB_BYTES;
+const SETUPS_MAX: usize = 8;
 const WAITERS: usize = 32;
 type Signal = RefCell<Option<Waker>>;
 thread_local! { static SETUPS: Cell<usize> = const { Cell::new(0) }; }
@@ -41,7 +43,7 @@ struct Setup;
 impl Setup {
     fn admit() -> Result<Self, WorkspaceError> {
         SETUPS.with(|count| {
-            if count.get() >= JOBS {
+            if count.get() >= SETUPS_MAX {
                 return Err(WorkspaceError::Capacity);
             }
             count.set(count.get() + 1);

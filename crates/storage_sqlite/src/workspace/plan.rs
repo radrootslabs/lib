@@ -3,31 +3,15 @@ use super::{
     AttachmentInput,
     crypto::{PRIVATE_PAYLOAD_MAX_BYTES, WorkspaceCrypto},
 };
-use radroots_domain::{CommandDigest, OperationId, TransactionId, UnixSeconds};
-use radroots_storage::command::{
-    BoundSigningPlan, ChatSigningPlan, OperationError, PreparedOperation,
-};
-use serde::{Deserialize, Serialize};
+use radroots_domain::{TransactionId, UnixSeconds};
+use radroots_storage::command::protected::plan::PlanManifest;
+use radroots_storage::command::{ChatSigningPlan, OperationError, PreparedOperation};
 use sqlx::{Row, SqliteConnection};
 use zeroize::Zeroizing;
 
 pub(super) const TABLE: &str = "CREATE TABLE signing_plans (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, plan_digest BLOB NOT NULL CHECK(length(plan_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), part_count INTEGER NOT NULL CHECK(part_count BETWEEN 1 AND 24), byte_count INTEGER NOT NULL CHECK(byte_count BETWEEN 1 AND 393216), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id), FOREIGN KEY(workspace,operation_id) REFERENCES operations(workspace,operation_id)) STRICT, WITHOUT ROWID";
 pub(super) const PARTS: &str = "CREATE TABLE signing_plan_parts (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, part INTEGER NOT NULL CHECK(part BETWEEN 1 AND 24), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,part), FOREIGN KEY(workspace,operation_id) REFERENCES signing_plans(workspace,operation_id)) STRICT, WITHOUT ROWID";
 const MAX_PROTECTED_TOTAL: usize = 2 * 1024 * 1024;
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Manifest {
-    version: u8,
-    workspace: radroots_domain::WorkspaceId,
-    operation_id: OperationId,
-    command_digest: CommandDigest,
-    preparation_transaction: TransactionId,
-    plan_digest: CommandDigest,
-    transaction_id: TransactionId,
-    bound_at: UnixSeconds,
-    part_count: usize,
-    byte_count: usize,
-}
 pub(super) struct ProtectedPlan {
     pub digest: [u8; 32],
     pub transaction: TransactionId,
@@ -44,20 +28,8 @@ pub(super) async fn protect(
 ) -> Result<ProtectedPlan, OperationError> {
     let anchor = prepared.identity();
     let chunks = plan.protected_wire().chunks(PRIVATE_PAYLOAD_MAX_BYTES);
-    let manifest = Manifest {
-        version: 1,
-        workspace: anchor.workspace_id(),
-        operation_id: anchor.operation_id(),
-        command_digest: anchor.command_digest(),
-        preparation_transaction: prepared.transaction_id(),
-        plan_digest: CommandDigest::from_bytes(*plan.digest()),
-        transaction_id: transaction,
-        bound_at,
-        part_count: chunks.len(),
-        byte_count: plan.protected_wire().len(),
-    };
-    let plaintext =
-        Zeroizing::new(serde_json::to_vec(&manifest).map_err(|_| OperationError::InvalidCommand)?);
+    let manifest = PlanManifest::capture(prepared, plan, transaction, bound_at)?;
+    let plaintext = manifest.encode()?;
     let protected = crypto
         .seal_plan_part(
             anchor.workspace_id(),
@@ -90,7 +62,7 @@ pub(super) async fn protect(
         transaction,
         manifest: protected,
         parts,
-        bytes: manifest.byte_count,
+        bytes: manifest.byte_count(),
     })
 }
 
@@ -153,18 +125,11 @@ pub(super) async fn read(
             &manifest,
         )
         .await?;
-    let decoded: Manifest = decoded
-        .expose_secret(|bytes| serde_json::from_slice(bytes))
-        .map_err(|_| OperationError::RecoveryRequired)?;
-    if decoded.version != 1
-        || decoded.workspace != selected.workspace_id()
-        || decoded.operation_id != anchor.operation_id()
-        || decoded.command_digest != anchor.command_digest()
-        || decoded.preparation_transaction != prepared.transaction_id()
-        || decoded.plan_digest.as_bytes() != &digest
-        || decoded.transaction_id != transaction
-        || decoded.part_count != part_count as usize
-        || decoded.byte_count != byte_count as usize
+    let decoded = decoded.expose_secret(|bytes| PlanManifest::decode(bytes, &prepared))?;
+    if decoded.plan_digest().as_bytes() != &digest
+        || decoded.transaction_id() != transaction
+        || decoded.part_count() != part_count as usize
+        || decoded.byte_count() != byte_count as usize
     {
         return Err(OperationError::RecoveryRequired);
     }
@@ -228,13 +193,10 @@ pub(super) async fn read(
         bytes: byte_count as usize,
     };
     // Validate the original T1 observation before returning even to internal callers.
-    let bound =
-        BoundSigningPlan::from_committed_store(prepared, plan, transaction, decoded.bound_at)?;
+    let bound_at = decoded.bound_at();
+    let bound = decoded.bind(prepared, plan)?;
     let (prepared, plan) = bound.into_parts();
-    Ok((
-        prepared,
-        Some((plan, transaction, decoded.bound_at, protected)),
-    ))
+    Ok((prepared, Some((plan, transaction, bound_at, protected))))
 }
 
 pub(super) async fn insert(

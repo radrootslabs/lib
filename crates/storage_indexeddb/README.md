@@ -30,14 +30,27 @@ commit atomically, with current access, writer and fresh deadline checks inside
 active callbacks. Unknown completion retains the original attempt and stops
 admission until exact reopening. Queries compare the complete fixed record set;
 missing, orphaned or damaged parts never trigger replacement. These methods
-provide T0 only; they do not implement signing, installation or delivery.
+provide T0; they do not issue signatures, install messages or deliver them.
+
+The owner also binds and queries the original complete T1 signing plan, using
+the shared native v1 manifest codec. The 384 KiB plan uses at most twenty-four
+16 KiB clear parts. Every part binds the workspace, operation, position and
+plan digest. One real 31-record transaction compares the grant, all five T0
+slots and all twenty-five T1 slots. Fresh binding rechecks the original issue
+window after asynchronous protection; exact retained replay keeps the original
+transaction and observation without fresh entropy. Missing, orphaned, foreign
+or damaged state refuses, including T0 absence with retained plan records.
+Unknown completion retains the original attempt and stops admission. T1 stores
+complete captured signing data; participant issuance remains a separate phase.
 
 The workspace holds an actual exclusive origin Web Lock. Unavailable or
 contended acquisition refuses; no in-memory substitute is selected. Accepted
 jobs remain Rust-owned and serial through cancelled observation. Closing stops
 admission, drains the jobs, closes IndexedDB, then observes actual lock release.
-Its setup/connection queues reserve a conservative 512 KiB per job, accept at
-most eight jobs within 4 MiB, and retain at most 32 weak close observations.
+Its workspace queue reserves a conservative 4 MiB for one accepted job,
+including a complete T1 plan and atomic comparisons. Grant-only setup remains
+separately bounded to eight jobs at 512 KiB each; close retains at most 32 weak
+observations.
 These limits cover owned inputs, not browser-internal or whole-process memory.
 Clear grants are bounded to 16 KiB and their protected representation to 32 KiB.
 

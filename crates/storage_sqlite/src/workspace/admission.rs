@@ -187,7 +187,7 @@ impl Journal<'_> {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|_| OperationError::StorageFailure)?;
-        let checked = async {
+        let checked: Result<(), OperationError> = async {
             recheck(
                 &mut transaction,
                 self.namespace,
@@ -208,17 +208,7 @@ impl Journal<'_> {
                 )
                 .await?;
             } else {
-                let count: i64 = sqlx::query_scalar(
-                    "SELECT (SELECT count(*) FROM operations WHERE workspace=?1 AND operation_id=?2)+(SELECT count(*) FROM signing_plans WHERE workspace=?1 AND operation_id=?2)+(SELECT count(*) FROM signing_plan_parts WHERE workspace=?1 AND operation_id=?2)",
-                )
-                .bind(self.selected.workspace_id().as_bytes().as_slice())
-                .bind(operation_id.as_bytes().as_slice())
-                .fetch_one(&mut *transaction)
-                .await
-                .map_err(|_| OperationError::RecoveryRequired)?;
-                if count != 0 {
-                    return Err(OperationError::RecoveryRequired);
-                }
+                operation::absent(&mut transaction, self.selected, operation_id).await?;
             }
             Ok(())
         }
@@ -257,7 +247,7 @@ impl Journal<'_> {
                 .begin_with("BEGIN IMMEDIATE")
                 .await
                 .map_err(|_| OperationError::StorageFailure)?;
-            let checked = async {
+            let checked: Result<(), OperationError> = async {
                 recheck(
                     &mut transaction,
                     self.namespace,
@@ -322,6 +312,7 @@ impl Journal<'_> {
             {
                 return Err(OperationError::DeadlineExceeded);
             }
+            operation::absent(&mut transaction, self.selected, operation_id).await?;
             operation::insert(&mut transaction, &request, transaction_id, &protected).await
         }
         .await;
@@ -364,7 +355,7 @@ impl Journal<'_> {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|_| OperationError::StorageFailure)?;
-        let checked = async {
+        let checked: Result<(), OperationError> = async {
             recheck(
                 &mut transaction,
                 self.namespace,
@@ -379,17 +370,7 @@ impl Journal<'_> {
             if let Some((snapshot, protected)) = &result {
                 operation::unchanged(&mut transaction, snapshot, protected).await?;
             } else {
-                let count: i64 = sqlx::query_scalar(
-                    "SELECT count(*) FROM operations WHERE workspace=? AND operation_id=?",
-                )
-                .bind(self.selected.workspace_id().as_bytes().as_slice())
-                .bind(operation_id.as_bytes().as_slice())
-                .fetch_one(&mut *transaction)
-                .await
-                .map_err(|_| OperationError::RecoveryRequired)?;
-                if count != 0 {
-                    return Err(OperationError::RecoveryRequired);
-                }
+                operation::absent(&mut transaction, self.selected, operation_id).await?;
             }
             Ok(())
         }

@@ -8,6 +8,8 @@ use radroots_domain::{
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+pub mod plan;
+
 /// Maximum complete preparation, before a host splits private records.
 pub const PREPARED_BYTES_MAX: usize = 65_536;
 
@@ -160,7 +162,7 @@ mod tests {
     use radroots_domain::{CommandContextData, ExecutorId, GrantId, PublicKey, WorkspaceId};
     use serde_json::json;
 
-    fn request() -> AdmissionRequest {
+    pub(super) fn request() -> AdmissionRequest {
         let participant =
             PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
                 .unwrap();

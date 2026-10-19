@@ -26,6 +26,7 @@ const server = createServer(async (req,res) => {
         self.onmessage=async(event)=>{try{
           if(event.data?.kind==='workspace_open'||event.data?.kind==='workspace_hold'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const revision=await owner.authenticate();if(m.kind==='workspace_hold')retainedWorkspace=owner;else await owner.close();self.postMessage({revision});return;}
           if(event.data?.kind==='journal_query'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const preparation=Array.from(await owner.query(65));await owner.close();self.postMessage({preparation});return;}
+          if(event.data?.kind==='plan_query'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const plan=Array.from(await owner.plan_query(180));await owner.close();self.postMessage({plan});return;}
           if(event.data?.kind==='persistent_create'){const provider=await Persistent.create(90);const fingerprint=provider.fingerprint();const encoded=await provider.protect(new Uint8Array([90,91,92]));await provider.close();self.postMessage({fingerprint:Array.from(fingerprint),encoded:Array.from(encoded)});return;}
           if(event.data?.kind==='persistent_open'){const provider=await Persistent.open(90,new Uint8Array(event.data.fingerprint));const plain=await provider.reveal(new Uint8Array(event.data.encoded));await provider.close();self.postMessage({plain:Array.from(plain)});return;}
           await protected_round_trip(79);const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
@@ -338,10 +339,89 @@ try {
       same(originalFallback.length,64);same(originalFallback.slice(0,32),new Array(32).fill(72));await unknownRead.close();
       const readReopen=await WorkspaceFixture.open(unknownReadReceipt.n,new Uint8Array(unknownReadReceipt.fingerprint),new Uint8Array(unknownReadReceipt.selection),new Uint8Array(unknownReadReceipt.proof));same(Array.from(await readReopen.query(72)),[]);await readReopen.close();
       passed('uncertain original admission read retains the captured operation anchor without inventing a transaction');
+      const receiptOf=(owner,n)=>({n,fingerprint:Array.from(owner.fingerprint()),selection:Array.from(owner.selection()),proof:Array.from(owner.proof()),namespace:owner.data_namespace()});
+      const openPlanReceipt=r=>WorkspaceFixture.open(r.n,new Uint8Array(r.fingerprint),new Uint8Array(r.selection),new Uint8Array(r.proof));
+      const sameRows=(a,b)=>{same(a.keys.map(keyBytes),b.keys.map(keyBytes));same(a.values.map(v=>Array.from(v)),b.values.map(v=>Array.from(v)));};
+      const planBox=await WorkspaceFixture.create(180),planReceipt=receiptOf(planBox,180);
+      await planBox.admit(180,false);same(Array.from(await planBox.plan_query(180)),[]);
+      const planWire=await planBox.new_plan(180);if(planWire.length<=16384)throw Error('plan did not exercise multipart storage');
+      const originalPlan=Array.from(await planBox.bind_plan(180,planWire));same(originalPlan.length,108);
+      same(new DataView(new Uint8Array(originalPlan).buffer).getUint32(72,false),planWire.length);
+      same(Array.from(await planBox.plan_query(180)),originalPlan);
+      const planStored=await workspaceBytes(planReceipt);if(planStored.values.length<8)throw Error('missing actual protected plan parts');
+      for(const v of planStored.values)if(v.length>32768)throw Error('oversized protected private plan record');
+      passed('actual peer/self NIP44, verified signed routes and atomic complete multipart T1 bind/query');
+      await rejects(()=>planBox.bind_plan_foreign(180,planWire),'unauthorized');
+      sameRows(await workspaceBytes(planReceipt),planStored);
+      passed('a valid foreign workspace binding cannot authorize T1 in the original owner');
+      planBox.set_time(1600);const oldPlanRandom=Crypto.prototype.getRandomValues;
+      try{Crypto.prototype.getRandomValues=()=>{throw Error('retained T1 acquired new entropy');};same(Array.from(await planBox.bind_plan(180,planWire)),originalPlan);}
+      finally{Crypto.prototype.getRandomValues=oldPlanRandom;}
+      const conflictingPlan=await planBox.new_plan(180);await rejects(()=>planBox.bind_plan(180,conflictingPlan),'idempotency_conflict');
+      same(Array.from(await planBox.plan_query(180)),originalPlan);
+      passed('exact late T1 replay retains original transaction/window without new entropy and refuses conflicting plans');
+      planBox.set_time(1000);await planBox.admit(181,false);const expiringPlan=await planBox.new_plan(181);
+      const beforePlanExpiry=await workspaceBytes(planReceipt);await rejects(()=>planBox.bind_plan_expiring(181,expiringPlan),'deadline_exceeded');
+      same(Array.from(await planBox.plan_query(181)),[]);sameRows(await workspaceBytes(planReceipt),beforePlanExpiry);
+      passed('fresh T1 expiry after actual wrapping rolls back the entire grant/T0/plan comparison batch');
+      planBox.set_time(1000);await planBox.admit(182,false);const abortedPlan=await planBox.new_plan(182);
+      const planKey=async(n,slot)=>new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array([...new TextEncoder().encode('radroots.browser.local_outbox.plan.key.v1\0'),...new Uint8Array(32).fill(n),0,0,0,slot])));
+      const abortPlanKey=await planKey(182,1),beforePlanAbort=await workspaceBytes(planReceipt);let planWriteAborted=false;
+      const actualPlanPut=IDBObjectStore.prototype.put;
+      try{IDBObjectStore.prototype.put=function(...args){const request=actualPlanPut.apply(this,args);if(this.transaction.db.name===planReceipt.namespace&&JSON.stringify(keyBytes(args[1]))===JSON.stringify(keyBytes(abortPlanKey))){request.addEventListener('success',()=>{planWriteAborted=true;this.transaction.abort();});}return request;};await rejects(()=>planBox.bind_plan(182,abortedPlan),'storage_failure');}
+      finally{IDBObjectStore.prototype.put=actualPlanPut;}
+      same(planWriteAborted,true);sameRows(await workspaceBytes(planReceipt),beforePlanAbort);same(Array.from(await planBox.plan_query(182)),[]);
+      passed('actual T1 part-write success followed by transaction abort never acknowledges or retains partial binding');
+      await planBox.abandon_plan(182,abortedPlan);same(planBox.abandon_auths(1),0);planBox.abandon_close();await planBox.close();
+      let currentPlanBox=await openPlanReceipt(planReceipt);same((await currentPlanBox.plan_query(182)).length,108);same(Array.from(await currentPlanBox.plan_query(180)),originalPlan);
+      await currentPlanBox.admit(184,false);await currentPlanBox.close();
+      passed('unobserved accepted T1 retains its job reservation and survives cancelled close with original stored result');
+      const stablePlans=await workspaceBytes(planReceipt),planKeys=await Promise.all(Array.from({length:25},(_,i)=>planKey(180,i))),foreignPlanKeys=await Promise.all(Array.from({length:25},(_,i)=>planKey(184,i)));
+      const findPlanBytes=k=>stablePlans.values[stablePlans.keys.findIndex(x=>JSON.stringify(keyBytes(x))===JSON.stringify(keyBytes(k)))];
+      for(const mode of ['orphan_manifest','missing_part','tampered','swapped','foreign_operation','missing_t0_query','missing_t0_admit']){
+        await changeWorkspace(planReceipt,store=>{
+          if(mode==='orphan_manifest')store.delete(planKeys[0]);
+          if(mode==='missing_part')store.delete(planKeys[1]);
+          if(mode==='tampered'){const bytes=new Uint8Array(findPlanBytes(planKeys[1]));bytes[bytes.length-1]^=1;store.put(bytes,planKeys[1]);}
+          if(mode==='swapped'){store.put(findPlanBytes(planKeys[1]),planKeys[2]);store.put(findPlanBytes(planKeys[2]),planKeys[1]);}
+          if(mode==='foreign_operation')planKeys.forEach((k,i)=>{const v=findPlanBytes(k);if(v)store.put(v,foreignPlanKeys[i]);});
+        });
+        if(mode.startsWith('missing_t0')){const t0=await Promise.all(Array.from({length:5},(_,i)=>operationKey(180,i)));await changeWorkspace(planReceipt,store=>t0.forEach(k=>store.delete(k)));}
+        const beforeFailure=await workspaceBytes(planReceipt);currentPlanBox=await openPlanReceipt(planReceipt);
+        if(mode==='missing_t0_query')await rejects(()=>currentPlanBox.query(180),'recovery_required');
+        else if(mode==='missing_t0_admit')await rejects(()=>currentPlanBox.admit(180,false),'recovery_required');
+        else await rejects(()=>currentPlanBox.plan_query(mode==='foreign_operation'?184:180),'recovery_required');
+        await currentPlanBox.close();sameRows(await workspaceBytes(planReceipt),beforeFailure);
+        await changeWorkspace(planReceipt,store=>{store.clear();stablePlans.keys.forEach((k,i)=>store.put(stablePlans.values[i],k));});
+      }
+      passed('T1 orphan/missing/tampered/swapped/foreign parts and removed T0 refuse without absence, replacement or repair');
+      const unknownPlan=await WorkspaceFixture.create(183),unknownPlanReceipt=receiptOf(unknownPlan,183);
+      await unknownPlan.admit(183,false);const unknownPlanWire=await unknownPlan.new_plan(183);let planUnknown;
+      try{IDBTransaction.prototype.abort=function(){if(this.db.name===unknownPlanReceipt.namespace)return;return actualAbort.call(this);};planUnknown=Array.from(await unknownPlan.bind_plan_unknown(183,unknownPlanWire));}
+      finally{IDBTransaction.prototype.abort=actualAbort;}
+      same(planUnknown.length,64);same(planUnknown.slice(0,32),new Array(32).fill(183));await unknownPlan.close();
+      const unknownPlanState=await workspaceBytes(unknownPlanReceipt);const unknownPlanOpen=await openPlanReceipt(unknownPlanReceipt);await rejects(()=>unknownPlanOpen.plan_query(183),'recovery_required');await unknownPlanOpen.close();sameRows(await workspaceBytes(unknownPlanReceipt),unknownPlanState);
+      passed('actual T1 completion despite suppressed abort retains original unknown transaction and preserves partial state');
+      const unknownPlanRead=await WorkspaceFixture.create(188),unknownPlanReadReceipt=receiptOf(unknownPlanRead,188);
+      const originalReadT0=Array.from(await unknownPlanRead.admit(188,false)),readPlanWire=await unknownPlanRead.new_plan(188),beforePlanRead=await workspaceBytes(unknownPlanReadReceipt);let planReadGets=0,planReadFallback;
+      try{planReadFallback=Array.from(await unknownPlanRead.bind_plan_read_unknown(188,readPlanWire,()=>{
+        IDBObjectStore.prototype.get=function(...args){if(this.transaction.db.name===unknownPlanReadReceipt.namespace&&++planReadGets===2)throw new DOMException('synthetic retained-record read failure','InvalidStateError');return actualGet.apply(this,args);};
+        IDBTransaction.prototype.abort=function(){if(this.db.name===unknownPlanReadReceipt.namespace)return;return actualAbort.call(this);};
+      }));}finally{IDBObjectStore.prototype.get=actualGet;IDBTransaction.prototype.abort=actualAbort;}
+      same(planReadFallback.length,64);same(planReadFallback.slice(0,32),new Array(32).fill(188));await unknownPlanRead.close();
+      const restoredRead=await openPlanReceipt(unknownPlanReadReceipt);same(Array.from(await restoredRead.query(188)),originalReadT0);same(Array.from(await restoredRead.plan_query(188)),[]);await restoredRead.close();sameRows(await workspaceBytes(unknownPlanReadReceipt),beforePlanRead);
+      passed('uncertain retained T1 input read preserves the original ID/digest without inventing a transaction or changing T0');
+      for(const mode of ['bad_clock','expired_grant']){
+        const n=mode==='bad_clock'?185:186,owner=await WorkspaceFixture.create(n),r=receiptOf(owner,n);await owner.admit(n,false);const wire=await owner.new_plan(n),before=await workspaceBytes(r);
+        await rejects(()=>mode==='bad_clock'?owner.bind_plan_bad_clock(n,wire):owner.bind_plan_expired_grant(n,wire),mode==='bad_clock'?'workspace_unavailable':'grant_expired');await owner.close();sameRows(await workspaceBytes(r),before);
+        const restored=await openPlanReceipt(r);same(Array.from(await restored.plan_query(n)),[]);await restored.close();
+      }
+      passed('backwards clock and grant expiry after T1 crypto refuse with unchanged original state');
       const workCall=message=>new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage(message);return;}worker.terminate();resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
+      same(await workCall({kind:'plan_query',...planReceipt}),{plan:originalPlan});passed('actual worker reopens and confirms the original protected complete T1');
       same(await workCall({kind:'journal_query',...journalReceipt}),{preparation:originalPreparation});passed('actual worker reopens and queries the original protected preparation');
       same(await workCall({kind:'workspace_open',...workspaceReceipt}),{error:'writer_active'});
-      same(outbox.abandon_auths(9),8);for(let n=0;n<64;n++)outbox.abandon_close();await outbox.close();
+      same(outbox.abandon_auths(2),1);for(let n=0;n<64;n++)outbox.abandon_close();await outbox.close();
       await rejects(()=>outbox.authenticate(),'closed');
       same(await workCall({kind:'workspace_open',...workspaceReceipt}),{revision:1});
       passed('bounded owned authentication and cancelled close drain before actual cross-worker writer acquisition');
@@ -378,7 +458,7 @@ try {
       const workerCreated=await workerCall({kind:'persistent_create'});
       same(await workerCall({kind:'persistent_open',...workerCreated}),{plain:[90,91,92]});
       passed('persistent provider survives actual worker termination and new worker instance');
-      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded},workspace:workspaceReceipt,journal:{...journalReceipt,preparation:originalPreparation}};
+      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded},workspace:workspaceReceipt,journal:{...journalReceipt,preparation:originalPreparation},plan:{...planReceipt,originalPlan}};
     } finally {IDBDatabase.prototype.transaction=nativeTransaction;}
   });
   await page.reload();
@@ -394,6 +474,7 @@ try {
   assert.equal(workspaceRestart,1);result.tests.push('authenticated browser workspace survives actual page and WASM restart');delete result.workspace;
   const preparationRestart=await page.evaluate(async receipt=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(receipt.n,new Uint8Array(receipt.fingerprint),new Uint8Array(receipt.selection),new Uint8Array(receipt.proof));const prepared=Array.from(await owner.query(65));await owner.close();return prepared;},result.journal);
   assert.deepEqual(preparationRestart,result.journal.preparation);result.tests.push('original protected operation survives actual page and WASM restart');delete result.journal;
+  const planRestart=await page.evaluate(async r=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(r.n,new Uint8Array(r.fingerprint),new Uint8Array(r.selection),new Uint8Array(r.proof));const plan=Array.from(await owner.plan_query(180));await owner.close();return plan;},result.plan);assert.deepEqual(planRestart,result.plan.originalPlan);result.tests.push('complete original protected T1 survives actual page and WASM restart');delete result.plan;
   delete result.persistent;
   console.log(JSON.stringify({engine,version:browser.version(),...result}));
 } finally {

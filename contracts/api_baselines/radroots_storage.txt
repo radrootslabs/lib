@@ -759,6 +759,21 @@ pub fn radroots_storage::memory::MemoryStorage::verify_backup(&self, radroots_st
 pub mod radroots_storage::command
 pub use radroots_storage::command::ChatSigningPlan
 pub mod radroots_storage::command::protected
+pub mod radroots_storage::command::protected::plan
+pub struct radroots_storage::command::protected::plan::PlanManifest(_)
+impl radroots_storage::command::protected::plan::PlanManifest
+pub fn radroots_storage::command::protected::plan::PlanManifest::bind(self, radroots_storage::command::PreparedOperation, radroots_protocol::chat::plan::ChatSigningPlan) -> core::result::Result<radroots_storage::command::BoundSigningPlan, radroots_storage::command::OperationError>
+pub const fn radroots_storage::command::protected::plan::PlanManifest::bound_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_storage::command::protected::plan::PlanManifest::byte_count(&self) -> usize
+pub fn radroots_storage::command::protected::plan::PlanManifest::capture(&radroots_storage::command::PreparedOperation, &radroots_protocol::chat::plan::ChatSigningPlan, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::plan::PlanManifest::decode(&[u8], &radroots_storage::command::PreparedOperation) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::plan::PlanManifest::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::command::OperationError>
+pub const fn radroots_storage::command::protected::plan::PlanManifest::part_count(&self) -> usize
+pub const fn radroots_storage::command::protected::plan::PlanManifest::plan_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_storage::command::protected::plan::PlanManifest::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+pub const radroots_storage::command::protected::plan::PARTS_MAX: usize
+pub const radroots_storage::command::protected::plan::PART_BYTES: usize
+pub const radroots_storage::command::protected::plan::PLAN_BYTES_MAX: usize
 pub const radroots_storage::command::protected::PREPARED_BYTES_MAX: usize
 pub fn radroots_storage::command::protected::check_digest(&radroots_storage::command::PreparedOperation, radroots_domain::context::ActorRef, core::option::Option<radroots_domain::identifier::CommandDigest>) -> core::result::Result<(), radroots_storage::command::OperationError>
 pub fn radroots_storage::command::protected::decode(&[u8], &radroots_storage::workspace::AttachmentInput, radroots_domain::identifier::OperationId) -> core::result::Result<radroots_storage::command::PreparedOperation, radroots_storage::command::OperationError>

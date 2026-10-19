@@ -35,6 +35,7 @@ pub(super) async fn read(
         .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation_id.as_bytes().as_slice())
         .fetch_optional(&mut *connection).await.map_err(|_| OperationError::RecoveryRequired)?;
     let Some(row) = row else {
+        absent(connection, selected, operation_id).await?;
         return Ok(None);
     };
     let bytes = |index| -> Result<Vec<u8>, OperationError> {
@@ -118,3 +119,21 @@ pub(super) async fn unchanged(
 }
 
 pub(super) use radroots_storage::command::protected::check_digest;
+
+/// Confirms complete original-ID absence before a new preparation or absent
+/// lookup. Every current operation-owned table has an indexed workspace/ID
+/// prefix. EXISTS never materializes an unbounded retained record set.
+pub(super) async fn absent(
+    connection: &mut SqliteConnection,
+    selected: &AttachmentInput,
+    operation: OperationId,
+) -> Result<(), OperationError> {
+    let retained: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM operations WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM signing_plans WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM signing_plan_parts WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM signing_attempts WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM seal_evidence WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM chat_messages WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM chat_publication_work WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM chat_delivery_attempts WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM chat_delivery_parts WHERE workspace=?1 AND operation_id=?2) OR EXISTS(SELECT 1 FROM chat_delivery_observations WHERE workspace=?1 AND operation_id=?2)")
+        .bind(selected.workspace_id().as_bytes().as_slice())
+        .bind(operation.as_bytes().as_slice())
+        .fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
+    if retained {
+        return Err(OperationError::RecoveryRequired);
+    }
+    Ok(())
+}
