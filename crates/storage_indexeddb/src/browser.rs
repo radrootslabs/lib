@@ -3,7 +3,7 @@ use super::{
     RecordKey,
 };
 use futures::channel::oneshot;
-use js_sys::{Reflect, Uint8Array};
+use js_sys::{ArrayBuffer, Function, Object, Reflect, Uint8Array};
 use std::{
     cell::{Cell, RefCell},
     future::poll_fn,
@@ -13,9 +13,14 @@ use std::{
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{
-    Event, IdbDatabase, IdbFactory, IdbObjectStore, IdbOpenDbRequest, IdbRequest, IdbTransaction,
-    IdbTransactionMode,
+    Event, IdbCursorWithValue, IdbDatabase, IdbFactory, IdbKeyRange, IdbObjectStore,
+    IdbOpenDbRequest, IdbRequest, IdbTransaction, IdbTransactionMode,
 };
+
+#[cfg(feature = "workspace")]
+mod snapshot;
+#[cfg(feature = "workspace")]
+pub use snapshot::{ReadSnapshot, RecordPrefix};
 
 const STORE: &str = "records";
 const WORK_MAX: usize = 32;
@@ -47,6 +52,70 @@ fn bytes(value: JsValue) -> Result<Option<Vec<u8>>, Error> {
         return Err(Error::CorruptRecord);
     }
     Ok(Some(value.to_vec()))
+}
+
+fn record_key(raw: JsValue) -> Result<RecordKey, Error> {
+    let view = if let Some(view) = raw.dyn_ref::<Uint8Array>() {
+        view.clone()
+    } else if raw.is_instance_of::<ArrayBuffer>() {
+        Uint8Array::new(&raw)
+    } else {
+        return Err(Error::CorruptRecord);
+    };
+    if view.length() != 32 {
+        return Err(Error::CorruptRecord);
+    }
+    let mut value = [0; 32];
+    view.copy_to(&mut value);
+    Ok(RecordKey::new(value))
+}
+fn lookup(store: &IdbObjectStore, record: RecordKey) -> Result<IdbRequest, JsValue> {
+    let range = IdbKeyRange::only(&key(record))?;
+    store.open_cursor_with_range(range.as_ref())
+}
+fn lookup_value(request: &IdbRequest, expected: RecordKey) -> Result<Option<Vec<u8>>, Error> {
+    let value = request.result().map_err(classify)?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    let cursor = value
+        .dyn_into::<IdbCursorWithValue>()
+        .map_err(|_| Error::CorruptRecord)?;
+    if record_key(cursor.key().map_err(classify)?)? != expected {
+        return Err(Error::CorruptRecord);
+    }
+    // A cursor distinguishes absent keys from stored undefined. Undefined is
+    // foreign data, never permission to overwrite an allegedly missing value.
+    let value = bytes(cursor.value().map_err(classify)?)?.ok_or(Error::CorruptRecord)?;
+    Ok(Some(value))
+}
+
+fn write_transaction(db: &IdbDatabase) -> Result<IdbTransaction, Error> {
+    // The pinned web-sys options binding requires a global unstable cfg. Keep
+    // that compiler input unchanged and use the checked standard host method.
+    let options = Object::new();
+    if !Reflect::set(&options, &"durability".into(), &"strict".into()).map_err(classify)? {
+        return Err(Error::Unavailable);
+    }
+    let method = Reflect::get(db, &"transaction".into())
+        .map_err(classify)?
+        .dyn_into::<Function>()
+        .map_err(|_| Error::Unavailable)?;
+    let tx = method
+        .call3(db, &STORE.into(), &"readwrite".into(), &options)
+        .map_err(classify)?
+        .dyn_into::<IdbTransaction>()
+        .map_err(|_| Error::Unavailable)?;
+    if Reflect::get(&tx, &"durability".into())
+        .map_err(classify)?
+        .as_string()
+        .as_deref()
+        != Some("strict")
+    {
+        let _ = tx.abort();
+        return Err(Error::Unavailable);
+    }
+    Ok(tx)
 }
 
 struct State {
@@ -181,13 +250,9 @@ impl Database {
         let (send, observe) = oneshot::channel();
         spawn_local(async move {
             let owner = work;
-            let result = match owner
-                .state
-                .db
-                .transaction_with_str_and_mode(STORE, IdbTransactionMode::Readwrite)
-            {
+            let result = match write_transaction(&owner.state.db) {
                 Ok(tx) => exchange(tx, batch, guard).await,
-                Err(error) => Err(classify(error)),
+                Err(error) => Err(error),
             };
             let _ = send.send(result);
         });
@@ -366,6 +431,7 @@ struct Completion {
     result: oneshot::Receiver<Result<(), Error>>,
     _complete: Closure<dyn FnMut(Event)>,
     _abort: Closure<dyn FnMut(Event)>,
+    _error: Closure<dyn FnMut(Event)>,
 }
 impl Completion {
     fn new(tx: IdbTransaction, failure: Rc<Cell<Option<Error>>>) -> Self {
@@ -389,6 +455,7 @@ impl Completion {
         };
         let abort = {
             let tx = tx.clone();
+            let failure = failure.clone();
             Closure::new(move |_: Event| {
                 let error = failure.get().unwrap_or_else(|| {
                     tx.error()
@@ -406,13 +473,38 @@ impl Completion {
                 }
             })
         };
+        let error = {
+            let tx = tx.clone();
+            let failure = failure.clone();
+            Closure::new(move |event: Event| {
+                let quota = event
+                    .target()
+                    .and_then(|target| target.dyn_into::<IdbRequest>().ok())
+                    .and_then(|request| request.error().ok().flatten())
+                    .is_some_and(|error| error.name() == "QuotaExceededError");
+                // Remember asynchronous request failure even if another host
+                // listener prevents its default abort. Unexpected completion
+                // then remains unknown, never a successful partial batch.
+                refuse(
+                    &tx,
+                    &failure,
+                    if quota {
+                        Error::Capacity
+                    } else {
+                        Error::Aborted
+                    },
+                );
+            })
+        };
         tx.set_oncomplete(Some(complete.as_ref().unchecked_ref()));
         tx.set_onabort(Some(abort.as_ref().unchecked_ref()));
+        tx.set_onerror(Some(error.as_ref().unchecked_ref()));
         Self {
             tx,
             result,
             _complete: complete,
             _abort: abort,
+            _error: error,
         }
     }
     async fn wait(&mut self) -> Result<(), Error> {
@@ -425,6 +517,7 @@ impl Drop for Completion {
     fn drop(&mut self) {
         self.tx.set_oncomplete(None);
         self.tx.set_onabort(None);
+        self.tx.set_onerror(None);
     }
 }
 struct RequestHandler {
@@ -448,7 +541,7 @@ async fn read(tx: IdbTransaction, record: RecordKey) -> Result<Option<Vec<u8>>, 
     let value = Rc::new(RefCell::new(None));
     let request = match tx
         .object_store(STORE)
-        .and_then(|store| store.get(&key(record)))
+        .and_then(|store| lookup(&store, record))
     {
         Ok(request) => request,
         Err(error) => {
@@ -461,12 +554,10 @@ async fn read(tx: IdbTransaction, record: RecordKey) -> Result<Option<Vec<u8>>, 
         let request = request.clone();
         let value = value.clone();
         let tx = tx.clone();
-        Closure::new(
-            move |_: Event| match request.result().map_err(classify).and_then(bytes) {
-                Ok(result) => *value.borrow_mut() = Some(result),
-                Err(error) => refuse(&tx, &failure, error),
-            },
-        )
+        Closure::new(move |_: Event| match lookup_value(&request, record) {
+            Ok(result) => *value.borrow_mut() = Some(result),
+            Err(error) => refuse(&tx, &failure, error),
+        })
     };
     request.set_onsuccess(Some(success.as_ref().unchecked_ref()));
     let _handler = RequestHandler {
@@ -493,13 +584,26 @@ async fn exchange(
             return Err(Error::CommitUnknown);
         }
     };
+    queue_batch(&store, &tx, batch, guard, &failure, &mut handlers);
+    completion.wait().await?;
+    Ok(Commit { records: count })
+}
+
+fn queue_batch(
+    store: &IdbObjectStore,
+    tx: &IdbTransaction,
+    batch: Batch,
+    guard: Option<Rc<dyn Fn() -> bool>>,
+    failure: &Rc<Cell<Option<Error>>>,
+    handlers: &mut Vec<RequestHandler>,
+) {
     // All reads are queued in this active turn. Each callback queues its write
     // synchronously; any later conflict aborts every earlier write atomically.
     for entry in batch.entries {
-        let request = match store.get(&key(entry.key)) {
+        let request = match lookup(store, entry.key) {
             Ok(request) => request,
             Err(error) => {
-                refuse(&tx, &failure, classify(error));
+                refuse(tx, failure, classify(error));
                 break;
             }
         };
@@ -528,11 +632,9 @@ async fn exchange(
             _success: success,
         });
     }
-    completion.wait().await?;
-    Ok(Commit { records: count })
 }
 fn apply(store: &IdbObjectStore, request: &IdbRequest, entry: &Mutation) -> Result<(), Error> {
-    let actual = bytes(request.result().map_err(classify)?)?;
+    let actual = lookup_value(request, entry.key)?;
     if actual != entry.expected {
         return Err(Error::Conflict);
     }

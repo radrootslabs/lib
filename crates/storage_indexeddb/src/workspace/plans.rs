@@ -1,6 +1,7 @@
 //! Actual protected T1 storage; no participant issuance or network effects.
 use super::journal::{OperationChange, Records, storage_error};
 use super::{BrowserWorkspace, Mutation, RecordKey, State, WorkspaceError, crypto, owned};
+use crate::ReadSnapshot;
 use radroots_domain::{CommandDigest, OperationId, TransactionId};
 use radroots_secrets::context::{
     EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
@@ -21,19 +22,16 @@ use zeroize::Zeroizing;
 
 const SLOTS: usize = PARTS_MAX + 1;
 fn key(operation: OperationId, slot: usize) -> RecordKey {
-    let mut h = Sha256::new();
-    h.update(b"radroots.browser.local_outbox.plan.key.v1\0");
-    h.update(operation.as_bytes());
-    h.update((slot as u32).to_be_bytes());
-    RecordKey::new(h.finalize().into())
+    super::address::key(operation, super::address::PLAN, 0, slot as u8)
 }
+
 fn context(
     state: &State,
     operation: OperationId,
     part: Option<(usize, CommandDigest)>,
 ) -> Result<EnvelopeContext, WorkspaceError> {
     let mut h = Sha256::new();
-    h.update(b"radroots.browser.local_outbox.plan.context.v1\0");
+    h.update(b"radroots.browser.local_outbox.plan.context.v2\0");
     h.update(state.selected.workspace_id().as_bytes());
     h.update(operation.as_bytes());
     if let Some((index, digest)) = part {
@@ -53,7 +51,7 @@ fn context(
             .map_err(|_| WorkspaceError::InvalidInput)?,
         EnvelopeSubject::parse("workspace_plan", subject)
             .map_err(|_| WorkspaceError::InvalidInput)?,
-        PayloadSchemaId::parse("radroots.browser.workspace.plan.v1")
+        PayloadSchemaId::parse("radroots.browser.workspace.plan.v2")
             .map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }
@@ -74,14 +72,14 @@ fn comparisons(
         .collect()
 }
 impl State {
-    async fn plan_records(&self, operation: OperationId) -> Result<Records, OperationError> {
+    pub(super) async fn plan_records(
+        &self,
+        view: &ReadSnapshot,
+        operation: OperationId,
+    ) -> Result<Records, OperationError> {
         let mut records = Vec::with_capacity(SLOTS);
         for slot in 0..SLOTS {
-            let value = self
-                .db
-                .get(key(operation, slot))
-                .await
-                .map_err(storage_error)?;
+            let value = self.read_view_key(view, key(operation, slot)).await?;
             if value
                 .as_ref()
                 .is_some_and(|v| v.len() > crypto::PROTECTED_MAX)
@@ -94,15 +92,23 @@ impl State {
     }
     pub(super) async fn absent_plans(
         &self,
+        view: &ReadSnapshot,
         operation: OperationId,
     ) -> Result<Vec<Mutation>, OperationError> {
-        let before = self.plan_records(operation).await?;
-        if before.iter().any(Option::is_some) {
+        let before = self.plan_records(view, operation).await?;
+        if before.iter().any(Option::is_some)
+            || view.keys().any(|key| {
+                !matches!(
+                    super::address::fields(key),
+                    Ok((super::address::PREPARED, _, _))
+                )
+            })
+        {
             return Err(OperationError::RecoveryRequired);
         }
         comparisons(operation, before, None)
     }
-    async fn retained_plan(
+    pub(super) async fn retained_plan(
         &self,
         prepared: &PreparedOperation,
         records: &Records,
@@ -208,14 +214,15 @@ impl BrowserWorkspace {
         let result = owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
             let operation = supplied.operation_id();
-            let t0 = state.operation_records(operation).await?;
+            let view = state.read_view(operation).await?;
+            let t0 = state.operation_records(&view, operation).await?;
             let prepared = state
                 .preparation(operation, &t0)
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?;
             protected::check_digest(&prepared, binding.actor(), Some(supplied.command_digest()))?;
             protected::same_binding(prepared.request().binding(), &binding)?;
-            let before = state.plan_records(operation).await?;
+            let before = state.plan_records(&view, operation).await?;
             let (manifest, plan, after, fresh) = if let Some((manifest, plan)) =
                 state.retained_plan(&prepared, &before).await?
             {
@@ -224,6 +231,14 @@ impl BrowserWorkspace {
                 }
                 (manifest, plan, None, false)
             } else {
+                if view.keys().any(|key| {
+                    !matches!(
+                        super::address::fields(key),
+                        Ok((super::address::PREPARED, _, _))
+                    )
+                }) {
+                    return Err(OperationError::RecoveryRequired);
+                }
                 let window = prepared.issuance_window();
                 let observed = access.binding.observed_at();
                 if observed < window.prepared_at() {
@@ -253,7 +268,7 @@ impl BrowserWorkspace {
                 window: fresh.then(|| prepared.issuance_window()),
                 extra: comparisons(operation, before, after)?,
             };
-            match state.check_operation(access, operation, change).await {
+            match state.check_operation(access, operation, change, view).await {
                 Ok(()) => Ok(PlanBindingOutcome::Committed(
                     manifest.bind(prepared, plan)?,
                 )),
@@ -274,7 +289,7 @@ impl BrowserWorkspace {
         }
     }
     /// Authenticates and confirms the original plan without issuance or replay.
-    pub async fn query_signing_intents(
+    pub async fn signing_plan(
         &self,
         binding: WorkspaceBinding,
         operation: OperationId,
@@ -285,16 +300,20 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
-            let t0 = state.operation_records(operation).await?;
+            let view = state.read_view(operation).await?;
+            let t0 = state.operation_records(&view, operation).await?;
             let prepared = state.preparation(operation, &t0).await?;
-            let records = state.plan_records(operation).await?;
+            let records = state.plan_records(&view, operation).await?;
             let retained = if let Some(prepared) = prepared {
                 protected::check_digest(&prepared, binding.actor(), Some(digest))?;
                 protected::same_binding(prepared.request().binding(), &binding)?;
                 let plan = state.retained_plan(&prepared, &records).await?;
+                if plan.is_none() {
+                    state.absent_plans(&view, operation).await?;
+                }
                 Some((prepared, plan))
             } else {
-                if records.iter().any(Option::is_some) {
+                if !view.is_empty() {
                     return Err(OperationError::RecoveryRequired);
                 }
                 None
@@ -305,7 +324,9 @@ impl BrowserWorkspace {
                 window: None,
                 extra: comparisons(operation, records, None)?,
             };
-            state.check_operation(access, operation, change).await?;
+            state
+                .check_operation(access, operation, change, view)
+                .await?;
             match retained {
                 Some((prepared, Some((manifest, plan)))) => manifest.bind(prepared, plan).map(Some),
                 _ => Ok(None),

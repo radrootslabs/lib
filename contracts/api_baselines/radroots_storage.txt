@@ -759,6 +759,24 @@ pub fn radroots_storage::memory::MemoryStorage::verify_backup(&self, radroots_st
 pub mod radroots_storage::command
 pub use radroots_storage::command::ChatSigningPlan
 pub mod radroots_storage::command::protected
+pub mod radroots_storage::command::protected::issuance
+pub struct radroots_storage::command::protected::issuance::ClaimRecord(_)
+impl radroots_storage::command::protected::issuance::ClaimRecord
+pub fn radroots_storage::command::protected::issuance::ClaimRecord::capture(&radroots_storage::command::SigningAttempt) -> Self
+pub fn radroots_storage::command::protected::issuance::ClaimRecord::decode(&[u8], radroots_storage::command::BoundSigningPlan, radroots_identity::key::PublicKey) -> core::result::Result<radroots_storage::command::SigningAttempt, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::issuance::ClaimRecord::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::command::OperationError>
+pub struct radroots_storage::command::protected::issuance::EvidenceManifest(_)
+impl radroots_storage::command::protected::issuance::EvidenceManifest
+pub const fn radroots_storage::command::protected::issuance::EvidenceManifest::attempt_id(&self) -> radroots_domain::identifier::SigningAttemptId
+pub const fn radroots_storage::command::protected::issuance::EvidenceManifest::byte_count(&self) -> usize
+pub fn radroots_storage::command::protected::issuance::EvidenceManifest::capture(&radroots_storage::command::SigningAttempt, &radroots_storage::command::SealEvidence, radroots_domain::identifier::TransactionId) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::issuance::EvidenceManifest::decode(&[u8], &radroots_storage::command::SigningAttempt) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::issuance::EvidenceManifest::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::command::OperationError>
+pub const fn radroots_storage::command::protected::issuance::EvidenceManifest::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
+pub const fn radroots_storage::command::protected::issuance::EvidenceManifest::evidence_digest(&self) -> &[u8; 32]
+pub const fn radroots_storage::command::protected::issuance::EvidenceManifest::part_count(&self) -> usize
+pub const fn radroots_storage::command::protected::issuance::EvidenceManifest::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+pub fn radroots_storage::command::protected::issuance::EvidenceManifest::verify(&self, &radroots_storage::command::SigningAttempt, &str) -> core::result::Result<radroots_storage::command::SealEvidence, radroots_storage::command::OperationError>
 pub mod radroots_storage::command::protected::plan
 pub struct radroots_storage::command::protected::plan::PlanManifest(_)
 impl radroots_storage::command::protected::plan::PlanManifest

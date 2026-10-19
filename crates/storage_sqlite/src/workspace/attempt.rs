@@ -3,63 +3,16 @@ use super::{
     AttachmentInput,
     crypto::{IssuancePayload, IssuanceScope, WorkspaceCrypto},
 };
-use radroots_domain::{
-    CommandDigest, EnvelopeEventId, GrantId, OperationId, PublicKey, SigningAttemptId,
-    TransactionId, UnixSeconds, WorkspaceId,
-};
+use radroots_domain::{PublicKey, SigningAttemptId, TransactionId, UnixSeconds};
+use radroots_storage::command::protected::issuance::ClaimRecord;
 use radroots_storage::command::{BoundSigningPlan, ClaimSnapshot, OperationError, SigningAttempt};
-use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqliteConnection};
-use zeroize::Zeroizing;
 
 pub(super) const TABLE: &str = "CREATE TABLE signing_attempts (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, recipient BLOB NOT NULL CHECK(length(recipient)=32), attempt_id BLOB NOT NULL CHECK(length(attempt_id)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), plan_digest BLOB NOT NULL CHECK(length(plan_digest)=32), intent_digest BLOB NOT NULL CHECK(length(intent_digest)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,recipient), FOREIGN KEY(workspace,operation_id) REFERENCES signing_plans(workspace,operation_id)) STRICT, WITHOUT ROWID";
 pub(super) const ID_INDEX: &str =
     "CREATE UNIQUE INDEX signing_attempt_identity ON signing_attempts(workspace,attempt_id)";
 pub(super) const TX_INDEX: &str = "CREATE UNIQUE INDEX signing_attempt_transaction_identity ON signing_attempts(workspace,transaction_id)";
 
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Encoded {
-    version: u8,
-    workspace: WorkspaceId,
-    operation_id: OperationId,
-    command_digest: CommandDigest,
-    plan_digest: [u8; 32],
-    recipient: PublicKey,
-    attempt_id: SigningAttemptId,
-    transaction_id: TransactionId,
-    claimed_at: UnixSeconds,
-    intent_digest: [u8; 32],
-    deadline_unix_ms: u64,
-    preparation_transaction: TransactionId,
-    plan_transaction: TransactionId,
-    grant_id: GrantId,
-    expected_event: EnvelopeEventId,
-}
-impl Encoded {
-    fn new(attempt: &SigningAttempt) -> Self {
-        let plan = attempt.bound_plan();
-        let prepared = plan.prepared();
-        let identity = prepared.identity();
-        Self {
-            version: 1,
-            workspace: identity.workspace_id(),
-            operation_id: identity.operation_id(),
-            command_digest: identity.command_digest(),
-            plan_digest: *plan.plan().digest(),
-            recipient: attempt.seal().recipient(),
-            attempt_id: attempt.attempt_id(),
-            transaction_id: attempt.transaction_id(),
-            claimed_at: attempt.claimed_at(),
-            intent_digest: *attempt.binding().digest(),
-            deadline_unix_ms: attempt.deadline_unix_ms().get(),
-            preparation_transaction: prepared.transaction_id(),
-            plan_transaction: plan.transaction_id(),
-            grant_id: prepared.request().binding().input().grant_id(),
-            expected_event: EnvelopeEventId::from_bytes(attempt.seal().event_id()),
-        }
-    }
-}
 pub(super) fn scope(attempt: &SigningAttempt) -> IssuanceScope {
     let identity = attempt.bound_plan().prepared().identity();
     IssuanceScope {
@@ -74,9 +27,7 @@ pub(super) async fn protect(
     attempt: &SigningAttempt,
     crypto: &WorkspaceCrypto,
 ) -> Result<Vec<u8>, OperationError> {
-    let bytes = Zeroizing::new(
-        serde_json::to_vec(&Encoded::new(attempt)).map_err(|_| OperationError::InvalidCommand)?,
-    );
+    let bytes = ClaimRecord::capture(attempt).encode()?;
     Ok(crypto
         .seal_issuance(scope(attempt), IssuancePayload::Attempt, 0, &bytes)
         .await?)
@@ -133,42 +84,20 @@ pub(super) async fn read(
     let plaintext = crypto
         .open_issuance(issuance_scope, IssuancePayload::Attempt, 0, &protected)
         .await?;
-    let encoded: Encoded = plaintext
-        .expose_secret(|bytes| serde_json::from_slice(bytes))
-        .map_err(|_| OperationError::RecoveryRequired)?;
-    if encoded.version != 1
-        || encoded.workspace != selected.workspace_id()
-        || encoded.operation_id != original.operation_id()
-        || encoded.command_digest != original.command_digest()
-        || &encoded.plan_digest != bound.plan().digest()
-        || encoded.recipient != recipient
-        || encoded.attempt_id != id
-        || encoded.transaction_id != transaction
-        || encoded.preparation_transaction != bound.prepared().transaction_id()
-        || encoded.plan_transaction != bound.transaction_id()
-        || encoded.grant_id != bound.prepared().request().binding().input().grant_id()
-    {
-        return Err(OperationError::RecoveryRequired);
-    }
-    let attempt = SigningAttempt::from_committed_store(
-        bound,
-        recipient,
-        id,
-        transaction,
-        encoded.claimed_at,
-    )?;
-    if encoded.intent_digest != *attempt.binding().digest()
+    let attempt = plaintext.expose_secret(|raw| ClaimRecord::decode(raw, bound, recipient))?;
+    if attempt.attempt_id() != id
+        || attempt.transaction_id() != transaction
         || intent_digest.as_slice() != attempt.binding().digest()
-        || encoded.deadline_unix_ms != attempt.deadline_unix_ms().get()
-        || encoded.expected_event.as_bytes() != &attempt.seal().event_id()
     {
         return Err(OperationError::RecoveryRequired);
     }
+    let time = attempt.claimed_at();
     Ok((
         attempt.into_bound_plan(),
-        Some((id, transaction, encoded.claimed_at, protected)),
+        Some((id, transaction, time, protected)),
     ))
 }
+
 pub(super) async fn insert(
     connection: &mut SqliteConnection,
     attempt: &SigningAttempt,

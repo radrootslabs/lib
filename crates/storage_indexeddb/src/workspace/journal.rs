@@ -3,6 +3,7 @@ use super::{
     Batch, BrowserWorkspace, Error, Mutation, RecordKey, State, WorkspaceError, crypto, grant_key,
     owned,
 };
+use crate::ReadSnapshot;
 use radroots_domain::{CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId};
 use radroots_secrets::context::{
     EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
@@ -40,20 +41,37 @@ impl OperationChange {
     }
 }
 
-fn key(operation: OperationId, slot: usize) -> RecordKey {
-    let mut h = Sha256::new();
-    h.update(b"radroots.browser.local_outbox.prepared.key.v1\0");
-    h.update(operation.as_bytes());
-    h.update((slot as u32).to_be_bytes());
-    RecordKey::new(h.finalize().into())
+pub(super) fn mutations(
+    grant: Vec<u8>,
+    operation: OperationId,
+    before: Records,
+    after: Option<Records>,
+    extra: Vec<Mutation>,
+) -> Result<Batch, OperationError> {
+    let mut mutations = Vec::with_capacity(SLOTS + 1 + extra.len());
+    mutations
+        .push(Mutation::new(grant_key(), Some(grant.clone()), Some(grant)).map_err(storage_error)?);
+    for (slot, old) in before.into_iter().enumerate() {
+        let new = after
+            .as_ref()
+            .map_or_else(|| old.clone(), |r| r[slot].clone());
+        mutations.push(Mutation::new(key(operation, slot), old, new).map_err(storage_error)?);
+    }
+    mutations.extend(extra);
+    Batch::new(mutations).map_err(storage_error)
 }
+
+fn key(operation: OperationId, slot: usize) -> RecordKey {
+    super::address::key(operation, super::address::PREPARED, 0, slot as u8)
+}
+
 fn context(
     state: &State,
     operation: OperationId,
     part: Option<(usize, &[u8])>,
 ) -> Result<EnvelopeContext, WorkspaceError> {
     let mut h = Sha256::new();
-    h.update(b"radroots.browser.local_outbox.prepared.context.v1\0");
+    h.update(b"radroots.browser.local_outbox.prepared.context.v2\0");
     h.update(state.selected.workspace_id().as_bytes());
     h.update(operation.as_bytes());
     if let Some((index, digest)) = part {
@@ -73,22 +91,19 @@ fn context(
             .map_err(|_| WorkspaceError::InvalidInput)?,
         EnvelopeSubject::parse("workspace_prepared", subject)
             .map_err(|_| WorkspaceError::InvalidInput)?,
-        PayloadSchemaId::parse("radroots.browser.workspace.prepared.v1")
+        PayloadSchemaId::parse("radroots.browser.workspace.prepared.v2")
             .map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }
 impl State {
     pub(super) async fn operation_records(
         &self,
+        view: &ReadSnapshot,
         operation: OperationId,
     ) -> Result<Records, OperationError> {
         let mut records = Vec::with_capacity(SLOTS);
         for slot in 0..SLOTS {
-            let value = self
-                .db
-                .get(key(operation, slot))
-                .await
-                .map_err(storage_error)?;
+            let value = self.read_view_key(view, key(operation, slot)).await?;
             if value
                 .as_ref()
                 .is_some_and(|bytes| bytes.len() > crypto::PROTECTED_MAX)
@@ -240,6 +255,7 @@ impl State {
         access: Access,
         operation: OperationId,
         change: OperationChange,
+        view: ReadSnapshot,
     ) -> Result<(), OperationError> {
         let OperationChange {
             before,
@@ -247,54 +263,45 @@ impl State {
             window,
             extra,
         } = change;
-        let mut mutations = Vec::with_capacity(SLOTS + 1 + extra.len());
-        mutations.push(
-            Mutation::new(
-                grant_key(),
-                Some(access.protected.clone()),
-                Some(access.protected),
-            )
-            .map_err(storage_error)?,
-        );
-        for (slot, old) in before.into_iter().enumerate() {
-            let new = after
-                .as_ref()
-                .map_or_else(|| old.clone(), |r| r[slot].clone());
-            mutations.push(Mutation::new(key(operation, slot), old, new).map_err(storage_error)?);
-        }
-        mutations.extend(extra);
-        let batch = Batch::new(mutations).map_err(storage_error)?;
+        let batch = mutations(access.protected, operation, before, after, extra)?;
         let active = self.active()?;
         let clock = self.clock.clone();
+        self.checked_batch(batch, view, move || {
+            if !active.get() {
+                return Err(WorkspaceError::Closed.into());
+            }
+            let now = clock.now()?;
+            if now.get() == 0 || now < access.binding.observed_at() {
+                return Err(WorkspaceError::Unavailable.into());
+            }
+            let current = access
+                .grant
+                .authenticate(access.binding.input(), &access.proof, now)?;
+            protected::same_binding(&access.binding, &current)?;
+            if let Some(window) = window {
+                if now < window.prepared_at() {
+                    return Err(WorkspaceError::Unavailable.into());
+                }
+                if now >= window.first_issue_not_after() {
+                    return Err(OperationError::DeadlineExceeded);
+                }
+            }
+            Ok(())
+        })
+        .await
+    }
+    pub(super) async fn checked_batch(
+        &self,
+        batch: Batch,
+        view: ReadSnapshot,
+        check: impl Fn() -> Result<(), OperationError> + 'static,
+    ) -> Result<(), OperationError> {
         let failure = Rc::new(Cell::new(None));
         let refused = failure.clone();
         let result = self
             .db
-            .compare_exchange_checked(batch, move || {
-                let eligible = (|| {
-                    if !active.get() {
-                        return Err(WorkspaceError::Closed.into());
-                    }
-                    let now = clock.now()?;
-                    if now.get() == 0 || now < access.binding.observed_at() {
-                        return Err(WorkspaceError::Unavailable.into());
-                    }
-                    let current =
-                        access
-                            .grant
-                            .authenticate(access.binding.input(), &access.proof, now)?;
-                    protected::same_binding(&access.binding, &current)?;
-                    if let Some(window) = window {
-                        if now < window.prepared_at() {
-                            return Err(WorkspaceError::Unavailable.into());
-                        }
-                        if now >= window.first_issue_not_after() {
-                            return Err(OperationError::DeadlineExceeded);
-                        }
-                    }
-                    Ok(())
-                })();
-                if let Err(error) = eligible {
+            .compare_exchange_snapshot_checked(batch, view, move || {
+                if let Err(error) = check() {
                     refused.set(Some(error));
                     false
                 } else {
@@ -333,9 +340,10 @@ impl BrowserWorkspace {
             let access = state.operation_access(request.binding(), proof).await?;
             let context = request.command().context();
             let operation = context.operation_id();
-            let before = state.operation_records(operation).await?;
+            let view = state.read_view(operation).await?;
+            let before = state.operation_records(&view, operation).await?;
             let extra = if before.iter().all(Option::is_none) {
-                state.absent_plans(operation).await?
+                state.absent_plans(&view, operation).await?
             } else {
                 Vec::new()
             };
@@ -386,6 +394,7 @@ impl BrowserWorkspace {
                         window: fresh.then(|| prepared.issuance_window()),
                         extra,
                     },
+                    view,
                 )
                 .await
             {
@@ -408,7 +417,7 @@ impl BrowserWorkspace {
     }
     /// Reads the original preparation under current access without replaying it.
     /// Absent results are confirmed atomically against every fixed record slot.
-    pub async fn query_operation(
+    pub async fn operation(
         &self,
         binding: WorkspaceBinding,
         operation: OperationId,
@@ -419,16 +428,19 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
-            let records = state.operation_records(operation).await?;
+            let view = state.read_view(operation).await?;
+            let records = state.operation_records(&view, operation).await?;
             let result = state.preparation(operation, &records).await?;
             if let Some(prepared) = &result {
                 protected::check_digest(prepared, binding.actor(), digest)?;
             }
             let mut change = OperationChange::observe(records);
             if result.is_none() {
-                change.extra = state.absent_plans(operation).await?;
+                change.extra = state.absent_plans(&view, operation).await?;
             }
-            state.check_operation(access, operation, change).await?;
+            state
+                .check_operation(access, operation, change, view)
+                .await?;
             Ok(result)
         })
         .await

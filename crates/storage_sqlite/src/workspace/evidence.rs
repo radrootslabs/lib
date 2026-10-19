@@ -3,13 +3,9 @@ use super::{
     attempt,
     crypto::{IssuancePayload, IssuanceScope, PRIVATE_PAYLOAD_MAX_BYTES, WorkspaceCrypto},
 };
-use core::num::NonZeroU64;
-use radroots_domain::{
-    CommandDigest, EnvelopeEventId, OperationId, PublicKey, SigningAttemptId, TransactionId,
-    WorkspaceId,
-};
+use radroots_domain::TransactionId;
+use radroots_storage::command::protected::issuance::EvidenceManifest;
 use radroots_storage::command::{EvidenceReceipt, OperationError, SealEvidence, SigningAttempt};
-use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqliteConnection};
 use zeroize::Zeroizing;
 
@@ -17,25 +13,6 @@ pub(super) const TABLE: &str = "CREATE TABLE seal_evidence (workspace BLOB NOT N
 pub(super) const PARTS: &str = "CREATE TABLE seal_evidence_parts (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, recipient BLOB NOT NULL, part INTEGER NOT NULL CHECK(part BETWEEN 1 AND 4), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,recipient,part), FOREIGN KEY(workspace,operation_id,recipient) REFERENCES seal_evidence(workspace,operation_id,recipient)) STRICT, WITHOUT ROWID";
 pub(super) const TX_INDEX: &str = "CREATE UNIQUE INDEX seal_evidence_transaction_identity ON seal_evidence(workspace,transaction_id)";
 const MAX_PROTECTED_TOTAL: usize = 1024 * 1024;
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Manifest {
-    version: u8,
-    workspace: WorkspaceId,
-    operation_id: OperationId,
-    command_digest: CommandDigest,
-    plan_digest: [u8; 32],
-    recipient: PublicKey,
-    attempt_id: SigningAttemptId,
-    claim_transaction: TransactionId,
-    intent_digest: [u8; 32],
-    event_id: EnvelopeEventId,
-    evidence_digest: [u8; 32],
-    transaction_id: TransactionId,
-    observed_at: Option<u64>,
-    byte_count: usize,
-    part_count: usize,
-}
 pub(super) struct ProtectedEvidence {
     pub manifest: Vec<u8>,
     pub parts: Vec<Vec<u8>>,
@@ -54,25 +31,8 @@ pub(super) async fn protect(
     let bytes = evidence.raw_json().as_bytes();
     let chunks = bytes.chunks(PRIVATE_PAYLOAD_MAX_BYTES);
     let receipt = EvidenceReceipt::from_committed_store(evidence, transaction);
-    let manifest = Manifest {
-        version: 1,
-        workspace: evidence.workspace_id(),
-        operation_id: evidence.operation_id(),
-        command_digest: evidence.command_digest(),
-        plan_digest: *evidence.plan_digest(),
-        recipient: evidence.recipient(),
-        attempt_id: evidence.attempt_id(),
-        claim_transaction: attempt.transaction_id(),
-        intent_digest: *evidence.intent().digest(),
-        event_id: evidence.event_id(),
-        evidence_digest: *evidence.digest(),
-        transaction_id: transaction,
-        observed_at: evidence.observed_at_unix_ms().map(NonZeroU64::get),
-        byte_count: bytes.len(),
-        part_count: chunks.len(),
-    };
-    let plaintext =
-        Zeroizing::new(serde_json::to_vec(&manifest).map_err(|_| OperationError::InvalidEvidence)?);
+    let manifest = EvidenceManifest::capture(attempt, evidence, transaction)?;
+    let plaintext = manifest.encode()?;
     let scope = attempt::scope(attempt);
     let manifest = crypto
         .seal_issuance(scope, IssuancePayload::Evidence, 0, &plaintext)
@@ -137,36 +97,16 @@ pub(super) async fn read(
     let plaintext = crypto
         .open_issuance(scope, IssuancePayload::Evidence, 0, &manifest)
         .await?;
-    let decoded: Manifest = plaintext
-        .expose_secret(|value| serde_json::from_slice(value))
-        .map_err(|_| OperationError::RecoveryRequired)?;
-    if decoded.version != 1
-        || decoded.workspace != scope.workspace
-        || decoded.operation_id != scope.operation
-        || decoded.command_digest != attempt.bound_plan().prepared().identity().command_digest()
-        || decoded.plan_digest != scope.plan_digest
-        || decoded.recipient != scope.recipient
-        || decoded.attempt_id != scope.attempt
-        || decoded.claim_transaction != attempt.transaction_id()
-        || decoded.intent_digest != *attempt.binding().digest()
-        || decoded.event_id.as_bytes() != &attempt.seal().event_id()
-        || decoded.event_id.as_bytes().as_slice() != event_id
-        || decoded.attempt_id.as_bytes().as_slice() != attempt_id
-        || decoded.evidence_digest.as_slice() != digest
-        || decoded.transaction_id != transaction
-        || decoded.part_count != count as usize
-        || decoded.byte_count != bytes as usize
+    let decoded = plaintext.expose_secret(|raw| EvidenceManifest::decode(raw, attempt))?;
+    if decoded.event_id().as_bytes().as_slice() != event_id.as_slice()
+        || decoded.attempt_id().as_bytes().as_slice() != attempt_id.as_slice()
+        || decoded.evidence_digest().as_slice() != digest.as_slice()
+        || decoded.transaction_id() != transaction
+        || decoded.part_count() != count as usize
+        || decoded.byte_count() != bytes as usize
     {
         return Err(OperationError::RecoveryRequired);
     }
-    let observed = match decoded.observed_at {
-        None => None,
-        Some(value) => Some(
-            NonZeroU64::new(value)
-                .filter(|time| time.get() <= 253_402_300_799_999)
-                .ok_or(OperationError::RecoveryRequired)?,
-        ),
-    };
     let (parts,total):(i64,i64)=sqlx::query_as("SELECT count(*),coalesce(sum(length(protected)),0) FROM seal_evidence_parts WHERE workspace=? AND operation_id=? AND recipient=?")
         .bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.recipient.as_bytes().as_slice()).fetch_one(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
     if parts != count || total <= 0 || total > (MAX_PROTECTED_TOTAL - manifest.len()) as i64 {
@@ -208,11 +148,7 @@ pub(super) async fn read(
         protected_parts.push(protected);
     }
     let text = core::str::from_utf8(&raw).map_err(|_| OperationError::RecoveryRequired)?;
-    let evidence = SealEvidence::verify(attempt, text, observed)
-        .map_err(|_| OperationError::RecoveryRequired)?;
-    if evidence.digest() != &decoded.evidence_digest {
-        return Err(OperationError::RecoveryRequired);
-    }
+    let evidence = decoded.verify(attempt, text)?;
     let receipt = EvidenceReceipt::from_committed_store(&evidence, transaction);
     Ok(Some((
         evidence,

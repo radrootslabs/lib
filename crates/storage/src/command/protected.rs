@@ -8,6 +8,7 @@ use radroots_domain::{
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+pub mod issuance;
 pub mod plan;
 
 /// Maximum complete preparation, before a host splits private records.

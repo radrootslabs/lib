@@ -1,6 +1,8 @@
 //! Synthetic isolated host-effect fixture, never a production custody API.
+mod issuance;
 mod plans;
 use futures::FutureExt;
+pub use issuance::ObtainedSeal;
 use radroots_domain::{
     ActorRole, CommandContextData, Coverage, OperationId, PublicKey, UnixSeconds, WorkspaceId,
 };
@@ -45,14 +47,12 @@ fn copied(proof: &AttachmentProof) -> AttachmentProof {
 struct Clock {
     now: Cell<u64>,
     after: Cell<Option<u64>>,
-    countdown: Cell<Option<(u32, u64)>>,
 }
 impl Clock {
     fn new() -> Self {
         Self {
             now: Cell::new(1000),
             after: Cell::new(None),
-            countdown: Cell::new(None),
         }
     }
 }
@@ -61,13 +61,6 @@ impl WorkspaceClock for Clock {
         let now = self.now.get();
         if let Some(next) = self.after.take() {
             self.now.set(next);
-        }
-        if let Some((remaining, next)) = self.countdown.take() {
-            if remaining == 1 {
-                self.now.set(next);
-            } else {
-                self.countdown.set(Some((remaining - 1, next)));
-            }
         }
         if now == 0 {
             return Err(WorkspaceError::Unavailable);
@@ -114,7 +107,6 @@ impl WorkspaceFixture {
     pub async fn admit_uncertain(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.request(n, false).await?;
         let digest = request.command().digest();
-        self.clock.countdown.set(Some((3, 1500)));
         match self
             .owner
             .admit_command_and_hold(request, copied(&self.proof))
@@ -153,7 +145,7 @@ impl WorkspaceFixture {
             .map_err(fail)?;
         let result = self
             .owner
-            .query_operation(
+            .operation(
                 binding,
                 OperationId::from_bytes([n; 32]),
                 None,
@@ -223,39 +215,15 @@ impl WorkspaceFixture {
         selection: Vec<u8>,
         proof: Vec<u8>,
     ) -> Result<Self, JsValue> {
-        if selection.len() > 16 * 1024 {
-            return Err(JsValue::from_str("oversized_selection"));
-        }
-        let input: AttachmentInput = serde_json::from_slice(&selection)
-            .map_err(|_| JsValue::from_str("invalid_selection"))?;
-        let proof = AttachmentProof::from_protected_input(&proof).map_err(fail)?;
-        let fingerprint = fingerprint
-            .as_slice()
-            .try_into()
-            .map_err(|_| JsValue::from_str("invalid_fingerprint"))?;
-        let provider = Rc::new(
-            BrowserProvider::open(key_namespace(n), reference(), fingerprint)
-                .await
-                .map_err(|e| JsValue::from_str(e.code()))?,
-        );
-        let clock = Rc::new(Clock::new());
-        let owner = BrowserWorkspace::open_existing(
-            input.clone(),
-            copied(&proof),
-            provider.clone(),
-            reference(),
-            AccessPolicy::standard(),
-            clock.clone(),
-        )
-        .await
-        .map_err(fail)?;
-        Ok(Self {
-            owner,
-            provider,
-            input,
-            proof,
-            clock,
-        })
+        Self::open_fixture(n, fingerprint, selection, proof, false).await
+    }
+    pub async fn open_capture(
+        n: u8,
+        fingerprint: Vec<u8>,
+        selection: Vec<u8>,
+        proof: Vec<u8>,
+    ) -> Result<Self, JsValue> {
+        Self::open_fixture(n, fingerprint, selection, proof, true).await
     }
     pub fn selection(&self) -> Vec<u8> {
         serde_json::to_vec(&self.input).unwrap()
@@ -268,7 +236,7 @@ impl WorkspaceFixture {
     }
     pub fn data_namespace(&self) -> String {
         let mut h = Sha256::new();
-        h.update(b"radroots.browser.local_outbox.namespace.v1\0");
+        h.update(b"radroots.browser.local_outbox.namespace.v2\0");
         h.update(self.input.workspace_id().as_bytes());
         Namespace::new(SourceGeneration::new(h.finalize().into()).unwrap()).name()
     }
@@ -365,6 +333,59 @@ impl WorkspaceFixture {
     }
 }
 impl WorkspaceFixture {
+    async fn open_fixture(
+        n: u8,
+        fingerprint: Vec<u8>,
+        selection: Vec<u8>,
+        proof: Vec<u8>,
+        capture_only: bool,
+    ) -> Result<Self, JsValue> {
+        if selection.len() > 16 * 1024 {
+            return Err(JsValue::from_str("oversized_selection"));
+        }
+        let input: AttachmentInput = serde_json::from_slice(&selection)
+            .map_err(|_| JsValue::from_str("invalid_selection"))?;
+        let proof = AttachmentProof::from_protected_input(&proof).map_err(fail)?;
+        let fingerprint = fingerprint
+            .as_slice()
+            .try_into()
+            .map_err(|_| JsValue::from_str("invalid_fingerprint"))?;
+        let provider = Rc::new(
+            BrowserProvider::open(key_namespace(n), reference(), fingerprint)
+                .await
+                .map_err(|e| JsValue::from_str(e.code()))?,
+        );
+        let clock = Rc::new(Clock::new());
+        let owner = if capture_only {
+            BrowserWorkspace::open_existing_for_capture(
+                input.clone(),
+                copied(&proof),
+                provider.clone(),
+                reference(),
+                AccessPolicy::standard(),
+                clock.clone(),
+            )
+            .await
+        } else {
+            BrowserWorkspace::open_existing(
+                input.clone(),
+                copied(&proof),
+                provider.clone(),
+                reference(),
+                AccessPolicy::standard(),
+                clock.clone(),
+            )
+            .await
+        }
+        .map_err(fail)?;
+        Ok(Self {
+            owner,
+            provider,
+            input,
+            proof,
+            clock,
+        })
+    }
     async fn request(&self, n: u8, changed: bool) -> Result<AdmissionRequest, JsValue> {
         let binding = self
             .owner

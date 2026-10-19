@@ -19,7 +19,7 @@ extern "C" {
     fn fixture_panic(message: &str);
 }
 
-struct BrowserRng;
+pub(super) struct BrowserRng;
 impl RngCore for BrowserRng {
     fn next_u32(&mut self) -> u32 {
         let mut bytes = [0; 4];
@@ -206,7 +206,7 @@ impl WorkspaceFixture {
     pub async fn plan_query(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.request(n, false).await?;
         self.owner
-            .query_signing_intents(
+            .signing_plan(
                 request.binding().clone(),
                 request.command().context().operation_id(),
                 request.command().digest(),
@@ -224,9 +224,6 @@ impl WorkspaceFixture {
             .map_err(|_| JsValue::from_str("invalid_plan"))?;
         if mode == 1 {
             self.clock.after.set(Some(1500));
-        }
-        if mode == 2 {
-            self.clock.countdown.set(Some((8, 1500)));
         }
         if mode == 3 {
             self.clock.after.set(Some(90));

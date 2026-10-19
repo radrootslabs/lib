@@ -7,9 +7,7 @@ use radroots_secrets::{
     provider::SecretProvider,
     wrapping::SecretMaterial,
 };
-use radroots_storage::workspace::local_outbox::{
-    GRANT_ENVELOPE_PURPOSE, GRANT_PAYLOAD_SCHEMA, grant_envelope_subject,
-};
+use radroots_storage::workspace::local_outbox::grant_envelope_subject;
 use radroots_storage::workspace::{WorkspaceError, local_outbox::GRANT_BYTES_MAX};
 use wasm_bindgen::{JsCast, JsValue};
 use zeroize::Zeroizing;
@@ -28,10 +26,12 @@ pub(super) fn random<const N: usize>() -> Result<Zeroizing<[u8; N]>, WorkspaceEr
 }
 fn context(workspace: WorkspaceId, grant: GrantId) -> Result<EnvelopeContext, WorkspaceError> {
     Ok(EnvelopeContext::new(
-        EnvelopePurpose::parse(GRANT_ENVELOPE_PURPOSE).map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopePurpose::parse("radroots.browser.workspace.grant")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
         EnvelopeSubject::parse("workspace_grant", grant_envelope_subject(workspace, grant))
             .map_err(|_| WorkspaceError::InvalidInput)?,
-        PayloadSchemaId::parse(GRANT_PAYLOAD_SCHEMA).map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse("radroots.browser.workspace.grant.v2")
+            .map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }
 pub(super) async fn seal(

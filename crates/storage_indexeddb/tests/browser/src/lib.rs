@@ -10,7 +10,9 @@ pub use protected::protected_round_trip;
 mod persistent;
 pub use persistent::Persistent;
 mod workspace;
-pub use workspace::WorkspaceFixture;
+pub use workspace::{ObtainedSeal, WorkspaceFixture};
+mod snapshot;
+pub use snapshot::Frozen;
 
 fn failure(error: Error) -> JsValue {
     JsValue::from_str(error.code())

@@ -1,7 +1,9 @@
 //! Authenticated browser local outboxes, independent of participant signing.
 //! Creation establishes a fresh unrelated buyer outbox only. Existing state
 //! requires its independently retained selection and protected proof.
+mod address;
 mod crypto;
+mod issuance;
 mod journal;
 mod lease;
 mod plans;
@@ -67,7 +69,7 @@ fn stored(error: Error) -> WorkspaceError {
 }
 fn namespace(input: &AttachmentInput) -> Result<Namespace, WorkspaceError> {
     let mut digest = Sha256::new();
-    digest.update(b"radroots.browser.local_outbox.namespace.v1\0");
+    digest.update(b"radroots.browser.local_outbox.namespace.v2\0");
     digest.update(input.workspace_id().as_bytes());
     SourceGeneration::new(digest.finalize().into())
         .map(Namespace::new)
@@ -129,6 +131,11 @@ fn select(
         .map_err(|_| WorkspaceError::Unavailable)?;
     Ok(())
 }
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum AccessMode {
+    Current,
+    CaptureOnly,
+}
 struct State {
     // Database drops before the lease if an unobserved owner is discarded.
     db: Database,
@@ -136,6 +143,7 @@ struct State {
     reference: SecretRef,
     selected: AttachmentInput,
     clock: Rc<dyn WorkspaceClock>,
+    mode: AccessMode,
     lease: RefCell<Option<lease::Lease>>,
     serial: Mutex<()>,
     jobs: Cell<usize>,
@@ -210,6 +218,19 @@ impl State {
         input: &AttachmentInput,
         proof: &AttachmentProof,
     ) -> Result<(LocalOutboxGrant, Vec<u8>, WorkspaceBinding), WorkspaceError> {
+        if self.mode != AccessMode::Current {
+            return Err(WorkspaceError::Unauthorized);
+        }
+        let (record, protected) = self.capture_grant(input, proof).await?;
+        let binding = record.authenticate(input, proof, self.clock.now()?)?;
+        self.active()?;
+        Ok((record, protected, binding))
+    }
+    async fn capture_grant(
+        &self,
+        input: &AttachmentInput,
+        proof: &AttachmentProof,
+    ) -> Result<(LocalOutboxGrant, Vec<u8>), WorkspaceError> {
         self.active()?;
         if input != &self.selected {
             return Err(WorkspaceError::Unauthorized);
@@ -229,9 +250,9 @@ impl State {
         )
         .await?;
         let record = plaintext.expose_secret(LocalOutboxGrant::decode)?;
-        let binding = record.authenticate(input, proof, self.clock.now()?)?;
+        record.authenticate_retained_capture(input, proof)?;
         self.active()?;
-        Ok((record, protected, binding))
+        Ok((record, protected))
     }
 }
 struct Work(Rc<State>);
@@ -328,7 +349,15 @@ impl BrowserWorkspace {
                         return Err(stored(error));
                     }
                 };
-                let owner = Self::assemble(db, provider, reference, input.clone(), clock, lease);
+                let owner = Self::assemble(
+                    db,
+                    provider,
+                    reference,
+                    input.clone(),
+                    clock,
+                    lease,
+                    AccessMode::Current,
+                );
                 let initialized = async {
                     let bytes = record.encode()?;
                     let binding = record.authenticate(&input, &proof, now)?;
@@ -378,6 +407,47 @@ impl BrowserWorkspace {
         policy: AccessPolicy,
         clock: Rc<dyn WorkspaceClock>,
     ) -> Result<Self, WorkspaceError> {
+        Self::open_mode(
+            input,
+            proof,
+            provider,
+            reference,
+            policy,
+            clock,
+            AccessMode::Current,
+        )
+        .await
+    }
+    /// Opens only for appending matching already obtained output to an actual
+    /// original claim. This handle cannot authenticate or admit fresh work.
+    pub async fn open_existing_for_capture(
+        input: AttachmentInput,
+        proof: AttachmentProof,
+        provider: Rc<dyn SecretProvider>,
+        reference: SecretRef,
+        policy: AccessPolicy,
+        clock: Rc<dyn WorkspaceClock>,
+    ) -> Result<Self, WorkspaceError> {
+        Self::open_mode(
+            input,
+            proof,
+            provider,
+            reference,
+            policy,
+            clock,
+            AccessMode::CaptureOnly,
+        )
+        .await
+    }
+    async fn open_mode(
+        input: AttachmentInput,
+        proof: AttachmentProof,
+        provider: Rc<dyn SecretProvider>,
+        reference: SecretRef,
+        policy: AccessPolicy,
+        clock: Rc<dyn WorkspaceClock>,
+        mode: AccessMode,
+    ) -> Result<Self, WorkspaceError> {
         select(provider.as_ref(), &reference, policy)?;
         let setup = Setup::admit()?;
         let (send, observe) = oneshot::channel();
@@ -393,8 +463,15 @@ impl BrowserWorkspace {
                         return Err(stored(error));
                     }
                 };
-                let owner = Self::assemble(db, provider, reference, input.clone(), clock, lease);
-                if let Err(error) = owner.state.access(&input, &proof).await {
+                let owner =
+                    Self::assemble(db, provider, reference, input.clone(), clock, lease, mode);
+                let authenticated = match mode {
+                    AccessMode::Current => owner.state.access(&input, &proof).await.map(|_| ()),
+                    AccessMode::CaptureOnly => {
+                        owner.state.capture_grant(&input, &proof).await.map(|_| ())
+                    }
+                };
+                if let Err(error) = authenticated {
                     owner.close().await?;
                     return Err(error);
                 }
@@ -412,6 +489,7 @@ impl BrowserWorkspace {
         selected: AttachmentInput,
         clock: Rc<dyn WorkspaceClock>,
         lease: lease::Lease,
+        mode: AccessMode,
     ) -> Self {
         Self {
             state: Rc::new(State {
@@ -420,6 +498,7 @@ impl BrowserWorkspace {
                 reference,
                 selected,
                 clock,
+                mode,
                 lease: RefCell::new(Some(lease)),
                 serial: Mutex::new(()),
                 jobs: Cell::new(0),

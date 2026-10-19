@@ -199,7 +199,7 @@ impl fmt::Debug for SigningAttempt {
 /// Confirmed new claim, retained potential issuance, or anchored uncertainty.
 /// A data variant alone cannot qualify a custom adapter's commit or dispatch.
 pub enum ClaimAttemptOutcome {
-    /// Only this actual newly committed native result permits its owning
+    /// Only this actual newly committed store result permits its owning
     /// executor to proceed once after route/provider/current-access checks.
     Claimed(SigningAttempt),
     /// Never dispatch again merely because this original record was found.
@@ -218,7 +218,7 @@ impl fmt::Debug for ClaimAttemptOutcome {
 }
 
 /// Independently authenticated exact obtained bytes, bound to reported claim
-/// data but not proof of the backend's actual retained attempt. Native capture
+/// data but not proof of the backend's actual retained attempt. Concrete capture
 /// must compare its own protected claim and plan before appending this evidence.
 pub struct SealEvidence {
     workspace_id: WorkspaceId,

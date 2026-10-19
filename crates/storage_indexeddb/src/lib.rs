@@ -10,6 +10,9 @@ mod browser;
 pub use browser::Database;
 
 #[cfg(all(feature = "workspace", target_arch = "wasm32"))]
+pub use browser::{ReadSnapshot, RecordPrefix};
+
+#[cfg(all(feature = "workspace", target_arch = "wasm32"))]
 pub mod workspace;
 
 /// Maximum opaque record size; private codecs must enforce their lower limit.

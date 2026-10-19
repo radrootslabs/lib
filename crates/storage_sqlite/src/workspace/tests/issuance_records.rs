@@ -22,6 +22,7 @@ struct Issued {
     selected: AttachmentInput,
     attempt: SigningAttempt,
     evidence: SealEvidence,
+    proof: AttachmentProof,
     path: std::path::PathBuf,
 }
 
@@ -275,6 +276,7 @@ impl Issued {
             selected,
             attempt,
             evidence,
+            proof,
             path,
         }
     }
@@ -503,6 +505,46 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
             .unwrap();
         assert_eq!(retained, protected);
     }
+    // Internally consistent authenticated metadata must still match the
+    // independent SQL indexes. Invalid metadata alone does not prove this.
+    let original_bytes = manifest["byte_count"].as_u64().unwrap();
+    let same_parts = if original_bytes.is_multiple_of(16_384) {
+        original_bytes - 1
+    } else {
+        original_bytes + 1
+    };
+    for byte_count in [same_parts, 1] {
+        let mut changed = manifest.clone();
+        changed["byte_count"] = json!(byte_count);
+        changed["part_count"] = json!(byte_count.div_ceil(16_384));
+        let protected = crypto
+            .seal_issuance(
+                scope,
+                IssuancePayload::Evidence,
+                0,
+                &serde_json::to_vec(&changed).unwrap(),
+            )
+            .await
+            .unwrap();
+        sqlx::query("UPDATE seal_evidence SET protected=?")
+            .bind(&protected)
+            .execute(&mut database)
+            .await
+            .unwrap();
+        assert_eq!(
+            evidence_store::read(&mut database, &issued.attempt, &crypto)
+                .await
+                .err()
+                .unwrap()
+                .code(),
+            "recovery_required"
+        );
+        let retained: Vec<u8> = sqlx::query_scalar("SELECT protected FROM seal_evidence")
+            .fetch_one(&mut database)
+            .await
+            .unwrap();
+        assert_eq!(retained, protected);
+    }
     sqlx::query("UPDATE seal_evidence SET protected=?")
         .bind(&original)
         .execute(&mut database)
@@ -718,5 +760,115 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
         .await
         .is_err()
     );
+    database.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn actual_capture_turn_refuses_uncertainty_foreign_scope_and_fabricated_claim_reports() {
+    use crate::workspace::{admission::Journal, fs::Namespace, issuance::absent_claim};
+    let issued = Issued::new().await;
+    let foreign = Issued::new().await;
+    let mut database = issued.database().await;
+    let crypto = issued.fixture.crypto();
+    let namespace = Namespace::acquire(&issued.path, false).unwrap();
+    let bound = issued.bound(&mut database).await;
+    let fake = SigningAttempt::from_committed_store(
+        bound,
+        participant(),
+        SigningAttemptId::from_bytes([77; 32]),
+        TransactionId::from_bytes([78; 32]),
+        UnixSeconds::new(100).unwrap(),
+    )
+    .unwrap();
+    let fabricated = SealEvidence::verify(&fake, issued.evidence.raw_json(), None).unwrap();
+    let mut uncertain = true;
+    let clock = FixedClock(0); // Any accidental clock consultation must fail.
+    let mut journal = Journal {
+        connection: &mut database,
+        namespace: &namespace,
+        selected: &issued.selected,
+        crypto: &crypto,
+        clock: &clock,
+        uncertain: &mut uncertain,
+    };
+    assert_eq!(
+        journal
+            .capture_access(&issued.selected, &issued.proof)
+            .await
+            .err()
+            .unwrap()
+            .code(),
+        "recovery_required"
+    );
+    *journal.uncertain = false;
+    assert_eq!(
+        journal
+            .capture_access(&foreign.selected, &issued.proof)
+            .await
+            .err()
+            .unwrap()
+            .code(),
+        "unauthorized"
+    );
+    let copy = || {
+        issued
+            .proof
+            .with_secret(|raw| AttachmentProof::from_protected_input(raw).unwrap())
+    };
+    assert_eq!(
+        journal
+            .capture_issuance(
+                issued.selected.clone(),
+                copy(),
+                foreign.evidence.retained_copy()
+            )
+            .await
+            .err()
+            .unwrap()
+            .code(),
+        "invalid_evidence"
+    );
+    assert_eq!(
+        journal
+            .capture_issuance(issued.selected.clone(), copy(), fabricated)
+            .await
+            .err()
+            .unwrap()
+            .code(),
+        "invalid_evidence"
+    );
+    let retained = journal
+        .capture_issuance(
+            issued.selected.clone(),
+            copy(),
+            issued.evidence.retained_copy(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(retained, EvidenceCaptureOutcome::Committed(_)));
+    let operation = issued
+        .attempt
+        .bound_plan()
+        .prepared()
+        .identity()
+        .operation_id();
+    assert_eq!(
+        absent_claim(
+            journal.connection,
+            &issued.selected,
+            operation,
+            participant()
+        )
+        .await
+        .err()
+        .unwrap()
+        .code(),
+        "recovery_required"
+    );
+    let retained = evidence_store::read(journal.connection, &issued.attempt, &crypto)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retained.0.raw_json(), issued.evidence.raw_json());
     database.close().await.unwrap();
 }
