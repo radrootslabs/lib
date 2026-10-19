@@ -278,7 +278,13 @@ impl BrowserWorkspace {
                 Claim::Present(attempt) => (attempt, false, Vec::new()),
                 Claim::Absent(bound, index) => {
                     state
-                        .check_claim_absence(&view, operation, request.command_digest(), &t0)
+                        .check_claim_absence(
+                            &view,
+                            operation,
+                            request.command_digest(),
+                            &t0,
+                            access.binding.observed_at(),
+                        )
                         .await?;
                     let now = access.binding.observed_at();
                     if now < bound.bound_at() {
@@ -318,6 +324,7 @@ impl BrowserWorkspace {
                 before: t0,
                 after: None,
                 window: fresh.then(|| attempt.bound_plan().prepared().issuance_window()),
+                delivery_deadline: None,
                 extra,
             };
             match state.check_operation(access, operation, change, view).await {
@@ -376,6 +383,7 @@ impl BrowserWorkspace {
                                     operation,
                                     request.command_digest(),
                                     &t0,
+                                    access.binding.observed_at(),
                                 )
                                 .await?;
                             None
@@ -534,6 +542,7 @@ impl BrowserWorkspace {
                                         operation,
                                         request.command_digest(),
                                         &t0,
+                                        access.binding.observed_at(),
                                     )
                                     .await?;
                             }
@@ -554,6 +563,7 @@ impl BrowserWorkspace {
                                     operation,
                                     request.command_digest(),
                                     &t0,
+                                    access.binding.observed_at(),
                                 )
                                 .await?;
                             None

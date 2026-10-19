@@ -45,6 +45,18 @@ impl RngCore for BrowserRng {
     }
 }
 impl CryptoRng for BrowserRng {}
+pub(super) fn delivery_relays(large: bool) -> Vec<String> {
+    if large {
+        (0..16)
+            .map(|index| format!("wss://plan.fixture.example/{index}/{}", "x".repeat(1900)))
+            .collect()
+    } else {
+        vec![
+            "wss://plan.fixture.example/a".into(),
+            "wss://plan.fixture.example/b".into(),
+        ]
+    }
+}
 fn summary(bound: BoundSigningPlan) -> Vec<u8> {
     let mut bytes = bound.transaction_id().as_bytes().to_vec();
     bytes.extend_from_slice(bound.plan().digest());
@@ -53,9 +65,8 @@ fn summary(bound: BoundSigningPlan) -> Vec<u8> {
     bytes.extend_from_slice(bound.prepared().transaction_id().as_bytes());
     bytes
 }
-#[wasm_bindgen]
 impl WorkspaceFixture {
-    pub async fn new_plan(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+    async fn plan_with_relays(&self, n: u8, profile: u8) -> Result<Vec<u8>, JsValue> {
         std::panic::set_hook(Box::new(|info| fixture_panic(&format!("{info}"))));
         let request = self.request(n, false).await?;
         let command = request.command();
@@ -100,13 +111,22 @@ impl WorkspaceFixture {
                 )
                 .unwrap(),
             );
-            let relay = "wss://plan.fixture.example/";
+            let relays = if profile != 0 {
+                delivery_relays(profile == 2)
+            } else {
+                vec![String::from("wss://plan.fixture.example/")]
+            };
             let source = nostr::UnsignedEvent {
                 id: None,
                 pubkey: public,
                 created_at: nostr::Timestamp::from_secs(999),
                 kind: nostr::Kind::Custom(10050),
-                tags: nostr::Tags::from_list(vec![nostr::Tag::parse(["relay", relay]).unwrap()]),
+                tags: nostr::Tags::from_list(
+                    relays
+                        .iter()
+                        .map(|relay| nostr::Tag::parse(["relay", relay.as_str()]).unwrap())
+                        .collect(),
+                ),
                 content: "synthetic public route metadata ".repeat(1000),
             }
             .sign_with_ctx(&context, &mut rng, &receiver)
@@ -117,7 +137,7 @@ impl WorkspaceFixture {
                     *recipient,
                     EnvelopeEventId::from_bytes(*source.id.as_bytes()),
                     &source.as_json(),
-                    &[relay.into()],
+                    &relays,
                 )
                 .unwrap(),
             );
@@ -128,6 +148,18 @@ impl WorkspaceFixture {
                 .protected_wire()
                 .to_vec(),
         )
+    }
+}
+#[wasm_bindgen]
+impl WorkspaceFixture {
+    pub async fn new_plan(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+        self.plan_with_relays(n, 0).await
+    }
+    pub async fn new_delivery_plan(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+        self.plan_with_relays(n, 1).await
+    }
+    pub async fn new_large_delivery_plan(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+        self.plan_with_relays(n, 2).await
     }
     pub async fn bind_plan(&self, n: u8, wire: Vec<u8>) -> Result<Vec<u8>, JsValue> {
         self.bind_plan_mode(n, wire, 0).await

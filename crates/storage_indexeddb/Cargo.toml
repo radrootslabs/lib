@@ -13,7 +13,7 @@ readme = "README.md"
 
 [features]
 default = []
-workspace = ["radroots_storage/protected_outbox", "dep:radroots_domain", "dep:radroots_secrets", "radroots_secrets/std", "dep:radroots_transport", "dep:sha2", "dep:zeroize"]
+workspace = ["radroots_storage/protected_outbox", "dep:radroots_domain", "dep:radroots_secrets", "radroots_secrets/std", "dep:radroots_transport", "dep:sha2", "dep:zeroize", "dep:nostr", "dep:serde", "dep:serde_json"]
 
 [dependencies]
 radroots_storage = { workspace = true }
@@ -24,6 +24,9 @@ sha2 = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+nostr = { workspace = true, features = ["alloc", "nip44"], optional = true }
+serde = { workspace = true, features = ["alloc", "derive"], optional = true }
+serde_json = { workspace = true, features = ["alloc", "raw_value"], optional = true }
 futures = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }

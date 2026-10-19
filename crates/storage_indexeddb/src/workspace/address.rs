@@ -11,6 +11,8 @@ pub(super) const CLAIM: u8 = 3;
 pub(super) const EVIDENCE: u8 = 4;
 pub(super) const INSTALLATION: u8 = 5;
 pub(super) const PUBLICATION: u8 = 6;
+pub(super) const DELIVERY: u8 = 7;
+pub(super) const REQUEST_INDEX: u8 = 9;
 
 fn prefix_bytes(operation: OperationId) -> [u8; 16] {
     let digest = Sha256::new()
@@ -37,10 +39,14 @@ pub(super) fn fields(key: RecordKey) -> Result<(u8, u8, u8), OperationError> {
     let kind = bytes[16];
     let recipient = bytes[17];
     let part = bytes[20];
-    if bytes[18..20]
-        .iter()
-        .chain(bytes[21..].iter())
-        .any(|b| *b != 0)
+    let delivery = matches!(kind, DELIVERY | REQUEST_INDEX);
+    let ordinal = u16::from_be_bytes([bytes[18], bytes[19]]);
+    if bytes[21..].iter().any(|b| *b != 0)
+        || if delivery {
+            !(1..=192).contains(&ordinal)
+        } else {
+            ordinal != 0
+        }
         || match kind {
             PREPARED => recipient != 0 || part > 4,
             PLAN => recipient != 0 || part > 24,
@@ -48,6 +54,8 @@ pub(super) fn fields(key: RecordKey) -> Result<(u8, u8, u8), OperationError> {
             EVIDENCE => recipient > 1 || part > 4,
             INSTALLATION => recipient != 0 || part != 0,
             PUBLICATION => recipient > 1 || part != 0,
+            DELIVERY => recipient > 1 || part > 24,
+            REQUEST_INDEX => recipient > 1 || part != 0,
             // Later reserved families remain unsupported until their actual
             // implementations and proving cohort land. Never ignore them.
             _ => true,
@@ -56,6 +64,30 @@ pub(super) fn fields(key: RecordKey) -> Result<(u8, u8, u8), OperationError> {
         return Err(OperationError::RecoveryRequired);
     }
     Ok((kind, recipient, part))
+}
+pub(super) fn delivery_key(
+    operation: OperationId,
+    kind: u8,
+    recipient: u8,
+    ordinal: u16,
+    part: u8,
+) -> RecordKey {
+    let mut bytes = *key(operation, kind, recipient, part).as_bytes();
+    bytes[18..20].copy_from_slice(&ordinal.to_be_bytes());
+    RecordKey::new(bytes)
+}
+pub(super) fn delivery_position(key: RecordKey) -> Result<(u8, u8, u16, u8), OperationError> {
+    let (kind, recipient, part) = fields(key)?;
+    if !matches!(kind, DELIVERY | REQUEST_INDEX) {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let bytes = key.as_bytes();
+    Ok((
+        kind,
+        recipient,
+        u16::from_be_bytes([bytes[18], bytes[19]]),
+        part,
+    ))
 }
 impl State {
     pub(super) async fn read_view(

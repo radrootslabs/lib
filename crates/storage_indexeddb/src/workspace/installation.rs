@@ -5,7 +5,7 @@ use super::{
     BrowserWorkspace, Mutation, State, WorkspaceError, address, crypto, owned, retained::Graph,
 };
 use crate::ReadSnapshot;
-use radroots_domain::{CommandDigest, OperationId, TransactionId};
+use radroots_domain::{CommandDigest, OperationId, TransactionId, UnixSeconds};
 use radroots_secrets::context::{
     EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
 };
@@ -55,11 +55,11 @@ fn context(
     ))
 }
 pub(super) struct Records {
-    message: Option<ChatInstallation>,
-    work: Vec<PublicationWork>,
+    pub message: Option<ChatInstallation>,
+    pub work: Vec<PublicationWork>,
 }
 impl Records {
-    async fn read(
+    pub(super) async fn read(
         state: &State,
         view: &ReadSnapshot,
         graph: &Graph,
@@ -113,6 +113,9 @@ impl Records {
         Ok(Self { message, work })
     }
 }
+pub(super) fn work_commitment(message: ChatInstallation, work: PublicationWork) -> [u8; 32] {
+    Sha256::digest(codec::work(message, work)).into()
+}
 impl State {
     /// A missing claim must not conceal installation/publication descendants.
     /// The complete witnessed prefix still fences all facts at actual commit.
@@ -122,9 +125,10 @@ impl State {
         operation: OperationId,
         digest: CommandDigest,
         t0: &PreparationRecords,
+        observed: UnixSeconds,
     ) -> Result<(), OperationError> {
-        let graph = Graph::read(self, view, operation, Some(digest), t0).await?;
-        Records::read(self, view, &graph, operation).await?;
+        self.delivery_facts(view, operation, Some(digest), t0, observed, None)
+            .await?;
         Ok(())
     }
 }
@@ -144,15 +148,21 @@ impl BrowserWorkspace {
             let operation = request.operation_id();
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;
-            let graph = Graph::read(
-                &state,
-                &view,
-                operation,
-                Some(request.command_digest()),
-                &t0,
-            )
-            .await?;
-            let bound = graph.bound().ok_or(OperationError::RecoveryRequired)?;
+            let snapshot = state
+                .delivery_facts(
+                    &view,
+                    operation,
+                    Some(request.command_digest()),
+                    &t0,
+                    access.binding.observed_at(),
+                    None,
+                )
+                .await?
+                .snapshot
+                .ok_or(OperationError::RecoveryRequired)?;
+            let bound = snapshot
+                .bound_plan()
+                .ok_or(OperationError::RecoveryRequired)?;
             radroots_storage::command::protected::same_binding(
                 bound.prepared().request().binding(),
                 request.binding(),
@@ -160,29 +170,30 @@ impl BrowserWorkspace {
             if bound.plan().digest() != request.plan_digest() {
                 return Err(OperationError::IdempotencyConflict);
             }
-            let records = Records::read(&state, &view, &graph, operation).await?;
-            let missing = graph
-                .obtained()
+            let original = snapshot.installation();
+            let missing = snapshot
+                .recipients()
+                .iter()
+                .filter_map(|value| value.obtained())
                 .filter(|evidence| {
-                    !records
-                        .work
+                    !snapshot
+                        .publications()
                         .iter()
                         .any(|value| value.evidence().recipient() == evidence.recipient())
                 })
                 .collect::<Vec<_>>();
-            if records.message.is_none() && missing.is_empty() {
+            if original.is_none() && missing.is_empty() {
                 return Err(OperationError::InvalidEvidence);
             }
-            let fresh = records.message.is_none() || !missing.is_empty();
+            let fresh = original.is_none() || !missing.is_empty();
             let transaction = if fresh {
                 TransactionId::from_bytes(*crypto::random::<32>()?)
             } else {
-                records
-                    .message
+                original
                     .ok_or(OperationError::RecoveryRequired)?
                     .transaction_id()
             };
-            let installed = if let Some(value) = records.message {
+            let installed = if let Some(value) = original {
                 value
             } else {
                 ChatInstallation::from_committed_store(
@@ -193,7 +204,7 @@ impl BrowserWorkspace {
                 )?
             };
             let mut extra = Vec::with_capacity(3);
-            if records.message.is_none() {
+            if original.is_none() {
                 let raw = codec::message(bound, installed);
                 let protected = crypto::seal_bound(
                     state.provider.as_ref(),
@@ -256,6 +267,7 @@ impl BrowserWorkspace {
                         before: t0,
                         after: None,
                         window: None,
+                        delivery_deadline: None,
                         extra,
                     },
                     view,
@@ -295,18 +307,16 @@ impl BrowserWorkspace {
             let observed = access.binding.observed_at();
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;
-            let graph = Graph::read(&state, &view, operation, digest, &t0).await?;
-            if let Some(prepared) = graph.prepared() {
+            let snapshot = state
+                .delivery_facts(&view, operation, digest, &t0, observed, None)
+                .await?
+                .snapshot;
+            if let Some(snapshot) = &snapshot {
                 radroots_storage::command::protected::same_binding(
-                    prepared.request().binding(),
+                    snapshot.prepared().request().binding(),
                     &binding,
                 )?;
             }
-            let records = Records::read(&state, &view, &graph, operation).await?;
-            let snapshot = graph
-                .into_snapshot(observed)?
-                .map(|snapshot| snapshot.with_installation(records.message, records.work))
-                .transpose()?;
             state
                 .check_operation(access, operation, OperationChange::observe(t0), view)
                 .await?;

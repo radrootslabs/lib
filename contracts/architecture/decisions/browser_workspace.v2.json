@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "radroots.storage.browser_workspace.v2",
-  "state": "implemented_verified_installation_component",
+  "state": "implemented_verified_delivery_frame_component",
   "owner": "radroots_storage_indexeddb",
   "feature": "workspace",
   "target": "wasm32-unknown-unknown",
@@ -152,9 +152,7 @@
       "delivery_request_index"
     ],
     "reserved_not_yet_implemented_families": [
-      "delivery_frame",
-      "delivery_observation",
-      "delivery_request_index"
+      "delivery_observation"
     ]
   },
   "signing_claim": {
@@ -202,6 +200,33 @@
     "capture_evidence",
     "obtained_evidence",
     "install_transition_and_outbox",
-    "operation_snapshot"
-  ]
+    "operation_snapshot",
+    "prepare_delivery_attempt",
+    "delivery_attempt"
+  ],
+  "delivery_frame": {
+    "phase": "D_attempt",
+    "complete_bytes_max": 393216,
+    "clear_part_bytes_max": 16384,
+    "parts_max": 24,
+    "manifest_bytes": 200,
+    "request_index_bytes": 100,
+    "new_records_max": 26,
+    "grant_t0_comparisons": 6,
+    "atomic_records_max": 32,
+    "per_recipient_slots_max": 192,
+    "total_slots_max": 384,
+    "per_endpoint_invocations_max": 12,
+    "protected_request_index_and_manifest_must_agree": true,
+    "one_original_publication_policy": true,
+    "retained_or_unknown_authorizes_redispatch": false,
+    "actual_original_seal_containment_and_temporary_key_verified": true,
+    "current_access_lease_clock_and_original_delivery_deadline_at_commit": true,
+    "signing_window_applied_to_delivery": false,
+    "caller_candidate_borrowed": true,
+    "accepted_work_has_bounded_owned_copy": true,
+    "actual_complete_prefix_fence": true,
+    "provider_signing_or_network_inside_transaction": false,
+    "delivery_observations_or_full_client_claim": false
+  }
 }

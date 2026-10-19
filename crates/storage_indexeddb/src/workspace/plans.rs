@@ -266,6 +266,7 @@ impl BrowserWorkspace {
                 before: t0,
                 after: None,
                 window: fresh.then(|| prepared.issuance_window()),
+                delivery_deadline: None,
                 extra: comparisons(operation, before, after)?,
             };
             match state.check_operation(access, operation, change, view).await {
@@ -322,6 +323,7 @@ impl BrowserWorkspace {
                 before: t0,
                 after: None,
                 window: None,
+                delivery_deadline: None,
                 extra: comparisons(operation, records, None)?,
             };
             state

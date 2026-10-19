@@ -4,7 +4,7 @@ use crate::ReadSnapshot;
 use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, PublicKey, UnixSeconds};
 use radroots_storage::command::{
     BoundSigningPlan, ClaimSnapshot, EvidenceReceipt, OperationError, OperationSnapshot,
-    RecipientSnapshot, RetainedOperation, protected,
+    RecipientSnapshot, RetainedOperation, SealEvidence, protected,
 };
 
 pub(super) async fn header(
@@ -50,17 +50,20 @@ pub(super) async fn header(
 pub(super) struct Graph {
     retained: Option<RetainedOperation>,
     recipients: Vec<RecipientSnapshot>,
+    output: Option<SealEvidence>,
 }
 impl Graph {
-    pub(super) async fn read(
+    pub(super) async fn read_for_output(
         state: &State,
         view: &ReadSnapshot,
         operation: OperationId,
         digest: Option<CommandDigest>,
         t0: &Records,
+        selected: Option<PublicKey>,
     ) -> Result<Self, OperationError> {
         let retained = header(state, view, operation, digest, t0).await?;
         let mut recipients = Vec::with_capacity(2);
+        let mut output = None;
         let retained = match retained {
             Some(RetainedOperation::Planned(bound)) => {
                 let mut bound = *bound;
@@ -87,15 +90,16 @@ impl Graph {
                             let claim = ClaimSnapshot::from_store_report(&attempt);
                             // Verify one bounded exact seal at a time; retaining a
                             // receipt does not duplicate private plan/raw bodies.
-                            let obtained = state
-                                .evidence(view, &attempt, index as u8)
-                                .await?
-                                .map(|(_, receipt)| receipt);
+                            let obtained = state.evidence(view, &attempt, index as u8).await?;
+                            let receipt = obtained.as_ref().map(|(_, receipt)| *receipt);
+                            if Some(recipient) == selected {
+                                output = obtained.map(|(value, _)| value);
+                            }
                             recipients.push(RecipientSnapshot::from_store_report(
                                 recipient,
                                 Some(expected),
                                 Some(claim),
-                                obtained,
+                                receipt,
                             ));
                             bound = attempt.into_bound_plan();
                         }
@@ -120,15 +124,16 @@ impl Graph {
         Ok(Self {
             retained,
             recipients,
+            output,
         })
+    }
+    pub(super) fn take_output(&mut self) -> Option<SealEvidence> {
+        self.output.take()
     }
     pub(super) fn bound(&self) -> Option<&BoundSigningPlan> {
         self.retained
             .as_ref()
             .and_then(RetainedOperation::bound_plan)
-    }
-    pub(super) fn prepared(&self) -> Option<&radroots_storage::command::PreparedOperation> {
-        self.retained.as_ref().map(RetainedOperation::prepared)
     }
     pub(super) fn receipt(&self, recipient: PublicKey) -> Result<EvidenceReceipt, OperationError> {
         self.recipients
@@ -136,9 +141,6 @@ impl Graph {
             .find(|value| value.recipient() == recipient)
             .and_then(|value| value.obtained())
             .ok_or(OperationError::RecoveryRequired)
-    }
-    pub(super) fn obtained(&self) -> impl Iterator<Item = EvidenceReceipt> + '_ {
-        self.recipients.iter().filter_map(|value| value.obtained())
     }
     pub(super) fn into_snapshot(
         self,

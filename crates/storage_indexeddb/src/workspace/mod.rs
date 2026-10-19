@@ -3,6 +3,7 @@
 //! requires its independently retained selection and protected proof.
 mod address;
 mod crypto;
+mod delivery;
 mod installation;
 mod issuance;
 mod journal;

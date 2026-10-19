@@ -1,7 +1,9 @@
 //! Synthetic isolated host-effect fixture, never a production custody API.
+mod delivery;
 mod installation;
 mod issuance;
 mod plans;
+pub use delivery::ObtainedEnvelope;
 use futures::FutureExt;
 pub use issuance::ObtainedSeal;
 use radroots_domain::{

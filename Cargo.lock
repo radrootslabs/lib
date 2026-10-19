@@ -3659,10 +3659,13 @@ version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "js-sys",
+ "nostr 0.44.7",
  "radroots_domain",
  "radroots_secrets",
  "radroots_storage",
  "radroots_transport",
+ "serde",
+ "serde_json",
  "sha2",
  "wasm-bindgen",
  "wasm-bindgen-futures",

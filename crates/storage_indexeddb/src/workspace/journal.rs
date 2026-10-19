@@ -28,6 +28,7 @@ pub(super) struct OperationChange {
     pub before: Records,
     pub after: Option<Records>,
     pub window: Option<IssuanceWindow>,
+    pub delivery_deadline: Option<core::num::NonZeroU64>,
     pub extra: Vec<Mutation>,
 }
 impl OperationChange {
@@ -36,6 +37,7 @@ impl OperationChange {
             before,
             after: None,
             window: None,
+            delivery_deadline: None,
             extra: Vec::new(),
         }
     }
@@ -261,6 +263,7 @@ impl State {
             before,
             after,
             window,
+            delivery_deadline,
             extra,
         } = change;
         let batch = mutations(access.protected, operation, before, after, extra)?;
@@ -285,6 +288,13 @@ impl State {
                 if now >= window.first_issue_not_after() {
                     return Err(OperationError::DeadlineExceeded);
                 }
+            }
+            if delivery_deadline.is_some_and(|deadline| {
+                now.get()
+                    .checked_mul(1000)
+                    .is_none_or(|time| time >= deadline.get())
+            }) {
+                return Err(OperationError::DeadlineExceeded);
             }
             Ok(())
         })
@@ -392,6 +402,7 @@ impl BrowserWorkspace {
                         before,
                         after,
                         window: fresh.then(|| prepared.issuance_window()),
+                        delivery_deadline: None,
                         extra,
                     },
                     view,

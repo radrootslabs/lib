@@ -15,6 +15,7 @@ radroots_storage_indexeddb = { path = "../..", features = ["workspace"] }
 radroots_storage = { path = "../../../storage" }
 radroots_domain = { path = "../../../domain", features = ["serde", "std"] }
 radroots_protocol = { path = "../../../protocol", features = ["chat"] }
+radroots_transport = { path = "../../../transport", features = ["serde"] }
 nostr = { version = "=0.44.7", default-features = false, features = ["alloc", "nip44"] }
 serde_json = "=1.0.149"
 sha2 = "=0.10.9"
