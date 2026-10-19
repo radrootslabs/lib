@@ -11,6 +11,9 @@ pub use radroots_protocol::chat::ChatSigningPlan;
 use radroots_protocol::command::CapturedChatCommand;
 use radroots_transport::BoxFuture;
 
+#[cfg(feature = "protected_outbox")]
+pub mod protected;
+
 mod delivery;
 mod delivery_summary;
 mod dm_source;

@@ -41,6 +41,14 @@ pub(super) async fn seal(
     grant: GrantId,
     plaintext: &[u8],
 ) -> Result<Vec<u8>, WorkspaceError> {
+    seal_bound(provider, reference, context(workspace, grant)?, plaintext).await
+}
+pub(super) async fn seal_bound(
+    provider: &dyn SecretProvider,
+    reference: &SecretRef,
+    context: EnvelopeContext,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, WorkspaceError> {
     if plaintext.len() > GRANT_BYTES_MAX {
         return Err(WorkspaceError::InvalidInput);
     }
@@ -58,7 +66,7 @@ pub(super) async fn seal(
                 reference.backend(),
                 reference.key_version(),
             ),
-            context(workspace, grant)?,
+            context,
             &plaintext,
             SealMaterial::new(material, Nonce::new(*nonce)),
         ),
@@ -79,6 +87,14 @@ pub(super) async fn open(
     grant: GrantId,
     protected: &[u8],
 ) -> Result<SecretMaterial, WorkspaceError> {
+    open_bound(provider, reference, context(workspace, grant)?, protected).await
+}
+pub(super) async fn open_bound(
+    provider: &dyn SecretProvider,
+    reference: &SecretRef,
+    context: EnvelopeContext,
+    protected: &[u8],
+) -> Result<SecretMaterial, WorkspaceError> {
     if protected.len() > PROTECTED_MAX {
         return Err(WorkspaceError::RecoveryRequired);
     }
@@ -91,7 +107,7 @@ pub(super) async fn open(
         return Err(WorkspaceError::RecoveryRequired);
     }
     let plaintext = envelope
-        .open(provider, &context(workspace, grant)?)
+        .open(provider, &context)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
     if plaintext.len() > GRANT_BYTES_MAX {

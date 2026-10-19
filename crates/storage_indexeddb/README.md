@@ -19,6 +19,19 @@ opening existing data requires its retained selection and protected proof.
 It supplies no participant custody, complete operation journal/storage SPI or
 stock authority.
 
+The workspace also executes immutable buyer operation admission and lookup.
+It retains the original command, transaction identity and first-issue window;
+an exact replay returns that preparation before acquiring entropy or applying
+a fresh command deadline. A different command under the same ID refuses.
+Preparation uses the shared native codec, split into at most four 16 KiB clear
+parts and an authenticated manifest. Each part binds its workspace, operation,
+position and full preparation digest. The grant comparison and all record slots
+commit atomically, with current access, writer and fresh deadline checks inside
+active callbacks. Unknown completion retains the original attempt and stops
+admission until exact reopening. Queries compare the complete fixed record set;
+missing, orphaned or damaged parts never trigger replacement. These methods
+provide T0 only; they do not implement signing, installation or delivery.
+
 The workspace holds an actual exclusive origin Web Lock. Unavailable or
 contended acquisition refuses; no in-memory substitute is selected. Accepted
 jobs remain Rust-owned and serial through cancelled observation. Closing stops

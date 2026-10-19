@@ -25,6 +25,7 @@ const server = createServer(async (req,res) => {
         let retainedWorkspace;
         self.onmessage=async(event)=>{try{
           if(event.data?.kind==='workspace_open'||event.data?.kind==='workspace_hold'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const revision=await owner.authenticate();if(m.kind==='workspace_hold')retainedWorkspace=owner;else await owner.close();self.postMessage({revision});return;}
+          if(event.data?.kind==='journal_query'){const m=event.data;const owner=await WorkspaceFixture.open(m.n,new Uint8Array(m.fingerprint),new Uint8Array(m.selection),new Uint8Array(m.proof));const preparation=Array.from(await owner.query(65));await owner.close();self.postMessage({preparation});return;}
           if(event.data?.kind==='persistent_create'){const provider=await Persistent.create(90);const fingerprint=provider.fingerprint();const encoded=await provider.protect(new Uint8Array([90,91,92]));await provider.close();self.postMessage({fingerprint:Array.from(fingerprint),encoded:Array.from(encoded)});return;}
           if(event.data?.kind==='persistent_open'){const provider=await Persistent.open(90,new Uint8Array(event.data.fingerprint));const plain=await provider.reveal(new Uint8Array(event.data.encoded));await provider.close();self.postMessage({plain:Array.from(plain)});return;}
           await protected_round_trip(79);const db=await Fixture.open(77,true);await db.write(1,undefined,new Uint8Array([77]));await db.close();const again=await Fixture.open(77,false);const value=await again.read(1);await again.close();self.postMessage({value:Array.from(value)});}catch(error){self.postMessage({error:String(error)});}};
@@ -245,7 +246,100 @@ try {
       const afterRefusal=await workspaceBytes(workspaceReceipt);same(Array.from(afterRefusal.values[0]),Array.from(originalGrant.values[0]));same(await outbox.authenticate(),1);
       outbox.set_time(2000);await rejects(()=>outbox.authenticate(),'grant_expired');outbox.set_time(1000);
       passed('actual active write callback refuses expiry after asynchronous wrapping and retains the original grant');
+      const keyBytes=v=>Array.from(v instanceof ArrayBuffer?new Uint8Array(v):v);
+      const journal=await WorkspaceFixture.create(171);
+      const journalReceipt={n:171,fingerprint:Array.from(journal.fingerprint()),selection:Array.from(journal.selection()),proof:Array.from(journal.proof()),namespace:journal.data_namespace()};
+      const originalPreparation=Array.from(await journal.admit(65,false));same(originalPreparation.length,80);
+      same(Array.from(await journal.query(65)),originalPreparation);same(Array.from(await journal.query(66)),[]);
+      const journalBytes=await workspaceBytes(journalReceipt);same(journalBytes.values.length,4);
+      for(const bytes of journalBytes.values)if(bytes.length>32768)throw Error('oversized protected private record');
+      journal.set_time(1600);
+      const originalRandom=Crypto.prototype.getRandomValues;
+      try{Crypto.prototype.getRandomValues=()=>{throw Error('replay acquired new entropy');};same(Array.from(await journal.admit(65,false)),originalPreparation);}
+      finally{Crypto.prototype.getRandomValues=originalRandom;}
+      await rejects(()=>journal.admit(65,true),'idempotency_conflict');
+      same(Array.from(await journal.query(65)),originalPreparation);
+      passed('actual atomic protected multipart T0 and exact late replay without new entropy');
+      journal.set_time(1000);await rejects(()=>journal.admit_expiring(66),'deadline_exceeded');
+      same(Array.from(await journal.query(66)),[]);
+      const afterLate=await workspaceBytes(journalReceipt);
+      same(afterLate.values.map(v=>Array.from(v)),journalBytes.values.map(v=>Array.from(v)));
+      same(afterLate.keys.map(keyBytes),journalBytes.keys.map(keyBytes));
+      passed('late command expiry after actual encryption aborts every operation part');
+      journal.set_time(1000);
+      const originalPut=IDBObjectStore.prototype.put;let puts=0;
+      try{IDBObjectStore.prototype.put=function(...args){const request=originalPut.apply(this,args);if(this.transaction.db.name===journalReceipt.namespace&&++puts===2)this.transaction.abort();return request;};await rejects(()=>journal.admit(69,false),'storage_failure');}
+      finally{IDBObjectStore.prototype.put=originalPut;}
+      same(puts,2);same(Array.from(await journal.query(69)),[]);
+      const afterAbort=await workspaceBytes(journalReceipt);same(afterAbort.values.map(v=>Array.from(v)),journalBytes.values.map(v=>Array.from(v)));
+      passed('actual aborted multipart admission leaves no acknowledged or partial preparation');
+      journal.set_time(1000);await journal.abandon_admission(67);journal.abandon_close();await journal.close();
+      let retainedJournal=await WorkspaceFixture.open(journalReceipt.n,new Uint8Array(journalReceipt.fingerprint),new Uint8Array(journalReceipt.selection),new Uint8Array(journalReceipt.proof));
+      const abandonedPreparation=Array.from(await retainedJournal.query(67));same(abandonedPreparation.length,80);
+      same(Array.from(await retainedJournal.query(65)),originalPreparation);await retainedJournal.close();
+      passed('unobserved accepted T0 survives cancelled close and exact protected reopen');
+      const operationKey=async(n,slot)=>{const bytes=new Uint8Array([...new TextEncoder().encode('radroots.browser.local_outbox.prepared.key.v1\0'),...new Uint8Array(32).fill(n),0,0,0,slot]);return new Uint8Array(await crypto.subtle.digest('SHA-256',bytes));};
+      const manifestKey=await operationKey(65,0),part1=await operationKey(65,1),part2=await operationKey(65,2);
+      const retainedJournalBytes=await workspaceBytes(journalReceipt);
+      const findBytes=k=>retainedJournalBytes.values[retainedJournalBytes.keys.findIndex(x=>JSON.stringify(keyBytes(x))===JSON.stringify(keyBytes(k)))];
+      for(const mode of ['orphan','missing_part','tampered','swapped_parts','wrong_operation']){
+        await changeWorkspace(journalReceipt,store=>{
+          if(mode==='orphan')store.delete(manifestKey);
+          if(mode==='missing_part')store.delete(part1);
+          if(mode==='tampered'){const bytes=new Uint8Array(findBytes(part1));bytes[bytes.length-1]^=1;store.put(bytes,part1);}
+          if(mode==='swapped_parts'){store.put(findBytes(part1),part2);store.put(findBytes(part2),part1);}
+        });
+        retainedJournal=await WorkspaceFixture.open(journalReceipt.n,new Uint8Array(journalReceipt.fingerprint),new Uint8Array(journalReceipt.selection),new Uint8Array(journalReceipt.proof));
+        if(mode==='wrong_operation'){const foreignKey=await operationKey(68,0);await changeWorkspace(journalReceipt,store=>store.put(findBytes(manifestKey),foreignKey));}
+        const beforeFailure=await workspaceBytes(journalReceipt);
+        if(mode==='wrong_operation'){
+          await rejects(()=>retainedJournal.query(68),'recovery_required');
+        }else await rejects(()=>retainedJournal.query(65),'recovery_required');
+        await retainedJournal.close();
+        const damaged=await workspaceBytes(journalReceipt);same(damaged.keys.map(keyBytes),beforeFailure.keys.map(keyBytes));same(damaged.values.map(v=>Array.from(v)),beforeFailure.values.map(v=>Array.from(v)));
+        // Failed lookup does not repair or replace any retained bytes.
+        await changeWorkspace(journalReceipt,store=>{store.clear();retainedJournalBytes.keys.forEach((k,i)=>store.put(retainedJournalBytes.values[i],k));});
+        if(!damaged.values.length)throw Error('failed lookup discarded the namespace');
+      }
+      retainedJournal=await WorkspaceFixture.open(journalReceipt.n,new Uint8Array(journalReceipt.fingerprint),new Uint8Array(journalReceipt.selection),new Uint8Array(journalReceipt.proof));
+      same(Array.from(await retainedJournal.query(65)),originalPreparation);await retainedJournal.close();
+      passed('orphan, missing, tampered, swapped and foreign-context preparation parts refuse without replacement');
+      const uncertain=await WorkspaceFixture.create(174);
+      const uncertainReceipt={n:174,fingerprint:Array.from(uncertain.fingerprint()),selection:Array.from(uncertain.selection()),proof:Array.from(uncertain.proof()),namespace:uncertain.data_namespace()};
+      const actualAbort=IDBTransaction.prototype.abort;let refusedAbort=0;
+      let uncertainAnchor;
+      try{IDBTransaction.prototype.abort=function(){if(this.db.name===uncertainReceipt.namespace){refusedAbort++;return;}return actualAbort.call(this);};uncertainAnchor=Array.from(await uncertain.admit_uncertain(70));}
+      finally{IDBTransaction.prototype.abort=actualAbort;}
+      same(uncertainAnchor.length,96);same(uncertainAnchor.slice(0,32),new Array(32).fill(70));same(refusedAbort,1);
+      await uncertain.close();await rejects(()=>uncertain.authenticate(),'closed');
+      const partial=await workspaceBytes(uncertainReceipt);same(partial.values.length,2);
+      const uncertainReopen=await WorkspaceFixture.open(uncertainReceipt.n,new Uint8Array(uncertainReceipt.fingerprint),new Uint8Array(uncertainReceipt.selection),new Uint8Array(uncertainReceipt.proof));
+      await rejects(()=>uncertainReopen.query(70),'recovery_required');await uncertainReopen.close();
+      const preservedPartial=await workspaceBytes(uncertainReceipt);same(preservedPartial.values.map(v=>Array.from(v)),partial.values.map(v=>Array.from(v)));
+      passed('actual completion despite suppressed abort retains original unknown attempt and refuses partial-state reopen');
+      const uncertainGrant=await WorkspaceFixture.create(175);
+      const uncertainGrantReceipt={n:175,fingerprint:Array.from(uncertainGrant.fingerprint()),selection:Array.from(uncertainGrant.selection()),proof:Array.from(uncertainGrant.proof()),namespace:uncertainGrant.data_namespace()};
+      const originalUncertainGrant=await workspaceBytes(uncertainGrantReceipt);uncertainGrant.expire_after_next_read();
+      try{IDBTransaction.prototype.abort=function(){if(this.db.name===uncertainGrantReceipt.namespace)return;return actualAbort.call(this);};await rejects(()=>uncertainGrant.revoke(),'commit_unknown');}
+      finally{IDBTransaction.prototype.abort=actualAbort;}
+      await uncertainGrant.close();const afterUncertainGrant=await workspaceBytes(uncertainGrantReceipt);
+      same(afterUncertainGrant.values.map(v=>Array.from(v)),originalUncertainGrant.values.map(v=>Array.from(v)));
+      const grantReopen=await WorkspaceFixture.open(uncertainGrantReceipt.n,new Uint8Array(uncertainGrantReceipt.fingerprint),new Uint8Array(uncertainGrantReceipt.selection),new Uint8Array(uncertainGrantReceipt.proof));same(await grantReopen.authenticate(),1);await grantReopen.close();
+      passed('grant refusal cannot conceal actual uncertain completion or replace original protected state');
+
+      const unknownRead=await WorkspaceFixture.create(176);
+      const unknownReadReceipt={n:176,fingerprint:Array.from(unknownRead.fingerprint()),selection:Array.from(unknownRead.selection()),proof:Array.from(unknownRead.proof()),namespace:unknownRead.data_namespace()};
+      const actualGet=IDBObjectStore.prototype.get;
+      let originalFallback;
+      try{originalFallback=Array.from(await unknownRead.admit_read_unknown(72,()=>{
+        IDBObjectStore.prototype.get=function(...args){if(this.transaction.db.name===unknownReadReceipt.namespace)throw new DOMException('synthetic host read failure','InvalidStateError');return actualGet.apply(this,args);};
+        IDBTransaction.prototype.abort=function(){if(this.db.name===unknownReadReceipt.namespace)return;return actualAbort.call(this);};
+      }));}finally{IDBObjectStore.prototype.get=actualGet;IDBTransaction.prototype.abort=actualAbort;}
+      same(originalFallback.length,64);same(originalFallback.slice(0,32),new Array(32).fill(72));await unknownRead.close();
+      const readReopen=await WorkspaceFixture.open(unknownReadReceipt.n,new Uint8Array(unknownReadReceipt.fingerprint),new Uint8Array(unknownReadReceipt.selection),new Uint8Array(unknownReadReceipt.proof));same(Array.from(await readReopen.query(72)),[]);await readReopen.close();
+      passed('uncertain original admission read retains the captured operation anchor without inventing a transaction');
       const workCall=message=>new Promise((resolve,reject)=>{const worker=new Worker('./worker.js',{type:'module'});worker.onmessage=e=>{if(e.data.ready){worker.postMessage(message);return;}worker.terminate();resolve(e.data);};worker.onerror=e=>{worker.terminate();reject(Error(e.message));};});
+      same(await workCall({kind:'journal_query',...journalReceipt}),{preparation:originalPreparation});passed('actual worker reopens and queries the original protected preparation');
       same(await workCall({kind:'workspace_open',...workspaceReceipt}),{error:'writer_active'});
       same(outbox.abandon_auths(9),8);for(let n=0;n<64;n++)outbox.abandon_close();await outbox.close();
       await rejects(()=>outbox.authenticate(),'closed');
@@ -284,7 +378,7 @@ try {
       const workerCreated=await workerCall({kind:'persistent_create'});
       same(await workerCall({kind:'persistent_open',...workerCreated}),{plain:[90,91,92]});
       passed('persistent provider survives actual worker termination and new worker instance');
-      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded},workspace:workspaceReceipt};
+      return {tests,events:events.reduce((all,event)=>(all[event]=(all[event]??0)+1,all),{}),persistent:{fingerprint,encoded},workspace:workspaceReceipt,journal:{...journalReceipt,preparation:originalPreparation}};
     } finally {IDBDatabase.prototype.transaction=nativeTransaction;}
   });
   await page.reload();
@@ -298,6 +392,8 @@ try {
   result.tests.push('persistent provider and encrypted data survive actual page and WASM restart');
   const workspaceRestart=await page.evaluate(async receipt=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(receipt.n,new Uint8Array(receipt.fingerprint),new Uint8Array(receipt.selection),new Uint8Array(receipt.proof));const revision=await owner.authenticate();await owner.close();return revision;},result.workspace);
   assert.equal(workspaceRestart,1);result.tests.push('authenticated browser workspace survives actual page and WASM restart');delete result.workspace;
+  const preparationRestart=await page.evaluate(async receipt=>{const {default:init,WorkspaceFixture}=await import('./fixture.js');await init();const owner=await WorkspaceFixture.open(receipt.n,new Uint8Array(receipt.fingerprint),new Uint8Array(receipt.selection),new Uint8Array(receipt.proof));const prepared=Array.from(await owner.query(65));await owner.close();return prepared;},result.journal);
+  assert.deepEqual(preparationRestart,result.journal.preparation);result.tests.push('original protected operation survives actual page and WASM restart');delete result.journal;
   delete result.persistent;
   console.log(JSON.stringify({engine,version:browser.version(),...result}));
 } finally {

@@ -758,6 +758,12 @@ pub fn radroots_storage::memory::MemoryStorage::transition_restore(&self, radroo
 pub fn radroots_storage::memory::MemoryStorage::verify_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
 pub mod radroots_storage::command
 pub use radroots_storage::command::ChatSigningPlan
+pub mod radroots_storage::command::protected
+pub const radroots_storage::command::protected::PREPARED_BYTES_MAX: usize
+pub fn radroots_storage::command::protected::check_digest(&radroots_storage::command::PreparedOperation, radroots_domain::context::ActorRef, core::option::Option<radroots_domain::identifier::CommandDigest>) -> core::result::Result<(), radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::decode(&[u8], &radroots_storage::workspace::AttachmentInput, radroots_domain::identifier::OperationId) -> core::result::Result<radroots_storage::command::PreparedOperation, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::encode(&radroots_storage::command::AdmissionRequest, radroots_domain::identifier::TransactionId, radroots_domain::issuance::IssuanceWindow) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::same_binding(&radroots_storage::workspace::WorkspaceBinding, &radroots_storage::workspace::WorkspaceBinding) -> core::result::Result<(), radroots_storage::command::OperationError>
 pub enum radroots_storage::command::AdmissionOutcome
 pub radroots_storage::command::AdmissionOutcome::Committed(radroots_storage::command::PreparedOperation)
 pub radroots_storage::command::AdmissionOutcome::Unknown(radroots_storage::command::CommitAttempt)

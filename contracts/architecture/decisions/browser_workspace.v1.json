@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "radroots.storage.browser_workspace.v1",
-  "state": "implemented_workspace_component",
+  "state": "implemented_admission_component",
   "owner": "radroots_storage_indexeddb",
   "feature": "workspace",
   "target": "wasm32-unknown-unknown",
@@ -61,5 +61,33 @@
     "actual_worker_termination_and_page_restart_required": true,
     "native_workspace_and_ordinary_inquiry_regressions_required": true,
     "final_phone_or_full_rcld_claim": false
+  },
+  "shared_prepared_codec": "radroots_storage::command::protected",
+  "operation_admission": {
+    "phase": "T0_only",
+    "original_identity_and_window_retained": true,
+    "exact_replay_before_fresh_deadline_or_entropy": true,
+    "same_id_different_digest_refused": true,
+    "private_record_clear_bytes_max": 16384,
+    "complete_preparation_clear_bytes_max": 65536,
+    "manifest_clear_bytes": 40,
+    "part_count_max": 4,
+    "fixed_slots_compared_atomically": 5,
+    "grant_compared_in_same_transaction": true,
+    "part_context_binds": [
+      "workspace",
+      "operation",
+      "position",
+      "complete_preparation_digest"
+    ],
+    "active_callback_checks": [
+      "writer_lease",
+      "current_grant_and_proof",
+      "monotonic_positive_clock",
+      "fresh_first_issue_deadline"
+    ],
+    "unknown_completion": "retain_original_attempt_stop_admission_exact_reopen",
+    "orphan_or_corrupt_replacement_allowed": false,
+    "participant_issuance_installation_or_delivery": false
   }
 }

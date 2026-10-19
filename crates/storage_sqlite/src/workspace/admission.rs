@@ -403,20 +403,7 @@ impl Journal<'_> {
     }
 }
 
-pub(super) fn same_binding(
-    captured: &WorkspaceBinding,
-    current: &WorkspaceBinding,
-) -> Result<(), OperationError> {
-    if captured.input() != current.input()
-        || captured.actor() != current.actor()
-        || captured.principal_id() != current.principal_id()
-        || captured.grant_revision() != current.grant_revision()
-        || captured.expires_at() != current.expires_at()
-    {
-        return Err(OperationError::Unauthorized);
-    }
-    Ok(())
-}
+pub(super) use radroots_storage::command::protected::same_binding;
 
 #[expect(
     clippy::too_many_arguments,

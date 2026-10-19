@@ -1,48 +1,13 @@
 //! Retained non-stock command preparation. No signing or delivery occurs here.
 
-use super::{AttachmentInput, WorkspaceBinding, crypto::WorkspaceCrypto};
-use radroots_domain::{
-    CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId, UnixSeconds,
-};
+use super::{AttachmentInput, crypto::WorkspaceCrypto};
+use radroots_domain::{IssuanceWindow, OperationId, TransactionId};
 use radroots_storage::command::{AdmissionRequest, OperationError, PreparedOperation};
-use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqliteConnection};
-use zeroize::Zeroizing;
 
 pub(super) const TABLE: &str = "CREATE TABLE operations (workspace BLOB NOT NULL CHECK(length(workspace)=32), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), actor BLOB NOT NULL CHECK(length(actor)=32), grant_id BLOB NOT NULL CHECK(length(grant_id)=32), command_type TEXT NOT NULL CHECK(command_type IN ('inbox.inquire','inbox.reply')), command_digest BLOB NOT NULL CHECK(length(command_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), phase TEXT NOT NULL CHECK(phase='prepared'), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), grant_singleton INTEGER NOT NULL CHECK(grant_singleton=1) REFERENCES workspace_grant(singleton), PRIMARY KEY(workspace,operation_id)) STRICT, WITHOUT ROWID";
 pub(super) const INDEX: &str =
     "CREATE UNIQUE INDEX operation_transaction_identity ON operations(workspace,transaction_id)";
-
-#[derive(Serialize)]
-struct Encoded<'a> {
-    version: u8,
-    selection: &'a AttachmentInput,
-    principal: &'a str,
-    grant_revision: Sequence,
-    grant_expires_at: UnixSeconds,
-    captured_observed_at: UnixSeconds,
-    transaction_id: TransactionId,
-    revision: Sequence,
-    prepared_at: UnixSeconds,
-    first_issue_not_after: UnixSeconds,
-    command: &'a serde_json::value::RawValue,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Decoded<'a> {
-    version: u8,
-    selection: AttachmentInput,
-    principal: String,
-    grant_revision: Sequence,
-    grant_expires_at: UnixSeconds,
-    captured_observed_at: UnixSeconds,
-    transaction_id: TransactionId,
-    revision: Sequence,
-    prepared_at: UnixSeconds,
-    first_issue_not_after: UnixSeconds,
-    #[serde(borrow)]
-    command: &'a serde_json::value::RawValue,
-}
 
 pub(super) async fn protect(
     request: &AdmissionRequest,
@@ -50,29 +15,10 @@ pub(super) async fn protect(
     window: IssuanceWindow,
     crypto: &WorkspaceCrypto,
 ) -> Result<Vec<u8>, OperationError> {
-    let binding = request.binding();
-    let encoded = Encoded {
-        version: 2,
-        selection: binding.input(),
-        principal: binding.principal_id(),
-        grant_revision: binding.grant_revision(),
-        grant_expires_at: binding.expires_at(),
-        captured_observed_at: binding.observed_at(),
-        transaction_id,
-        revision: Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?,
-        prepared_at: window.prepared_at(),
-        first_issue_not_after: window.first_issue_not_after(),
-        command: serde_json::from_slice(request.command().protected_wire())
-            .map_err(|_| OperationError::InvalidCommand)?,
-    };
-    let plaintext =
-        Zeroizing::new(serde_json::to_vec(&encoded).map_err(|_| OperationError::InvalidCommand)?);
-    if plaintext.len() > 65_536 {
-        return Err(OperationError::InvalidCommand);
-    }
+    let plaintext = radroots_storage::command::protected::encode(request, transaction_id, window)?;
     Ok(crypto
         .seal_operation(
-            binding.input().workspace_id(),
+            request.binding().input().workspace_id(),
             request.command().context().operation_id(),
             &plaintext,
         )
@@ -116,58 +62,19 @@ pub(super) async fn read(
         .open_operation(selected.workspace_id(), operation_id, &protected)
         .await?;
     let snapshot = plaintext.expose_secret(|bytes| {
-        let decoded: Decoded<'_> =
-            serde_json::from_slice(bytes).map_err(|_| OperationError::RecoveryRequired)?;
-        if decoded.version != 2
-            || decoded.revision.get() == 0
-            || phase != "prepared"
-            || revision != 1
-            || decoded.revision.get() != revision as u64
-        {
-            return Err(OperationError::RecoveryRequired);
-        }
-        let command_context: radroots_domain::CommandContextData = {
-            #[derive(Deserialize)]
-            struct ContextOnly {
-                context: radroots_domain::CommandContextData,
-            }
-            serde_json::from_str::<ContextOnly>(decoded.command.get())
-                .map_err(|_| OperationError::RecoveryRequired)?
-                .context
-        };
-        let binding = WorkspaceBinding::from_authenticated_host(
-            decoded.selection,
-            command_context.actor(),
-            decoded.principal,
-            decoded.grant_revision,
-            decoded.grant_expires_at,
-            decoded.captured_observed_at,
-        )?;
-        if binding.input() != selected {
-            return Err(OperationError::RecoveryRequired);
-        }
-        let request =
-            AdmissionRequest::from_protected_wire(binding, decoded.command.get().as_bytes())?;
-        let context = request.command().context();
-        if context.workspace_id() != selected.workspace_id()
-            || context.operation_id() != operation_id
-            || actor != context.actor().participant().as_bytes()
-            || grant != request.binding().input().grant_id().as_bytes()
-            || digest != request.command().digest().as_bytes()
-            || transaction != decoded.transaction_id.as_bytes()
-            || kind != request.command().kind().as_str()
-        {
-            return Err(OperationError::RecoveryRequired);
-        }
-        let snapshot = PreparedOperation::from_committed_store(
-            request,
-            decoded.transaction_id,
-            decoded.revision,
-            IssuanceWindow::new(decoded.prepared_at, decoded.first_issue_not_after)
-                .map_err(|_| OperationError::RecoveryRequired)?,
-        )?;
-        Ok::<_, OperationError>(snapshot)
+        radroots_storage::command::protected::decode(bytes, selected, operation_id)
     })?;
+    let request = snapshot.request();
+    if phase != "prepared"
+        || revision != 1
+        || actor != request.command().context().actor().participant().as_bytes()
+        || grant != request.binding().input().grant_id().as_bytes()
+        || digest != request.command().digest().as_bytes()
+        || transaction != snapshot.transaction_id().as_bytes()
+        || kind != request.command().kind().as_str()
+    {
+        return Err(OperationError::RecoveryRequired);
+    }
     Ok(Some((snapshot, protected)))
 }
 
@@ -210,16 +117,4 @@ pub(super) async fn unchanged(
     Ok(())
 }
 
-pub(super) fn check_digest(
-    snapshot: &PreparedOperation,
-    actor: radroots_domain::ActorRef,
-    expected: Option<CommandDigest>,
-) -> Result<(), OperationError> {
-    if snapshot.request().command().context().actor().participant() != actor.participant() {
-        return Err(OperationError::Unauthorized);
-    }
-    if expected.is_some_and(|digest| digest != snapshot.request().command().digest()) {
-        return Err(OperationError::IdempotencyConflict);
-    }
-    Ok(())
-}
+pub(super) use radroots_storage::command::protected::check_digest;

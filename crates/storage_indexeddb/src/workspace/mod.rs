@@ -2,6 +2,7 @@
 //! Creation establishes a fresh unrelated buyer outbox only. Existing state
 //! requires its independently retained selection and protected proof.
 mod crypto;
+mod journal;
 mod lease;
 
 use super::{Batch, Database, Error, Mutation, Namespace, OpenMode, RecordKey};
@@ -106,8 +107,10 @@ async fn commit_current(
             }
         })
         .await;
-    if let Some(error) = failure.get() {
-        return Err(error);
+    // Only a confirmed abort makes the callback refusal a known failure.
+    // A host that completed despite refusal must retain CommitUnknown.
+    if matches!(result, Err(Error::GuardRefused)) {
+        return Err(failure.get().unwrap_or(WorkspaceError::RecoveryRequired));
     }
     result.map(|_| ()).map_err(stored)
 }
@@ -240,10 +243,27 @@ impl Drop for Work {
         }
     }
 }
-async fn owned<T: 'static>(
+trait JobError: From<WorkspaceError> {
+    fn workspace_failure(&self) -> Option<WorkspaceError>;
+}
+impl JobError for WorkspaceError {
+    fn workspace_failure(&self) -> Option<WorkspaceError> {
+        Some(*self)
+    }
+}
+impl JobError for radroots_storage::command::OperationError {
+    fn workspace_failure(&self) -> Option<WorkspaceError> {
+        match self {
+            Self::Workspace(error) => Some(*error),
+            Self::RecoveryRequired => Some(WorkspaceError::RecoveryRequired),
+            _ => None,
+        }
+    }
+}
+async fn owned<T: 'static, E: JobError + 'static>(
     work: Work,
-    future: impl Future<Output = Result<T, WorkspaceError>> + 'static,
-) -> Result<T, WorkspaceError> {
+    future: impl Future<Output = Result<T, E>> + 'static,
+) -> Result<T, E> {
     let (send, observe) = oneshot::channel();
     spawn_local(async move {
         let state = work.0.clone();
@@ -251,17 +271,21 @@ async fn owned<T: 'static>(
         let _serial = state.serial.lock().await;
         let result = future.await;
         if matches!(
-            result,
-            Err(WorkspaceError::Closed
-                | WorkspaceError::Unavailable
-                | WorkspaceError::RecoveryRequired
-                | WorkspaceError::CommitUnknown)
+            result.as_ref().err().and_then(JobError::workspace_failure),
+            Some(
+                WorkspaceError::Closed
+                    | WorkspaceError::Unavailable
+                    | WorkspaceError::RecoveryRequired
+                    | WorkspaceError::CommitUnknown
+            )
         ) {
             state.stop();
         }
         let _ = send.send(result);
     });
-    observe.await.unwrap_or(Err(WorkspaceError::CommitUnknown))
+    observe
+        .await
+        .unwrap_or_else(|_| Err(WorkspaceError::CommitUnknown.into()))
 }
 /// One bounded browser writer. Clones share admission, serial work and actual
 /// close completion. No proof or participant signer is retained in the handle.

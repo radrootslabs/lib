@@ -86,6 +86,11 @@ validates current scope. Enrollment takes qualified host identities and proof
 without acquiring a backend or establishing durable authority. Concrete hosts
 must protect, commit and authenticate that state through their explicit owned
 lifecycle. This feature does not enable a database, provider or runtime.
+Its `command::protected` module supplies the shared native/browser immutable
+Prepared codec and pure binding/commitment checks. The complete codec is bounded
+to 64 KiB; a concrete host must split it to meet any smaller private-record
+budget, protect each record and atomically retain the full set. Decoding is a
+historical observation and supplies no current grant, actual commit or issuance.
 
 `BackupSource::settle_backup_writes` waits for earlier owner writes, including
 work whose caller was cancelled. The host excludes new writes before settling

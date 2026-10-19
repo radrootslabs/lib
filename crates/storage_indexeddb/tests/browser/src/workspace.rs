@@ -1,6 +1,8 @@
 //! Synthetic isolated host-effect fixture, never a production custody API.
 use futures::FutureExt;
-use radroots_domain::{ActorRole, Coverage, PublicKey, UnixSeconds, WorkspaceId};
+use radroots_domain::{
+    ActorRole, CommandContextData, Coverage, OperationId, PublicKey, UnixSeconds, WorkspaceId,
+};
 use radroots_secrets::{
     SecretId, SecretRef,
     browser::BrowserProvider,
@@ -8,6 +10,7 @@ use radroots_secrets::{
     provider::AccessPolicy,
 };
 use radroots_storage::{
+    command::{AdmissionOutcome, AdmissionRequest, PreparedOperation},
     event::SourceGeneration,
     workspace::{AttachmentInput, AttachmentProof, WorkspaceClock, WorkspaceError, WorkspaceStore},
 };
@@ -41,12 +44,14 @@ fn copied(proof: &AttachmentProof) -> AttachmentProof {
 struct Clock {
     now: Cell<u64>,
     after: Cell<Option<u64>>,
+    countdown: Cell<Option<(u32, u64)>>,
 }
 impl Clock {
     fn new() -> Self {
         Self {
             now: Cell::new(1000),
             after: Cell::new(None),
+            countdown: Cell::new(None),
         }
     }
 }
@@ -55,6 +60,13 @@ impl WorkspaceClock for Clock {
         let now = self.now.get();
         if let Some(next) = self.after.take() {
             self.now.set(next);
+        }
+        if let Some((remaining, next)) = self.countdown.take() {
+            if remaining == 1 {
+                self.now.set(next);
+            } else {
+                self.countdown.set(Some((remaining - 1, next)));
+            }
         }
         if now == 0 {
             return Err(WorkspaceError::Unavailable);
@@ -72,6 +84,105 @@ pub struct WorkspaceFixture {
 }
 #[wasm_bindgen]
 impl WorkspaceFixture {
+    pub async fn admit_read_unknown(
+        &self,
+        n: u8,
+        hook: js_sys::Function,
+    ) -> Result<Vec<u8>, JsValue> {
+        let request = self.request(n, false).await?;
+        let digest = request.command().digest();
+        hook.call0(&JsValue::NULL)?;
+        match self
+            .owner
+            .admit_command_and_hold(request, copied(&self.proof))
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?
+        {
+            AdmissionOutcome::Committed(_) => Err(JsValue::from_str("unexpected_commit")),
+            AdmissionOutcome::Unknown(anchor) => {
+                assert_eq!(anchor.workspace_id(), self.input.workspace_id());
+                assert_eq!(anchor.operation_id(), OperationId::from_bytes([n; 32]));
+                assert_eq!(anchor.command_digest(), digest);
+                assert_eq!(anchor.transaction_id(), None);
+                let mut bytes = anchor.operation_id().as_bytes().to_vec();
+                bytes.extend_from_slice(anchor.command_digest().as_bytes());
+                Ok(bytes)
+            }
+        }
+    }
+    pub async fn admit_uncertain(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+        let request = self.request(n, false).await?;
+        let digest = request.command().digest();
+        self.clock.countdown.set(Some((3, 1500)));
+        match self
+            .owner
+            .admit_command_and_hold(request, copied(&self.proof))
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?
+        {
+            AdmissionOutcome::Committed(_) => Err(JsValue::from_str("unexpected_commit")),
+            AdmissionOutcome::Unknown(anchor) => {
+                assert_eq!(anchor.workspace_id(), self.input.workspace_id());
+                assert_eq!(anchor.operation_id(), OperationId::from_bytes([n; 32]));
+                assert_eq!(anchor.command_digest(), digest);
+                let mut bytes = anchor.operation_id().as_bytes().to_vec();
+                bytes.extend_from_slice(anchor.command_digest().as_bytes());
+                bytes.extend_from_slice(anchor.transaction_id().unwrap().as_bytes());
+                Ok(bytes)
+            }
+        }
+    }
+    pub async fn admit(&self, n: u8, changed: bool) -> Result<Vec<u8>, JsValue> {
+        let request = self.request(n, changed).await?;
+        match self
+            .owner
+            .admit_command_and_hold(request, copied(&self.proof))
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?
+        {
+            AdmissionOutcome::Committed(prepared) => Ok(summary(prepared)),
+            AdmissionOutcome::Unknown(_) => Err(JsValue::from_str("commit_unknown")),
+        }
+    }
+    pub async fn query(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+        let binding = self
+            .owner
+            .authenticate(self.input.clone(), copied(&self.proof))
+            .await
+            .map_err(fail)?;
+        let result = self
+            .owner
+            .query_operation(
+                binding,
+                OperationId::from_bytes([n; 32]),
+                None,
+                copied(&self.proof),
+            )
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?;
+        Ok(result.map(summary).unwrap_or_default())
+    }
+    pub async fn admit_expiring(&self, n: u8) -> Result<(), JsValue> {
+        let request = self.request(n, false).await?;
+        self.clock.after.set(Some(1500));
+        self.owner
+            .admit_command_and_hold(request, copied(&self.proof))
+            .await
+            .map(|_| ())
+            .map_err(|e| JsValue::from_str(e.code()))
+    }
+    pub async fn abandon_admission(&self, n: u8) -> Result<(), JsValue> {
+        let request = self.request(n, false).await?;
+        if self
+            .owner
+            .admit_command_and_hold(request, copied(&self.proof))
+            .now_or_never()
+            .is_some()
+        {
+            return Err(JsValue::from_str("unexpected_immediate_admission"));
+        }
+        Ok(())
+    }
     pub async fn sibling(&self) -> Result<Self, JsValue> {
         let clock = Rc::new(Clock::new());
         let config = LocalOutboxConfig::new(
@@ -253,6 +364,39 @@ impl WorkspaceFixture {
     }
 }
 impl WorkspaceFixture {
+    async fn request(&self, n: u8, changed: bool) -> Result<AdmissionRequest, JsValue> {
+        let binding = self
+            .owner
+            .authenticate(self.input.clone(), copied(&self.proof))
+            .await
+            .map_err(fail)?;
+        let context = CommandContextData::new(
+            OperationId::from_bytes([n; 32]),
+            binding.actor(),
+            self.input.workspace_id(),
+            self.input.authority(),
+            self.input.route_digest(),
+            None,
+            None,
+            UnixSeconds::new(1500).unwrap(),
+            None,
+        )
+        .unwrap();
+        // Escaped control bytes exercise multiple private-record parts without
+        // exceeding the shared 4096-byte chat text limit.
+        let text = if changed {
+            "changed".to_string()
+        } else {
+            "\u{0001}".repeat(4096)
+        };
+        let wire = serde_json::to_vec(
+            &serde_json::json!({"type":"inbox.inquire","context":context,
+            "input":{"thread_id":"66".repeat(32),"peer":participant(),"source":null,"text":text}}),
+        )
+        .unwrap();
+        AdmissionRequest::from_protected_wire(binding, &wire)
+            .map_err(|e| JsValue::from_str(e.code()))
+    }
     async fn initialize(n: u8, expire: bool) -> Result<Self, JsValue> {
         let provider = Rc::new(
             BrowserProvider::create(key_namespace(n), reference())
@@ -287,4 +431,17 @@ impl WorkspaceFixture {
             clock,
         })
     }
+}
+fn summary(prepared: PreparedOperation) -> Vec<u8> {
+    let mut bytes = prepared.transaction_id().as_bytes().to_vec();
+    bytes.extend_from_slice(prepared.request().command().digest().as_bytes());
+    bytes.extend_from_slice(&prepared.issuance_window().prepared_at().get().to_be_bytes());
+    bytes.extend_from_slice(
+        &prepared
+            .issuance_window()
+            .first_issue_not_after()
+            .get()
+            .to_be_bytes(),
+    );
+    bytes
 }
