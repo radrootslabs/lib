@@ -12,6 +12,7 @@ pub(super) const EVIDENCE: u8 = 4;
 pub(super) const INSTALLATION: u8 = 5;
 pub(super) const PUBLICATION: u8 = 6;
 pub(super) const DELIVERY: u8 = 7;
+pub(super) const OBSERVATION: u8 = 8;
 pub(super) const REQUEST_INDEX: u8 = 9;
 
 fn prefix_bytes(operation: OperationId) -> [u8; 16] {
@@ -39,28 +40,30 @@ pub(super) fn fields(key: RecordKey) -> Result<(u8, u8, u8), OperationError> {
     let kind = bytes[16];
     let recipient = bytes[17];
     let part = bytes[20];
-    let delivery = matches!(kind, DELIVERY | REQUEST_INDEX);
+    let delivery = matches!(kind, DELIVERY | OBSERVATION | REQUEST_INDEX);
     let ordinal = u16::from_be_bytes([bytes[18], bytes[19]]);
-    if bytes[21..].iter().any(|b| *b != 0)
-        || if delivery {
-            !(1..=192).contains(&ordinal)
-        } else {
-            ordinal != 0
-        }
-        || match kind {
-            PREPARED => recipient != 0 || part > 4,
-            PLAN => recipient != 0 || part > 24,
-            CLAIM => recipient > 1 || part != 0,
-            EVIDENCE => recipient > 1 || part > 4,
-            INSTALLATION => recipient != 0 || part != 0,
-            PUBLICATION => recipient > 1 || part != 0,
-            DELIVERY => recipient > 1 || part > 24,
-            REQUEST_INDEX => recipient > 1 || part != 0,
-            // Later reserved families remain unsupported until their actual
-            // implementations and proving cohort land. Never ignore them.
-            _ => true,
-        }
-    {
+    if (if kind == OBSERVATION {
+        bytes[23..].iter().any(|b| *b != 0) || bytes[21] >= 16 || !(1..=6).contains(&bytes[22])
+    } else {
+        bytes[21..].iter().any(|b| *b != 0)
+    }) || if delivery {
+        !(1..=192).contains(&ordinal)
+    } else {
+        ordinal != 0
+    } || match kind {
+        PREPARED => recipient != 0 || part > 4,
+        PLAN => recipient != 0 || part > 24,
+        CLAIM => recipient > 1 || part != 0,
+        EVIDENCE => recipient > 1 || part > 4,
+        INSTALLATION => recipient != 0 || part != 0,
+        PUBLICATION => recipient > 1 || part != 0,
+        DELIVERY => recipient > 1 || part > 24,
+        OBSERVATION => recipient > 1 || part != 0,
+        REQUEST_INDEX => recipient > 1 || part != 0,
+        // Later reserved families remain unsupported until their actual
+        // implementations and proving cohort land. Never ignore them.
+        _ => true,
+    } {
         return Err(OperationError::RecoveryRequired);
     }
     Ok((kind, recipient, part))
@@ -78,7 +81,7 @@ pub(super) fn delivery_key(
 }
 pub(super) fn delivery_position(key: RecordKey) -> Result<(u8, u8, u16, u8), OperationError> {
     let (kind, recipient, part) = fields(key)?;
-    if !matches!(kind, DELIVERY | REQUEST_INDEX) {
+    if !matches!(kind, DELIVERY | OBSERVATION | REQUEST_INDEX) {
         return Err(OperationError::RecoveryRequired);
     }
     let bytes = key.as_bytes();
@@ -88,6 +91,25 @@ pub(super) fn delivery_position(key: RecordKey) -> Result<(u8, u8, u16, u8), Ope
         u16::from_be_bytes([bytes[18], bytes[19]]),
         part,
     ))
+}
+pub(super) fn observation_key(
+    operation: OperationId,
+    recipient: u8,
+    ordinal: u16,
+    target: u8,
+    kind: u8,
+) -> RecordKey {
+    let mut bytes = *delivery_key(operation, OBSERVATION, recipient, ordinal, 0).as_bytes();
+    bytes[21] = target;
+    bytes[22] = kind;
+    RecordKey::new(bytes)
+}
+pub(super) fn observation_position(key: RecordKey) -> Result<(u8, u16, u8, u8), OperationError> {
+    let (family, recipient, ordinal, _) = delivery_position(key)?;
+    if family != OBSERVATION {
+        return Err(OperationError::RecoveryRequired);
+    }
+    Ok((recipient, ordinal, key.as_bytes()[21], key.as_bytes()[22]))
 }
 impl State {
     pub(super) async fn read_view(

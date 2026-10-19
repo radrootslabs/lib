@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "radroots.storage.browser_workspace.v2",
-  "state": "implemented_verified_delivery_frame_component",
+  "state": "implemented_verified_delivery_observation_component",
   "owner": "radroots_storage_indexeddb",
   "feature": "workspace",
   "target": "wasm32-unknown-unknown",
@@ -151,9 +151,7 @@
       "delivery_observation",
       "delivery_request_index"
     ],
-    "reserved_not_yet_implemented_families": [
-      "delivery_observation"
-    ]
+    "reserved_not_yet_implemented_families": []
   },
   "signing_claim": {
     "phase": "S_claim",
@@ -202,7 +200,9 @@
     "install_transition_and_outbox",
     "operation_snapshot",
     "prepare_delivery_attempt",
-    "delivery_attempt"
+    "delivery_attempt",
+    "record_delivery_observation",
+    "delivery_observations"
   ],
   "delivery_frame": {
     "phase": "D_attempt",
@@ -228,5 +228,22 @@
     "actual_complete_prefix_fence": true,
     "provider_signing_or_network_inside_transaction": false,
     "delivery_observations_or_full_client_claim": false
+  },
+  "delivery_observation": {
+    "phase": "D_observation",
+    "record_bytes_max": 16384,
+    "reports_max_per_operation": 2304,
+    "independent_classes": 6,
+    "append_only_first_original_details_and_optional_time": true,
+    "expected_context_binds_original_attempt_work_target_class_and_transaction": true,
+    "streamed_with_actual_attempt_frame": true,
+    "original_retained_proof_required": true,
+    "current_expiry_revocation_or_unavailable_clock_discards_obtained_fact": false,
+    "full_prefix_and_original_grant_checked_in_retention_transaction": true,
+    "provider_or_network_inside_transaction": false,
+    "query_current_access_required": true,
+    "retained_or_unknown_authorizes_dispatch": false,
+    "capture_only_owner_allows_fresh_authentication_or_commands": false,
+    "actual_remote_acceptance_or_full_client_claim": false
   }
 }

@@ -10,7 +10,7 @@ pub use protected::protected_round_trip;
 mod persistent;
 pub use persistent::Persistent;
 mod workspace;
-pub use workspace::{ObtainedEnvelope, ObtainedSeal, WorkspaceFixture};
+pub use workspace::{ObtainedEnvelope, ObtainedObservation, ObtainedSeal, WorkspaceFixture};
 mod snapshot;
 pub use snapshot::Frozen;
 

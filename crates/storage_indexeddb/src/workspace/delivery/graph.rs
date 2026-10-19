@@ -8,9 +8,11 @@ use crate::workspace::{
     installation::{Records, work_commitment},
     retained,
 };
-use crate::{Mutation, ReadSnapshot};
+use crate::{Mutation, ReadSnapshot, RecordKey};
 use radroots_domain::OperationId;
-use radroots_storage::command::{DeliveryAttempt, DeliveryAttemptSummary, OperationError};
+use radroots_storage::command::{
+    DeliveryAttempt, DeliveryAttemptSummary, DeliveryObservation, OperationError,
+};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use zeroize::Zeroizing;
@@ -18,6 +20,8 @@ use zeroize::Zeroizing;
 pub(in crate::workspace) struct Graph {
     pub summaries: Vec<DeliveryAttemptSummary>,
     pub selected: Option<DeliveryAttempt>,
+    pub(super) selected_slot: Option<Slot>,
+    pub observations: Vec<DeliveryObservation>,
     pub slots: [u16; 2],
 }
 impl Graph {
@@ -30,8 +34,22 @@ impl Graph {
         selected: Option<Selection<'_>>,
     ) -> Result<Self, OperationError> {
         let mut positions = BTreeMap::<(u8, u16), BTreeSet<(u8, u8)>>::new();
+        let mut observations = BTreeMap::<(u8, u16), BTreeMap<(u8, u8), RecordKey>>::new();
+        let mut observation_count = 0;
         for key in view.keys() {
             let (kind, _, _) = address::fields(key)?;
+            if kind == address::OBSERVATION {
+                let (recipient, ordinal, target, kind) = address::observation_position(key)?;
+                observation_count += 1;
+                if observation_count > 2304 {
+                    return Err(OperationError::RecoveryRequired);
+                }
+                observations
+                    .entry((recipient, ordinal))
+                    .or_default()
+                    .insert((target, kind), key);
+                continue;
+            }
             if !matches!(kind, address::DELIVERY | address::REQUEST_INDEX) {
                 continue;
             }
@@ -47,6 +65,8 @@ impl Graph {
         let mut result = Self {
             summaries: Vec::with_capacity(positions.len()),
             selected: None,
+            selected_slot: None,
+            observations: Vec::with_capacity(observation_count),
             slots: [0; 2],
         };
         let mut representations = BTreeMap::new();
@@ -106,6 +126,18 @@ impl Graph {
             if !parsed.matches(&report) {
                 return Err(OperationError::RecoveryRequired);
             }
+            result.observations.extend(
+                super::observation::read(
+                    state,
+                    view,
+                    slot,
+                    &report,
+                    observations
+                        .remove(&(recipient, ordinal))
+                        .unwrap_or_default(),
+                )
+                .await?,
+            );
             routes(bound, participant, report.intent())
                 .map_err(|_| OperationError::RecoveryRequired)?;
             if representations
@@ -124,8 +156,12 @@ impl Graph {
                         && selected.event == Some(report.intent().event_id()))
                 {
                     result.selected = Some(report);
+                    result.selected_slot = Some(slot);
                 }
             }
+        }
+        if !observations.is_empty() {
+            return Err(OperationError::RecoveryRequired);
         }
         Ok(result)
     }

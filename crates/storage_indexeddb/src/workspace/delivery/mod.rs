@@ -2,6 +2,8 @@
 mod codec;
 mod graph;
 mod json;
+mod observation;
+mod observation_operations;
 mod operations;
 
 use super::State;
@@ -95,6 +97,7 @@ pub(super) struct Selection<'a> {
 pub(super) struct Facts {
     pub snapshot: Option<OperationSnapshot>,
     pub selected: Option<DeliveryAttempt>,
+    selected_slot: Option<Slot>,
     pub original: Option<SealEvidence>,
     pub slots: [u16; 2],
 }
@@ -127,12 +130,13 @@ impl State {
             .map(|snapshot| {
                 snapshot
                     .with_installation(installed.message, installed.work)?
-                    .with_delivery(deliveries.summaries, Vec::new())
+                    .with_delivery(deliveries.summaries, deliveries.observations)
             })
             .transpose()?;
         Ok(Facts {
             snapshot,
             selected: deliveries.selected,
+            selected_slot: deliveries.selected_slot,
             original: output,
             slots: deliveries.slots,
         })

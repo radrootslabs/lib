@@ -2,10 +2,12 @@
 mod delivery;
 mod installation;
 mod issuance;
+mod observations;
 mod plans;
 pub use delivery::ObtainedEnvelope;
 use futures::FutureExt;
 pub use issuance::ObtainedSeal;
+pub use observations::ObtainedObservation;
 use radroots_domain::{
     ActorRole, CommandContextData, Coverage, OperationId, PublicKey, UnixSeconds, WorkspaceId,
 };

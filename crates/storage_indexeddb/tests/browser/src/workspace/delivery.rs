@@ -100,6 +100,38 @@ impl WorkspaceFixture {
 }
 #[wasm_bindgen]
 impl WorkspaceFixture {
+    pub fn alternate_envelope(
+        &self,
+        original: &ObtainedEnvelope,
+    ) -> Result<ObtainedEnvelope, JsValue> {
+        let event = nostr::Event::from_json(original.candidate.raw_json()).unwrap();
+        let context = nostr::secp256k1::Secp256k1::new();
+        let mut scalar = [0; 32];
+        scalar[31] = 3;
+        let keys =
+            nostr::Keys::new_with_ctx(&context, nostr::SecretKey::from_slice(&scalar).unwrap());
+        let alternate = nostr::UnsignedEvent {
+            id: Some(event.id),
+            pubkey: event.pubkey,
+            created_at: event.created_at,
+            kind: event.kind,
+            tags: event.tags.clone(),
+            content: event.content.clone(),
+        }
+        .sign_with_ctx(&context, &mut BrowserRng, &keys)
+        .unwrap();
+        alternate.verify_with_ctx(&context).unwrap();
+        assert_eq!(alternate.id, event.id);
+        assert_ne!(alternate.as_json(), event.as_json());
+        Ok(ObtainedEnvelope {
+            candidate: EnvelopeCandidate::from_obtained(
+                original.candidate.work(),
+                &alternate.as_json(),
+                &scalar,
+            )
+            .map_err(|e| JsValue::from_str(e.code()))?,
+        })
+    }
     pub async fn envelope(&self, n: u8, index: u8, mode: u8) -> Result<ObtainedEnvelope, JsValue> {
         let request = self.request(n, false).await?;
         let snapshot = self
