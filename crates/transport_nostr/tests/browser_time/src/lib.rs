@@ -116,6 +116,24 @@ pub async fn verify_host_time() -> Result<js_sys::Array, JsValue> {
         "expired ready local future",
     )?;
     passed.push(&"expired ready local future".into());
+
+    struct DeferredReady(Rc<Cell<bool>>);
+    impl core::future::IntoFuture for DeferredReady {
+        type Output = u32;
+        type IntoFuture = futures::future::Ready<u32>;
+        fn into_future(self) -> Self::IntoFuture {
+            self.0.set(true);
+            futures::future::ready(7)
+        }
+    }
+    let converted = Rc::new(Cell::new(false));
+    let builder = timeout_at(expired, DeferredReady(Rc::clone(&converted)));
+    require(!converted.get(), "unpolled IntoFuture builder is inert")?;
+    require(
+        builder.await.ok() == Some(7) && converted.get(),
+        "IntoFuture builder timeout",
+    )?;
+    passed.push(&"local IntoFuture builder".into());
     require(
         timeout_at(expired, pending::<()>()).await.is_err(),
         "expired pending future",

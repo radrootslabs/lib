@@ -24,6 +24,7 @@ approved_packages = [
   "radroots_storage",
   "radroots_storage_sqlite",
   "radroots_transport_nostr",
+  "radroots_transport_nostr_native",
   "radroots_sync",
   "radroots_geonames",
   "radroots_sdk",
@@ -47,6 +48,7 @@ local_packages = [
   "radroots_storage",
   "radroots_storage_sqlite",
   "radroots_transport_nostr",
+  "radroots_transport_nostr_native",
   "radroots_sync",
   "radroots_geonames",
   "radroots_sdk",
@@ -64,7 +66,6 @@ private = [
   "radroots_service_sqlite",
   "radroots_sql_core",
   "radroots_storage_indexeddb",
-  "radroots_transport_nostr_native",
 ]
 build_codegen = [
   "radroots_core_bindings",
@@ -115,6 +116,7 @@ crates = [
   "radroots_storage",
   "radroots_storage_sqlite",
   "radroots_transport_nostr",
+  "radroots_transport_nostr_native",
   "radroots_sync",
   "radroots_execution",
   "radroots_geonames",

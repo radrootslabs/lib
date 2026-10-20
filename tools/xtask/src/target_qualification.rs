@@ -214,7 +214,7 @@ mod tests {
                 ("macos", "aarch64-apple-darwin"),
             ]
         );
-        assert_eq!(packages.len(), 21);
+        assert_eq!(packages.len(), 22);
     }
 
     #[test]

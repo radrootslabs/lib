@@ -4,7 +4,9 @@ use radroots_transport_nostr::{
     RelayUrlPolicy,
 };
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn configure_transport(
+    host: std::sync::Arc<dyn radroots_transport::host::websocket::Connector>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let endpoint = RelayEndpoint::new(
         "wss://relay.example.com",
         RelayUrlPolicy::Public,
@@ -12,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let profile = RelayProfile::explicit(RelayProfileKind::Public, [endpoint])?;
     let config = Config::from_profile(profile).with_timeouts(5_000, 20_000, 2_000)?;
-    let transport = NostrTransport::new(config);
+    let transport = NostrTransport::new(config, host);
 
     let source: &dyn EventSource = &transport;
     let subscriber: &dyn EventSubscriber = &transport;
@@ -23,4 +25,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("configured a Nostr source, subscriber, and sink without opening a relay connection");
     Ok(())
+}
+
+fn main() {
+    println!("call configure_transport with an explicit socket host");
 }

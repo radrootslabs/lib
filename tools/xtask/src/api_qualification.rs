@@ -81,6 +81,7 @@ fn validate(contract: &Contract, expected_packages: usize) -> Result<(), String>
             "radroots_sdk",
             "radroots_domain",
             "radroots_execution",
+            "radroots_transport_nostr_native",
         ])
         || contract.baseline_override.len() != overrides.len()
         || contract
@@ -165,7 +166,7 @@ mod tests {
             .and_then(std::path::Path::parent)
             .expect("workspace root");
         let contract = load(root).expect("contract");
-        validate(&contract, 21).expect("valid contract");
+        validate(&contract, 22).expect("valid contract");
         let invocation = invocation(&contract, "radroots_core");
         assert!(invocation.contains(&"--all-features".to_owned()));
         assert!(invocation.ends_with(&["--release-type".to_owned(), "major".to_owned()]));

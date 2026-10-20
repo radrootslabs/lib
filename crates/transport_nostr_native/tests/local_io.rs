@@ -6,8 +6,8 @@ use radroots_transport::{
     source::{FetchBounds, SubscriptionBounds, SubscriptionEndReason},
 };
 use radroots_transport_nostr::{
-    Config, NostrTransport, RelayAccess, RelayAggregateState, RelayEndpoint, RelayEvidenceState,
-    RelayProfile, RelayProfileKind, RelayUrlPolicy,
+    Config, RelayAccess, RelayAggregateState, RelayEndpoint, RelayEvidenceState, RelayProfile,
+    RelayProfileKind, RelayUrlPolicy,
 };
 use serde_json::Value;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -74,7 +74,7 @@ async fn simulator_profile_proves_read_capability_against_a_real_loopback_socket
         FetchBounds::new(1, unix_time_ms() + 5_000).expect("bounds"),
     )
     .expect("request");
-    let transport = NostrTransport::new(config);
+    let transport = radroots_transport_nostr_native::create_transport(config);
     let page = tokio::time::timeout(Duration::from_secs(5), transport.fetch(request))
         .await
         .expect("bounded fetch")
@@ -174,7 +174,7 @@ async fn simulator_profile_streams_and_cancels_a_real_live_subscription() {
         SubscriptionBounds::new(2, unix_time_ms() + 5_000).expect("bounds"),
     )
     .expect("request");
-    let transport = NostrTransport::new(config);
+    let transport = radroots_transport_nostr_native::create_transport(config);
     let mut subscription =
         tokio::time::timeout(Duration::from_secs(5), transport.subscribe(request))
             .await
@@ -265,7 +265,7 @@ async fn shutdown_disconnects_the_shared_live_pool_and_refuses_new_effects() {
         unix_time_ms() + 5000,
     )
     .unwrap();
-    let transport = NostrTransport::new(config);
+    let transport = radroots_transport_nostr_native::create_transport(config);
     let prepared = transport.prepare_delivery(delivery.clone()).unwrap();
     transport
         .begin_authentication(&relay, "shutdown challenge", 1000, 2000)

@@ -43,7 +43,10 @@ fn transport(urls: &[String]) -> (NostrTransport, FetchRequest) {
         FetchBounds::new(10, now + 5000).unwrap(),
     )
     .unwrap();
-    (NostrTransport::new(config), request)
+    (
+        radroots_transport_nostr_native::create_transport(config),
+        request,
+    )
 }
 
 async fn listener() -> (TcpListener, String) {

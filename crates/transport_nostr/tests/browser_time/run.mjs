@@ -67,7 +67,7 @@ try {
     };
     worker.postMessage('run');
   }));
-  assert.equal(main.length, 12);
+  assert.equal(main.length, 13);
   assert.deepEqual(dedicated, main);
   assert.deepEqual(errors, []);
   console.log(JSON.stringify({engine, version: browser.version(), main, dedicated, pageErrors: errors}));

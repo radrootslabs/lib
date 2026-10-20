@@ -1,6 +1,6 @@
 //! Exact retained EVENT framing and connection-local acknowledgement handling.
 
-use crate::{relay::MAX_WIRE_MESSAGE_BYTES, socket_write::WriterRegistry, status};
+use crate::{session_socket::MAX_WIRE_MESSAGE_BYTES, socket_write::WriterRegistry, status};
 use futures::StreamExt;
 use nostr_sdk::prelude::{EventId, RelayMessage};
 use nostr_sdk::relay::{RelayNotification, RelayStatus};

@@ -136,3 +136,7 @@ manifest_path = "crates/domain/Cargo.toml"
 [[package]]
 name = "radroots_execution"
 manifest_path = "crates/execution/Cargo.toml"
+
+[[package]]
+name = "radroots_transport_nostr_native"
+manifest_path = "crates/transport_nostr_native/Cargo.toml"

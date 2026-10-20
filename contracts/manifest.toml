@@ -24,6 +24,7 @@ algorithm_crates = [
   "radroots_storage_sqlite",
   "radroots_sync",
   "radroots_transport_nostr",
+  "radroots_transport_nostr_native",
 ]
 
 [surface.rust_crate_tiers]
@@ -47,6 +48,7 @@ published_support = [
   "radroots_storage_sqlite",
   "radroots_sync",
   "radroots_transport_nostr",
+  "radroots_transport_nostr_native",
 ]
 deferred_publication = [
   "radroots_transport_reticulum",

@@ -41,25 +41,26 @@ radroots_nostr = { workspace = true, default-features = false, features = [
   "events",
 ] }
 radroots_protocol = { workspace = true, default-features = false }
-radroots_transport = { workspace = true, default-features = false }
+radroots_transport = { workspace = true, default-features = false, features = ["std"] }
 async-wsocket = { workspace = true }
 futures = { workspace = true }
 nostr-sdk = { workspace = true }
-rustls = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 sha2 = { workspace = true, default-features = false }
-tokio = { workspace = true, features = ["net", "time"] }
-tokio-rustls = { workspace = true }
-tokio-tungstenite = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
 url = { workspace = true }
-webpki-roots = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 async-utility = { workspace = true }
+getrandom_04 = { workspace = true, features = ["wasm_js"] }
 wasm-bindgen-futures = { workspace = true }
 web-time = { workspace = true }
 
 [dev-dependencies]
+tokio-tungstenite = { workspace = true }
 tokio = { workspace = true, features = [
   "macros",
   "net",

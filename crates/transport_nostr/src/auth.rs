@@ -321,7 +321,7 @@ mod tests {
             .expect("profile"),
         );
         let client = Arc::new(MockAuthClient(AtomicUsize::new(0)));
-        let transport = NostrTransport::new(config).with_auth_client(client.clone());
+        let transport = crate::test_host::transport(config).with_auth_client(client.clone());
         (transport, client, relay)
     }
 

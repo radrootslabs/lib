@@ -11,13 +11,16 @@ mod exact_delivery;
 mod host_time;
 mod profile;
 mod relay;
+mod session_socket;
 mod sink;
 mod socket_write;
 mod source;
 mod source_ingress;
-mod source_wire;
+
 mod status;
 mod subscription;
+#[cfg(test)]
+mod test_host;
 
 pub use client::{Config, NostrTransport, ReconnectBackoff};
 pub use cursor::RelayCursor;

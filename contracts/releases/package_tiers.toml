@@ -35,6 +35,7 @@ packages = [
   "radroots_nostr_connect",
   "radroots_storage_sqlite",
   "radroots_transport_nostr",
+  "radroots_transport_nostr_native",
   "radroots_geonames",
 ]
 

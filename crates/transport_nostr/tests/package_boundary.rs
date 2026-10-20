@@ -52,7 +52,8 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
             "socket_write",
             "source",
             "source_ingress",
-            "source_wire",
+            "session_socket",
+            "test_host",
             "status",
             "subscription"
         ])
@@ -109,7 +110,7 @@ fn documentation_example_and_reviewed_api_baseline_are_complete() {
         "Config::from_profile(",
         "RelayEndpoint::new(",
         "RelayProfile::explicit(",
-        "NostrTransport::new(config)",
+        "NostrTransport::new(config, host)",
         "let source: &dyn EventSource",
         "let subscriber: &dyn EventSubscriber",
         "let sink: &dyn EventSink",
@@ -337,8 +338,9 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
             "source_ingress.rs".to_owned(),
             "source_paging_tests.rs".to_owned(),
             "source_window.rs".to_owned(),
-            "source_wire.rs".to_owned(),
-            "source_wire_tests.rs".to_owned(),
+            "session_socket.rs".to_owned(),
+            "session_socket_tests.rs".to_owned(),
+            "test_host.rs".to_owned(),
             "status.rs".to_owned(),
             "subscription.rs".to_owned(),
         ])

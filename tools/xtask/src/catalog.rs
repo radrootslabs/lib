@@ -25,7 +25,11 @@ const CONSOLIDATION_ID: &str = "radroots.rust.consolidation.v1";
 const VERSION: &str = "0.1.0-alpha";
 // Implemented public owners from the approved shared SDK target. Native
 // introduction provenance is independent of publication eligibility.
-const NATIVE_PUBLIC_PACKAGES: &[&str] = &["radroots_domain", "radroots_execution"];
+const NATIVE_PUBLIC_PACKAGES: &[&str] = &[
+    "radroots_domain",
+    "radroots_execution",
+    "radroots_transport_nostr_native",
+];
 const APPLICATION_RETIREMENT: &str =
     "contracts/architecture/decisions/tera_application_ownership.v1.json";
 const RETIRED_APPLICATION_PACKAGES: [&str; 4] = [
@@ -1550,7 +1554,7 @@ mod tests {
 
     #[test]
     fn public_inventory_is_exact() {
-        assert_eq!(expected_public_packages().len(), 21);
+        assert_eq!(expected_public_packages().len(), 22);
         assert!(expected_public_packages().contains("radroots"));
         assert!(expected_public_packages().contains("radroots_sdk"));
     }
@@ -1566,7 +1570,11 @@ mod tests {
 
     #[test]
     fn only_approved_shared_native_packages_can_be_public() {
-        for name in ["radroots_domain", "radroots_execution"] {
+        for name in [
+            "radroots_domain",
+            "radroots_execution",
+            "radroots_transport_nostr_native",
+        ] {
             let mut catalog = checked_in_catalog();
             let package = catalog.package.iter_mut().find(|p| p.name == name).unwrap();
             package.visibility = "public_release".to_owned();

@@ -1495,7 +1495,7 @@ adr_required = false
             .parent()
             .unwrap();
         let names = super::public_package_names(root, &architecture()).unwrap();
-        assert_eq!(names.len(), 21);
+        assert_eq!(names.len(), 22);
         assert!(names.contains("radroots_domain") && names.contains("radroots_execution"));
         assert!(!names.contains("radroots_nostrdb"));
     }

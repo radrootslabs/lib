@@ -21,8 +21,11 @@ async fn queued_subscription_is_sent_once_after_a_real_socket_reconnect() {
             crate::RelayAccess::ReadOnly,
         )
         .unwrap();
-        let connector =
-            crate::relay::HardenedWebsocketTransport::new(&[endpoint], Duration::from_secs(1));
+        let connector = crate::session_socket::SessionWebsocketTransport::new(
+            &[endpoint],
+            Duration::from_secs(1),
+            std::sync::Arc::new(crate::test_host::LoopbackConnector),
+        );
         let client = Client::builder().websocket_transport(connector).build();
         client.add_relay(&url).await.unwrap();
         let (closed, closure) = tokio::sync::oneshot::channel();
@@ -109,8 +112,11 @@ async fn actual_native_receivers_report_local_repeated_gaps_and_continue() {
             crate::RelayAccess::ReadOnly,
         )
         .unwrap();
-        let connector =
-            crate::relay::HardenedWebsocketTransport::new(&[endpoint], Duration::from_secs(1));
+        let connector = crate::session_socket::SessionWebsocketTransport::new(
+            &[endpoint],
+            Duration::from_secs(1),
+            std::sync::Arc::new(crate::test_host::LoopbackConnector),
+        );
         let client = Client::builder()
             .websocket_transport(connector)
             .notification_channel_size(NonZeroUsize::new(2).unwrap())

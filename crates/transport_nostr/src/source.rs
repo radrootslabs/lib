@@ -1436,8 +1436,11 @@ mod tests {
                     .unwrap()
             })
             .collect::<Vec<_>>();
-        let connector =
-            crate::relay::HardenedWebsocketTransport::new(&endpoints, Duration::from_secs(1));
+        let connector = crate::session_socket::SessionWebsocketTransport::new(
+            &endpoints,
+            Duration::from_secs(1),
+            std::sync::Arc::new(crate::test_host::LoopbackConnector),
+        );
         let ingress = connector.ingress.clone();
         let client = nostr_sdk::client::Client::builder()
             .websocket_transport(connector)

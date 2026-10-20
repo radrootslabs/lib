@@ -20,8 +20,7 @@ use radroots_transport::{
     policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
 };
 use radroots_transport_nostr::{
-    Config, NostrTransport, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind,
-    RelayUrlPolicy,
+    Config, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind, RelayUrlPolicy,
 };
 use std::{
     num::NonZeroU64,
@@ -350,7 +349,7 @@ async fn native_delivery_retains_exact_outer_before_loopback_and_reopen_preserve
             .await
             .unwrap();
     });
-    let transport = NostrTransport::new(ready.config.clone());
+    let transport = radroots_transport_nostr_native::create_transport(ready.config.clone());
     let request = attempt.transport_request().unwrap();
     let receipt = transport.deliver(request.clone()).await.unwrap();
     receipt.validate_for_request(&request).unwrap();

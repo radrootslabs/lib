@@ -2027,7 +2027,7 @@ impl NostrSlot {
             return Err(crate::Error::client_closed());
         }
         current.current = Some(NostrState {
-            transport: Arc::new(radroots_transport_nostr::NostrTransport::new(config)),
+            transport: Arc::new(radroots_transport_nostr_native::create_transport(config)),
             read_targets,
             write_targets,
         });

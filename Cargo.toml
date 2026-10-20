@@ -74,6 +74,7 @@ default-members = [
   "crates/storage",
   "crates/storage_sqlite",
   "crates/transport_nostr",
+  "crates/transport_nostr_native",
   "crates/sync",
   "crates/geonames",
   "crates/sdk",
@@ -195,6 +196,7 @@ flate2 = { version = "1" }
 fs2 = { version = "0.4" }
 goblin = { version = "0.8.2" }
 getrandom = { version = "0.2", default-features = false }
+getrandom_04 = { package = "getrandom", version = "=0.4.2", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 hmac = { version = "0.12", default-features = false }
 http = { version = "1" }

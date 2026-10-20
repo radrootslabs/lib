@@ -83,6 +83,10 @@ name = "radroots_transport_nostr"
 allowed_public_paths = []
 
 [[package]]
+name = "radroots_transport_nostr_native"
+allowed_public_paths = []
+
+[[package]]
 name = "radroots_sync"
 allowed_public_paths = []
 

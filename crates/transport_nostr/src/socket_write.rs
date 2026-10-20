@@ -6,9 +6,9 @@ use core::{
     pin::Pin,
     task::{Context, Poll},
 };
+use futures::future::BoxFuture;
 use futures::{Sink, SinkExt, lock::Mutex};
 use nostr_sdk::{error::Error as TransportError, transport::websocket::WebSocketSink};
-use radroots_transport::BoxFuture;
 use std::{
     collections::BTreeMap,
     sync::{

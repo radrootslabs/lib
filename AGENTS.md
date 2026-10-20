@@ -196,7 +196,7 @@ Before editing code:
 - Preserve deferred flake expressions as unqualified compatibility inputs;
   do not use their evaluation or outputs as evidence until an accepted
   contract explicitly reactivates them.
-- `contracts/crates/release.v2.toml` records the twenty-one current public Lib
+- `contracts/crates/release.v2.toml` records the twenty-two current public Lib
   packages, including `radroots_sdk` and `radroots`. Release V1's earlier
   repository split remains history. The approved successor replaces old
   SDK/trade/model boundaries directly and retains ancillary capabilities;

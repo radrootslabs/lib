@@ -6,8 +6,7 @@ use radroots_transport::{
     source::{FetchBounds, NextPage},
 };
 use radroots_transport_nostr::{
-    Config, NostrTransport, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind,
-    RelayUrlPolicy,
+    Config, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind, RelayUrlPolicy,
 };
 use serde_json::Value;
 use std::{
@@ -101,7 +100,7 @@ async fn real_capped_eose_preserves_received_ties_and_yields_explicit_older_hist
             .collect(),
     )
     .unwrap();
-    let transport = NostrTransport::new(config);
+    let transport = radroots_transport_nostr_native::create_transport(config);
     let deadline = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()

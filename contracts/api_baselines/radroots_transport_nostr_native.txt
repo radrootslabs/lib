@@ -1,0 +1,6 @@
+pub mod radroots_transport_nostr_native
+pub struct radroots_transport_nostr_native::NativeConnector
+impl radroots_transport::host::websocket::Connector for radroots_transport_nostr_native::NativeConnector
+pub fn radroots_transport_nostr_native::NativeConnector::connect<'a>(&'a self, &'a str, core::time::Duration, core::num::nonzero::NonZeroUsize, alloc::sync::Arc<dyn radroots_transport::host::websocket::Admission>) -> radroots_transport::host::websocket::IoFuture<'a, core::result::Result<alloc::sync::Arc<dyn radroots_transport::host::websocket::Socket>, radroots_transport::host::websocket::Error>>
+pub fn radroots_transport_nostr_native::NativeConnector::supports_ping(&self) -> bool
+pub fn radroots_transport_nostr_native::create_transport(radroots_transport_nostr::client::Config) -> radroots_transport_nostr::client::NostrTransport

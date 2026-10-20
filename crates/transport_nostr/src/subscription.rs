@@ -1348,4 +1348,21 @@ mod tests {
             Err(radroots_transport::Error::UnexpectedSubscriptionEvent)
         );
     }
+
+    #[test]
+    fn empty_and_unrepresentable_selectors_never_gain_implicit_wire_filters() {
+        assert_eq!(
+            subscription_filter(&FetchSelector::all(), None).unwrap(),
+            Filter::new()
+        );
+        let unsupported = FetchSelector::all().with_kinds(vec![u32::MAX]).unwrap();
+        assert!(!selector_is_representable(&unsupported));
+        assert!(subscription_filter(&unsupported, None).is_err());
+        let partial = FetchSelector::all().with_kinds(vec![1, u32::MAX]).unwrap();
+        assert!(selector_is_representable(&partial));
+        assert_eq!(
+            subscription_filter(&partial, None).unwrap(),
+            Filter::new().kind(Kind::TextNote)
+        );
+    }
 }

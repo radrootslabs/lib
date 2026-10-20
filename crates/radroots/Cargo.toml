@@ -49,6 +49,7 @@ radroots_storage = { workspace = true }
 radroots_storage_sqlite = { workspace = true, optional = true }
 radroots_nostr = { workspace = true, features = ["signing", "nip17"], optional = true }
 radroots_transport_nostr = { workspace = true, optional = true }
+radroots_transport_nostr_native = { workspace = true, optional = true }
 radroots_trade = { workspace = true, features = ["json", "std"] }
 radroots_transport = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
@@ -56,7 +57,7 @@ tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 [features]
 default = ["client"]
 client = ["radroots_sdk/default", "radroots_storage/memory"]
-native = ["client", "radroots_sdk/native", "dep:radroots_storage_sqlite", "dep:futures", "dep:tokio", "dep:radroots_nostr", "dep:radroots_transport_nostr"]
+native = ["client", "radroots_sdk/native", "dep:radroots_storage_sqlite", "dep:futures", "dep:tokio", "dep:radroots_nostr", "dep:radroots_transport_nostr", "dep:radroots_transport_nostr_native"]
 nostr = ["client", "radroots_sdk/nostr"]
 blossom = ["client", "radroots_sdk/blossom"]
 nip46 = ["nostr", "radroots_sdk/nip46"]
@@ -75,6 +76,7 @@ futures = { workspace = true }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_nostr = { workspace = true, features = ["signing", "nip17"] }
 radroots_transport_nostr = { workspace = true }
+radroots_transport_nostr_native = { workspace = true }
 tokio-tungstenite = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 tempfile = { workspace = true }

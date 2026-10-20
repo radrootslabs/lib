@@ -166,4 +166,19 @@ mod tests {
         assert!(futures::poll!(&mut first).is_ready());
         assert!(futures::poll!(&mut second).is_ready());
     }
+
+    #[test]
+    fn poisoned_budget_refuses_every_inventory_entry_without_resetting_authority() {
+        let budget = FetchBudget::default();
+        assert!(budget.wire(1, 1, 1));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = budget.0.lock().unwrap();
+            panic!("injected budget lock failure");
+        }));
+        assert!(budget.exhausted());
+        assert!(!budget.wire(0, 0, 0));
+        assert!(!budget.notification());
+        assert!(!budget.event(0));
+        futures::executor::block_on(budget.wait_exhausted());
+    }
 }

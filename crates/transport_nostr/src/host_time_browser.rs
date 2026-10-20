@@ -1,6 +1,6 @@
 //! Absolute deadlines with timer disposal confined to its local owner.
 
-use core::{future::Future, pin::pin, time::Duration};
+use core::{future::IntoFuture, pin::pin, time::Duration};
 use futures::{
     channel::oneshot,
     future::{Either, select},
@@ -10,14 +10,14 @@ pub(crate) use web_time::Instant;
 #[derive(Debug)]
 pub(crate) struct Elapsed;
 
-pub(crate) async fn timeout<F: Future>(
+pub(crate) async fn timeout<F: IntoFuture>(
     duration: Duration,
     future: F,
 ) -> Result<F::Output, Elapsed> {
     timeout_at(Instant::now() + duration, future).await
 }
 
-pub(crate) async fn timeout_at<F: Future>(
+pub(crate) async fn timeout_at<F: IntoFuture>(
     deadline: Instant,
     future: F,
 ) -> Result<F::Output, Elapsed> {
@@ -32,7 +32,7 @@ pub(crate) async fn timeout_at<F: Future>(
             let _ = elapsed.send(());
         }
     });
-    let result = match select(pin!(future), pin!(receiver)).await {
+    let result = match select(pin!(future.into_future()), pin!(receiver)).await {
         Either::Left((value, _)) => Ok(value),
         Either::Right(_) => Err(Elapsed),
     };

@@ -27,7 +27,8 @@ Fractional waits round up, long waits use bounded signed-delay chunks, and
 each wake rechecks the deadline before reporting expiry.
 Its isolated
 page/worker fixture lives in `tests/browser_time`; this does not qualify the
-complete transport, which still requires native socket I/O at this checkpoint.
+complete browser connector or ordinary client. Native socket ownership belongs
+to `radroots_transport_nostr_native`; shared protocol state stays here.
 
 ## Configure without connecting
 
@@ -41,6 +42,8 @@ use radroots_transport_nostr::{
     RelayProfileKind, RelayUrlPolicy,
 };
 
+# fn configure(host: std::sync::Arc<dyn radroots_transport::host::websocket::Connector>)
+# -> Result<(), Box<dyn std::error::Error>> {
 let endpoint = RelayEndpoint::new(
     "wss://relay.example.com",
     RelayUrlPolicy::Public,
@@ -48,7 +51,7 @@ let endpoint = RelayEndpoint::new(
 )?;
 let profile = RelayProfile::explicit(RelayProfileKind::Public, [endpoint])?;
 let config = Config::from_profile(profile).with_timeouts(5_000, 20_000, 2_000)?;
-let transport = NostrTransport::new(config);
+let transport = NostrTransport::new(config, host);
 
 let source: &dyn EventSource = &transport;
 let subscriber: &dyn EventSubscriber = &transport;
@@ -56,7 +59,8 @@ let sink: &dyn EventSink = &transport;
 drop(source.status());
 let _ = subscriber;
 drop(sink.status());
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok(())
+# }
 ```
 
 A runnable version is available at
@@ -340,8 +344,12 @@ event JSON.
 
 ## Features and runtime requirements
 
-The package has no Cargo features. It is a standard-library native adapter;
-Tokio and the upstream Nostr relay client are private implementation choices.
+The package has no Cargo features. It is the standard-library shared protocol
+adapter. Its constructor requires an explicit socket host through
+`radroots_transport::host::websocket`. Native callers use
+`radroots_transport_nostr_native::create_transport`; the browser provider is
+separately governed. Concrete DNS, TCP, TLS and plaintext WebSocket metering do
+not live in this package. The upstream Nostr relay client remains private.
 The crate never creates an executor, installs a runtime, launches an
 adapter-owned worker, installs a tracing subscriber, or owns process lifecycle.
 The host must poll operations from a compatible executor and provide

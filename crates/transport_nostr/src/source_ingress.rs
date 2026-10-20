@@ -436,4 +436,36 @@ mod tests {
         }));
         assert!(!poisoned.finish());
     }
+
+    #[test]
+    fn missing_or_poisoned_connection_state_refuses_both_io_directions_and_charging() {
+        let registry = registry();
+        let missing = IngressConnection {
+            registry: registry.clone(),
+            relay: "missing".into(),
+            generation: 1,
+        };
+        let context = Context::from_waker(futures::task::noop_waker_ref());
+        assert!(!missing.admitted(&context));
+        assert!(!missing.admitted_write(&context));
+        assert!(!missing.charge(0, 0, 0));
+        let current = registry.connection("one").unwrap();
+        assert!(current.admitted(&context));
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = registry.0.lock().unwrap();
+            panic!("injected connection registry failure");
+        }));
+        assert!(!current.admitted(&context));
+        assert!(!current.admitted_write(&context));
+        assert!(!current.charge(1, 1, 1));
+        assert!(registry.connection("one").is_none());
+        assert!(
+            registry
+                .register(
+                    ["one".to_owned()].into_iter(),
+                    Arc::new(FetchBudget::default())
+                )
+                .is_none()
+        );
+    }
 }

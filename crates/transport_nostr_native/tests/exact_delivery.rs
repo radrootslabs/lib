@@ -7,8 +7,7 @@ use radroots_transport::{
     source::FetchBounds,
 };
 use radroots_transport_nostr::{
-    Config, NostrTransport, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind,
-    RelayUrlPolicy,
+    Config, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind, RelayUrlPolicy,
 };
 use serde_json::{Value, json};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -119,7 +118,7 @@ async fn selected_delivery_never_connects_to_held_target_and_preserves_full_requ
         let event: Value = serde_json::from_str(&wire).unwrap();
         reply(&mut socket, json!(["OK", event[1]["id"], true, ""])).await;
     });
-    let transport = NostrTransport::new(config.clone());
+    let transport = radroots_transport_nostr_native::create_transport(config.clone());
     let request = request(&config, &raw);
     let selected = TargetSet::new(vec![request.target_set().targets()[0].clone()]).unwrap();
     let result = transport
@@ -179,7 +178,7 @@ async fn exact_signed_bytes_read_requests_and_auth_use_the_same_connection() {
         .await;
         reply(&mut socket, json!(["OK", event[1]["id"], true, ""])).await;
     });
-    let transport = NostrTransport::new(config.clone());
+    let transport = radroots_transport_nostr_native::create_transport(config.clone());
     let page = transport
         .fetch(
             FetchRequest::new(
@@ -239,7 +238,7 @@ async fn an_overlong_ack_identifier_never_accepts_the_matching_prefix() {
     let request = request(&config, &raw);
     let receipt = tokio::time::timeout(
         Duration::from_secs(5),
-        NostrTransport::new(config).deliver(request.clone()),
+        radroots_transport_nostr_native::create_transport(config).deliver(request.clone()),
     )
     .await
     .unwrap()
@@ -247,6 +246,45 @@ async fn an_overlong_ack_identifier_never_accepts_the_matching_prefix() {
     done.send(()).unwrap();
     server.await.unwrap();
     assert!(!receipt.is_satisfied(&request).unwrap());
+}
+
+#[tokio::test]
+async fn binary_acknowledgements_never_invent_acceptance_for_exact_or_overlong_ids() {
+    for canonical in [true, false] {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let config = config(&format!("ws://{}", listener.local_addr().unwrap()), 250);
+        let raw = raw_event();
+        let (done, wait) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let mut socket = accept_async(tcp).await.unwrap();
+            let event: Value = serde_json::from_str(&text(&mut socket).await).unwrap();
+            let id = event[1]["id"].as_str().unwrap();
+            let id = if canonical {
+                id.to_owned()
+            } else {
+                format!("{id}00")
+            };
+            socket
+                .send(Message::Binary(
+                    json!(["OK", id, true, ""]).to_string().into_bytes().into(),
+                ))
+                .await
+                .unwrap();
+            wait.await.unwrap();
+        });
+        let request = request(&config, &raw);
+        let transport = radroots_transport_nostr_native::create_transport(config);
+        let receipt =
+            tokio::time::timeout(Duration::from_secs(5), transport.deliver(request.clone()))
+                .await
+                .unwrap()
+                .unwrap();
+        done.send(()).unwrap();
+        server.await.unwrap();
+        transport.shutdown().await;
+        assert!(!receipt.is_satisfied(&request).unwrap());
+    }
 }
 
 #[tokio::test]
@@ -269,7 +307,7 @@ async fn relay_challenge_never_creates_an_implicit_authentication_response() {
         );
         reply(&mut socket, json!(["OK", event[1]["id"], true, ""])).await;
     });
-    let transport = NostrTransport::new(config.clone());
+    let transport = radroots_transport_nostr_native::create_transport(config.clone());
     let request = request(&config, &raw);
     let receipt = tokio::time::timeout(Duration::from_secs(5), transport.deliver(request.clone()))
         .await
@@ -312,7 +350,7 @@ async fn rejection_lost_ack_and_disconnect_never_invent_acceptance() {
                 _ => unreachable!(),
             }
         });
-        let receipt = NostrTransport::new(config.clone())
+        let receipt = radroots_transport_nostr_native::create_transport(config.clone())
             .deliver(request(&config, &raw))
             .await
             .unwrap();
@@ -355,7 +393,7 @@ async fn matching_negative_ack_never_accepts_duplicate_text() {
                 .unwrap()
                 .unwrap();
         });
-        let transport = NostrTransport::new(config.clone());
+        let transport = radroots_transport_nostr_native::create_transport(config.clone());
         let request = request(&config, &raw);
         let receipt =
             tokio::time::timeout(Duration::from_secs(5), transport.deliver(request.clone()))
@@ -397,7 +435,7 @@ async fn matching_positive_ack_accepts_existing_duplicate_and_empty_messages() {
         let request = request(&config, &raw);
         let receipt = tokio::time::timeout(
             Duration::from_secs(5),
-            NostrTransport::new(config).deliver(request.clone()),
+            radroots_transport_nostr_native::create_transport(config).deliver(request.clone()),
         )
         .await
         .unwrap()
@@ -428,7 +466,7 @@ async fn quota_refusal_is_terminal_and_redacted_at_the_receipt_boundary() {
         )
         .await;
     });
-    let transport = NostrTransport::new(config.clone());
+    let transport = radroots_transport_nostr_native::create_transport(config.clone());
     let receipt = transport
         .deliver(request(&config, &raw_event()))
         .await
@@ -482,7 +520,7 @@ async fn queued_delivery_targets_cannot_start_after_the_shared_deadline() {
         let _published = text(&mut socket).await;
         futures::future::pending::<()>().await;
     });
-    let transport = NostrTransport::new(config.clone());
+    let transport = radroots_transport_nostr_native::create_transport(config.clone());
     let receipt = transport
         .deliver(request(&config, &raw_event()))
         .await

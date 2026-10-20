@@ -347,7 +347,7 @@ async fn actual_loopback_wrong_ack_timeout_disconnect_and_rejection_remain_disti
         });
         let request = attempt.transport_request().unwrap();
         let target = request.target_set().targets()[0].fingerprint();
-        let transport = NostrTransport::new(ready.config.clone());
+        let transport = radroots_transport_nostr_native::create_transport(ready.config.clone());
         let result = transport.deliver(request.clone()).await;
         let observation = match result {
             Ok(receipt) => {

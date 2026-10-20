@@ -24,6 +24,7 @@ packages = [
   "radroots_trade",
   "radroots_transport",
   "radroots_transport_nostr",
+  "radroots_transport_nostr_native",
   "radroots_sdk",
   "radroots",
 ]
@@ -43,3 +44,7 @@ revision = "52e2a15a90aa4f07f053930be4dda203a0f6631a"
 [[baseline_override]]
 package = "radroots_execution"
 revision = "52e2a15a90aa4f07f053930be4dda203a0f6631a"
+
+[[baseline_override]]
+package = "radroots_transport_nostr_native"
+revision = "605c23d5d5edfdbf86e548b7ac0ce57cd0a7ca22"

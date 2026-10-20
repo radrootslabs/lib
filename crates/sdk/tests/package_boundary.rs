@@ -40,6 +40,7 @@ fn manifest_has_final_identity_and_dependency_boundary() {
         "radroots_trade",
         "radroots_transport",
         "radroots_transport_nostr",
+        "radroots_transport_nostr_native",
     ]);
     assert_eq!(dependencies, expected);
     for forbidden in [

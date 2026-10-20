@@ -53,7 +53,7 @@ impl NativeInquiry {
             .validate_for(&write)
             .map_err(|_| OperationError::InvalidCommand)?;
         Ok(Self {
-            transport: NostrTransport::new(config),
+            transport: radroots_transport_nostr_native::create_transport(config),
             read,
             write,
             policy,

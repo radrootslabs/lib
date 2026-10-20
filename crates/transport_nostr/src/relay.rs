@@ -1,26 +1,11 @@
 //! Nostr relay identifiers and network policy.
 
-use crate::{Error, RelayEndpoint};
-use async_wsocket::Message;
-use async_wsocket::futures_util::stream::SplitSink;
-use async_wsocket::futures_util::{Sink, SinkExt, StreamExt};
+use crate::Error;
 use core::fmt;
-use core::pin::Pin;
 use nostr_sdk::error::Error as TransportError;
-use nostr_sdk::transport::websocket::{WebSocketSink, WebSocketStream, WebSocketTransport};
-use radroots_transport::{BoxFuture, Target, TargetNetworkPolicy, TransportId};
-use std::collections::BTreeMap;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::Arc;
-use std::task::{Context, Poll};
-use std::time::Duration;
-use tokio::net::TcpStream;
-use tokio_tungstenite::tungstenite::Message as WireMessage;
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream as TokioWebSocketStream};
+use radroots_transport::{Target, TargetNetworkPolicy, TransportId};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
-
-const MAX_RESOLVED_ADDRESSES: usize = 32;
-pub(crate) const MAX_WIRE_MESSAGE_BYTES: usize = 512 * 1024;
 
 /// Validated canonical Nostr relay URL.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -93,173 +78,6 @@ impl fmt::Display for RelayUrl {
     }
 }
 
-/// WebSocket connector that validates and pins DNS results before opening a
-/// socket while retaining the original host name for TLS verification.
-#[derive(Clone, Debug)]
-pub(crate) struct HardenedWebsocketTransport {
-    policies: Arc<BTreeMap<String, RelayUrlPolicy>>,
-    connect_timeout: Duration,
-    pub(crate) writers: crate::socket_write::WriterRegistry,
-    pub(crate) ingress: crate::source_ingress::IngressRegistry,
-}
-
-impl HardenedWebsocketTransport {
-    pub(crate) fn new(endpoints: &[RelayEndpoint], connect_timeout: Duration) -> Self {
-        Self {
-            connect_timeout,
-            ingress: crate::source_ingress::IngressRegistry::new(
-                endpoints
-                    .iter()
-                    .map(|endpoint| endpoint.url().as_str().to_owned()),
-            ),
-            writers: crate::socket_write::WriterRegistry::new(
-                endpoints
-                    .iter()
-                    .map(|endpoint| endpoint.url().as_str().to_owned()),
-            ),
-            policies: Arc::new(
-                endpoints
-                    .iter()
-                    .map(|endpoint| (endpoint.url().as_str().to_owned(), endpoint.policy()))
-                    .collect(),
-            ),
-        }
-    }
-}
-
-impl WebSocketTransport for HardenedWebsocketTransport {
-    fn support_ping(&self) -> bool {
-        true
-    }
-
-    // Direct DNS/socket/TLS behavior is verified by the network-hardening
-    // integration suite; deterministic coverage owns the surrounding policy.
-    #[cfg_attr(coverage_nightly, coverage(off))]
-    fn connect<'a>(
-        &'a self,
-        url: &'a Url,
-        proxy: Option<SocketAddr>,
-    ) -> BoxFuture<'a, Result<(WebSocketSink, WebSocketStream), TransportError>> {
-        Box::pin(async move {
-            if proxy.is_some() {
-                return Err(policy_error(
-                    "proxy and Tor connection modes are not configured",
-                ));
-            }
-            let policy = self
-                .policies
-                .get(configured_policy_key(url))
-                .copied()
-                .ok_or_else(|| policy_error("relay URL is not configured"))?;
-            let relay = RelayUrl::parse(url.as_str(), policy)
-                .map_err(|_| policy_error("relay URL is denied by network policy"))?;
-            let parsed =
-                Url::parse(relay.as_str()).map_err(|_| policy_error("relay URL is invalid"))?;
-            let host = parsed
-                .host_str()
-                .ok_or_else(|| policy_error("relay URL host is missing"))?;
-            let port = parsed
-                .port_or_known_default()
-                .ok_or_else(|| policy_error("relay URL port is missing"))?;
-
-            let connect = async {
-                let ingress = self
-                    .ingress
-                    .connection(relay.as_str())
-                    .ok_or_else(|| policy_error("relay ingress unavailable"))?;
-                let addresses = resolve_bounded(host, port).await?;
-                relay
-                    .validate_resolved_addresses(policy, addresses.iter().map(SocketAddr::ip))
-                    .map_err(|_| policy_error("relay DNS result is denied by network policy"))?;
-                let tcp = connect_pinned(addresses.as_slice()).await?;
-                let plaintext = if parsed.scheme() == "wss" {
-                    let mut roots = rustls::RootCertStore::empty();
-                    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-                    let tls_config = rustls::ClientConfig::builder()
-                        .with_root_certificates(roots)
-                        .with_no_client_auth();
-                    let server_name = rustls::pki_types::ServerName::try_from(
-                        host.trim_matches(['[', ']']).to_owned(),
-                    )
-                    .map_err(|_| policy_error("relay TLS server name is invalid"))?;
-                    let tls = tokio_rustls::TlsConnector::from(Arc::new(tls_config))
-                        .connect(server_name, tcp)
-                        .await
-                        .map_err(TransportError::transport)?;
-                    MaybeTlsStream::Rustls(tls)
-                } else {
-                    MaybeTlsStream::Plain(tcp)
-                };
-                let metered = crate::source_wire::MeteredIo::new(plaintext, ingress);
-                let config = tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
-                    .max_message_size(Some(MAX_WIRE_MESSAGE_BYTES))
-                    .max_frame_size(Some(MAX_WIRE_MESSAGE_BYTES));
-                let (stream, _) = tokio_tungstenite::client_async_with_config(
-                    relay.as_str(),
-                    metered,
-                    Some(config),
-                )
-                .await
-                .map_err(TransportError::transport)?;
-                let (tx, rx) = stream.split();
-                let writer =
-                    crate::socket_write::SocketWriter::new(Box::pin(HardenedTransportSink(tx)));
-                self.writers.install(relay.as_str(), &writer)?;
-                let sink: WebSocketSink =
-                    Box::pin(crate::socket_write::SharedSocketSink::new(writer));
-                let stream: WebSocketStream = Box::pin(rx.map(|result| {
-                    result
-                        .map_err(TransportError::transport)
-                        .and_then(from_wire)
-                }));
-                Ok((sink, stream))
-            };
-
-            tokio::time::timeout(self.connect_timeout, connect)
-                .await
-                .map_err(|_| policy_error("relay connection deadline elapsed"))?
-        })
-    }
-}
-
-fn configured_policy_key(url: &Url) -> &str {
-    if url.path() == "/" && url.query().is_none() && url.fragment().is_none() {
-        url.as_str().strip_suffix('/').unwrap_or(url.as_str())
-    } else {
-        url.as_str()
-    }
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn resolve_bounded(host: &str, port: u16) -> Result<Vec<SocketAddr>, TransportError> {
-    let mut addresses = tokio::net::lookup_host((host, port))
-        .await
-        .map_err(|_| policy_error("relay DNS resolution failed"))?;
-    let mut bounded = Vec::new();
-    for address in addresses.by_ref().take(MAX_RESOLVED_ADDRESSES + 1) {
-        bounded.push(address);
-    }
-    if bounded.is_empty() {
-        return Err(policy_error("relay DNS resolution returned no addresses"));
-    }
-    if bounded.len() > MAX_RESOLVED_ADDRESSES {
-        return Err(policy_error(
-            "relay DNS resolution exceeded its address limit",
-        ));
-    }
-    Ok(bounded)
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-async fn connect_pinned(addresses: &[SocketAddr]) -> Result<TcpStream, TransportError> {
-    for address in addresses {
-        if let Ok(stream) = TcpStream::connect(address).await {
-            return Ok(stream);
-        }
-    }
-    Err(policy_error("relay connection failed"))
-}
-
 #[derive(Debug)]
 struct NetworkPolicyError(&'static str);
 
@@ -275,99 +93,6 @@ pub(crate) fn policy_error(message: &'static str) -> TransportError {
     TransportError::policy(NetworkPolicyError(message))
 }
 
-type MeteredSocket = TokioWebSocketStream<crate::source_wire::MeteredIo<MaybeTlsStream<TcpStream>>>;
-
-struct HardenedTransportSink(SplitSink<MeteredSocket, WireMessage>);
-
-fn from_wire(message: WireMessage) -> Result<Message, TransportError> {
-    Ok(match message {
-        WireMessage::Text(text) => {
-            validate_wire_identifiers(&text)?;
-            Message::Text(text.to_string())
-        }
-        WireMessage::Binary(bytes) => Message::Binary(bytes.to_vec()),
-        WireMessage::Ping(bytes) => Message::Ping(bytes.to_vec()),
-        WireMessage::Pong(bytes) => Message::Pong(bytes.to_vec()),
-        WireMessage::Close(frame) => Message::Close(frame.map(Into::into)),
-        WireMessage::Frame(_) => return Err(policy_error("unexpected raw WebSocket frame")),
-    })
-}
-
-fn validate_wire_identifiers(text: &str) -> Result<(), TransportError> {
-    if text.len() > MAX_WIRE_MESSAGE_BYTES {
-        return Err(policy_error("relay message exceeds the wire limit"));
-    }
-    // Enforce original wire identities before the upstream fixed-array decoder
-    // can truncate hex to its expected prefix. Leave other decoding to the SDK.
-    let Ok(serde_json::Value::Array(fields)) = serde_json::from_str(text) else {
-        return Ok(());
-    };
-    let canonical_hex = |value: Option<&serde_json::Value>, length| {
-        value
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|value| {
-                value.len() == length
-                    && value
-                        .bytes()
-                        .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
-            })
-    };
-    let valid = match fields.first().and_then(serde_json::Value::as_str) {
-        Some("OK") => canonical_hex(fields.get(1), 64),
-        Some("EVENT") => fields.get(2).is_some_and(|event| {
-            canonical_hex(event.get("id"), 64)
-                && canonical_hex(event.get("pubkey"), 64)
-                && canonical_hex(event.get("sig"), 128)
-        }),
-        _ => true,
-    };
-    if !valid {
-        return Err(policy_error("relay message has a noncanonical identifier"));
-    }
-    Ok(())
-}
-
-impl Sink<Message> for HardenedTransportSink {
-    type Error = TransportError;
-
-    #[cfg_attr(coverage_nightly, coverage(off))]
-    fn poll_ready(
-        mut self: Pin<&mut Self>,
-        context: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.0)
-            .poll_ready_unpin(context)
-            .map_err(TransportError::transport)
-    }
-
-    #[cfg_attr(coverage_nightly, coverage(off))]
-    fn start_send(mut self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
-        Pin::new(&mut self.0)
-            .start_send_unpin(item.into())
-            .map_err(TransportError::transport)
-    }
-
-    #[cfg_attr(coverage_nightly, coverage(off))]
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        context: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.0)
-            .poll_flush_unpin(context)
-            .map_err(TransportError::transport)
-    }
-
-    #[cfg_attr(coverage_nightly, coverage(off))]
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        context: &mut Context<'_>,
-    ) -> Poll<Result<(), Self::Error>> {
-        Pin::new(&mut self.0)
-            .poll_close_unpin(context)
-            .map_err(TransportError::transport)
-    }
-}
-
 /// Destination class authorized for relay connections.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[non_exhaustive]
@@ -381,7 +106,7 @@ pub enum RelayUrlPolicy {
 }
 
 impl RelayUrlPolicy {
-    fn accepts_address(self, address: IpAddr) -> bool {
+    pub(crate) fn accepts_address(self, address: IpAddr) -> bool {
         match self {
             Self::Public => public_address(address),
             Self::Local => address.is_loopback(),
@@ -475,117 +200,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn original_wire_identifiers_are_exact_canonical_and_never_rewritten() {
-        use serde_json::json;
-        let event = json!({"id": "ab".repeat(32), "pubkey": "cd".repeat(32),
-                           "sig": "ef".repeat(64), "extension": true});
-        let text = format!(" \n{} \t", json!(["EVENT", "bounded", event]));
-        assert_eq!(
-            from_wire(WireMessage::Text(text.clone().into())).unwrap(),
-            Message::Text(text)
-        );
-        for field in ["id", "pubkey", "sig"] {
-            let original = event[field].as_str().unwrap();
-            for invalid in [
-                json!(format!("{original}00")),
-                json!(&original[2..]),
-                json!(original.to_ascii_uppercase()),
-                json!(format!("g{}", &original[1..])),
-                json!(null),
-                json!(32),
-            ] {
-                let mut malformed = event.clone();
-                malformed[field] = invalid;
-                let text = json!(["EVENT", "bounded", malformed]).to_string();
-                assert!(
-                    from_wire(WireMessage::Text(text.into())).is_err(),
-                    "{field}"
-                );
-            }
-        }
-        for id in [json!("aa".repeat(33)), json!("AA".repeat(32)), json!(null)] {
-            let text = json!(["OK", id, true, ""]).to_string();
-            assert!(from_wire(WireMessage::Text(text.into())).is_err());
-        }
-        for control in [
-            json!(["OK", "aa".repeat(32), true, ""]),
-            json!(["AUTH", "arbitrary challenge"]),
-            json!(["EOSE", "arbitrary subscription"]),
-            json!(["NOTICE", "arbitrary notice"]),
-        ] {
-            let text = control.to_string();
-            assert_eq!(
-                from_wire(WireMessage::Text(text.clone().into())).unwrap(),
-                Message::Text(text)
-            );
-        }
-        assert!(validate_wire_identifiers(&" ".repeat(MAX_WIRE_MESSAGE_BYTES + 1)).is_err());
-    }
-
-    #[test]
-    fn metered_socket_conversion_preserves_data_control_and_close_messages() {
-        for message in [
-            WireMessage::Text("text".into()),
-            WireMessage::Binary(vec![0, 255].into()),
-            WireMessage::Ping(vec![1, 2].into()),
-            WireMessage::Pong(vec![3].into()),
-            WireMessage::Close(None),
-            WireMessage::Close(Some(tokio_tungstenite::tungstenite::protocol::CloseFrame {
-                code: tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode::Normal,
-                reason: "finished".into(),
-            })),
-        ] {
-            let restored: WireMessage = from_wire(message.clone()).expect("conversion").into();
-            assert_eq!(restored, message);
-        }
-    }
-
-    #[tokio::test]
-    async fn secure_relay_requires_tls_before_any_http_upgrade() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("listener");
-        let endpoint = format!("wss://{}", listener.local_addr().expect("address"));
-        let server = tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.expect("accept");
-            let mut prefix = [0; 5];
-            socket
-                .read_exact(&mut prefix)
-                .await
-                .expect("TLS record prefix");
-            socket
-                .write_all(b"HTTP/1.1 101 Switching Protocols\r\n\r\n")
-                .await
-                .expect("plaintext response");
-            prefix
-        });
-        let profile = crate::profile::test_profile(
-            crate::RelayProfileKind::Simulator,
-            RelayUrlPolicy::Local,
-            [endpoint.as_str()],
-        )
-        .expect("local TLS profile");
-        let transport =
-            HardenedWebsocketTransport::new(profile.endpoints(), Duration::from_secs(5));
-        let url = Url::parse(&endpoint).expect("URL");
-        let result = transport.connect(&url, None).await;
-        assert!(
-            result.is_err(),
-            "plaintext peer must not complete a secure relay connection"
-        );
-        let prefix = tokio::time::timeout(Duration::from_secs(5), server)
-            .await
-            .expect("server deadline")
-            .expect("server task");
-        assert_eq!(
-            prefix[0], 0x16,
-            "client must send a TLS handshake, never an HTTP request"
-        );
-        assert_eq!(prefix[1], 0x03, "TLS record version family");
-    }
-
-    #[test]
     fn policies_classify_literal_and_named_destinations() {
         assert!(RelayUrl::parse("wss://relay.example.com", RelayUrlPolicy::Public).is_ok());
         assert!(RelayUrl::parse("wss://10.0.0.1", RelayUrlPolicy::Public).is_err());
@@ -616,75 +230,7 @@ mod tests {
             RelayUrl::from_target(&local, RelayUrlPolicy::Public),
             Err(Error::UnexpectedTransport)
         ));
-        let profile = crate::profile::test_profile(
-            crate::RelayProfileKind::Public,
-            RelayUrlPolicy::Public,
-            ["wss://relay.example.com"],
-        )
-        .expect("profile");
-        assert!(
-            HardenedWebsocketTransport::new(profile.endpoints(), Duration::from_secs(5))
-                .support_ping()
-        );
         assert!(!policy_error("denied").to_string().is_empty());
-
-        let root = Url::parse("wss://relay.example/").expect("root URL");
-        let path = Url::parse("wss://relay.example/path/").expect("path URL");
-        let query = Url::parse("wss://relay.example/?scope=write").expect("query URL");
-        let fragment = Url::parse("wss://relay.example/#status").expect("fragment URL");
-        assert_eq!(configured_policy_key(&root), "wss://relay.example");
-        assert_eq!(configured_policy_key(&path), "wss://relay.example/path/");
-        assert_eq!(
-            configured_policy_key(&query),
-            "wss://relay.example/?scope=write"
-        );
-        assert_eq!(
-            configured_policy_key(&fragment),
-            "wss://relay.example/#status"
-        );
-    }
-
-    #[tokio::test]
-    async fn proxy_refusal_precedes_socket_effects() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let url = format!("ws://{address}");
-        let endpoint =
-            crate::RelayEndpoint::new(&url, RelayUrlPolicy::Local, crate::RelayAccess::ReadOnly)
-                .unwrap();
-        let transport = HardenedWebsocketTransport::new(&[endpoint], Duration::from_secs(1));
-        let url = Url::parse(&url).unwrap();
-        assert!(transport.connect(&url, Some(address)).await.is_err());
-        assert!(
-            tokio::time::timeout(Duration::from_millis(20), listener.accept())
-                .await
-                .is_err()
-        );
-    }
-
-    #[tokio::test]
-    async fn configured_connector_timeout_bounds_an_unfinished_websocket_handshake() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let url = format!("ws://{}", listener.local_addr().unwrap());
-        let endpoint =
-            crate::RelayEndpoint::new(&url, RelayUrlPolicy::Local, crate::RelayAccess::ReadOnly)
-                .unwrap();
-        let transport = HardenedWebsocketTransport::new(&[endpoint], Duration::from_millis(50));
-        let (accepted, observed) = tokio::sync::oneshot::channel();
-        let (release, wait) = tokio::sync::oneshot::channel::<()>();
-        let peer = tokio::spawn(async move {
-            let (_socket, _) = listener.accept().await.unwrap();
-            accepted.send(()).unwrap();
-            wait.await.unwrap();
-        });
-        let url = Url::parse(&url).unwrap();
-        let result = tokio::time::timeout(Duration::from_secs(2), transport.connect(&url, None))
-            .await
-            .expect("the configured connector deadline must expire");
-        assert!(result.is_err());
-        observed.await.unwrap();
-        release.send(()).unwrap();
-        peer.await.unwrap();
     }
 
     #[test]
@@ -823,5 +369,33 @@ mod tests {
                 RelayUrlPolicy::Public.accepts_address(allowed.parse::<IpAddr>().expect("address"))
             );
         }
+    }
+
+    #[test]
+    fn address_policy_keeps_special_use_range_edges_and_adjacent_global_addresses_distinct() {
+        for (address, accepted) in [
+            ("100.63.255.255", true),
+            ("100.64.0.0", false),
+            ("100.127.255.255", false),
+            ("100.128.0.0", true),
+            ("192.0.0.0", false),
+            ("192.0.0.255", false),
+            ("192.0.1.0", true),
+            ("192.88.98.255", true),
+            ("192.88.99.0", false),
+            ("192.88.99.255", false),
+            ("192.88.100.0", true),
+            ("2001:1ff::1", false),
+            ("2001:200::1", true),
+            ("2001:db8::1", false),
+            ("2001:db9::1", true),
+        ] {
+            assert_eq!(
+                RelayUrlPolicy::Public.accepts_address(address.parse().unwrap()),
+                accepted,
+                "{address}"
+            );
+        }
+        assert!(validate_scheme("ftp://relay.example", "ftp", RelayUrlPolicy::Public).is_err());
     }
 }

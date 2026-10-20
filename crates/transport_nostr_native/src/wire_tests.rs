@@ -1,5 +1,5 @@
 use super::*;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 const UPGRADE: &[u8] = b"HTTP/1.1 101 Switching Protocols\r\n\r\n";
 const MAX_MESSAGE_BYTES: usize = 512 * 1024;
@@ -119,6 +119,11 @@ fn eof_rejects_partial_upgrade_header_and_payload() {
 struct Authority {
     open: AtomicBool,
     charge: AtomicBool,
+    bytes: AtomicUsize,
+    frames: AtomicUsize,
+    data: AtomicUsize,
+    byte_limit: AtomicUsize,
+    data_limit: AtomicUsize,
 }
 
 impl Admission for Authority {
@@ -131,8 +136,13 @@ impl Admission for Authority {
     fn admitted_write(&self, _: &Context<'_>) -> bool {
         self.open.load(Ordering::SeqCst)
     }
-    fn charge(&self, _: usize, _: usize, _: usize) -> bool {
+    fn charge(&self, bytes: usize, frames: usize, data: usize) -> bool {
+        let bytes = self.bytes.fetch_add(bytes, Ordering::SeqCst) + bytes;
+        self.frames.fetch_add(frames, Ordering::SeqCst);
+        let data = self.data.fetch_add(data, Ordering::SeqCst) + data;
         self.charge.load(Ordering::SeqCst)
+            && bytes <= self.byte_limit.load(Ordering::SeqCst)
+            && data <= self.data_limit.load(Ordering::SeqCst)
     }
 }
 
@@ -190,6 +200,11 @@ fn metered(bytes: Vec<u8>) -> (MeteredIo<ControlledIo>, Arc<Authority>) {
     let authority = Arc::new(Authority {
         open: AtomicBool::new(true),
         charge: AtomicBool::new(true),
+        bytes: AtomicUsize::new(0),
+        frames: AtomicUsize::new(0),
+        data: AtomicUsize::new(0),
+        byte_limit: AtomicUsize::new(usize::MAX),
+        data_limit: AtomicUsize::new(usize::MAX),
     });
     let inner = ControlledIo {
         bytes,
@@ -333,4 +348,50 @@ fn truncated_payload_eof_is_terminal_at_the_meter_boundary() {
         (Poll::Ready(Err(_)), 0)
     ));
     assert_eq!(meter.inner.reads, 2);
+}
+
+#[test]
+fn raw_upgrade_and_frame_overhead_are_charged_before_any_message_decode() {
+    let mut bytes = UPGRADE.to_vec();
+    bytes.extend([0x81, 0]);
+    let length = bytes.len();
+    let (mut meter, authority) = metered(bytes);
+    authority.byte_limit.store(length, Ordering::SeqCst);
+    assert!(
+        matches!(read_meter(&mut meter, 4096), (Poll::Ready(Ok(())), count) if count == length)
+    );
+    assert_eq!(authority.bytes.load(Ordering::SeqCst), length);
+    assert_eq!(authority.frames.load(Ordering::SeqCst), 1);
+    assert_eq!(authority.data.load(Ordering::SeqCst), 1);
+    meter.inner.bytes.extend([0x81, 0]);
+    assert!(matches!(
+        read_meter(&mut meter, 4096),
+        (Poll::Ready(Err(_)), 0)
+    ));
+    assert!(meter.failed);
+}
+
+#[test]
+fn empty_data_frames_exhaust_the_original_attempt_allowance_before_decode() {
+    let mut bytes = UPGRADE.to_vec();
+    for _ in 0..4097 {
+        bytes.extend([0x81, 0]);
+    }
+    let (mut meter, authority) = metered(bytes);
+    authority.data_limit.store(4096, Ordering::SeqCst);
+    loop {
+        match read_meter(&mut meter, 4096) {
+            (Poll::Ready(Ok(())), count) => assert!(count > 0),
+            (Poll::Ready(Err(_)), 0) => break,
+            other => panic!("unexpected read: {other:?}"),
+        }
+    }
+    assert_eq!(authority.data.load(Ordering::SeqCst), 4097);
+    assert_eq!(authority.frames.load(Ordering::SeqCst), 4097);
+    let reads = meter.inner.reads;
+    assert!(matches!(
+        read_meter(&mut meter, 4096),
+        (Poll::Ready(Err(_)), 0)
+    ));
+    assert_eq!(meter.inner.reads, reads);
 }

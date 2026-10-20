@@ -27,6 +27,7 @@ fn package_has_final_identity_and_exact_dependencies() {
             "radroots_trade",
             "radroots_transport",
             "radroots_transport_nostr",
+            "radroots_transport_nostr_native",
             "tokio",
         ])
     );
@@ -40,7 +41,7 @@ fn features_forward_the_exact_user_oriented_graph() {
     for forwarding in [
         "default = [\"client\"]",
         "client = [\"radroots_sdk/default\", \"radroots_storage/memory\"]",
-        "native = [\"client\", \"radroots_sdk/native\", \"dep:radroots_storage_sqlite\", \"dep:futures\", \"dep:tokio\", \"dep:radroots_nostr\", \"dep:radroots_transport_nostr\"]",
+        "native = [\"client\", \"radroots_sdk/native\", \"dep:radroots_storage_sqlite\", \"dep:futures\", \"dep:tokio\", \"dep:radroots_nostr\", \"dep:radroots_transport_nostr\", \"dep:radroots_transport_nostr_native\"]",
         "nostr = [\"client\", \"radroots_sdk/nostr\"]",
         "nip46 = [\"nostr\", \"radroots_sdk/nip46\"]",
         "radrootsd = [\"client\", \"radroots_sdk/radrootsd\"]",

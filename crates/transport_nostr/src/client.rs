@@ -253,7 +253,7 @@ impl nostr_sdk::policy::AdmitPolicy for VerifiedEventAdmission {
         _relay_url: &'a nostr_sdk::prelude::RelayUrl,
         _subscription_id: &'a nostr_sdk::prelude::SubscriptionId,
         event: &'a nostr_sdk::prelude::Event,
-    ) -> radroots_transport::BoxFuture<
+    ) -> futures::future::BoxFuture<
         'a,
         Result<nostr_sdk::policy::AdmitStatus, nostr_sdk::error::Error>,
     > {
@@ -284,10 +284,14 @@ pub struct NostrTransport {
 
 impl NostrTransport {
     /// Creates an inert transport from validated explicit configuration.
-    pub fn new(config: Config) -> Self {
-        let connector = crate::relay::HardenedWebsocketTransport::new(
+    pub fn new(
+        config: Config,
+        host: Arc<dyn radroots_transport::host::websocket::Connector>,
+    ) -> Self {
+        let connector = crate::session_socket::SessionWebsocketTransport::new(
             config.endpoints(),
             std::time::Duration::from_millis(config.connect_timeout_ms()),
+            host,
         );
         let writers = connector.writers.clone();
         let ingress = connector.ingress.clone();
@@ -550,7 +554,7 @@ mod tests {
                 .is_err()
         );
 
-        let transport = NostrTransport::new(config.clone());
+        let transport = crate::test_host::transport(config.clone());
         assert_eq!(transport.config(), &config);
         let debug = format!("{transport:?}");
         assert!(debug.contains("NostrTransport"));
@@ -567,7 +571,7 @@ mod tests {
             )
             .expect("profile"),
         );
-        let transport = NostrTransport::new(config);
+        let transport = crate::test_host::transport(config);
         assert_eq!(transport.next_subscription_sequence(), Ok(1));
         assert_eq!(transport.next_subscription_sequence(), Ok(2));
         transport
