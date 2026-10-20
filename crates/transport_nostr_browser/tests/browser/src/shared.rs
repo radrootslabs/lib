@@ -75,7 +75,11 @@ pub async fn verify_shared_session(base: String) -> Result<js_sys::Array, JsValu
         .map_err(|_| JsValue::from_str("shared fetch error"))?;
     check(
         page.events().len() == 1 && page.target_outcomes()[0].state() == FetchTargetState::Complete,
-        "shared verified source and EOSE",
+        &format!(
+            "shared verified source and EOSE: events={} targets={:?}",
+            page.events().len(),
+            page.target_outcomes()
+        ),
     )?;
     passed.push(&"shared independently verified event and EOSE".into());
     let request = DeliveryRequest::new(

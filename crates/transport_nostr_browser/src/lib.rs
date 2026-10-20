@@ -6,6 +6,8 @@
 mod browser;
 mod connector;
 #[cfg(any(target_arch = "wasm32", test))]
+mod scope;
+#[cfg(any(target_arch = "wasm32", test))]
 mod state;
 
 pub use connector::BrowserConnector;
@@ -15,5 +17,8 @@ pub use connector::BrowserConnector;
 pub fn create_transport(
     config: radroots_transport_nostr::Config,
 ) -> radroots_transport_nostr::NostrTransport {
-    radroots_transport_nostr::NostrTransport::new(config, std::sync::Arc::new(BrowserConnector))
+    radroots_transport_nostr::NostrTransport::new(
+        config,
+        std::sync::Arc::new(BrowserConnector::default()),
+    )
 }

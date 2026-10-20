@@ -2,8 +2,36 @@ use radroots_transport::host::websocket::{Admission, Connector, Error, IoFuture,
 use std::{net::IpAddr, num::NonZeroUsize, sync::Arc, time::Duration};
 
 /// Inert provider whose DOM socket and callbacks stay on their origin thread.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct BrowserConnector;
+#[derive(Clone, Default)]
+pub struct BrowserConnector {
+    #[cfg(any(target_arch = "wasm32", test))]
+    scope: Arc<crate::scope::Scope>,
+}
+
+impl std::fmt::Debug for BrowserConnector {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("BrowserConnector([owned])")
+    }
+}
+
+impl BrowserConnector {
+    /// Permanently refuses new socket owners and waits for local callback
+    /// disposal on every original socket in this scope. Does not join upstream
+    /// SDK tasks or prove a remote close handshake. Resume after cancellation.
+    /// An unpolled future has no effect. Clones share this same close boundary.
+    pub fn close(&self) -> IoFuture<'_, Result<(), Error>> {
+        Box::pin(async move {
+            #[cfg(any(target_arch = "wasm32", test))]
+            {
+                self.scope.close().await
+            }
+            #[cfg(not(any(target_arch = "wasm32", test)))]
+            {
+                Ok(())
+            }
+        })
+    }
+}
 
 impl Connector for BrowserConnector {
     fn supports_ping(&self) -> bool {
@@ -24,7 +52,14 @@ impl Connector for BrowserConnector {
             }
             #[cfg(target_arch = "wasm32")]
             {
-                crate::browser::connect(endpoint, timeout, max_message_bytes, admission).await
+                crate::browser::connect(
+                    endpoint,
+                    timeout,
+                    max_message_bytes,
+                    admission,
+                    &self.scope,
+                )
+                .await
             }
             #[cfg(not(target_arch = "wasm32"))]
             {
@@ -90,13 +125,14 @@ mod tests {
     }
     #[test]
     fn non_browser_connection_refuses_and_zero_deadline_does_not_start_io() {
-        assert!(!BrowserConnector.supports_ping());
+        let connector = BrowserConnector::default();
+        assert!(!connector.supports_ping());
         for (endpoint, duration, error) in [
             ("ws://127.0.0.1", Duration::from_secs(1), Error::Unsupported),
             ("wss://example.org", Duration::ZERO, Error::Timeout),
             ("invalid", Duration::from_secs(1), Error::Policy),
         ] {
-            let result = futures::executor::block_on(BrowserConnector.connect(
+            let result = futures::executor::block_on(connector.connect(
                 endpoint,
                 duration,
                 NonZeroUsize::new(1).unwrap(),
@@ -119,5 +155,24 @@ mod tests {
         .unwrap();
         let profile = RelayProfile::explicit(RelayProfileKind::Public, [endpoint]).unwrap();
         let _transport = crate::create_transport(Config::from_profile(profile));
+    }
+
+    #[test]
+    fn clones_share_disposal_and_diagnostics_never_expose_buffered_peer_data() {
+        use crate::state::{Shared, Status};
+        let connector = BrowserConnector::default();
+        let socket = Arc::new(Shared::new(Grant::new(true), 64));
+        socket.lock().unwrap().status = Status::Open;
+        socket
+            .push(radroots_transport::host::websocket::Frame::Text(
+                "private buffered peer content".into(),
+            ))
+            .unwrap();
+        connector.scope.register(&socket).unwrap();
+        assert!(!format!("{connector:?}").contains("private buffered peer content"));
+        let clone = connector.clone();
+        socket.finish();
+        futures::executor::block_on(clone.close()).unwrap();
+        assert_eq!(connector.scope.register(&socket), Err(Error::Closed));
     }
 }

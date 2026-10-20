@@ -15,6 +15,7 @@ pub(crate) async fn connect(
     timeout: Duration,
     limit: NonZeroUsize,
     admission: Arc<dyn Admission>,
+    scope: &crate::scope::Scope,
 ) -> Result<Arc<dyn Socket>, Error> {
     poll_fn(|context| {
         Poll::Ready(
@@ -27,6 +28,7 @@ pub(crate) async fn connect(
     })
     .await?;
     let shared = Arc::new(Shared::new(admission, limit.get()));
+    scope.register(&shared)?;
     let (sender, receiver) = oneshot::channel();
     let mut cancellation = CancelConnect(Some(shared.clone()));
     start_owner(
@@ -200,7 +202,9 @@ impl Socket for BrowserSocket {
             self.shared.stop();
             poll_fn(|context| {
                 self.shared.closer.register(context.waker());
-                if self.shared.lock()?.finished {
+                let finished = self.shared.lock()?.finished;
+                if finished {
+                    self.shared.closer.take();
                     Poll::Ready(Ok(()))
                 } else {
                     Poll::Pending

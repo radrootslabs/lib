@@ -55,6 +55,7 @@ pub(crate) struct Shared {
     pub(crate) actor: AtomicWaker,
     pub(crate) reader: AtomicWaker,
     pub(crate) closer: AtomicWaker,
+    pub(crate) scope_closer: AtomicWaker,
 }
 
 impl Shared {
@@ -73,6 +74,7 @@ impl Shared {
             actor: AtomicWaker::new(),
             reader: AtomicWaker::new(),
             closer: AtomicWaker::new(),
+            scope_closer: AtomicWaker::new(),
         }
     }
 
@@ -84,6 +86,7 @@ impl Shared {
         self.actor.wake();
         self.reader.wake();
         self.closer.wake();
+        self.scope_closer.wake();
     }
 
     pub(crate) fn stop(&self) {

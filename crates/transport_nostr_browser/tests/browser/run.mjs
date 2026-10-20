@@ -41,23 +41,24 @@ globalThis.waitForBrowserSocketClose=async route=>{
 globalThis.forceBrowserSocketBackpressure=()=>{
   Object.defineProperty(observedSockets.at(-1),'bufferedAmount',{get(){return 4*1024*1024;}});
 };
-async function verifyCleanup(checkTimers=true){
+async function verifyCleanup(checkTimers=true,expectedStalls=2){
   await new Promise(resolve=>setTimeout(resolve,80));
   for(const socket of observedSockets){
     if(socket.onopen||socket.onmessage||socket.onerror||socket.onclose)throw Error('retained socket callback');
     if(socket.readyState!==ActualWebSocket.CLOSED)throw Error('retained open socket: '+socket.url+' state='+socket.readyState);
   }
-  const inert=['unpolled','cancelled-owner','revoked-owner','expired-owner'];
+  const inert=['unpolled','cancelled-owner','revoked-owner','expired-owner','closed-owner'];
   if(observedSockets.some(socket=>inert.some(route=>socket.url.endsWith('/'+route))))throw Error('inert or expired connection performed I/O');
-  if(observedSockets.filter(socket=>socket.url.endsWith('/stall')).length!==2)throw Error('missing original pending handshake attempts');
+  if(observedSockets.filter(socket=>socket.url.endsWith('/stall')).length!==expectedStalls)throw Error('missing original pending handshake attempts');
   if(checkTimers && activeTimers.size)throw Error('retained browser socket timer: '+activeTimers.size);
   return observedSockets.length;
 }`;
 const execute = `
-const {default:init,verify_socket,verify_shared_session,fixture_event}=await import('./fixture.js');await init();
+const {default:init,verify_socket,verify_scope,verify_shared_session,fixture_event}=await import('./fixture.js');await init();
 const passed=Array.from(await verify_socket(base));const directDisposed=await verifyCleanup();
-const shared=Array.from(await verify_shared_session(base));const disposed=await verifyCleanup(false);
-return {passed,shared,directDisposed,disposed,expectedRaw:fixture_event()};`;
+const scope=Array.from(await verify_scope(base));const scopeDisposed=await verifyCleanup(true,3);
+const shared=Array.from(await verify_shared_session(base));const disposed=await verifyCleanup(false,3);
+return {passed,scope,shared,directDisposed,scopeDisposed,disposed,expectedRaw:fixture_event()};`;
 const worker = `${observer}
 self.onmessage=async event=>{try{const base=event.data;const run=async()=>{${execute}};self.postMessage(await run());}
 catch(error){self.postMessage({error:String(error)});}};`;
@@ -113,23 +114,33 @@ try {
   const automation=engine==='firefox'?'webdriver_bidi':'playwright_default';
   const options=engine==='firefox'?{headless:true,channel:'moz-firefox-nightly',executablePath:playwright.firefox.executablePath()}:{headless:true};
   browser=await playwright[engine].launch(options);
-  const page=await browser.newPage();
+  let page=await browser.newPage();
   const errors=[],expectedUserAgentDiagnostics=[];
   const expectedDiagnostics=new Set([
     `Firefox can’t establish a connection to the server at ${base}/stall.`,
     `The connection to ${base}/stall was interrupted while the page was loading.`,
   ]);
-  page.on('pageerror',error=>{
+  const onPageError=error=>{
     // BiDi reports these user-agent diagnostics as script errors for the two
     // deliberately interrupted handshakes. Retain the exact messages separately;
     // every other error still fails, including exceptions from product code.
     if(engine==='firefox' && automation==='webdriver_bidi' && expectedDiagnostics.has(error.message))expectedUserAgentDiagnostics.push(error.message);
     else errors.push(error.message);
-  });
+  };
+  page.on('pageerror',onPageError);
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.addScriptTag({content:observer});
   const main=await page.evaluate(new Function('base',`return (async()=>{${execute}})();`),base);
   console.error(JSON.stringify({phase:'main_completed',engine,result:main}));
+  // Each context first proves disposal on its original objects. WebKit can
+  // retain the network tasks for cancelled HTTP upgrades after DOM close; six
+  // such deliberately stalled tasks otherwise block the next connection.
+  // Isolate page and worker fixture resources without renewing any deadline or
+  // claiming that local disposal proves a remote/network-task close handshake.
+  await page.close();
+  page=await browser.newPage();
+  page.on('pageerror',onPageError);
+  await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const dedicated=await page.evaluate(base=>new Promise((resolve,reject)=>{
     const worker=new Worker('./worker.js',{type:'module'});
     worker.onerror=event=>{worker.terminate();reject(Error(event.message));};
@@ -138,6 +149,7 @@ try {
   }),base);
   assert.equal(main.passed.length,19);
   assert.equal(main.shared.length,7);
+  assert.equal(main.scope.length,4);
   assert.deepEqual(main,dedicated);
   assert.deepEqual(errors,[]);
   assert(!upgrades.includes('/unpolled'));
@@ -145,8 +157,8 @@ try {
   assert.equal(publications.length,8);
   for(const publication of publications)assert.equal(publication.wire,`["EVENT",${main.expectedRaw}]`);
   // A deadline may expire before the user agent transmits an HTTP upgrade.
-  assert(upgrades.filter(path=>path==='/stall').length<=4);
-  assert(expectedUserAgentDiagnostics.length<=8);
+  assert(upgrades.filter(path=>path==='/stall').length<=6);
+  assert(expectedUserAgentDiagnostics.length<=12);
   console.log(JSON.stringify({engine,automation,version:browser.version(),main,dedicated,pageErrors:errors,expectedUserAgentDiagnostics,upgrades,observed}));
 } finally {
   clearTimeout(deadline);

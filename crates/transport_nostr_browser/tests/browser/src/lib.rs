@@ -89,7 +89,7 @@ async fn connect(
     limit: usize,
     grant: Arc<Grant>,
 ) -> Result<Arc<dyn Socket>, JsValue> {
-    BrowserConnector
+    BrowserConnector::default()
         .connect(
             &format!("{base}/{route}"),
             Duration::from_secs(2),
@@ -103,9 +103,10 @@ async fn connect(
 #[wasm_bindgen]
 pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
     let passed = js_sys::Array::new();
+    let connector = BrowserConnector::default();
     let grant = Grant::new();
     let endpoint = format!("{base}/unpolled");
-    let future = BrowserConnector.connect(
+    let future = connector.connect(
         &endpoint,
         Duration::from_secs(1),
         NonZeroUsize::new(1024).unwrap(),
@@ -116,7 +117,7 @@ pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
     passed.push(&"unpolled inert".into());
 
     let endpoint = format!("{base}/cancelled-owner");
-    let mut attempt = BrowserConnector.connect(
+    let mut attempt = connector.connect(
         &endpoint,
         Duration::from_secs(1),
         NonZeroUsize::new(1).unwrap(),
@@ -132,7 +133,7 @@ pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
 
     let endpoint = format!("{base}/revoked-owner");
     let revoked_grant = Grant::new();
-    let mut attempt = BrowserConnector.connect(
+    let mut attempt = connector.connect(
         &endpoint,
         Duration::from_secs(1),
         NonZeroUsize::new(1).unwrap(),
@@ -150,7 +151,7 @@ pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
     passed.push(&"revocation before owner startup".into());
 
     let endpoint = format!("{base}/expired-owner");
-    let mut attempt = BrowserConnector.connect(
+    let mut attempt = connector.connect(
         &endpoint,
         Duration::from_millis(5),
         NonZeroUsize::new(1).unwrap(),
@@ -192,10 +193,7 @@ pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
             "unsupported control",
         )?;
     }
-    check(
-        !BrowserConnector.supports_ping(),
-        "browser ping unavailable",
-    )?;
+    check(!connector.supports_ping(), "browser ping unavailable")?;
     check(
         socket.send(Frame::Binary(vec![0; 1025])).await == Err(Error::Protocol),
         "outgoing size",
@@ -296,7 +294,7 @@ pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
     passed.push(&"last socket observer cleanup".into());
 
     let endpoint = format!("{base}/stall");
-    let mut attempt = BrowserConnector.connect(
+    let mut attempt = connector.connect(
         &endpoint,
         Duration::from_secs(2),
         NonZeroUsize::new(1).unwrap(),
@@ -310,7 +308,7 @@ pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
     drop(attempt);
     pause().await;
     passed.push(&"cancelled handshake cleanup".into());
-    let result = BrowserConnector
+    let result = connector
         .connect(
             &endpoint,
             Duration::from_millis(20),
@@ -324,5 +322,95 @@ pub async fn verify_socket(base: String) -> Result<js_sys::Array, JsValue> {
     )?;
     passed.push(&"handshake deadline cleanup".into());
     pause().await;
+    Ok(passed)
+}
+
+#[wasm_bindgen]
+pub async fn verify_scope(base: String) -> Result<js_sys::Array, JsValue> {
+    let passed = js_sys::Array::new();
+    let connector = BrowserConnector::default();
+    let sibling = BrowserConnector::default();
+    let endpoint = format!("{base}/echo");
+    let limit = NonZeroUsize::new(1024).unwrap();
+    let a = connector
+        .connect(&endpoint, Duration::from_secs(2), limit, Grant::new())
+        .await
+        .map_err(error)?;
+    let b = connector
+        .connect(&endpoint, Duration::from_secs(2), limit, Grant::new())
+        .await
+        .map_err(error)?;
+    let other = sibling
+        .connect(&endpoint, Duration::from_secs(2), limit, Grant::new())
+        .await
+        .map_err(error)?;
+    let (socket_done, scope_done) = futures::join!(a.close(), connector.close());
+    socket_done.map_err(error)?;
+    scope_done.map_err(error)?;
+    check(
+        b.receive().await.map_err(error)?.is_none(),
+        "all original scope sockets disposed",
+    )?;
+    check(
+        b.send(Frame::Text("closed".into())).await == Err(Error::Closed),
+        "scope cannot send after disposal",
+    )?;
+    let denied = connector
+        .connect(&endpoint, Duration::from_secs(2), limit, Grant::new())
+        .await;
+    check(
+        matches!(denied, Err(Error::Closed)),
+        "closed scope cannot admit another original owner",
+    )?;
+    passed.push(&"concurrent socket and scope disposal".into());
+    other
+        .send(Frame::Text("isolated scope".into()))
+        .await
+        .map_err(error)?;
+    check(
+        other.receive().await.map_err(error)? == Some(Frame::Text("isolated scope".into())),
+        "sibling scope remains live",
+    )?;
+    let copy = sibling.clone();
+    let (first, second) = futures::join!(sibling.close(), copy.close());
+    first.map_err(error)?;
+    second.map_err(error)?;
+    passed.push(&"scope isolation and shared clone closure".into());
+
+    let connector = BrowserConnector::default();
+    let stalled = format!("{base}/stall");
+    let mut attempt = connector.connect(&stalled, Duration::from_secs(2), limit, Grant::new());
+    check(
+        attempt.as_mut().now_or_never().is_none(),
+        "original pending scope handshake",
+    )?;
+    pause().await;
+    let mut closing = connector.close();
+    check(
+        closing.as_mut().now_or_never().is_none(),
+        "scope close starts pending before original owner disposal",
+    )?;
+    drop(closing);
+    check(
+        matches!(attempt.await, Err(Error::Closed)),
+        "original handshake refused by scope close",
+    )?;
+    connector.close().await.map_err(error)?;
+    passed.push(&"cancelled scope close resumes original disposal".into());
+
+    let connector = BrowserConnector::default();
+    let inert = format!("{base}/closed-owner");
+    let mut attempt = connector.connect(&inert, Duration::from_secs(2), limit, Grant::new());
+    check(
+        attempt.as_mut().now_or_never().is_none(),
+        "deferred original scope owner",
+    )?;
+    let (attempt, closed) = futures::join!(attempt, connector.close());
+    check(
+        matches!(attempt, Err(Error::Closed)),
+        "scope refuses before DOM owner starts",
+    )?;
+    closed.map_err(error)?;
+    passed.push(&"scope close before DOM owner startup".into());
     Ok(passed)
 }

@@ -33,3 +33,15 @@ it does not prove a remote close handshake. Cancelling a connect or dropping the
 last socket handle requests that same local cleanup. A page or worker being
 terminated has no asynchronous completion guarantee. Import and construction
 perform no I/O. Non-browser targets refuse connections.
+The user agent may retain an underlying pending network task after DOM close;
+repeated interrupted handshakes can consume its per-origin connection capacity.
+Subsequent calls still consume their original deadlines and cannot infer remote
+cleanup from local disposal.
+
+Cloned `BrowserConnector` handles own one disposal scope, with at most 64 retained
+original socket owners. Keep the connector when composing a client. After
+stopping the shared protocol session, await its `close` method before closing
+storage: it permanently refuses new owners and waits for every original local
+socket owner to detach callbacks and initiate close. A cancelled close resumes
+the same disposal. Separate connector scopes remain independent. This scope
+does not manage protocol membership, grant retries or join upstream SDK tasks.
