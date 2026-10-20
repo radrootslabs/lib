@@ -63,10 +63,6 @@ pub const radroots_protocol::capability::v1::SCHEMAS: &[radroots_protocol::schem
 pub fn radroots_protocol::capability::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
 pub fn radroots_protocol::capability::v1::validate_catalog(&[radroots_protocol::capability::v1::TransportDescriptor]) -> core::result::Result<(), radroots_protocol::capability::v1::Error>
 pub mod radroots_protocol::chat
-pub enum radroots_protocol::chat::ChatReplay
-pub radroots_protocol::chat::ChatReplay::ExactReplayByRequestId
-pub radroots_protocol::chat::ChatReplay::LocalReplaySafe
-pub radroots_protocol::chat::ChatReplay::NonReplayable
 pub struct radroots_protocol::chat::CapturedDmRoute
 impl radroots_protocol::chat::CapturedDmRoute
 pub fn radroots_protocol::chat::CapturedDmRoute::from_observed_descriptor(radroots_identity::key::PublicKey, radroots_domain::identifier::EnvelopeEventId, &str, &[alloc::string::String]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
@@ -111,13 +107,15 @@ pub const fn radroots_protocol::chat::ChatSigningPlan::command_digest(&self) -> 
 pub const fn radroots_protocol::chat::ChatSigningPlan::created_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_protocol::chat::ChatSigningPlan::digest(&self) -> &[u8; 32]
 pub const fn radroots_protocol::chat::ChatSigningPlan::message_id(&self) -> radroots_domain::identifier::MessageId
-pub fn radroots_protocol::chat::ChatSigningPlan::new(&radroots_protocol::command::CapturedChatCommand, radroots_domain::context::UnixSeconds, alloc::vec::Vec<radroots_protocol::chat::ChatSeal>, alloc::vec::Vec<radroots_protocol::chat::CapturedDmRoute>, radroots_protocol::chat::ChatReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::chat::ChatSigningPlan::new(&radroots_protocol::command::CapturedChatCommand, radroots_domain::context::UnixSeconds, alloc::vec::Vec<radroots_protocol::chat::ChatSeal>, alloc::vec::Vec<radroots_protocol::chat::CapturedDmRoute>, radroots_protocol::plan::SigningReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub const fn radroots_protocol::chat::ChatSigningPlan::operation_id(&self) -> radroots_domain::identifier::OperationId
 pub fn radroots_protocol::chat::ChatSigningPlan::parse(&radroots_protocol::command::CapturedChatCommand, &[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub fn radroots_protocol::chat::ChatSigningPlan::protected_wire(&self) -> &[u8]
-pub const fn radroots_protocol::chat::ChatSigningPlan::replay(&self) -> radroots_protocol::chat::ChatReplay
+pub const fn radroots_protocol::chat::ChatSigningPlan::replay(&self) -> radroots_protocol::plan::SigningReplay
 pub fn radroots_protocol::chat::ChatSigningPlan::routes(&self) -> &[radroots_protocol::chat::CapturedDmRoute]
 pub fn radroots_protocol::chat::ChatSigningPlan::seals(&self) -> &[radroots_protocol::chat::ChatSeal]
+impl core::convert::From<radroots_protocol::chat::ChatSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
+pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::chat::ChatSigningPlan) -> Self
 impl core::fmt::Debug for radroots_protocol::chat::ChatSigningPlan
 pub fn radroots_protocol::chat::ChatSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::chat::DmRelayAdvertisement
@@ -514,6 +512,22 @@ pub fn radroots_protocol::listing::ListingEvent::fields(&self) -> radroots_proto
 pub fn radroots_protocol::listing::ListingEvent::new(&radroots_protocol::listing::PublishInput, radroots_identity::key::PublicKey, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 impl core::fmt::Debug for radroots_protocol::listing::ListingEvent
 pub fn radroots_protocol::listing::ListingEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::listing::PublicSigningPlan
+impl radroots_protocol::listing::PublicSigningPlan
+pub fn radroots_protocol::listing::PublicSigningPlan::capture(&radroots_protocol::listing::CapturedListingCommand, radroots_domain::context::UnixSeconds, &[alloc::string::String], radroots_protocol::plan::SigningReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::listing::PublicSigningPlan::command_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::listing::PublicSigningPlan::created_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_protocol::listing::PublicSigningPlan::digest(&self) -> &[u8; 32]
+pub const fn radroots_protocol::listing::PublicSigningPlan::event(&self) -> &radroots_protocol::listing::ListingEvent
+pub const fn radroots_protocol::listing::PublicSigningPlan::operation_id(&self) -> radroots_domain::identifier::OperationId
+pub fn radroots_protocol::listing::PublicSigningPlan::parse(&radroots_protocol::listing::CapturedListingCommand, &[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::listing::PublicSigningPlan::protected_wire(&self) -> &[u8]
+pub const fn radroots_protocol::listing::PublicSigningPlan::replay(&self) -> radroots_protocol::plan::SigningReplay
+pub fn radroots_protocol::listing::PublicSigningPlan::selected_targets(&self) -> &[alloc::boxed::Box<str>]
+impl core::convert::From<radroots_protocol::listing::PublicSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
+pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::listing::PublicSigningPlan) -> Self
+impl core::fmt::Debug for radroots_protocol::listing::PublicSigningPlan
+pub fn radroots_protocol::listing::PublicSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::listing::PublishInput
 impl radroots_protocol::listing::PublishInput
 pub const fn radroots_protocol::listing::PublishInput::id(&self) -> radroots_domain::listing::ListingId
@@ -551,6 +565,30 @@ pub fn radroots_protocol::nip01::UnsignedEvent::fmt(&self, &mut core::fmt::Forma
 pub fn radroots_protocol::nip01::canonical_preimage(&radroots_protocol::nip01::EventFields<'_>) -> alloc::string::String
 pub fn radroots_protocol::nip01::preimage_len(&radroots_protocol::nip01::EventFields<'_>, usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub fn radroots_protocol::nip01::signed_json_len(&radroots_protocol::nip01::EventFields<'_>, usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
+pub mod radroots_protocol::plan
+pub enum radroots_protocol::plan::CapturedSigningPlan
+pub radroots_protocol::plan::CapturedSigningPlan::Chat(radroots_protocol::chat::ChatSigningPlan)
+pub radroots_protocol::plan::CapturedSigningPlan::Listing(radroots_protocol::listing::PublicSigningPlan)
+impl radroots_protocol::plan::CapturedSigningPlan
+pub const fn radroots_protocol::plan::CapturedSigningPlan::chat(&self) -> core::option::Option<&radroots_protocol::chat::ChatSigningPlan>
+pub const fn radroots_protocol::plan::CapturedSigningPlan::command_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::plan::CapturedSigningPlan::created_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_protocol::plan::CapturedSigningPlan::digest(&self) -> &[u8; 32]
+pub const fn radroots_protocol::plan::CapturedSigningPlan::listing(&self) -> core::option::Option<&radroots_protocol::listing::PublicSigningPlan>
+pub const fn radroots_protocol::plan::CapturedSigningPlan::operation_id(&self) -> radroots_domain::identifier::OperationId
+pub fn radroots_protocol::plan::CapturedSigningPlan::parse(&radroots_protocol::command::CapturedCommand, &[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::plan::CapturedSigningPlan::protected_wire(&self) -> &[u8]
+pub const fn radroots_protocol::plan::CapturedSigningPlan::replay(&self) -> radroots_protocol::plan::SigningReplay
+impl core::convert::From<radroots_protocol::chat::ChatSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
+pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::chat::ChatSigningPlan) -> Self
+impl core::convert::From<radroots_protocol::listing::PublicSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
+pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::listing::PublicSigningPlan) -> Self
+impl core::fmt::Debug for radroots_protocol::plan::CapturedSigningPlan
+pub fn radroots_protocol::plan::CapturedSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::plan::SigningReplay
+pub radroots_protocol::plan::SigningReplay::ExactReplayByRequestId
+pub radroots_protocol::plan::SigningReplay::LocalReplaySafe
+pub radroots_protocol::plan::SigningReplay::NonReplayable
 pub mod radroots_protocol::radrootsd
 pub mod radroots_protocol::radrootsd::transport_publish
 pub mod radroots_protocol::radrootsd::transport_publish::v5

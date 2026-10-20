@@ -30,7 +30,7 @@ fn context(
         .chain_update(bound.plan().digest());
     let schema = if let Some(index) = recipient {
         let seal = bound
-            .plan()
+            .chat_plan()?
             .seals()
             .get(index as usize)
             .ok_or(OperationError::RecoveryRequired)?;
@@ -83,7 +83,7 @@ impl Records {
         };
         let mut work = Vec::with_capacity(2);
         if let Some(bound) = graph.bound() {
-            for (index, seal) in bound.plan().seals().iter().enumerate() {
+            for (index, seal) in bound.chat_plan()?.seals().iter().enumerate() {
                 if let Some(raw) = state
                     .read_view_key(
                         view,
@@ -224,7 +224,7 @@ impl BrowserWorkspace {
             }
             for evidence in missing {
                 let index = bound
-                    .plan()
+                    .chat_plan()?
                     .seals()
                     .iter()
                     .position(|seal| seal.recipient() == evidence.recipient())

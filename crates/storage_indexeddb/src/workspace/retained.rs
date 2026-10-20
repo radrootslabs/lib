@@ -38,8 +38,11 @@ pub(super) async fn header(
     };
     for key in view.keys() {
         let (kind, recipient, _) = address::fields(key)?;
-        if kind >= address::CLAIM && recipient as usize >= plan.seals().len() {
-            return Err(OperationError::RecoveryRequired);
+        if kind >= address::CLAIM {
+            let chat = plan.chat().ok_or(OperationError::UnsupportedOperation)?;
+            if recipient as usize >= chat.seals().len() {
+                return Err(OperationError::RecoveryRequired);
+            }
         }
     }
     Ok(Some(RetainedOperation::Planned(Box::new(
@@ -68,14 +71,14 @@ impl Graph {
             Some(RetainedOperation::Planned(bound)) => {
                 let mut bound = *bound;
                 let keys = bound
-                    .plan()
+                    .chat_plan()?
                     .seals()
                     .iter()
                     .map(|seal| seal.recipient())
                     .collect::<Vec<_>>();
                 for (index, recipient) in keys.into_iter().enumerate() {
                     let expected =
-                        EnvelopeEventId::from_bytes(bound.plan().seals()[index].event_id());
+                        EnvelopeEventId::from_bytes(bound.chat_plan()?.seals()[index].event_id());
                     match state.claim(view, bound, recipient, index as u8).await? {
                         Claim::Absent(returned, _) => {
                             recipients.push(RecipientSnapshot::from_store_report(
@@ -87,7 +90,7 @@ impl Graph {
                             bound = returned;
                         }
                         Claim::Present(attempt) => {
-                            let claim = ClaimSnapshot::from_store_report(&attempt);
+                            let claim = ClaimSnapshot::from_store_report(&attempt)?;
                             // Verify one bounded exact seal at a time; retaining a
                             // receipt does not duplicate private plan/raw bodies.
                             let obtained = state.evidence(view, &attempt, index as u8).await?;

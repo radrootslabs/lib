@@ -30,17 +30,17 @@ struct ClaimWire {
     expected_event: EnvelopeEventId,
 }
 impl ClaimWire {
-    fn new(attempt: &SigningAttempt) -> Self {
+    fn new(attempt: &SigningAttempt) -> Result<Self, OperationError> {
         let plan = attempt.bound_plan();
         let prepared = plan.prepared();
         let identity = prepared.identity();
-        Self {
+        Ok(Self {
             version: 1,
             workspace: identity.workspace_id(),
             operation_id: identity.operation_id(),
             command_digest: identity.command_digest(),
             plan_digest: *plan.plan().digest(),
-            recipient: attempt.seal().recipient(),
+            recipient: attempt.seal()?.recipient(),
             attempt_id: attempt.attempt_id(),
             transaction_id: attempt.transaction_id(),
             claimed_at: attempt.claimed_at(),
@@ -49,16 +49,16 @@ impl ClaimWire {
             preparation_transaction: prepared.transaction_id(),
             plan_transaction: plan.transaction_id(),
             grant_id: prepared.request().binding().input().grant_id(),
-            expected_event: EnvelopeEventId::from_bytes(attempt.seal().event_id()),
-        }
+            expected_event: EnvelopeEventId::from_bytes(attempt.seal()?.event_id()),
+        })
     }
 }
 /// Closed v1 claim codec. The concrete host still verifies its retained indexes
 /// and acknowledges actual completion before reporting a newly claimed attempt.
 pub struct ClaimRecord(ClaimWire);
 impl ClaimRecord {
-    pub fn capture(attempt: &SigningAttempt) -> Self {
-        Self(ClaimWire::new(attempt))
+    pub fn capture(attempt: &SigningAttempt) -> Result<Self, OperationError> {
+        Ok(Self(ClaimWire::new(attempt)?))
     }
     pub fn encode(&self) -> Result<Zeroizing<Vec<u8>>, OperationError> {
         encode(&self.0)
@@ -80,7 +80,7 @@ impl ClaimRecord {
             wire.transaction_id,
             wire.claimed_at,
         )?;
-        if wire != ClaimWire::new(&attempt) {
+        if wire != ClaimWire::new(&attempt)? {
             return Err(OperationError::RecoveryRequired);
         }
         Ok(attempt)
@@ -158,11 +158,11 @@ impl EvidenceManifest {
             || w.operation_id != identity.operation_id()
             || w.command_digest != identity.command_digest()
             || &w.plan_digest != bound.plan().digest()
-            || w.recipient != attempt.seal().recipient()
+            || w.recipient != attempt.seal()?.recipient()
             || w.attempt_id != attempt.attempt_id()
             || w.claim_transaction != attempt.transaction_id()
             || &w.intent_digest != attempt.binding().digest()
-            || w.event_id.as_bytes() != &attempt.seal().event_id()
+            || w.event_id.as_bytes() != &attempt.seal()?.event_id()
             || !(1..=65536).contains(&w.byte_count)
             || !(1..=4).contains(&w.part_count)
             || w.byte_count.div_ceil(PART_BYTES) != w.part_count

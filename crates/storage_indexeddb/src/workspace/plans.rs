@@ -8,7 +8,7 @@ use radroots_secrets::context::{
 };
 use radroots_storage::{
     command::{
-        BoundSigningPlan, ChatSigningPlan, CommitAttempt, OperationError, PlanBindingOutcome,
+        BoundSigningPlan, CapturedSigningPlan, CommitAttempt, OperationError, PlanBindingOutcome,
         PreparedOperation,
         protected::{
             self,
@@ -112,7 +112,7 @@ impl State {
         &self,
         prepared: &PreparedOperation,
         records: &Records,
-    ) -> Result<Option<(PlanManifest, ChatSigningPlan)>, OperationError> {
+    ) -> Result<Option<(PlanManifest, CapturedSigningPlan)>, OperationError> {
         let Some(manifest) = &records[0] else {
             if records.iter().any(Option::is_some) {
                 return Err(OperationError::RecoveryRequired);
@@ -155,7 +155,7 @@ impl State {
                 Ok(())
             })?;
         }
-        let plan = ChatSigningPlan::parse(prepared.request().chat_command()?, &wire)
+        let plan = CapturedSigningPlan::parse(prepared.request().command(), &wire)
             .map_err(|_| OperationError::RecoveryRequired)?;
         if plan.digest() != manifest.plan_digest().as_bytes() {
             return Err(OperationError::RecoveryRequired);
@@ -166,7 +166,7 @@ impl State {
         &self,
         operation: OperationId,
         manifest: &PlanManifest,
-        plan: &ChatSigningPlan,
+        plan: &CapturedSigningPlan,
     ) -> Result<Records, OperationError> {
         let mut records = Vec::with_capacity(SLOTS);
         let bytes = manifest.encode()?;
@@ -200,7 +200,7 @@ impl BrowserWorkspace {
     pub async fn bind_signing_intents(
         &self,
         binding: WorkspaceBinding,
-        supplied: ChatSigningPlan,
+        supplied: CapturedSigningPlan,
         proof: AttachmentProof,
     ) -> Result<PlanBindingOutcome, OperationError> {
         let fallback = CommitAttempt::new(
@@ -213,6 +213,9 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         let result = owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
+            if supplied.listing().is_some() {
+                return Err(OperationError::UnsupportedOperation);
+            }
             let operation = supplied.operation_id();
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;
@@ -247,8 +250,8 @@ impl BrowserWorkspace {
                 if observed >= window.first_issue_not_after() {
                     return Err(OperationError::DeadlineExceeded);
                 }
-                let checked = ChatSigningPlan::parse(
-                    prepared.request().chat_command()?,
+                let checked = CapturedSigningPlan::parse(
+                    prepared.request().command(),
                     supplied.protected_wire(),
                 )
                 .map_err(|_| OperationError::InvalidCommand)?;

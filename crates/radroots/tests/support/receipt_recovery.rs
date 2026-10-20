@@ -108,7 +108,7 @@ async fn original_capture_recovery_retries_known_rollback_without_reissuing_and_
                 &issued.binding,
                 issued.attempt.bound_plan().prepared(),
                 *issued.attempt.bound_plan().plan().digest(),
-                issued.attempt.seal().recipient(),
+                issued.attempt.seal().unwrap().recipient(),
             ),
             copy(&issued.proof),
         )
@@ -206,7 +206,7 @@ async fn unknown_capture_recovery_preserves_writer_during_refused_preflight_and_
                 &issued.binding,
                 issued.attempt.bound_plan().prepared(),
                 *issued.attempt.bound_plan().plan().digest(),
-                issued.attempt.seal().recipient(),
+                issued.attempt.seal().unwrap().recipient(),
             ),
             copy(&issued.proof),
         )

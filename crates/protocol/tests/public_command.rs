@@ -182,3 +182,121 @@ fn unsupported_full_profile_features_are_refused_without_silent_quote_or_media_f
         );
     }
 }
+
+#[test]
+fn exact_public_plan_reconstructs_original_event_and_refuses_changed_framing_or_command() {
+    use radroots_protocol::{
+        listing::PublicSigningPlan,
+        plan::{CapturedSigningPlan, SigningReplay},
+    };
+    let public = CapturedListingCommand::capture(
+        context(),
+        PublishInput::parse(&serde_json::to_vec(&input()).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let targets = vec![
+        "wss://listing.fixture.example/a".to_string(),
+        "wss://listing.fixture.example/b".to_string(),
+    ];
+    let plan = PublicSigningPlan::capture(
+        &public,
+        UnixSeconds::new(100).unwrap(),
+        &targets,
+        SigningReplay::NonReplayable,
+    )
+    .unwrap();
+    let wire = plan.protected_wire().to_vec();
+    let digest = *plan.digest();
+    let event_id = *plan.event().event_id();
+    assert_eq!(
+        plan.selected_targets()
+            .iter()
+            .map(|s| s.as_ref())
+            .collect::<Vec<_>>(),
+        targets
+    );
+    let common = CapturedCommand::from(public);
+    let retained = CapturedSigningPlan::parse(&common, &wire).unwrap();
+    assert_eq!(retained.protected_wire(), wire);
+    assert_eq!(retained.digest(), &digest);
+    assert_eq!(retained.listing().unwrap().event().event_id(), &event_id);
+    #[cfg(feature = "chat")]
+    assert!(retained.chat().is_none());
+    assert!(!format!("{retained:?}").contains("Carrots"));
+    let changed = PublicSigningPlan::capture(
+        common.listing().unwrap(),
+        UnixSeconds::new(101).unwrap(),
+        &targets,
+        SigningReplay::NonReplayable,
+    )
+    .unwrap();
+    assert_ne!(changed.digest(), &digest);
+    for replay in [
+        SigningReplay::LocalReplaySafe,
+        SigningReplay::ExactReplayByRequestId,
+    ] {
+        let changed = PublicSigningPlan::capture(
+            common.listing().unwrap(),
+            UnixSeconds::new(100).unwrap(),
+            &targets,
+            replay,
+        )
+        .unwrap();
+        assert_ne!(changed.digest(), &digest);
+        assert_eq!(
+            PublicSigningPlan::parse(common.listing().unwrap(), changed.protected_wire())
+                .unwrap()
+                .replay(),
+            replay
+        );
+    }
+    let prefix = b"radroots.listing.signing_plan.v1\0".len();
+    for offset in [
+        0,
+        prefix,
+        prefix + 32,
+        prefix + 64 + 8,
+        prefix + 64 + 9,
+        prefix + 64 + 10,
+    ] {
+        let mut changed = wire.clone();
+        changed[offset] ^= 0x80;
+        assert!(CapturedSigningPlan::parse(&common, &changed).is_err());
+    }
+    let mut changed = wire.clone();
+    let offset = changed.windows(7).position(|w| w == b"Carrots").unwrap();
+    changed[offset] = b'P';
+    assert!(CapturedSigningPlan::parse(&common, &changed).is_err());
+    let mut changed = wire.clone();
+    changed.push(0);
+    assert!(CapturedSigningPlan::parse(&common, &changed).is_err());
+    for end in [0, 1, prefix, prefix + 32, wire.len() - 1] {
+        assert!(CapturedSigningPlan::parse(&common, &wire[..end]).is_err());
+    }
+    let chat = CapturedCommand::from(
+        CapturedChatCommand::inquire(
+            context(),
+            InquireInput::new(ThreadId::from_bytes([6; 32]), key(), None, "Private").unwrap(),
+        )
+        .unwrap(),
+    );
+    assert!(CapturedSigningPlan::parse(&chat, &wire).is_err());
+    assert!(
+        PublicSigningPlan::capture(
+            common.listing().unwrap(),
+            UnixSeconds::new(100).unwrap(),
+            &[],
+            SigningReplay::NonReplayable
+        )
+        .is_err()
+    );
+    assert!(
+        PublicSigningPlan::capture(
+            common.listing().unwrap(),
+            UnixSeconds::new(100).unwrap(),
+            &vec![targets[0].clone(); 2],
+            SigningReplay::NonReplayable
+        )
+        .is_err()
+    );
+}

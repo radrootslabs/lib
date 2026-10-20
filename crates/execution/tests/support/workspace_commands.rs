@@ -193,7 +193,7 @@ impl OperationJournal for Journal {
     fn bind_signing_intents(
         &self,
         _binding: WorkspaceBinding,
-        _plan: ChatSigningPlan,
+        _plan: CapturedSigningPlan,
         _proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<PlanBindingOutcome, OperationError>> {
         panic!("unexpected journal effect")

@@ -82,7 +82,7 @@ async fn prepare(
     let recipients = plan.seals().iter().map(|seal| seal.recipient()).collect();
     bound(
         store
-            .bind_signing_intents(binding.clone(), plan, copy(proof))
+            .bind_signing_intents(binding.clone(), (plan).into(), copy(proof))
             .await
             .unwrap(),
     );
@@ -109,7 +109,7 @@ async fn obtain(attempt: &SigningAttempt, missing: bool) -> SealEvidence {
     let intent = SigningIntent::from_chat_seal(
         attempt.binding().operation_id(),
         attempt.bound_plan().prepared().identity().command_digest(),
-        attempt.seal(),
+        attempt.seal().unwrap(),
         ProviderCall::new(key(), attempt.deadline_unix_ms(), CancellationSignal::new()),
     )
     .unwrap();
@@ -335,7 +335,12 @@ async fn one_recipient_obtained_does_not_invent_the_other_and_failed_capture_kee
     assert!(matches!(
         store
             .claim_attempt(
-                selection(&binding, &prepared, digest, second.seal().recipient()),
+                selection(
+                    &binding,
+                    &prepared,
+                    digest,
+                    second.seal().unwrap().recipient()
+                ),
                 copy(&proof)
             )
             .await
@@ -671,7 +676,7 @@ async fn missing_preparation_plan_and_attempt_are_distinct_from_wrong_plan_ident
     let digest = *retained.digest();
     bound(
         store
-            .bind_signing_intents(binding.clone(), retained, copy(&proof))
+            .bind_signing_intents(binding.clone(), (retained).into(), copy(&proof))
             .await
             .unwrap(),
     );

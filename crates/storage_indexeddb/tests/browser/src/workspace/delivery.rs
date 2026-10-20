@@ -148,7 +148,8 @@ impl WorkspaceFixture {
         let recipient = snapshot
             .bound_plan()
             .unwrap()
-            .plan()
+            .chat_plan()
+            .unwrap()
             .seals()
             .get(index as usize)
             .ok_or(JsValue::from_str("invalid_recipient"))?

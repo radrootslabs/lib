@@ -19,7 +19,9 @@ use sha2::{Digest, Sha256};
 
 mod command;
 mod input;
+mod plan;
 pub use command::CapturedListingCommand;
+pub use plan::PublicSigningPlan;
 
 /// Assigned NIP-99 addressable classified-listing kind.
 pub const LISTING_KIND: u32 = 30402;

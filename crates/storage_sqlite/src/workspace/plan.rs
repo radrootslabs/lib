@@ -5,7 +5,7 @@ use super::{
 };
 use radroots_domain::{TransactionId, UnixSeconds};
 use radroots_storage::command::protected::plan::PlanManifest;
-use radroots_storage::command::{ChatSigningPlan, OperationError, PreparedOperation};
+use radroots_storage::command::{CapturedSigningPlan, OperationError, PreparedOperation};
 use sqlx::{Row, SqliteConnection};
 use zeroize::Zeroizing;
 
@@ -21,7 +21,7 @@ pub(super) struct ProtectedPlan {
 }
 pub(super) async fn protect(
     prepared: &PreparedOperation,
-    plan: &ChatSigningPlan,
+    plan: &CapturedSigningPlan,
     transaction: TransactionId,
     bound_at: UnixSeconds,
     crypto: &WorkspaceCrypto,
@@ -74,7 +74,12 @@ pub(super) async fn read(
 ) -> Result<
     (
         PreparedOperation,
-        Option<(ChatSigningPlan, TransactionId, UnixSeconds, ProtectedPlan)>,
+        Option<(
+            CapturedSigningPlan,
+            TransactionId,
+            UnixSeconds,
+            ProtectedPlan,
+        )>,
     ),
     OperationError,
 > {
@@ -180,7 +185,7 @@ pub(super) async fn read(
         })?;
         parts.push(protected);
     }
-    let plan = ChatSigningPlan::parse(prepared.request().chat_command()?, &wire)
+    let plan = CapturedSigningPlan::parse(prepared.request().command(), &wire)
         .map_err(|_| OperationError::RecoveryRequired)?;
     if plan.digest() != &digest {
         return Err(OperationError::RecoveryRequired);

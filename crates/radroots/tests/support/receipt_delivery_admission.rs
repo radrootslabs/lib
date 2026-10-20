@@ -57,10 +57,10 @@ async fn self_copy_delivery_refuses_the_original_peer_as_temporary_author() {
             .await
             .unwrap(),
     );
-    let fields = claim.seal().fields();
+    let fields = claim.seal().unwrap().fields();
     let participant = keys(1);
     let signed = nostr::UnsignedEvent {
-        id: Some(nostr::EventId::from_slice(&claim.seal().event_id()).unwrap()),
+        id: Some(nostr::EventId::from_slice(&claim.seal().unwrap().event_id()).unwrap()),
         pubkey: participant.public_key(),
         created_at: nostr::Timestamp::from_secs(fields.created_at),
         kind: nostr::Kind::Custom(13),

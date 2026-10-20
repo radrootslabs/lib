@@ -1,7 +1,7 @@
 #![cfg(feature = "chat")]
 
 use radroots_domain::{PublicKey, UnixSeconds};
-use radroots_protocol::{chat::*, command::CapturedChatCommand, nip01::*};
+use radroots_protocol::{chat::*, command::CapturedChatCommand, nip01::*, plan::SigningReplay};
 use serde_json::Value;
 
 fn vectors() -> Value {
@@ -273,9 +273,9 @@ fn complete_plan_roundtrip_preserves_all_exact_descriptors_and_refuses_truncatio
     for row in vectors()["vectors"].as_array().unwrap() {
         let command = CapturedChatCommand::parse(text(row, "wire").as_bytes()).unwrap();
         for replay in [
-            ChatReplay::NonReplayable,
-            ChatReplay::LocalReplaySafe,
-            ChatReplay::ExactReplayByRequestId,
+            SigningReplay::NonReplayable,
+            SigningReplay::LocalReplaySafe,
+            SigningReplay::ExactReplayByRequestId,
         ] {
             let (seals, routes) = plan_parts(row, &command);
             let plan =
@@ -317,7 +317,7 @@ fn complete_plan_roundtrip_preserves_all_exact_descriptors_and_refuses_truncatio
                 time(1_700_000_000),
                 seals,
                 routes,
-                ChatReplay::NonReplayable
+                SigningReplay::NonReplayable
             )
             .is_err()
         );
@@ -329,7 +329,7 @@ fn complete_plan_roundtrip_preserves_all_exact_descriptors_and_refuses_truncatio
                 time(1_700_000_000),
                 seals,
                 routes,
-                ChatReplay::NonReplayable
+                SigningReplay::NonReplayable
             )
             .is_err()
         );
@@ -342,7 +342,7 @@ fn complete_plan_roundtrip_preserves_all_exact_descriptors_and_refuses_truncatio
                     time(1_700_000_000),
                     seals,
                     routes,
-                    ChatReplay::NonReplayable
+                    SigningReplay::NonReplayable
                 )
                 .is_err()
             );
@@ -429,7 +429,7 @@ fn complete_plan_refuses_individual_provenance_field_and_combined_route_substitu
             time(1_700_000_000),
             seals,
             routes,
-            ChatReplay::NonReplayable
+            SigningReplay::NonReplayable
         )
         .is_err()
     );
@@ -443,7 +443,7 @@ fn complete_plan_refuses_individual_provenance_field_and_combined_route_substitu
             time(1_700_000_000),
             seals,
             routes,
-            ChatReplay::NonReplayable
+            SigningReplay::NonReplayable
         )
         .is_err()
     );
@@ -454,7 +454,7 @@ fn complete_plan_refuses_individual_provenance_field_and_combined_route_substitu
             time(1_700_000_001),
             seals,
             routes,
-            ChatReplay::NonReplayable
+            SigningReplay::NonReplayable
         )
         .is_err()
     );
@@ -466,7 +466,7 @@ fn complete_plan_refuses_individual_provenance_field_and_combined_route_substitu
             time(1_700_000_000),
             seals,
             routes,
-            ChatReplay::NonReplayable
+            SigningReplay::NonReplayable
         )
         .is_err()
     );
@@ -492,7 +492,7 @@ fn complete_plan_refuses_individual_provenance_field_and_combined_route_substitu
             time(1_700_000_000),
             seals,
             routes,
-            ChatReplay::NonReplayable
+            SigningReplay::NonReplayable
         ),
         Err(WireError::LimitExceeded)
     ));
@@ -502,7 +502,7 @@ fn complete_plan_refuses_individual_provenance_field_and_combined_route_substitu
         time(1_700_000_000),
         seals,
         routes,
-        ChatReplay::NonReplayable,
+        SigningReplay::NonReplayable,
     )
     .unwrap();
     let count = b"radroots.chat.signing_plan.v1\0".len() + 32 * 3 + 8 + 1;

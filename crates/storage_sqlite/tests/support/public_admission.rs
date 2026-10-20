@@ -1,5 +1,234 @@
 //! Actual encrypted T0 only. No signature, installation or delivery is claimed.
 use super::*;
+use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
+use radroots_storage::command::{BoundSigningPlan, ClaimAttemptRequest, PlanBindingOutcome};
+
+fn public_plan(prepared: &PreparedOperation, time: u64, targets: &[String]) -> PublicSigningPlan {
+    PublicSigningPlan::capture(
+        prepared.request().command().listing().unwrap(),
+        UnixSeconds::new(time).unwrap(),
+        targets,
+        SigningReplay::NonReplayable,
+    )
+    .unwrap()
+}
+fn planned(outcome: PlanBindingOutcome) -> BoundSigningPlan {
+    match outcome {
+        PlanBindingOutcome::Committed(plan) => plan,
+        PlanBindingOutcome::Unknown(_) => panic!("unexpected unknown T1"),
+    }
+}
+
+#[tokio::test]
+async fn public_t1_retains_exact_encrypted_plan_reopens_and_replays_without_fresh_deadline() {
+    let fixture = Fixture::new();
+    let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+    let prepared = committed(
+        store
+            .admit_command_and_hold(
+                public_request(&binding, 80, "original public T1", "first"),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    let targets = vec!["wss://public-plan.fixture.example/a".to_string()];
+    fixture.clock.now.store(110, Ordering::SeqCst);
+    let plan = public_plan(&prepared, 101, &targets);
+    let wire = plan.protected_wire().to_vec();
+    let digest = *plan.digest();
+    let event = *plan.event().event_id();
+    let retained = planned(
+        store
+            .bind_signing_intents(binding.clone(), plan.into(), copy(&proof))
+            .await
+            .unwrap(),
+    );
+    let transaction = retained.transaction_id();
+    assert_eq!(retained.bound_at().get(), 110);
+    assert_eq!(retained.plan().digest(), &digest);
+    assert_eq!(
+        retained.plan().listing().unwrap().event().event_id(),
+        &event
+    );
+    assert_eq!(
+        retained.chat_plan().err(),
+        Some(OperationError::UnsupportedOperation)
+    );
+    assert!(matches!(
+        store
+            .claim_attempt(
+                ClaimAttemptRequest::new(
+                    binding.clone(),
+                    prepared.identity().operation_id(),
+                    prepared.identity().command_digest(),
+                    digest,
+                    key()
+                ),
+                copy(&proof)
+            )
+            .await,
+        Err(OperationError::UnsupportedOperation)
+    ));
+    let mut db = fixture.database().await;
+    let attempts: i64 = sqlx::query_scalar("SELECT count(*) FROM signing_attempts")
+        .fetch_one(&mut db)
+        .await
+        .unwrap();
+    assert_eq!(attempts, 0);
+    db.close().await.unwrap();
+    store.close().await.unwrap();
+    for name in ["execution_v1.sqlite", "execution_v1.sqlite-wal"] {
+        if let Ok(bytes) = std::fs::read(fixture.path.join(name)) {
+            assert!(
+                !bytes
+                    .windows(targets[0].len())
+                    .any(|w| w == targets[0].as_bytes())
+            );
+        }
+    }
+    fixture.clock.now.store(160, Ordering::SeqCst);
+    let reopened = fixture.reopen(input).await;
+    let queried = reopened
+        .signing_plan(
+            binding.clone(),
+            prepared.identity().operation_id(),
+            prepared.identity().command_digest(),
+            copy(&proof),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(queried.transaction_id(), transaction);
+    assert_eq!(queried.plan().protected_wire(), wire);
+    let replay = planned(
+        reopened
+            .bind_signing_intents(
+                binding.clone(),
+                public_plan(&prepared, 101, &targets).into(),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    assert_eq!(replay.transaction_id(), transaction);
+    assert_eq!(replay.plan().protected_wire(), wire);
+    let other = vec!["wss://public-plan.fixture.example/other".to_string()];
+    assert!(matches!(
+        reopened
+            .bind_signing_intents(
+                binding,
+                public_plan(&prepared, 101, &other).into(),
+                copy(&proof)
+            )
+            .await,
+        Err(OperationError::IdempotencyConflict)
+    ));
+    reopened.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn public_t1_refuses_wrong_proof_and_fresh_expiry_without_creating_a_plan() {
+    let fixture = Fixture::new();
+    let (store, _, proof, binding) = fixture.create_scoped(200, true).await;
+    let prepared = committed(
+        store
+            .admit_command_and_hold(
+                public_request(&binding, 81, "fresh public T1", "first"),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    let targets = vec!["wss://public-plan.fixture.example/a".to_string()];
+    assert!(matches!(
+        store
+            .bind_signing_intents(
+                binding.clone(),
+                public_plan(&prepared, 100, &targets).into(),
+                AttachmentProof::from_protected_input(&[0; 32]).unwrap()
+            )
+            .await,
+        Err(OperationError::Workspace(WorkspaceError::Unauthorized))
+    ));
+    fixture.clock.now.store(150, Ordering::SeqCst);
+    assert!(matches!(
+        store
+            .bind_signing_intents(
+                binding.clone(),
+                public_plan(&prepared, 100, &targets).into(),
+                copy(&proof)
+            )
+            .await,
+        Err(OperationError::DeadlineExceeded)
+    ));
+    assert!(
+        store
+            .signing_plan(
+                binding,
+                prepared.identity().operation_id(),
+                prepared.identity().command_digest(),
+                copy(&proof)
+            )
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let mut db = fixture.database().await;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM signing_plans")
+        .fetch_one(&mut db)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+    db.close().await.unwrap();
+    store.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn accepted_public_t1_survives_observer_loss_and_close_drains_the_original_plan() {
+    use futures::FutureExt;
+    let fixture = Fixture::new();
+    let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+    let prepared = committed(
+        store
+            .admit_command_and_hold(
+                public_request(&binding, 82, "owned public T1", "first"),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    let plan = public_plan(
+        &prepared,
+        100,
+        &["wss://public-plan.fixture.example/a".to_string()],
+    );
+    let wire = plan.protected_wire().to_vec();
+    let (arrived, resume) = fixture.clock.arm(0);
+    assert!(
+        store
+            .bind_signing_intents(binding.clone(), plan.into(), copy(&proof))
+            .now_or_never()
+            .is_none()
+    );
+    reached(arrived).await;
+    resume.send(()).unwrap();
+    store.close().await.unwrap();
+    let reopened = fixture.reopen(input).await;
+    let retained = reopened
+        .signing_plan(
+            binding,
+            prepared.identity().operation_id(),
+            prepared.identity().command_digest(),
+            copy(&proof),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retained.plan().protected_wire(), wire);
+    assert!(retained.plan().listing().is_some());
+    reopened.close().await.unwrap();
+}
 
 fn public_request(
     binding: &WorkspaceBinding,

@@ -4,7 +4,8 @@ mod issuance;
 use super::*;
 use nostr::{JsonUtil, nips::nip44};
 use radroots_domain::EnvelopeEventId;
-use radroots_protocol::chat::{CapturedDmRoute, ChatReplay, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::plan::SigningReplay;
 use radroots_storage::command::{BoundSigningPlan, PlanBindingOutcome};
 fn keys(last: u8) -> nostr::Keys {
     let mut bytes = [0; 32];
@@ -78,7 +79,7 @@ fn plan(
         UnixSeconds::new(created).unwrap(),
         seals,
         routes,
-        ChatReplay::NonReplayable,
+        SigningReplay::NonReplayable,
     )
     .unwrap()
 }
@@ -111,11 +112,11 @@ async fn complete_private_plan_commits_reopens_and_replays_exact_original_bytes_
     );
     let retained = bound(
         store
-            .bind_signing_intents(binding.clone(), original, copy(&proof))
+            .bind_signing_intents(binding.clone(), (original).into(), copy(&proof))
             .await
             .unwrap(),
     );
-    assert_eq!(retained.plan().seals().len(), 2);
+    assert_eq!(retained.chat_plan().unwrap().seals().len(), 2);
     assert_eq!(retained.plan().protected_wire(), wire);
     assert_eq!(
         retained.prepared().transaction_id(),
@@ -125,7 +126,7 @@ async fn complete_private_plan_commits_reopens_and_replays_exact_original_bytes_
     let altered = plan(prepared.request().chat_command().unwrap(), 100, "changed");
     assert!(matches!(
         store
-            .bind_signing_intents(binding.clone(), altered, copy(&proof))
+            .bind_signing_intents(binding.clone(), (altered).into(), copy(&proof))
             .await,
         Err(OperationError::IdempotencyConflict)
     ));
@@ -134,7 +135,7 @@ async fn complete_private_plan_commits_reopens_and_replays_exact_original_bytes_
     assert_eq!(
         bound(
             store
-                .bind_signing_intents(binding.clone(), replay, copy(&proof))
+                .bind_signing_intents(binding.clone(), (replay).into(), copy(&proof))
                 .await
                 .unwrap()
         )
@@ -193,7 +194,7 @@ async fn no_new_plan_commits_after_window_or_after_current_grant_revocation() {
             fixture.clock.now.store(150, Ordering::SeqCst);
         }
         let result = store
-            .bind_signing_intents(binding, supplied, copy(&proof))
+            .bind_signing_intents(binding, (supplied).into(), copy(&proof))
             .await;
         assert!(if revoked {
             matches!(
@@ -229,11 +230,12 @@ async fn admitted_plan_outlives_its_observer_and_byte_budget_refuses_unadmitted_
     let (arrived, resume) = fixture.clock.arm(0);
     let mut first = store.bind_signing_intents(
         binding.clone(),
-        plan(
+        (plan(
             preparations[0].request().chat_command().unwrap(),
             100,
             "one",
-        ),
+        ))
+        .into(),
         copy(&proof),
     );
     assert!(futures::poll!(first.as_mut()).is_pending());
@@ -243,7 +245,7 @@ async fn admitted_plan_outlives_its_observer_and_byte_budget_refuses_unadmitted_
     for prepared in &preparations[1..4] {
         let mut next = store.bind_signing_intents(
             binding.clone(),
-            plan(prepared.request().chat_command().unwrap(), 100, "one"),
+            (plan(prepared.request().chat_command().unwrap(), 100, "one")).into(),
             copy(&proof),
         );
         assert!(futures::poll!(next.as_mut()).is_pending());
@@ -253,11 +255,12 @@ async fn admitted_plan_outlives_its_observer_and_byte_budget_refuses_unadmitted_
         store
             .bind_signing_intents(
                 binding.clone(),
-                plan(
+                (plan(
                     preparations[4].request().chat_command().unwrap(),
                     100,
                     "one"
-                ),
+                ))
+                .into(),
                 copy(&proof)
             )
             .await,
@@ -312,7 +315,7 @@ async fn expiry_during_protection_and_known_sql_rollback_preserve_unbound_prepar
             sqlx::raw_sql("CREATE TRIGGER reject_plan BEFORE INSERT ON signing_plan_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ABORT,'synthetic storage failure'); END").execute(&mut database).await.unwrap();
         }
         let (arrived, resume) = fixture.clock.arm(1);
-        let mut call = store.bind_signing_intents(binding.clone(), supplied, copy(&proof));
+        let mut call = store.bind_signing_intents(binding.clone(), (supplied).into(), copy(&proof));
         assert!(futures::poll!(call.as_mut()).is_pending());
         reached(arrived).await;
         if expire {
@@ -367,7 +370,7 @@ async fn unknown_plan_completion_latches_until_reopen_and_preserves_original_ope
     let mut database = fixture.database().await;
     sqlx::raw_sql("CREATE TRIGGER unknown_plan BEFORE INSERT ON signing_plan_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ROLLBACK,'synthetic unknown completion'); END").execute(&mut database).await.unwrap();
     let outcome = store
-        .bind_signing_intents(binding.clone(), supplied, copy(&proof))
+        .bind_signing_intents(binding.clone(), (supplied).into(), copy(&proof))
         .await
         .unwrap();
     match outcome {
@@ -428,7 +431,7 @@ async fn retained_plan_refuses_index_manifest_and_part_substitution_without_repa
         store
             .bind_signing_intents(
                 binding.clone(),
-                plan(prepared.request().chat_command().unwrap(), 100, "one"),
+                (plan(prepared.request().chat_command().unwrap(), 100, "one")).into(),
                 copy(&proof),
             )
             .await

@@ -83,7 +83,7 @@ pub(super) async fn prepare(
     let recipients = plan.seals().iter().map(|seal| seal.recipient()).collect();
     bound(
         store
-            .bind_signing_intents(binding.clone(), plan, copy(proof))
+            .bind_signing_intents(binding.clone(), (plan).into(), copy(proof))
             .await
             .unwrap(),
     );
@@ -110,7 +110,7 @@ pub(super) async fn obtain(attempt: &SigningAttempt, missing: bool) -> SealEvide
     let intent = SigningIntent::from_chat_seal(
         attempt.binding().operation_id(),
         attempt.bound_plan().prepared().identity().command_digest(),
-        attempt.seal(),
+        attempt.seal().unwrap(),
         ProviderCall::new(key(), attempt.deadline_unix_ms(), CancellationSignal::new()),
     )
     .unwrap();

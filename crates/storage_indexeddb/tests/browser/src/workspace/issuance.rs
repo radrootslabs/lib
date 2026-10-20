@@ -15,7 +15,7 @@ fn summary(attempt: &SigningAttempt) -> Vec<u8> {
     raw.extend_from_slice(attempt.binding().digest());
     raw.extend_from_slice(&attempt.claimed_at().get().to_be_bytes());
     raw.extend_from_slice(&attempt.deadline_unix_ms().get().to_be_bytes());
-    raw.extend_from_slice(&attempt.seal().event_id());
+    raw.extend_from_slice(&attempt.seal().unwrap().event_id());
     raw
 }
 fn receipt(value: EvidenceReceipt) -> Vec<u8> {
@@ -35,7 +35,7 @@ fn signed_output(
     attempt: &SigningAttempt,
     observed: Option<NonZeroU64>,
 ) -> Result<SealEvidence, JsValue> {
-    let fields = attempt.seal().fields();
+    let fields = attempt.seal().unwrap().fields();
     let context = nostr::secp256k1::Secp256k1::new();
     let mut scalar = [0; 32];
     scalar[31] = 1;
@@ -102,7 +102,8 @@ impl WorkspaceFixture {
             .map_err(|e| JsValue::from_str(e.code()))?
             .ok_or(JsValue::from_str("missing_plan"))?;
         let recipient = bound
-            .plan()
+            .chat_plan()
+            .unwrap()
             .seals()
             .get(index as usize)
             .ok_or(JsValue::from_str("invalid_recipient"))?
@@ -128,7 +129,7 @@ impl WorkspaceFixture {
             identity.operation_id(),
             identity.command_digest(),
             *bound.plan().digest(),
-            original.attempt.seal().recipient(),
+            original.attempt.seal().unwrap().recipient(),
         );
         self.journal()
             .obtained_evidence(request, copied(&self.proof))

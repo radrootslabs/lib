@@ -757,12 +757,13 @@ pub fn radroots_storage::memory::MemoryStorage::transition_backup(&self, radroot
 pub fn radroots_storage::memory::MemoryStorage::transition_restore(&self, radroots_storage::backup::BackupId, radroots_storage::backup::ReliabilityRevision, radroots_storage::backup::RestoreTransition, u64) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::backup::RestoreOperation, radroots_storage::Error>>
 pub fn radroots_storage::memory::MemoryStorage::verify_backup(&self, radroots_storage::backup::BackupPlan, radroots_storage::backup::BackupManifest) -> radroots_transport::source::BoxFuture<'_, core::result::Result<(), radroots_storage::backup::BackupCapabilityError>>
 pub mod radroots_storage::command
+pub use radroots_storage::command::CapturedSigningPlan
 pub use radroots_storage::command::ChatSigningPlan
 pub mod radroots_storage::command::protected
 pub mod radroots_storage::command::protected::issuance
 pub struct radroots_storage::command::protected::issuance::ClaimRecord(_)
 impl radroots_storage::command::protected::issuance::ClaimRecord
-pub fn radroots_storage::command::protected::issuance::ClaimRecord::capture(&radroots_storage::command::SigningAttempt) -> Self
+pub fn radroots_storage::command::protected::issuance::ClaimRecord::capture(&radroots_storage::command::SigningAttempt) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::protected::issuance::ClaimRecord::decode(&[u8], radroots_storage::command::BoundSigningPlan, radroots_identity::key::PublicKey) -> core::result::Result<radroots_storage::command::SigningAttempt, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::protected::issuance::ClaimRecord::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::command::OperationError>
 pub struct radroots_storage::command::protected::issuance::EvidenceManifest(_)
@@ -780,10 +781,10 @@ pub fn radroots_storage::command::protected::issuance::EvidenceManifest::verify(
 pub mod radroots_storage::command::protected::plan
 pub struct radroots_storage::command::protected::plan::PlanManifest(_)
 impl radroots_storage::command::protected::plan::PlanManifest
-pub fn radroots_storage::command::protected::plan::PlanManifest::bind(self, radroots_storage::command::PreparedOperation, radroots_protocol::chat::plan::ChatSigningPlan) -> core::result::Result<radroots_storage::command::BoundSigningPlan, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::plan::PlanManifest::bind(self, radroots_storage::command::PreparedOperation, radroots_protocol::plan::CapturedSigningPlan) -> core::result::Result<radroots_storage::command::BoundSigningPlan, radroots_storage::command::OperationError>
 pub const fn radroots_storage::command::protected::plan::PlanManifest::bound_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_storage::command::protected::plan::PlanManifest::byte_count(&self) -> usize
-pub fn radroots_storage::command::protected::plan::PlanManifest::capture(&radroots_storage::command::PreparedOperation, &radroots_protocol::chat::plan::ChatSigningPlan, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::protected::plan::PlanManifest::capture(&radroots_storage::command::PreparedOperation, &radroots_protocol::plan::CapturedSigningPlan, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::protected::plan::PlanManifest::decode(&[u8], &radroots_storage::command::PreparedOperation) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::protected::plan::PlanManifest::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::command::OperationError>
 pub const fn radroots_storage::command::protected::plan::PlanManifest::part_count(&self) -> usize
@@ -885,9 +886,10 @@ pub fn radroots_storage::command::AdmissionRequest::fmt(&self, &mut core::fmt::F
 pub struct radroots_storage::command::BoundSigningPlan
 impl radroots_storage::command::BoundSigningPlan
 pub const fn radroots_storage::command::BoundSigningPlan::bound_at(&self) -> radroots_domain::context::UnixSeconds
-pub fn radroots_storage::command::BoundSigningPlan::from_committed_store(radroots_storage::command::PreparedOperation, radroots_protocol::chat::plan::ChatSigningPlan, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::command::OperationError>
-pub fn radroots_storage::command::BoundSigningPlan::into_parts(self) -> (radroots_storage::command::PreparedOperation, radroots_protocol::chat::plan::ChatSigningPlan)
-pub const fn radroots_storage::command::BoundSigningPlan::plan(&self) -> &radroots_protocol::chat::plan::ChatSigningPlan
+pub fn radroots_storage::command::BoundSigningPlan::chat_plan(&self) -> core::result::Result<&radroots_protocol::chat::plan::ChatSigningPlan, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::BoundSigningPlan::from_committed_store(radroots_storage::command::PreparedOperation, impl core::convert::Into<radroots_protocol::plan::CapturedSigningPlan>, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::BoundSigningPlan::into_parts(self) -> (radroots_storage::command::PreparedOperation, radroots_protocol::plan::CapturedSigningPlan)
+pub const fn radroots_storage::command::BoundSigningPlan::plan(&self) -> &radroots_protocol::plan::CapturedSigningPlan
 pub const fn radroots_storage::command::BoundSigningPlan::prepared(&self) -> &radroots_storage::command::PreparedOperation
 pub const fn radroots_storage::command::BoundSigningPlan::transaction_id(&self) -> radroots_domain::identifier::TransactionId
 impl core::fmt::Debug for radroots_storage::command::BoundSigningPlan
@@ -932,7 +934,7 @@ pub const fn radroots_storage::command::ClaimSnapshot::attempt_id(self) -> radro
 pub const fn radroots_storage::command::ClaimSnapshot::claimed_at(self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_storage::command::ClaimSnapshot::command_digest(self) -> radroots_domain::identifier::CommandDigest
 pub const fn radroots_storage::command::ClaimSnapshot::event_id(self) -> radroots_domain::identifier::EnvelopeEventId
-pub fn radroots_storage::command::ClaimSnapshot::from_store_report(&radroots_storage::command::SigningAttempt) -> Self
+pub fn radroots_storage::command::ClaimSnapshot::from_store_report(&radroots_storage::command::SigningAttempt) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub const fn radroots_storage::command::ClaimSnapshot::intent(self) -> radroots_protocol::intent::IntentBinding
 pub const fn radroots_storage::command::ClaimSnapshot::operation_id(self) -> radroots_domain::identifier::OperationId
 pub const fn radroots_storage::command::ClaimSnapshot::plan_digest(&self) -> &[u8; 32]
@@ -1135,13 +1137,13 @@ pub const fn radroots_storage::command::SigningAttempt::deadline_unix_ms(&self) 
 pub fn radroots_storage::command::SigningAttempt::from_committed_store(radroots_storage::command::BoundSigningPlan, radroots_identity::key::PublicKey, radroots_domain::identifier::SigningAttemptId, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::SigningAttempt::identity(&self) -> radroots_storage::command::CommitAttempt
 pub fn radroots_storage::command::SigningAttempt::into_bound_plan(self) -> radroots_storage::command::BoundSigningPlan
-pub fn radroots_storage::command::SigningAttempt::seal(&self) -> &radroots_protocol::chat::ChatSeal
+pub fn radroots_storage::command::SigningAttempt::seal(&self) -> core::result::Result<&radroots_protocol::chat::ChatSeal, radroots_storage::command::OperationError>
 pub const fn radroots_storage::command::SigningAttempt::transaction_id(&self) -> radroots_domain::identifier::TransactionId
 impl core::fmt::Debug for radroots_storage::command::SigningAttempt
 pub fn radroots_storage::command::SigningAttempt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait radroots_storage::command::OperationJournal: radroots_storage::workspace::WorkspaceStore
 pub fn radroots_storage::command::OperationJournal::admit_command_and_hold(&self, radroots_storage::command::AdmissionRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::AdmissionOutcome, radroots_storage::command::OperationError>>
-pub fn radroots_storage::command::OperationJournal::bind_signing_intents(&self, radroots_storage::workspace::WorkspaceBinding, radroots_protocol::chat::plan::ChatSigningPlan, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::PlanBindingOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::command::OperationJournal::bind_signing_intents(&self, radroots_storage::workspace::WorkspaceBinding, radroots_protocol::plan::CapturedSigningPlan, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::PlanBindingOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::capture_evidence<'a>(&'a self, radroots_storage::workspace::AttachmentInput, &'a radroots_storage::workspace::AttachmentProof, &'a radroots_storage::command::SealEvidence) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::command::EvidenceCaptureOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::claim_attempt(&self, radroots_storage::command::ClaimAttemptRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::ClaimAttemptOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::delivery_attempt(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, radroots_transport::sink::DeliveryRequestId, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::DeliveryAttempt>, radroots_storage::command::OperationError>>

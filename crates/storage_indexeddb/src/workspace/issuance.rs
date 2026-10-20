@@ -25,18 +25,18 @@ pub(super) enum Claim {
     Absent(BoundSigningPlan, u8),
     Present(SigningAttempt),
 }
-fn position(bound: &BoundSigningPlan, recipient: PublicKey) -> Option<u8> {
-    bound
-        .plan()
+fn position(bound: &BoundSigningPlan, recipient: PublicKey) -> Result<Option<u8>, OperationError> {
+    Ok(bound
+        .chat_plan()?
         .seals()
         .iter()
         .position(|seal| seal.recipient() == recipient)
-        .and_then(|i| u8::try_from(i).ok())
+        .and_then(|i| u8::try_from(i).ok()))
 }
 fn base(state: &State, bound: &BoundSigningPlan, index: u8) -> Result<Sha256, OperationError> {
     let identity = bound.prepared().identity();
     let recipient = bound
-        .plan()
+        .chat_plan()?
         .seals()
         .get(index as usize)
         .ok_or(OperationError::InvalidCommand)?
@@ -270,7 +270,7 @@ impl BrowserWorkspace {
                 return Err(OperationError::IdempotencyConflict);
             }
             let index =
-                position(&bound, request.recipient()).ok_or(OperationError::InvalidCommand)?;
+                position(&bound, request.recipient())?.ok_or(OperationError::InvalidCommand)?;
             let (attempt, fresh, extra) = match state
                 .claim(&view, bound, request.recipient(), index)
                 .await?
@@ -300,7 +300,7 @@ impl BrowserWorkspace {
                         TransactionId::from_bytes(*crypto::random::<32>()?),
                         now,
                     )?;
-                    let encoded = ClaimRecord::capture(&attempt).encode()?;
+                    let encoded = ClaimRecord::capture(&attempt)?.encode()?;
                     let protected = crypto::seal_bound(
                         state.provider.as_ref(),
                         &state.reference,
@@ -370,7 +370,7 @@ impl BrowserWorkspace {
                 if bound.plan().digest() != request.plan_digest() {
                     return Err(OperationError::IdempotencyConflict);
                 }
-                if let Some(index) = position(&bound, request.recipient()) {
+                if let Some(index) = position(&bound, request.recipient())? {
                     match state
                         .claim(&view, bound, request.recipient(), index)
                         .await?
@@ -437,7 +437,7 @@ impl BrowserWorkspace {
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?;
             let index =
-                position(&bound, supplied.recipient()).ok_or(OperationError::InvalidEvidence)?;
+                position(&bound, supplied.recipient())?.ok_or(OperationError::InvalidEvidence)?;
             let attempt = match state
                 .claim(&view, bound, supplied.recipient(), index)
                 .await?
@@ -533,7 +533,7 @@ impl BrowserWorkspace {
                 if bound.plan().digest() != request.plan_digest() {
                     return Err(OperationError::IdempotencyConflict);
                 }
-                if let Some(index) = position(&bound, request.recipient()) {
+                if let Some(index) = position(&bound, request.recipient())? {
                     match state
                         .claim(&view, bound, request.recipient(), index)
                         .await?

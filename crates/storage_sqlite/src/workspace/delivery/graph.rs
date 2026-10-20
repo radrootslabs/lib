@@ -40,7 +40,7 @@ fn allowed_routes(
 ) -> Result<BTreeMap<PublicKey, BTreeSet<String>>, OperationError> {
     let mut result = BTreeMap::new();
     for route in bound
-        .plan()
+        .chat_plan()?
         .routes()
         .iter()
         .filter(|route| route.participant() == recipient)

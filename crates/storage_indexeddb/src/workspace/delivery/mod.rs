@@ -63,7 +63,7 @@ fn routes(
 ) -> Result<(), OperationError> {
     let mut selected = None;
     for route in bound
-        .plan()
+        .chat_plan()?
         .routes()
         .iter()
         .filter(|route| route.participant() == recipient)

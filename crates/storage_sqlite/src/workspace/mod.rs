@@ -309,7 +309,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
     fn bind_signing_intents(
         &self,
         binding: WorkspaceBinding,
-        plan: radroots_storage::command::ChatSigningPlan,
+        plan: radroots_storage::command::CapturedSigningPlan,
         proof: AttachmentProof,
     ) -> BoxFuture<
         '_,

@@ -3,8 +3,9 @@ use crate::workspace::{operation, plan as plan_store};
 use nostr::{JsonUtil, nips::nip44};
 use radroots_domain::{CommandContextData, EnvelopeEventId, OperationId};
 use radroots_protocol::{
-    chat::{CapturedDmRoute, ChatReplay, ChatRumor, ChatSeal, ChatSigningPlan},
+    chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan},
     command::{CapturedChatCommand, InquireInput},
+    plan::SigningReplay,
 };
 use radroots_storage::command::{
     AdmissionOutcome, AdmissionRequest, OperationJournal, PlanBindingOutcome,
@@ -111,7 +112,7 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
         UnixSeconds::new(100).unwrap(),
         vec![seal],
         vec![route],
-        ChatReplay::NonReplayable,
+        SigningReplay::NonReplayable,
     )
     .unwrap();
     let digest = *plan.digest();
@@ -132,7 +133,7 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
     clock.0.store(90, Ordering::SeqCst);
     assert!(matches!(
         store
-            .bind_signing_intents(binding.clone(), rollback_plan, copied())
+            .bind_signing_intents(binding.clone(), (rollback_plan).into(), copied())
             .await,
         Err(radroots_storage::command::OperationError::Workspace(
             WorkspaceError::Unavailable
@@ -155,7 +156,7 @@ async fn authenticated_plan_manifest_parts_and_transaction_comparisons_refuse_ea
     clock.0.store(100, Ordering::SeqCst);
     assert!(matches!(
         store
-            .bind_signing_intents(binding, plan, copied())
+            .bind_signing_intents(binding, (plan).into(), copied())
             .await
             .unwrap(),
         PlanBindingOutcome::Committed(_)

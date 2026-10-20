@@ -92,7 +92,7 @@ impl ChatInstallation {
         }
         Ok(Self {
             plan: *bound.plan().digest(),
-            message: bound.plan().message_id(),
+            message: bound.chat_plan()?.message_id(),
             preparation_transaction: bound.prepared().transaction_id(),
             plan_transaction: bound.transaction_id(),
             transaction,
@@ -173,7 +173,7 @@ impl PublicationWork {
             || installation.operation_id() != evidence.operation_id()
             || installation.command_digest() != evidence.command_digest()
             || installation.plan_digest() != bound.plan().digest()
-            || installation.message_id() != bound.plan().message_id()
+            || installation.message_id() != bound.chat_plan()?.message_id()
             || installation.preparation_transaction_id() != bound.prepared().transaction_id()
             || installation.plan_transaction_id() != bound.transaction_id()
             || queued_at < installation.installed_at()
@@ -238,7 +238,7 @@ fn check_evidence(
 ) -> Result<(), OperationError> {
     let identity = bound.prepared().identity();
     let seal = bound
-        .plan()
+        .chat_plan()?
         .seals()
         .iter()
         .find(|seal| seal.recipient() == evidence.recipient())

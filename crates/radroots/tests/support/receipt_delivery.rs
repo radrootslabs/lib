@@ -96,7 +96,7 @@ impl Ready {
         let recipient = prepared.request().chat_command().unwrap().peer();
         bound(
             store
-                .bind_signing_intents(binding.clone(), plan, copy(&proof))
+                .bind_signing_intents(binding.clone(), (plan).into(), copy(&proof))
                 .await
                 .unwrap(),
         );
@@ -119,7 +119,7 @@ impl Ready {
         let intent = SigningIntent::from_chat_seal(
             claim.binding().operation_id(),
             prepared.identity().command_digest(),
-            claim.seal(),
+            claim.seal().unwrap(),
             ProviderCall::new(key(), claim.deadline_unix_ms(), CancellationSignal::new()),
         )
         .unwrap();

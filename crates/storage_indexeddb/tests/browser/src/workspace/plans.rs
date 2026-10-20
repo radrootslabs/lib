@@ -8,7 +8,8 @@ use nostr::{
     prelude::rand::{CryptoRng, Error, RngCore},
 };
 use radroots_domain::{EnvelopeEventId, UnixSeconds};
-use radroots_protocol::chat::{CapturedDmRoute, ChatReplay, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::plan::SigningReplay;
 use radroots_storage::command::{BoundSigningPlan, PlanBindingOutcome};
 use radroots_storage::workspace::WorkspaceStore;
 use wasm_bindgen::{JsCast, prelude::*};
@@ -143,7 +144,7 @@ impl WorkspaceFixture {
             );
         }
         Ok(
-            ChatSigningPlan::new(command, time, seals, routes, ChatReplay::NonReplayable)
+            ChatSigningPlan::new(command, time, seals, routes, SigningReplay::NonReplayable)
                 .unwrap()
                 .protected_wire()
                 .to_vec(),
@@ -175,7 +176,11 @@ impl WorkspaceFixture {
         hook.call0(&JsValue::NULL)?;
         match self
             .journal()
-            .bind_signing_intents(request.binding().clone(), plan, copied(&self.proof))
+            .bind_signing_intents(
+                request.binding().clone(),
+                (plan).into(),
+                copied(&self.proof),
+            )
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
         {
@@ -205,7 +210,7 @@ impl WorkspaceFixture {
             .map_err(super::fail)?;
         let result = self
             .journal()
-            .bind_signing_intents(foreign, plan, copied(&self.proof))
+            .bind_signing_intents(foreign, (plan).into(), copied(&self.proof))
             .await;
         sibling.close().await?;
         result.map(|_| ()).map_err(|e| JsValue::from_str(e.code()))
@@ -227,7 +232,11 @@ impl WorkspaceFixture {
         let plan = ChatSigningPlan::parse(request.chat_command().unwrap(), &wire).unwrap();
         if self
             .journal()
-            .bind_signing_intents(request.binding().clone(), plan, copied(&self.proof))
+            .bind_signing_intents(
+                request.binding().clone(),
+                (plan).into(),
+                copied(&self.proof),
+            )
             .now_or_never()
             .is_some()
         {
@@ -265,7 +274,11 @@ impl WorkspaceFixture {
         }
         let outcome = self
             .journal()
-            .bind_signing_intents(request.binding().clone(), plan, copied(&self.proof))
+            .bind_signing_intents(
+                request.binding().clone(),
+                (plan).into(),
+                copied(&self.proof),
+            )
             .await
             .map_err(|e| JsValue::from_str(e.code()))?;
         match outcome {

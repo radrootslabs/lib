@@ -1,0 +1,150 @@
+//! Common immutable signing-plan data, with explicit artifact families.
+use crate::{command::CapturedCommand, nip01::WireError};
+use core::fmt;
+use radroots_domain::{CommandDigest, OperationId, UnixSeconds};
+
+/// Captured provider declaration. Execution must independently verify current
+/// support before any reissue; this data authenticates no provider guarantee.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SigningReplay {
+    /// Uncertain invocation requires reconciliation, never automatic reissue.
+    NonReplayable,
+    /// The actual local provider independently qualifies safe exact reissue.
+    LocalReplaySafe,
+    /// The actual provider independently binds exact replay to request identity.
+    ExactReplayByRequestId,
+}
+impl SigningReplay {
+    pub(crate) const fn code(self) -> u8 {
+        match self {
+            Self::NonReplayable => 0,
+            Self::LocalReplaySafe => 1,
+            Self::ExactReplayByRequestId => 2,
+        }
+    }
+    pub(crate) fn from_code(code: u8) -> Result<Self, WireError> {
+        match code {
+            0 => Ok(Self::NonReplayable),
+            1 => Ok(Self::LocalReplaySafe),
+            2 => Ok(Self::ExactReplayByRequestId),
+            _ => Err(WireError::InvalidInput),
+        }
+    }
+}
+
+/// Exact complete plan data. No public artifact is represented as a chat seal,
+/// and no optional recipient is filled with a synthetic participant.
+pub enum CapturedSigningPlan {
+    /// Original private profile, preserving its established binary bytes.
+    #[cfg(feature = "chat")]
+    Chat(crate::chat::ChatSigningPlan),
+    /// Exact known-kind public listing preimage and selected target descriptors.
+    #[cfg(feature = "listing")]
+    Listing(crate::listing::PublicSigningPlan),
+}
+impl CapturedSigningPlan {
+    /// Reconstructs only the family of the independently retained command.
+    pub fn parse(command: &CapturedCommand, wire: &[u8]) -> Result<Self, WireError> {
+        match command {
+            #[cfg(feature = "chat")]
+            CapturedCommand::Chat(command) => {
+                crate::chat::ChatSigningPlan::parse(command, wire).map(Self::Chat)
+            }
+            #[cfg(feature = "listing")]
+            CapturedCommand::Listing(command) => {
+                crate::listing::PublicSigningPlan::parse(command, wire).map(Self::Listing)
+            }
+            #[cfg(not(feature = "chat"))]
+            CapturedCommand::Chat(_) => Err(WireError::InvalidInput),
+        }
+    }
+    /// Original operation identity.
+    pub const fn operation_id(&self) -> OperationId {
+        match self {
+            #[cfg(feature = "chat")]
+            Self::Chat(p) => p.operation_id(),
+            #[cfg(feature = "listing")]
+            Self::Listing(p) => p.operation_id(),
+        }
+    }
+    /// Exact command commitment.
+    pub const fn command_digest(&self) -> CommandDigest {
+        match self {
+            #[cfg(feature = "chat")]
+            Self::Chat(p) => p.command_digest(),
+            #[cfg(feature = "listing")]
+            Self::Listing(p) => p.command_digest(),
+        }
+    }
+    /// Original business event time.
+    pub const fn created_at(&self) -> UnixSeconds {
+        match self {
+            #[cfg(feature = "chat")]
+            Self::Chat(p) => p.created_at(),
+            #[cfg(feature = "listing")]
+            Self::Listing(p) => p.created_at(),
+        }
+    }
+    /// Historical declaration, without permission to reissue.
+    pub const fn replay(&self) -> SigningReplay {
+        match self {
+            #[cfg(feature = "chat")]
+            Self::Chat(p) => p.replay(),
+            #[cfg(feature = "listing")]
+            Self::Listing(p) => p.replay(),
+        }
+    }
+    /// Complete immutable protected representation.
+    pub fn protected_wire(&self) -> &[u8] {
+        match self {
+            #[cfg(feature = "chat")]
+            Self::Chat(p) => p.protected_wire(),
+            #[cfg(feature = "listing")]
+            Self::Listing(p) => p.protected_wire(),
+        }
+    }
+    /// Commitment to every retained field.
+    pub const fn digest(&self) -> &[u8; 32] {
+        match self {
+            #[cfg(feature = "chat")]
+            Self::Chat(p) => p.digest(),
+            #[cfg(feature = "listing")]
+            Self::Listing(p) => p.digest(),
+        }
+    }
+    /// Borrows actual private preimages only.
+    #[cfg(feature = "chat")]
+    pub const fn chat(&self) -> Option<&crate::chat::ChatSigningPlan> {
+        match self {
+            Self::Chat(p) => Some(p),
+            #[cfg(feature = "listing")]
+            Self::Listing(_) => None,
+        }
+    }
+    /// Borrows actual public data only.
+    #[cfg(feature = "listing")]
+    pub const fn listing(&self) -> Option<&crate::listing::PublicSigningPlan> {
+        match self {
+            Self::Listing(p) => Some(p),
+            #[cfg(feature = "chat")]
+            Self::Chat(_) => None,
+        }
+    }
+}
+#[cfg(feature = "chat")]
+impl From<crate::chat::ChatSigningPlan> for CapturedSigningPlan {
+    fn from(p: crate::chat::ChatSigningPlan) -> Self {
+        Self::Chat(p)
+    }
+}
+#[cfg(feature = "listing")]
+impl From<crate::listing::PublicSigningPlan> for CapturedSigningPlan {
+    fn from(p: crate::listing::PublicSigningPlan) -> Self {
+        Self::Listing(p)
+    }
+}
+impl fmt::Debug for CapturedSigningPlan {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("CapturedSigningPlan(<redacted>)")
+    }
+}

@@ -7,7 +7,8 @@ use super::{HostBound, HostFuture, Shared, SignerSession};
 use alloc::{string::String, vec::Vec};
 use core::num::NonZeroU64;
 use radroots_domain::{PublicKey, UnixSeconds};
-use radroots_protocol::chat::{CapturedDmRoute, ChatReplay, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::plan::SigningReplay;
 use radroots_signing::{
     issuance::{OutcomeKind, SigningIntent},
     provider::{PrivateCiphertext, PrivateText, ProviderCall},
@@ -209,7 +210,7 @@ impl InquiryRuntime {
                 let signer = signer.as_ref().ok_or(OperationError::Unauthorized)?;
                 let plan = self.plan(&prepared, signer).await?;
                 match journal
-                    .bind_signing_intents(binding.clone(), plan, copy(proof)?)
+                    .bind_signing_intents(binding.clone(), plan.into(), copy(proof)?)
                     .await?
                 {
                     PlanBindingOutcome::Committed(bound) => bound,
@@ -282,13 +283,13 @@ impl InquiryRuntime {
             .ok_or(OperationError::Unauthorized)?
         {
             radroots_signing::recovery::ReplayCapability::NonReplayable => {
-                ChatReplay::NonReplayable
+                SigningReplay::NonReplayable
             }
             radroots_signing::recovery::ReplayCapability::LocalReplaySafe => {
-                ChatReplay::LocalReplaySafe
+                SigningReplay::LocalReplaySafe
             }
             radroots_signing::recovery::ReplayCapability::ExactReplayByRequestId => {
-                ChatReplay::ExactReplayByRequestId
+                SigningReplay::ExactReplayByRequestId
             }
             _ => return Err(OperationError::Unauthorized),
         };
@@ -340,7 +341,7 @@ impl InquiryRuntime {
     ) -> Result<(), OperationError> {
         let prepared = bound.prepared();
         let binding = prepared.request().binding();
-        for seal in bound.plan().seals() {
+        for seal in bound.chat_plan()?.seals() {
             let select = || {
                 ClaimAttemptRequest::new(
                     binding.clone(),
@@ -379,9 +380,9 @@ impl InquiryRuntime {
             let intent = SigningIntent::from_chat_seal(
                 prepared.identity().operation_id(),
                 prepared.identity().command_digest(),
-                attempt.seal(),
+                attempt.seal()?,
                 ProviderCall::new(
-                    attempt.seal().fields().author,
+                    attempt.seal()?.fields().author,
                     attempt.deadline_unix_ms(),
                     CancellationSignal::new(),
                 ),
@@ -454,7 +455,7 @@ impl InquiryRuntime {
             }
             let recipient = work.evidence().recipient();
             let route = bound
-                .plan()
+                .chat_plan()?
                 .routes()
                 .iter()
                 .find(|route| route.participant() == recipient)

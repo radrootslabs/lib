@@ -5,7 +5,7 @@ use super::{
 };
 use radroots_domain::{CommandDigest, OperationId, PublicKey};
 use radroots_storage::command::{
-    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSeal, ChatSigningPlan,
+    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSeal, CapturedSigningPlan,
     ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt, DeliveryAttempt,
     DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryObservation,
     DeliveryObservationOutcome, EnvelopeCandidate, EvidenceCaptureOutcome, InstallationOutcome,
@@ -107,7 +107,7 @@ enum Job {
     ),
     BindPlan(
         Box<WorkspaceBinding>,
-        ChatSigningPlan,
+        CapturedSigningPlan,
         AttachmentProof,
         Reply<PlanBindingOutcome, OperationError>,
     ),
@@ -815,7 +815,7 @@ impl Handle {
     pub(super) async fn bind_plan(
         &self,
         binding: WorkspaceBinding,
-        plan: ChatSigningPlan,
+        plan: CapturedSigningPlan,
         proof: AttachmentProof,
     ) -> Result<PlanBindingOutcome, OperationError> {
         let anchor = CommitAttempt::new(

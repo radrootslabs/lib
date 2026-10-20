@@ -35,20 +35,20 @@ pub struct ClaimSnapshot {
 impl ClaimSnapshot {
     /// Copies a structural store report; no backend claim or nonissuance proof
     /// is created by this conversion.
-    pub fn from_store_report(attempt: &SigningAttempt) -> Self {
+    pub fn from_store_report(attempt: &SigningAttempt) -> Result<Self, OperationError> {
         let identity = attempt.bound_plan().prepared().identity();
-        Self {
+        Ok(Self {
             workspace: identity.workspace_id(),
             operation: identity.operation_id(),
             command: identity.command_digest(),
             plan: *attempt.bound_plan().plan().digest(),
-            recipient: attempt.seal().recipient(),
+            recipient: attempt.seal()?.recipient(),
             attempt: attempt.attempt_id(),
             transaction: attempt.transaction_id(),
             claimed_at: attempt.claimed_at(),
-            event: EnvelopeEventId::from_bytes(attempt.seal().event_id()),
+            event: EnvelopeEventId::from_bytes(attempt.seal()?.event_id()),
             intent: attempt.binding(),
-        }
+        })
     }
     /// Original workspace identity.
     pub const fn workspace_id(self) -> WorkspaceId {
@@ -362,7 +362,7 @@ impl OperationSnapshot {
                 continue;
             };
             let seal = bound
-                .plan()
+                .chat_plan()?
                 .seals()
                 .iter()
                 .find(|seal| seal.recipient() == expected)
@@ -676,7 +676,9 @@ impl OperationSnapshot {
     }
     /// Exact original logical message identity, separate from seal event IDs.
     pub fn message_id(&self) -> Option<MessageId> {
-        self.bound_plan().map(|bound| bound.plan().message_id())
+        self.bound_plan()
+            .and_then(|bound| bound.plan().chat())
+            .map(|plan| plan.message_id())
     }
     /// Complete sorted unique recipient set and independent outcomes.
     pub fn recipients(&self) -> &[RecipientSnapshot] {

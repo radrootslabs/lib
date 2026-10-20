@@ -1,5 +1,6 @@
 //! Immutable complete known-kind signing data, without execution authority.
 use super::{CapturedDmRoute, ChatRumor, ChatSeal};
+use crate::plan::SigningReplay;
 use crate::{command::CapturedChatCommand, nip01::WireError};
 use alloc::{boxed::Box, collections::BTreeSet, string::String, vec::Vec};
 use core::fmt;
@@ -13,15 +14,6 @@ use zeroize::Zeroizing;
 pub const PLAN_MAX_BYTES: usize = 384 * 1024;
 const MAGIC: &[u8] = b"radroots.chat.signing_plan.v1\0";
 
-/// Captured provider declaration. Data never establishes a provider guarantee
-/// or permits reissue after an uncertain effect; execution revalidates support.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ChatReplay {
-    NonReplayable,
-    LocalReplaySafe,
-    ExactReplayByRequestId,
-}
-
 /// Complete sorted recipient set, exact seal preimages and retained route
 /// observations. Construction verifies structural provenance only: encryption
 /// authentication, signed route verification, network approval, provider
@@ -31,7 +23,7 @@ pub struct ChatSigningPlan {
     command_digest: CommandDigest,
     message_id: MessageId,
     created_at: UnixSeconds,
-    replay: ChatReplay,
+    replay: SigningReplay,
     seals: Box<[ChatSeal]>,
     routes: Box<[CapturedDmRoute]>,
     wire: Zeroizing<Vec<u8>>,
@@ -45,7 +37,7 @@ impl ChatSigningPlan {
         created_at: UnixSeconds,
         seals: Vec<ChatSeal>,
         routes: Vec<CapturedDmRoute>,
-        replay: ChatReplay,
+        replay: SigningReplay,
     ) -> Result<Self, WireError> {
         let rumor = ChatRumor::from_command(command, created_at)?;
         if seals.len() != rumor.recipients().len() || routes.len() != seals.len() {
@@ -99,9 +91,9 @@ impl ChatSigningPlan {
         wire.extend_from_slice(rumor.message_id().as_bytes());
         wire.extend_from_slice(&created_at.get().to_be_bytes());
         wire.push(match replay {
-            ChatReplay::NonReplayable => 0,
-            ChatReplay::LocalReplaySafe => 1,
-            ChatReplay::ExactReplayByRequestId => 2,
+            SigningReplay::NonReplayable => 0,
+            SigningReplay::LocalReplaySafe => 1,
+            SigningReplay::ExactReplayByRequestId => 2,
         });
         wire.push(seals.len() as u8);
         for (seal, route) in seals.iter().zip(&routes) {
@@ -154,9 +146,9 @@ impl ChatSigningPlan {
             return Err(WireError::InvalidInput);
         }
         let replay = match input.byte()? {
-            0 => ChatReplay::NonReplayable,
-            1 => ChatReplay::LocalReplaySafe,
-            2 => ChatReplay::ExactReplayByRequestId,
+            0 => SigningReplay::NonReplayable,
+            1 => SigningReplay::LocalReplaySafe,
+            2 => SigningReplay::ExactReplayByRequestId,
             _ => return Err(WireError::InvalidInput),
         };
         if usize::from(input.byte()?) != rumor.recipients().len() {
@@ -221,7 +213,7 @@ impl ChatSigningPlan {
     pub const fn created_at(&self) -> UnixSeconds {
         self.created_at
     }
-    pub const fn replay(&self) -> ChatReplay {
+    pub const fn replay(&self) -> SigningReplay {
         self.replay
     }
     pub fn seals(&self) -> &[ChatSeal] {

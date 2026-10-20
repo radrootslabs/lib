@@ -9,6 +9,7 @@ use radroots_domain::{
 };
 pub use radroots_protocol::chat::ChatSigningPlan;
 use radroots_protocol::command::{CapturedChatCommand, CapturedCommand};
+pub use radroots_protocol::plan::CapturedSigningPlan;
 use radroots_transport::BoxFuture;
 
 #[cfg(feature = "protected_outbox")]
@@ -413,7 +414,7 @@ pub trait OperationJournal: WorkspaceStore {
     fn bind_signing_intents(
         &self,
         binding: WorkspaceBinding,
-        plan: ChatSigningPlan,
+        plan: CapturedSigningPlan,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<PlanBindingOutcome, OperationError>>;
     /// Queries original complete plan bytes under current access, including
@@ -448,7 +449,7 @@ pub trait OperationJournal: WorkspaceStore {
 /// A custom adapter's structural report does not qualify durable execution.
 pub struct BoundSigningPlan {
     prepared: PreparedOperation,
-    plan: ChatSigningPlan,
+    plan: Box<CapturedSigningPlan>,
     transaction_id: TransactionId,
     bound_at: radroots_domain::UnixSeconds,
 }
@@ -456,10 +457,11 @@ impl BoundSigningPlan {
     /// Compares exact original command and fixed first-issue window.
     pub fn from_committed_store(
         prepared: PreparedOperation,
-        plan: ChatSigningPlan,
+        plan: impl Into<CapturedSigningPlan>,
         transaction_id: TransactionId,
         bound_at: radroots_domain::UnixSeconds,
     ) -> Result<Self, OperationError> {
+        let plan = plan.into();
         if plan.operation_id() != prepared.identity().operation_id()
             || plan.command_digest() != prepared.identity().command_digest()
             || bound_at < prepared.issuance_window().prepared_at()
@@ -472,24 +474,29 @@ impl BoundSigningPlan {
         // Reconstruct against the actually retained command, rather than trust
         // a matching digest descriptor attached to unrelated plan fields.
         let checked =
-            ChatSigningPlan::parse(prepared.request().chat_command()?, plan.protected_wire())
+            CapturedSigningPlan::parse(prepared.request().command(), plan.protected_wire())
                 .map_err(|_| OperationError::RecoveryRequired)?;
         Ok(Self {
             prepared,
-            plan: checked,
+            plan: Box::new(checked),
             transaction_id,
             bound_at,
         })
     }
     /// Transfers retained command and exact plan without changing their identities.
-    pub fn into_parts(self) -> (PreparedOperation, ChatSigningPlan) {
-        (self.prepared, self.plan)
+    pub fn into_parts(self) -> (PreparedOperation, CapturedSigningPlan) {
+        (self.prepared, *self.plan)
     }
     pub const fn prepared(&self) -> &PreparedOperation {
         &self.prepared
     }
-    pub const fn plan(&self) -> &ChatSigningPlan {
+    pub const fn plan(&self) -> &CapturedSigningPlan {
         &self.plan
+    }
+    /// Borrows actual private preimages only; public plans never acquire an
+    /// invented seal, peer or message through a private effect port.
+    pub fn chat_plan(&self) -> Result<&ChatSigningPlan, OperationError> {
+        self.plan.chat().ok_or(OperationError::UnsupportedOperation)
     }
     pub const fn transaction_id(&self) -> TransactionId {
         self.transaction_id

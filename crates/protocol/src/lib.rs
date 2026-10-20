@@ -26,6 +26,11 @@ pub mod chat;
 #[cfg(feature = "listing")]
 pub mod listing;
 
+/// Complete typed signing plans. Retention and provider declarations create no
+/// signing authority, signature, installed result or publication evidence.
+#[cfg(any(feature = "chat", feature = "listing"))]
+pub mod plan;
+
 #[cfg(all(test, not(feature = "std")))]
 extern crate std;
 

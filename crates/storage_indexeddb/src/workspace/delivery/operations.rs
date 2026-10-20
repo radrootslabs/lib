@@ -113,7 +113,7 @@ impl BrowserWorkspace {
                 .bound_plan()
                 .ok_or(OperationError::RecoveryRequired)?;
             let recipient = bound
-                .plan()
+                .chat_plan()?
                 .seals()
                 .iter()
                 .position(|seal| seal.recipient() == evidence.recipient())

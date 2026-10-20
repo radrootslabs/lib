@@ -64,7 +64,7 @@ impl RetainedGraph {
                 let mut bound =
                     BoundSigningPlan::from_committed_store(prepared, plan, transaction, time)?;
                 let keys: Vec<PublicKey> = bound
-                    .plan()
+                    .chat_plan()?
                     .seals()
                     .iter()
                     .map(|seal| seal.recipient())
@@ -73,7 +73,7 @@ impl RetainedGraph {
                     let (returned, claim) =
                         attempt::read(connection, selected, bound, recipient, crypto).await?;
                     let expected = returned
-                        .plan()
+                        .chat_plan()?
                         .seals()
                         .iter()
                         .find(|seal| seal.recipient() == recipient)
@@ -88,7 +88,7 @@ impl RetainedGraph {
                             time,
                         )?;
                         let captured = evidence::read(connection, &attempt, crypto).await?;
-                        let claim = ClaimSnapshot::from_store_report(&attempt);
+                        let claim = ClaimSnapshot::from_store_report(&attempt)?;
                         let (obtained, evidence, original) = match captured {
                             Some((value, protected)) => {
                                 (Some(protected.receipt), Some(protected), Some(value))

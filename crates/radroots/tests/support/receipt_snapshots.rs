@@ -335,10 +335,13 @@ async fn full_receipts_keep_obtained_and_unknown_recipients_separate_and_bind_or
         original.role(),
         radroots_protocol::intent::ArtifactRole::BusinessSeal
     );
-    assert_eq!(original.recipient(), Some(first.seal().recipient()));
+    assert_eq!(
+        original.recipient(),
+        Some(first.seal().unwrap().recipient())
+    );
     assert_eq!(
         original.expected_event().unwrap().as_bytes(),
-        &first.seal().event_id()
+        &first.seal().unwrap().event_id()
     );
     assert_eq!(original.attempt_id(), Some(first.attempt_id()));
     assert_eq!(
@@ -464,7 +467,7 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
     let message = plan.message_id();
     let plan_receipt = bound(
         store
-            .bind_signing_intents(binding.clone(), plan, copy(&proof))
+            .bind_signing_intents(binding.clone(), (plan).into(), copy(&proof))
             .await
             .unwrap(),
     );

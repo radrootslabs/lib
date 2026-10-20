@@ -8,8 +8,9 @@ use radroots_domain::{
     CommandContextData, EnvelopeEventId, OperationId, SigningAttemptId, TransactionId,
 };
 use radroots_protocol::{
-    chat::{CapturedDmRoute, ChatReplay, ChatRumor, ChatSeal, ChatSigningPlan},
+    chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan},
     command::{CapturedChatCommand, InquireInput},
+    plan::SigningReplay,
 };
 use radroots_storage::command::{
     AdmissionOutcome, AdmissionRequest, BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest,
@@ -214,7 +215,7 @@ impl Issued {
             UnixSeconds::new(100).unwrap(),
             vec![seal],
             vec![route],
-            ChatReplay::NonReplayable,
+            SigningReplay::NonReplayable,
         )
         .unwrap();
         let digest = *plan.digest();
@@ -233,7 +234,7 @@ impl Issued {
         ));
         assert!(matches!(
             store
-                .bind_signing_intents(binding.clone(), plan, copied())
+                .bind_signing_intents(binding.clone(), (plan).into(), copied())
                 .await
                 .unwrap(),
             PlanBindingOutcome::Committed(_)
@@ -249,9 +250,9 @@ impl Issued {
             ClaimAttemptOutcome::Claimed(value) => value,
             _ => panic!("first claim must confirm"),
         };
-        let fields = attempt.seal().fields();
+        let fields = attempt.seal().unwrap().fields();
         let signed = nostr::UnsignedEvent {
-            id: Some(nostr::EventId::from_slice(&attempt.seal().event_id()).unwrap()),
+            id: Some(nostr::EventId::from_slice(&attempt.seal().unwrap().event_id()).unwrap()),
             pubkey: keys.public_key(),
             created_at: nostr::Timestamp::from_secs(fields.created_at),
             kind: nostr::Kind::Custom(13),
@@ -320,7 +321,7 @@ async fn authenticated_attempt_headers_and_all_indexed_facts_are_checked_without
     let issued = Issued::new().await;
     let mut database = issued.database().await;
     let crypto = issued.fixture.crypto();
-    let scope = attempt_store::scope(&issued.attempt);
+    let scope = attempt_store::scope(&issued.attempt).unwrap();
     let original: Vec<u8> = sqlx::query_scalar("SELECT protected FROM signing_attempts")
         .fetch_one(&mut database)
         .await
@@ -447,7 +448,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
     let issued = Issued::new().await;
     let mut database = issued.database().await;
     let crypto = issued.fixture.crypto();
-    let scope = attempt_store::scope(&issued.attempt);
+    let scope = attempt_store::scope(&issued.attempt).unwrap();
     let original: Vec<u8> = sqlx::query_scalar("SELECT protected FROM seal_evidence")
         .fetch_one(&mut database)
         .await

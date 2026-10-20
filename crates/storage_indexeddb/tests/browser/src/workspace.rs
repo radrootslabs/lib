@@ -148,27 +148,27 @@ impl WorkspaceFixture {
         }
     }
     pub async fn admit_public(&self, n: u8) -> Result<(), JsValue> {
-        let request = self.request(n, false).await?;
-        let input = serde_json::json!({"id":"01".repeat(16),"title":"Carrots","summary":"Quote required",
-            "description_markdown":"Public terms","published_at":"1000","profile":{
-            "profile":"radroots.listing","version":1,"state":"active",
-            "product":{"name":"Carrots","description":"","producer":null,"origin_summary":null},
-            "default_option":"02".repeat(32),"options":[{"id":"02".repeat(32),"label":"One bunch",
-            "unit":{"type":"package","label":"bunch","contents":{"type":"unspecified"}},
-            "increment":"1","minimum":"1","price":{"type":"quote_required"},
-            "supply":{"type":"unknown"},"lead_seconds":"0"}],
-            "fulfillment":{"modes":["pickup"],"area":"Example region","lead_seconds":"0"},
-            "authority":null,"media":[]}});
-        let wire = serde_json::to_vec(&serde_json::json!({"type":"listing.publish",
-            "context":request.command().context(),"input":input}))
-        .unwrap();
-        let public = AdmissionRequest::from_protected_wire(request.binding().clone(), &wire)
-            .map_err(|e| JsValue::from_str(e.code()))?;
+        let public = self.public_request(n).await?;
         self.journal()
             .admit_command_and_hold(public, copied(&self.proof))
             .await
             .map_err(|e| JsValue::from_str(e.code()))?;
         Err(JsValue::from_str("unexpected_public_commit"))
+    }
+    pub async fn bind_public(&self, n: u8) -> Result<(), JsValue> {
+        let public = self.public_request(n).await?;
+        let plan = radroots_protocol::listing::PublicSigningPlan::capture(
+            public.command().listing().unwrap(),
+            UnixSeconds::new(1000).unwrap(),
+            &["wss://public-plan.fixture.example/a".to_string()],
+            radroots_protocol::plan::SigningReplay::NonReplayable,
+        )
+        .unwrap();
+        self.journal()
+            .bind_signing_intents(public.binding().clone(), plan.into(), copied(&self.proof))
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?;
+        Err(JsValue::from_str("unexpected_public_plan"))
     }
     pub async fn query(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let binding = self
@@ -438,6 +438,25 @@ impl WorkspaceFixture {
             proof,
             clock,
         })
+    }
+    async fn public_request(&self, n: u8) -> Result<AdmissionRequest, JsValue> {
+        let request = self.request(n, false).await?;
+        let input = serde_json::json!({"id":"01".repeat(16),"title":"Carrots","summary":"Quote required",
+            "description_markdown":"Public terms","published_at":"1000","profile":{
+            "profile":"radroots.listing","version":1,"state":"active",
+            "product":{"name":"Carrots","description":"","producer":null,"origin_summary":null},
+            "default_option":"02".repeat(32),"options":[{"id":"02".repeat(32),"label":"One bunch",
+            "unit":{"type":"package","label":"bunch","contents":{"type":"unspecified"}},
+            "increment":"1","minimum":"1","price":{"type":"quote_required"},
+            "supply":{"type":"unknown"},"lead_seconds":"0"}],
+            "fulfillment":{"modes":["pickup"],"area":"Example region","lead_seconds":"0"},
+            "authority":null,"media":[]}});
+        let wire = serde_json::to_vec(&serde_json::json!({"type":"listing.publish",
+            "context":request.command().context(),"input":input}))
+        .unwrap();
+        let public = AdmissionRequest::from_protected_wire(request.binding().clone(), &wire)
+            .map_err(|e| JsValue::from_str(e.code()))?;
+        Ok(public)
     }
     async fn request(&self, n: u8, changed: bool) -> Result<AdmissionRequest, JsValue> {
         let binding = self

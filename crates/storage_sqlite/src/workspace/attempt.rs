@@ -13,23 +13,23 @@ pub(super) const ID_INDEX: &str =
     "CREATE UNIQUE INDEX signing_attempt_identity ON signing_attempts(workspace,attempt_id)";
 pub(super) const TX_INDEX: &str = "CREATE UNIQUE INDEX signing_attempt_transaction_identity ON signing_attempts(workspace,transaction_id)";
 
-pub(super) fn scope(attempt: &SigningAttempt) -> IssuanceScope {
+pub(super) fn scope(attempt: &SigningAttempt) -> Result<IssuanceScope, OperationError> {
     let identity = attempt.bound_plan().prepared().identity();
-    IssuanceScope {
+    Ok(IssuanceScope {
         workspace: identity.workspace_id(),
         operation: identity.operation_id(),
         plan_digest: *attempt.bound_plan().plan().digest(),
         attempt: attempt.attempt_id(),
-        recipient: attempt.seal().recipient(),
-    }
+        recipient: attempt.seal()?.recipient(),
+    })
 }
 pub(super) async fn protect(
     attempt: &SigningAttempt,
     crypto: &WorkspaceCrypto,
 ) -> Result<Vec<u8>, OperationError> {
-    let bytes = ClaimRecord::capture(attempt).encode()?;
+    let bytes = ClaimRecord::capture(attempt)?.encode()?;
     Ok(crypto
-        .seal_issuance(scope(attempt), IssuancePayload::Attempt, 0, &bytes)
+        .seal_issuance(scope(attempt)?, IssuancePayload::Attempt, 0, &bytes)
         .await?)
 }
 /// Returns the complete original plan on absence as well as a verified retained
@@ -105,7 +105,7 @@ pub(super) async fn insert(
 ) -> Result<(), OperationError> {
     let identity = attempt.bound_plan().prepared().identity();
     sqlx::query("INSERT INTO signing_attempts(workspace,operation_id,recipient,attempt_id,transaction_id,plan_digest,intent_digest,protected) VALUES(?,?,?,?,?,?,?,?)")
-        .bind(identity.workspace_id().as_bytes().as_slice()).bind(identity.operation_id().as_bytes().as_slice()).bind(attempt.seal().recipient().as_bytes().as_slice()).bind(attempt.attempt_id().as_bytes().as_slice()).bind(attempt.transaction_id().as_bytes().as_slice()).bind(attempt.bound_plan().plan().digest().as_slice()).bind(attempt.binding().digest().as_slice()).bind(protected).execute(connection).await.map_err(|_|OperationError::StorageFailure)?;
+        .bind(identity.workspace_id().as_bytes().as_slice()).bind(identity.operation_id().as_bytes().as_slice()).bind(attempt.seal()?.recipient().as_bytes().as_slice()).bind(attempt.attempt_id().as_bytes().as_slice()).bind(attempt.transaction_id().as_bytes().as_slice()).bind(attempt.bound_plan().plan().digest().as_slice()).bind(attempt.binding().digest().as_slice()).bind(protected).execute(connection).await.map_err(|_|OperationError::StorageFailure)?;
     Ok(())
 }
 pub(super) async fn unchanged(
@@ -115,7 +115,7 @@ pub(super) async fn unchanged(
 ) -> Result<(), OperationError> {
     unchanged_snapshot(
         connection,
-        ClaimSnapshot::from_store_report(attempt),
+        ClaimSnapshot::from_store_report(attempt)?,
         protected,
     )
     .await

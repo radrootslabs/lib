@@ -22,7 +22,7 @@ const MAX_TIME: u64 = 253_402_300_799;
 const RANDOMIZED_PAST_SECONDS: u64 = 172_800;
 
 mod plan;
-pub use plan::{ChatReplay, ChatSigningPlan, PLAN_MAX_BYTES};
+pub use plan::{ChatSigningPlan, PLAN_MAX_BYTES};
 mod routes;
 pub use routes::{CapturedDmRoute, DmRelayAdvertisement};
 mod gift_wrap;

@@ -77,7 +77,7 @@ impl Graph {
             result.slots[recipient as usize] = ordinal;
             let bound = original.bound().ok_or(OperationError::RecoveryRequired)?;
             let participant = bound
-                .plan()
+                .chat_plan()?
                 .seals()
                 .get(recipient as usize)
                 .ok_or(OperationError::RecoveryRequired)?

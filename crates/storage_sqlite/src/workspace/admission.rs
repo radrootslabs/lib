@@ -4,7 +4,7 @@ use super::{
 };
 use radroots_domain::{CommandDigest, IssuanceWindow, OperationId, TransactionId};
 use radroots_storage::command::{
-    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, ChatSigningPlan, CommitAttempt,
+    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSigningPlan, CommitAttempt,
     OperationError, PlanBindingOutcome, PreparedOperation,
 };
 use sqlx::{Connection, Sqlite, SqliteConnection, Transaction};
@@ -47,7 +47,7 @@ impl Journal<'_> {
     pub(super) async fn bind_plan(
         &mut self,
         binding: WorkspaceBinding,
-        supplied: ChatSigningPlan,
+        supplied: CapturedSigningPlan,
         proof: AttachmentProof,
     ) -> Result<PlanBindingOutcome, OperationError> {
         let (record, grant, current) = self.access(&binding, &proof).await?;
@@ -78,8 +78,8 @@ impl Journal<'_> {
                 if current.observed_at() >= window.first_issue_not_after() {
                     return Err(OperationError::DeadlineExceeded);
                 }
-                let supplied = ChatSigningPlan::parse(
-                    prepared.request().chat_command()?,
+                let supplied = CapturedSigningPlan::parse(
+                    prepared.request().command(),
                     supplied.protected_wire(),
                 )
                 .map_err(|_| OperationError::InvalidCommand)?;

@@ -1,7 +1,7 @@
 //! Validated historical T1 metadata shared by concrete protected hosts.
 //! This codec establishes neither a commit nor current issuance authority.
 use super::{OperationError, PreparedOperation};
-use crate::command::{BoundSigningPlan, ChatSigningPlan};
+use crate::command::{BoundSigningPlan, CapturedSigningPlan};
 use radroots_domain::{CommandDigest, OperationId, TransactionId, UnixSeconds, WorkspaceId};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -35,7 +35,7 @@ impl PlanManifest {
     /// must still authenticate current access and confirm its actual transaction.
     pub fn capture(
         prepared: &PreparedOperation,
-        plan: &ChatSigningPlan,
+        plan: &CapturedSigningPlan,
         transaction: TransactionId,
         bound_at: UnixSeconds,
     ) -> Result<Self, OperationError> {
@@ -121,7 +121,7 @@ impl PlanManifest {
     pub fn bind(
         self,
         prepared: PreparedOperation,
-        plan: ChatSigningPlan,
+        plan: CapturedSigningPlan,
     ) -> Result<BoundSigningPlan, OperationError> {
         self.validate(&prepared)?;
         if plan.digest() != self.plan_digest().as_bytes()
@@ -141,9 +141,11 @@ impl PlanManifest {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command::ChatSigningPlan;
     use crate::command::protected::tests::request;
     use radroots_domain::{EnvelopeEventId, IssuanceWindow, Sequence};
-    use radroots_protocol::chat::{CapturedDmRoute, ChatReplay, ChatRumor, ChatSeal};
+    use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal};
+    use radroots_protocol::plan::SigningReplay;
     use serde_json::json;
 
     fn make_prepared() -> PreparedOperation {
@@ -159,7 +161,7 @@ mod tests {
         )
         .unwrap()
     }
-    fn make_plan(prepared: &PreparedOperation, created: u64) -> ChatSigningPlan {
+    fn make_plan(prepared: &PreparedOperation, created: u64) -> CapturedSigningPlan {
         // These are structural descriptors for pure codec tests. They supply
         // neither authenticated ciphertext nor a verified relay advertisement.
         let command = prepared.request().chat_command().unwrap();
@@ -185,9 +187,10 @@ mod tests {
             now,
             vec![seal],
             vec![route],
-            ChatReplay::NonReplayable,
+            SigningReplay::NonReplayable,
         )
         .unwrap()
+        .into()
     }
     #[test]
     fn manifest_binds_original_preparation_plan_and_window_without_minting_authority() {

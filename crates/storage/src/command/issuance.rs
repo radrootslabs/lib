@@ -102,12 +102,12 @@ impl SigningAttempt {
             return Err(OperationError::RecoveryRequired);
         }
         let recipient_index = bound
-            .plan()
+            .chat_plan()?
             .seals()
             .iter()
             .position(|seal| seal.recipient() == recipient)
             .ok_or(OperationError::InvalidCommand)?;
-        let seal = &bound.plan().seals()[recipient_index];
+        let seal = &bound.chat_plan()?.seals()[recipient_index];
         let deadline = NonZeroU64::new(
             window
                 .first_issue_not_after()
@@ -162,8 +162,12 @@ impl SigningAttempt {
     }
     /// Borrows the exact retained seal. The private index is validated once
     /// against the immutable complete plan by the structural constructor.
-    pub fn seal(&self) -> &ChatSeal {
-        &self.bound.plan().seals()[self.recipient_index]
+    pub fn seal(&self) -> Result<&ChatSeal, OperationError> {
+        self.bound
+            .chat_plan()?
+            .seals()
+            .get(self.recipient_index)
+            .ok_or(OperationError::RecoveryRequired)
     }
     pub const fn attempt_id(&self) -> SigningAttemptId {
         self.attempt_id
@@ -252,7 +256,7 @@ impl SealEvidence {
         };
         let wire = Nip01EventWire::parse_json_exact_with_limits(raw, limits)
             .map_err(|_| OperationError::InvalidEvidence)?;
-        let seal = attempt.seal();
+        let seal = attempt.seal()?;
         let fields = seal.fields();
         let event_id = EnvelopeEventId::from_bytes(seal.event_id());
         if wire.id != event_id.to_string()
@@ -303,14 +307,17 @@ impl SealEvidence {
         }
     }
     pub fn matches_attempt(&self, attempt: &SigningAttempt) -> bool {
+        let Ok(seal) = attempt.seal() else {
+            return false;
+        };
         self.workspace_id == attempt.bound_plan().prepared().identity().workspace_id()
             && self.attempt_id == attempt.attempt_id()
             && self.intent == attempt.binding()
             && self.operation_id == attempt.bound_plan().prepared().identity().operation_id()
             && self.command_digest == attempt.bound_plan().prepared().identity().command_digest()
             && &self.plan_digest == attempt.bound_plan().plan().digest()
-            && self.recipient == attempt.seal().recipient()
-            && self.event_id.as_bytes() == &attempt.seal().event_id()
+            && self.recipient == seal.recipient()
+            && self.event_id.as_bytes() == &seal.event_id()
     }
     pub const fn workspace_id(&self) -> WorkspaceId {
         self.workspace_id

@@ -33,7 +33,7 @@ pub(super) async fn protect(
     let receipt = EvidenceReceipt::from_committed_store(evidence, transaction);
     let manifest = EvidenceManifest::capture(attempt, evidence, transaction)?;
     let plaintext = manifest.encode()?;
-    let scope = attempt::scope(attempt);
+    let scope = attempt::scope(attempt)?;
     let manifest = crypto
         .seal_issuance(scope, IssuancePayload::Evidence, 0, &plaintext)
         .await?;
@@ -61,7 +61,7 @@ pub(super) async fn read(
     attempt: &SigningAttempt,
     crypto: &WorkspaceCrypto,
 ) -> Result<Option<(SealEvidence, ProtectedEvidence)>, OperationError> {
-    let scope = attempt::scope(attempt);
+    let scope = attempt::scope(attempt)?;
     let row=sqlx::query("SELECT CASE WHEN length(attempt_id)=32 THEN attempt_id END,CASE WHEN length(event_id)=32 THEN event_id END,CASE WHEN length(evidence_digest)=32 THEN evidence_digest END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,part_count,byte_count,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM seal_evidence WHERE workspace=? AND operation_id=? AND recipient=?")
         .bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.recipient.as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
     let Some(row) = row else {
@@ -178,7 +178,7 @@ pub(super) async fn unchanged(
     attempt: &SigningAttempt,
     value: Option<&ProtectedEvidence>,
 ) -> Result<(), OperationError> {
-    unchanged_scope(connection, attempt::scope(attempt), value).await
+    unchanged_scope(connection, attempt::scope(attempt)?, value).await
 }
 pub(super) async fn unchanged_scope(
     connection: &mut SqliteConnection,

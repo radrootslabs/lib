@@ -10,7 +10,8 @@ mod snapshots;
 use super::*;
 use nostr::{JsonUtil, nips::nip44};
 use radroots_domain::EnvelopeEventId;
-use radroots_protocol::chat::{CapturedDmRoute, ChatReplay, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::plan::SigningReplay;
 use radroots_storage::command::{BoundSigningPlan, PlanBindingOutcome};
 fn keys(last: u8) -> nostr::Keys {
     let mut bytes = [0; 32];
@@ -99,7 +100,7 @@ fn plan_with_routes(
         UnixSeconds::new(created).unwrap(),
         seals,
         routes,
-        ChatReplay::NonReplayable,
+        SigningReplay::NonReplayable,
     )
     .unwrap()
 }
