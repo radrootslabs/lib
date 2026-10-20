@@ -1,5 +1,12 @@
 # radroots_transport
 
+The `std` host boundary `host::websocket` exchanges owned frames, revocable
+admission and bounded errors with concrete native or browser socket providers.
+It owns no protocol session, reconnect policy, executor or concrete socket.
+Browser providers keep DOM objects local and exchange safe channel handles;
+application futures retain their target-specific host bounds. The data model
+and source/sink SPIs remain available without `std`.
+
 `radroots_transport` is the transport-neutral host SPI for moving verified
 Radroots events between explicit targets. It owns extensible transport and
 target identities, separate source and sink capabilities, bounded fetch and

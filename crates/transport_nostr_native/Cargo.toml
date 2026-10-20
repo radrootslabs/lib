@@ -1,0 +1,29 @@
+[package]
+name = "radroots_transport_nostr_native"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Native socket ownership for the shared Radroots Nostr session"
+readme = "README.md"
+
+[dependencies]
+radroots_transport = { workspace = true, features = ["std"] }
+radroots_transport_nostr = { workspace = true }
+futures = { workspace = true }
+rustls = { workspace = true }
+tokio = { workspace = true, features = ["net", "time"] }
+tokio-rustls = { workspace = true }
+tokio-tungstenite = { workspace = true }
+url = { workspace = true }
+webpki-roots = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

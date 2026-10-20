@@ -3788,6 +3788,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_transport_nostr_native"
+version = "0.1.0-alpha"
+dependencies = [
+ "futures",
+ "radroots_transport",
+ "radroots_transport_nostr",
+ "rustls",
+ "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite",
+ "url",
+ "webpki-roots 0.26.11",
+]
+
+[[package]]
 name = "radroots_transport_reticulum"
 version = "0.1.0-alpha"
 dependencies = [

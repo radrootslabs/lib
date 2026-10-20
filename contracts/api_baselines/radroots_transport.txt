@@ -168,6 +168,43 @@ pub radroots_transport::error::Error::UnsupportedOperation
 impl core::fmt::Display for radroots_transport::error::Error
 pub fn radroots_transport::error::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_transport::host
+pub mod radroots_transport::host::websocket
+#[non_exhaustive] pub enum radroots_transport::host::websocket::Error
+pub radroots_transport::host::websocket::Error::Closed
+pub radroots_transport::host::websocket::Error::Policy
+pub radroots_transport::host::websocket::Error::Protocol
+pub radroots_transport::host::websocket::Error::Timeout
+pub radroots_transport::host::websocket::Error::Unavailable
+pub radroots_transport::host::websocket::Error::Unsupported
+impl core::error::Error for radroots_transport::host::websocket::Error
+impl core::fmt::Display for radroots_transport::host::websocket::Error
+pub fn radroots_transport::host::websocket::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_transport::host::websocket::Frame
+pub radroots_transport::host::websocket::Frame::Binary(alloc::vec::Vec<u8>)
+pub radroots_transport::host::websocket::Frame::Close(core::option::Option<radroots_transport::host::websocket::CloseFrame>)
+pub radroots_transport::host::websocket::Frame::Ping(alloc::vec::Vec<u8>)
+pub radroots_transport::host::websocket::Frame::Pong(alloc::vec::Vec<u8>)
+pub radroots_transport::host::websocket::Frame::Text(alloc::string::String)
+impl core::fmt::Debug for radroots_transport::host::websocket::Frame
+pub fn radroots_transport::host::websocket::Frame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_transport::host::websocket::CloseFrame
+pub radroots_transport::host::websocket::CloseFrame::code: u16
+pub radroots_transport::host::websocket::CloseFrame::reason: alloc::string::String
+impl core::fmt::Debug for radroots_transport::host::websocket::CloseFrame
+pub fn radroots_transport::host::websocket::CloseFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait radroots_transport::host::websocket::Admission: core::marker::Send + core::marker::Sync
+pub fn radroots_transport::host::websocket::Admission::admitted_read(&self, &core::task::wake::Context<'_>) -> bool
+pub fn radroots_transport::host::websocket::Admission::admitted_write(&self, &core::task::wake::Context<'_>) -> bool
+pub fn radroots_transport::host::websocket::Admission::charge(&self, usize, usize, usize) -> bool
+pub fn radroots_transport::host::websocket::Admission::permits_address(&self, core::net::ip_addr::IpAddr) -> bool
+pub trait radroots_transport::host::websocket::Connector: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub fn radroots_transport::host::websocket::Connector::connect<'a>(&'a self, &'a str, core::time::Duration, core::num::nonzero::NonZeroUsize, alloc::sync::Arc<dyn radroots_transport::host::websocket::Admission>) -> radroots_transport::host::websocket::IoFuture<'a, core::result::Result<alloc::sync::Arc<dyn radroots_transport::host::websocket::Socket>, radroots_transport::host::websocket::Error>>
+pub fn radroots_transport::host::websocket::Connector::supports_ping(&self) -> bool
+pub trait radroots_transport::host::websocket::Socket: core::marker::Send + core::marker::Sync
+pub fn radroots_transport::host::websocket::Socket::close(&self) -> radroots_transport::host::websocket::IoFuture<'_, core::result::Result<(), radroots_transport::host::websocket::Error>>
+pub fn radroots_transport::host::websocket::Socket::receive(&self) -> radroots_transport::host::websocket::IoFuture<'_, core::result::Result<core::option::Option<radroots_transport::host::websocket::Frame>, radroots_transport::host::websocket::Error>>
+pub fn radroots_transport::host::websocket::Socket::send(&self, radroots_transport::host::websocket::Frame) -> radroots_transport::host::websocket::IoFuture<'_, core::result::Result<(), radroots_transport::host::websocket::Error>>
+pub type radroots_transport::host::websocket::IoFuture<'a, T> = core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = T> + core::marker::Send + 'a)>>
 pub trait radroots_transport::host::HostBound: core::marker::Send + core::marker::Sync
 impl<T: core::marker::Send + core::marker::Sync + ?core::marker::Sized> radroots_transport::host::HostBound for T
 pub trait radroots_transport::host::MoveBound: core::marker::Send

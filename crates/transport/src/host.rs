@@ -1,5 +1,9 @@
 //! Target-aware host bounds and shared handles for transport composition.
 
+/// Concrete WebSocket I/O supplied by native or browser hosts.
+#[cfg(feature = "std")]
+pub mod websocket;
+
 /// Native host implementations are thread safe; browser hosts may be local.
 #[cfg(not(target_arch = "wasm32"))]
 pub trait HostBound: Send + Sync {}
