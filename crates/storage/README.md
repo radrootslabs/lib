@@ -100,6 +100,12 @@ New preparations retain scope explicitly in version 3. Historical version 2
 preparations remain readable only with their original buyer-outbox authority;
 no actor descriptor can infer a seller grant during recovery.
 
+Common admission retains a typed command family. Fresh public listing T0
+requires an authenticated seller outbox and valid bounded event inputs. The
+current history and approval prerequisites remain explicit refusals. Chat-only
+ports require actual chat data and return `capability_unavailable` for a public
+preparation; no synthetic peer or receipt bridges the families.
+
 `BackupSource::settle_backup_writes` waits for earlier owner writes, including
 work whose caller was cancelled. The host excludes new writes before settling
 and retains that exclusion through related inventory and capture. Settling does

@@ -38,6 +38,62 @@ fn option(
 }
 
 #[test]
+fn spare_caller_capacity_preserves_exact_terms_and_default_selection() {
+    let mut modes = Vec::with_capacity(4096);
+    modes.push(FulfillmentMode::Pickup);
+    let mut options = Vec::with_capacity(4096);
+    options.push(
+        option(
+            1,
+            SaleUnit::package_unspecified("bunch").unwrap(),
+            "1",
+            "1",
+            "10",
+        )
+        .unwrap(),
+    );
+    options.push(
+        option(
+            2,
+            SaleUnit::measured(MeasurementUnit::Kilogram),
+            "0.25",
+            "0.5",
+            "10",
+        )
+        .unwrap(),
+    );
+    let compact = options.clone();
+    let expanded = ListingTerms::new(
+        ListingState::Active,
+        product(),
+        ListingOptionId::from_bytes([2; 32]),
+        options,
+        PublicFulfillment::new(modes, "Example region", LeadSeconds::new(0).unwrap()).unwrap(),
+        None,
+    )
+    .unwrap();
+    let expected = ListingTerms::new(
+        ListingState::Active,
+        product(),
+        ListingOptionId::from_bytes([2; 32]),
+        compact,
+        fulfillment(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(expanded, expected);
+    assert_eq!(
+        expanded.default_option().id(),
+        ListingOptionId::from_bytes([2; 32])
+    );
+    assert_eq!(
+        serde_json::to_vec(&expanded).unwrap(),
+        serde_json::to_vec(&expected).unwrap()
+    );
+    assert_eq!(expanded.clone(), expected);
+}
+
+#[test]
 fn identifiers_durations_and_public_data_preserve_exact_cross_host_values() {
     let id = ListingId::from_bytes([0xAB; 16]);
     assert_eq!(id.to_string(), "ab".repeat(16));

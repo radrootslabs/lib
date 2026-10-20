@@ -3,6 +3,9 @@
 #[path = "support/workspace_plans.rs"]
 mod plans;
 
+#[path = "support/public_admission.rs"]
+mod public_admission;
+
 use radroots_domain::{
     CommandContextData, CommandDigest, CorrelationId, OperationId, PublicKey, UnixSeconds,
 };
@@ -147,9 +150,26 @@ impl Fixture {
         AttachmentProof,
         WorkspaceBinding,
     ) {
+        self.create_scoped(expiry, false).await
+    }
+    async fn create_scoped(
+        &self,
+        expiry: u64,
+        seller: bool,
+    ) -> (
+        Arc<NativeWorkspace>,
+        AttachmentInput,
+        AttachmentProof,
+        WorkspaceBinding,
+    ) {
+        let config = if seller {
+            LocalOutboxConfig::seller
+        } else {
+            LocalOutboxConfig::new
+        };
         let (store, input, proof) = NativeWorkspace::initialize_local_outbox(
             &self.path,
-            LocalOutboxConfig::new(
+            config(
                 key(),
                 key(),
                 "synthetic-device",
@@ -253,7 +273,7 @@ async fn actual_commit_reopen_and_replay_preserve_original_identity_and_private_
     let anchor = original.identity();
     assert_eq!(original.revision().get(), 1);
     assert_eq!(
-        original.request().command().text(),
+        original.request().chat_command().unwrap().text(),
         "private-cabbage-inquiry-🧺"
     );
     assert_eq!(original.request().binding().input(), &input);
@@ -444,7 +464,7 @@ async fn lost_observer_does_not_cancel_admitted_transaction_and_close_drains_it(
         .unwrap()
         .unwrap();
     assert_eq!(
-        result.request().command().text(),
+        result.request().chat_command().unwrap().text(),
         "retained after observer cancellation"
     );
     reopened.close().await.unwrap();

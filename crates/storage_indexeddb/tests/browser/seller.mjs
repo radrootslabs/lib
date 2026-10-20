@@ -32,7 +32,9 @@ async function workflow({WorkspaceFixture}, previous) {
   check(await seller.is_seller());
   check(await seller.authenticate() === 1);
   await refuses(() => seller.wrong_proof(), 'unauthorized');
-  tests.push('explicit protected seller scope and exact credential');
+  await refuses(() => seller.admit_public(244), 'capability_unavailable');
+  check((await seller.query(244)).length === 0);
+  tests.push('explicit protected seller scope, exact credential and unsupported public refusal without a row');
   const fingerprint = seller.fingerprint(), selection = seller.selection(), proof = seller.proof();
   const preparation = Array.from(await seller.admit(244, false));
   await seller.close();

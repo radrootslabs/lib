@@ -73,7 +73,11 @@ async fn prepare(
             .await
             .unwrap(),
     );
-    let plan = plan(prepared.request().command(), 100, "native-issuance");
+    let plan = plan(
+        prepared.request().chat_command().unwrap(),
+        100,
+        "native-issuance",
+    );
     let digest = *plan.digest();
     let recipients = plan.seals().iter().map(|seal| seal.recipient()).collect();
     bound(
@@ -659,7 +663,11 @@ async fn missing_preparation_plan_and_attempt_are_distinct_from_wrong_plan_ident
             .unwrap()
             .is_none()
     );
-    let retained = plan(prepared.request().command(), 100, "missing-claim");
+    let retained = plan(
+        prepared.request().chat_command().unwrap(),
+        100,
+        "missing-claim",
+    );
     let digest = *retained.digest();
     bound(
         store

@@ -8,7 +8,7 @@ use radroots_domain::{
     CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId, WorkspaceId,
 };
 pub use radroots_protocol::chat::ChatSigningPlan;
-use radroots_protocol::command::CapturedChatCommand;
+use radroots_protocol::command::{CapturedChatCommand, CapturedCommand};
 use radroots_transport::BoxFuture;
 
 #[cfg(feature = "protected_outbox")]
@@ -49,6 +49,8 @@ pub enum OperationError {
     InvalidEvidence,
     /// This concrete authority cannot execute the requested action.
     Unauthorized,
+    /// This exact backend/family port cannot perform the requested operation.
+    UnsupportedOperation,
     /// Required authenticated thread/order history is unavailable.
     MissingHistory,
     /// No qualified protected origin verifies the supplied approval descriptor.
@@ -72,6 +74,7 @@ impl OperationError {
             Self::InvalidCommand => "invalid_command",
             Self::InvalidEvidence => "invalid_evidence",
             Self::Unauthorized => "unauthorized",
+            Self::UnsupportedOperation => "capability_unavailable",
             Self::MissingHistory => "missing_history",
             Self::UnverifiedApproval => "unverified_approval",
             Self::DeadlineExceeded => "deadline_exceeded",
@@ -99,7 +102,7 @@ impl From<WorkspaceError> for OperationError {
 /// persisted state inside the actual admission transaction.
 pub struct AdmissionRequest {
     binding: WorkspaceBinding,
-    command: CapturedChatCommand,
+    command: CapturedCommand,
 }
 impl AdmissionRequest {
     /// Refuses substituted workspace, actor/grant, authority or route data.
@@ -107,8 +110,9 @@ impl AdmissionRequest {
     /// an expired original command may still be queried/reconciled by identity.
     pub fn new(
         binding: WorkspaceBinding,
-        command: CapturedChatCommand,
+        command: impl Into<CapturedCommand>,
     ) -> Result<Self, OperationError> {
+        let command = command.into();
         let context = command.context();
         let input = binding.input();
         if context.actor() != binding.actor()
@@ -126,8 +130,7 @@ impl AdmissionRequest {
         binding: WorkspaceBinding,
         wire: &[u8],
     ) -> Result<Self, OperationError> {
-        let command =
-            CapturedChatCommand::parse(wire).map_err(|_| OperationError::RecoveryRequired)?;
+        let command = CapturedCommand::parse(wire).map_err(|_| OperationError::RecoveryRequired)?;
         Self::new(binding, command)
     }
     /// Borrows the captured attachment observation, without claiming it is current.
@@ -135,11 +138,41 @@ impl AdmissionRequest {
         &self.binding
     }
     /// Borrows exact immutable command data.
-    pub const fn command(&self) -> &CapturedChatCommand {
+    pub const fn command(&self) -> &CapturedCommand {
         &self.command
     }
+    /// Borrows actual chat data only. A public operation has no invented peer,
+    /// rumor, text or parent and cannot enter a chat-only effect port.
+    pub fn chat_command(&self) -> Result<&CapturedChatCommand, OperationError> {
+        self.command
+            .chat()
+            .ok_or(OperationError::UnsupportedOperation)
+    }
+    /// Checks fresh non-stock payload preconditions after actual authentication.
+    /// This structural check supplies no current access, transaction or hold;
+    /// concrete owners must independently recheck their authoritative fences.
+    pub fn validate_fresh(&self, now: radroots_domain::UnixSeconds) -> Result<(), OperationError> {
+        if self.command.requires_history() {
+            return Err(OperationError::MissingHistory);
+        }
+        if self.command.context().approval().is_some() {
+            return Err(OperationError::UnverifiedApproval);
+        }
+        if let Some(listing) = self.command.listing() {
+            if self.binding.scope() != crate::workspace::LocalOutboxScope::NewSellerOutbox {
+                return Err(OperationError::Unauthorized);
+            }
+            radroots_protocol::listing::ListingEvent::new(
+                listing.input(),
+                self.binding.actor().participant(),
+                now,
+            )
+            .map_err(|_| OperationError::InvalidCommand)?;
+        }
+        Ok(())
+    }
     /// Transfers both owned descriptors to the concrete transaction owner.
-    pub fn into_parts(self) -> (WorkspaceBinding, CapturedChatCommand) {
+    pub fn into_parts(self) -> (WorkspaceBinding, CapturedCommand) {
         (self.binding, self.command)
     }
 }
@@ -438,8 +471,9 @@ impl BoundSigningPlan {
         }
         // Reconstruct against the actually retained command, rather than trust
         // a matching digest descriptor attached to unrelated plan fields.
-        let checked = ChatSigningPlan::parse(prepared.request().command(), plan.protected_wire())
-            .map_err(|_| OperationError::RecoveryRequired)?;
+        let checked =
+            ChatSigningPlan::parse(prepared.request().chat_command()?, plan.protected_wire())
+                .map_err(|_| OperationError::RecoveryRequired)?;
         Ok(Self {
             prepared,
             plan: checked,

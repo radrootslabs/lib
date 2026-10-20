@@ -53,7 +53,10 @@ impl WorkspaceFixture {
         time: u32,
     ) -> Result<ObtainedObservation, JsValue> {
         let request = self.request(n, false).await?;
-        let mut recipients = vec![self.input.participant(), request.command().peer()];
+        let mut recipients = vec![
+            self.input.participant(),
+            request.chat_command().unwrap().peer(),
+        ];
         recipients.sort_unstable();
         recipients.dedup();
         let attempt = self
@@ -146,7 +149,10 @@ impl WorkspaceFixture {
     }
     pub async fn query_observations(&self, n: u8, index: u8, id: u8) -> Result<String, JsValue> {
         let request = self.request(n, false).await?;
-        let mut recipients = vec![self.input.participant(), request.command().peer()];
+        let mut recipients = vec![
+            self.input.participant(),
+            request.chat_command().unwrap().peer(),
+        ];
         recipients.sort_unstable();
         recipients.dedup();
         self.journal()

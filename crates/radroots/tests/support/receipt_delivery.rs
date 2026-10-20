@@ -86,9 +86,14 @@ impl Ready {
                 .await
                 .unwrap(),
         );
-        let plan = plan_with_routes(prepared.request().command(), time, "delivery", Some(urls));
+        let plan = plan_with_routes(
+            prepared.request().chat_command().unwrap(),
+            time,
+            "delivery",
+            Some(urls),
+        );
         let digest = *plan.digest();
-        let recipient = prepared.request().command().peer();
+        let recipient = prepared.request().chat_command().unwrap().peer();
         bound(
             store
                 .bind_signing_intents(binding.clone(), plan, copy(&proof))

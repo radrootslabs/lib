@@ -69,7 +69,7 @@ impl WorkspaceFixture {
     async fn plan_with_relays(&self, n: u8, profile: u8) -> Result<Vec<u8>, JsValue> {
         std::panic::set_hook(Box::new(|info| fixture_panic(&format!("{info}"))));
         let request = self.request(n, false).await?;
-        let command = request.command();
+        let command = request.chat_command().unwrap();
         let time = UnixSeconds::new(1000).unwrap();
         let rumor = ChatRumor::from_command(command, time).unwrap();
         let context = nostr::secp256k1::Secp256k1::new();
@@ -171,7 +171,7 @@ impl WorkspaceFixture {
         hook: js_sys::Function,
     ) -> Result<Vec<u8>, JsValue> {
         let request = self.request(n, false).await?;
-        let plan = ChatSigningPlan::parse(request.command(), &wire).unwrap();
+        let plan = ChatSigningPlan::parse(request.chat_command().unwrap(), &wire).unwrap();
         hook.call0(&JsValue::NULL)?;
         match self
             .journal()
@@ -196,7 +196,7 @@ impl WorkspaceFixture {
     }
     pub async fn bind_plan_foreign(&self, n: u8, wire: Vec<u8>) -> Result<(), JsValue> {
         let request = self.request(n, false).await?;
-        let plan = ChatSigningPlan::parse(request.command(), &wire).unwrap();
+        let plan = ChatSigningPlan::parse(request.chat_command().unwrap(), &wire).unwrap();
         let sibling = self.sibling().await?;
         let foreign = sibling
             .owner
@@ -224,7 +224,7 @@ impl WorkspaceFixture {
     }
     pub async fn abandon_plan(&self, n: u8, wire: Vec<u8>) -> Result<(), JsValue> {
         let request = self.request(n, false).await?;
-        let plan = ChatSigningPlan::parse(request.command(), &wire).unwrap();
+        let plan = ChatSigningPlan::parse(request.chat_command().unwrap(), &wire).unwrap();
         if self
             .journal()
             .bind_signing_intents(request.binding().clone(), plan, copied(&self.proof))
@@ -252,7 +252,7 @@ impl WorkspaceFixture {
 impl WorkspaceFixture {
     async fn bind_plan_mode(&self, n: u8, wire: Vec<u8>, mode: u8) -> Result<Vec<u8>, JsValue> {
         let request = self.request(n, false).await?;
-        let plan = ChatSigningPlan::parse(request.command(), &wire)
+        let plan = ChatSigningPlan::parse(request.chat_command().unwrap(), &wire)
             .map_err(|_| JsValue::from_str("invalid_plan"))?;
         if mode == 1 {
             self.clock.after.set(Some(1500));

@@ -139,6 +139,25 @@ pub const radroots_protocol::chat::SIGNED_MAX_BYTES: usize
 pub fn radroots_protocol::chat::nip44_v2_payload_len(usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub mod radroots_protocol::command
 pub use radroots_protocol::command::CHAT_MAX_BYTES
+pub enum radroots_protocol::command::CapturedCommand
+pub radroots_protocol::command::CapturedCommand::Chat(radroots_protocol::command::CapturedChatCommand)
+pub radroots_protocol::command::CapturedCommand::Listing(radroots_protocol::listing::CapturedListingCommand)
+impl radroots_protocol::command::CapturedCommand
+pub const fn radroots_protocol::command::CapturedCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedCommand::chat(&self) -> core::option::Option<&radroots_protocol::command::CapturedChatCommand>
+pub const fn radroots_protocol::command::CapturedCommand::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedCommand::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::command::CapturedCommand::kind(&self) -> radroots_protocol::command::CommandKind
+pub const fn radroots_protocol::command::CapturedCommand::listing(&self) -> core::option::Option<&radroots_protocol::listing::CapturedListingCommand>
+pub fn radroots_protocol::command::CapturedCommand::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedCommand::protected_wire(&self) -> &[u8]
+pub fn radroots_protocol::command::CapturedCommand::requires_history(&self) -> bool
+impl core::convert::From<radroots_protocol::command::CapturedChatCommand> for radroots_protocol::command::CapturedCommand
+pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::command::CapturedChatCommand) -> Self
+impl core::convert::From<radroots_protocol::listing::CapturedListingCommand> for radroots_protocol::command::CapturedCommand
+pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::listing::CapturedListingCommand) -> Self
+impl core::fmt::Debug for radroots_protocol::command::CapturedCommand
+pub fn radroots_protocol::command::CapturedCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_protocol::command::ChatKind
 pub radroots_protocol::command::ChatKind::Inquire
 pub radroots_protocol::command::ChatKind::Reply
@@ -148,9 +167,16 @@ pub const fn radroots_protocol::command::ChatKind::as_str(self) -> &'static str
 pub radroots_protocol::command::CommandError::InvalidInput
 pub radroots_protocol::command::CommandError::LimitExceeded
 pub radroots_protocol::command::CommandError::UnsupportedCommand
+pub radroots_protocol::command::CommandError::UnsupportedProfile
 impl core::error::Error for radroots_protocol::command::CommandError
 impl core::fmt::Display for radroots_protocol::command::CommandError
 pub fn radroots_protocol::command::CommandError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_protocol::command::CommandKind
+pub radroots_protocol::command::CommandKind::Inquire
+pub radroots_protocol::command::CommandKind::PublishListing
+pub radroots_protocol::command::CommandKind::Reply
+impl radroots_protocol::command::CommandKind
+pub const fn radroots_protocol::command::CommandKind::as_str(self) -> &'static str
 pub struct radroots_protocol::command::CapturedChatCommand
 impl radroots_protocol::command::CapturedChatCommand
 pub const fn radroots_protocol::command::CapturedChatCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
@@ -166,6 +192,8 @@ pub fn radroots_protocol::command::CapturedChatCommand::reply(radroots_domain::c
 pub fn radroots_protocol::command::CapturedChatCommand::source(&self) -> core::option::Option<&radroots_protocol::command::ListingRevisionRef>
 pub fn radroots_protocol::command::CapturedChatCommand::text(&self) -> &str
 pub const fn radroots_protocol::command::CapturedChatCommand::thread_id(&self) -> radroots_domain::identifier::ThreadId
+impl core::convert::From<radroots_protocol::command::CapturedChatCommand> for radroots_protocol::command::CapturedCommand
+pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::command::CapturedChatCommand) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedChatCommand
 pub fn radroots_protocol::command::CapturedChatCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::InquireInput
@@ -466,6 +494,19 @@ impl core::error::Error for radroots_protocol::intent::InvalidIntentBinding
 impl core::fmt::Display for radroots_protocol::intent::InvalidIntentBinding
 pub fn radroots_protocol::intent::InvalidIntentBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_protocol::listing
+pub struct radroots_protocol::listing::CapturedListingCommand
+impl radroots_protocol::listing::CapturedListingCommand
+pub const fn radroots_protocol::listing::CapturedListingCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub fn radroots_protocol::listing::CapturedListingCommand::capture(radroots_domain::context::CommandContextData, radroots_protocol::listing::PublishInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::listing::CapturedListingCommand::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::listing::CapturedListingCommand::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::listing::CapturedListingCommand::input(&self) -> &radroots_protocol::listing::PublishInput
+pub fn radroots_protocol::listing::CapturedListingCommand::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::listing::CapturedListingCommand::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::listing::CapturedListingCommand> for radroots_protocol::command::CapturedCommand
+pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::listing::CapturedListingCommand) -> Self
+impl core::fmt::Debug for radroots_protocol::listing::CapturedListingCommand
+pub fn radroots_protocol::listing::CapturedListingCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::listing::ListingEvent
 impl radroots_protocol::listing::ListingEvent
 pub const fn radroots_protocol::listing::ListingEvent::event_id(&self) -> &[u8; 32]
@@ -479,6 +520,8 @@ pub const fn radroots_protocol::listing::PublishInput::id(&self) -> radroots_dom
 pub fn radroots_protocol::listing::PublishInput::new(radroots_domain::listing::ListingId, &str, &str, &str, radroots_domain::context::UnixSeconds, radroots_domain::listing::ListingTerms) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub const fn radroots_protocol::listing::PublishInput::published_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_protocol::listing::PublishInput::terms(&self) -> &radroots_domain::listing::ListingTerms
+impl radroots_protocol::listing::PublishInput
+pub fn radroots_protocol::listing::PublishInput::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
 impl core::fmt::Debug for radroots_protocol::listing::PublishInput
 pub fn radroots_protocol::listing::PublishInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_protocol::listing::LISTING_EVENT_MAX_BYTES: usize

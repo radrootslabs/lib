@@ -124,6 +124,14 @@ The reviewed Rust surface is recorded in the
 
 ## Complete private signing-plan data
 
+`command::CapturedCommand` preserves the original chat bytes and commitments
+and admits a separate typed `listing::CapturedListingCommand` when `listing`
+is enabled. Public capture uses the same context and correlation/approval hash
+projections. Its closed parser validates the supported quote-required profile
+through domain constructors; unsupported price, supply, package contents or
+media features are refused explicitly. Public commands have no chat peer or
+private message. Capture supplies no current grant, signature or durable effect.
+
 `chat::ChatSigningPlan` retains the exact sorted unique peer/self recipient set,
 seal author/kind/time/empty tags/content/event ID/purpose, original signed DM
 route-source bytes, selected targets, logical message ID, command commitment and

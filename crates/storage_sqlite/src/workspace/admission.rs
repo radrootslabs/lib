@@ -78,9 +78,11 @@ impl Journal<'_> {
                 if current.observed_at() >= window.first_issue_not_after() {
                     return Err(OperationError::DeadlineExceeded);
                 }
-                let supplied =
-                    ChatSigningPlan::parse(prepared.request().command(), supplied.protected_wire())
-                        .map_err(|_| OperationError::InvalidCommand)?;
+                let supplied = ChatSigningPlan::parse(
+                    prepared.request().chat_command()?,
+                    supplied.protected_wire(),
+                )
+                .map_err(|_| OperationError::InvalidCommand)?;
                 if supplied.created_at() < window.prepared_at()
                     || supplied.created_at() > current.observed_at()
                 {
@@ -232,6 +234,15 @@ impl Journal<'_> {
         proof: AttachmentProof,
     ) -> Result<AdmissionOutcome, OperationError> {
         let (record, grant, observed) = self.access(request.binding(), &proof).await?;
+        if request.command().listing().is_some() {
+            let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+                .fetch_one(&mut *self.connection)
+                .await
+                .map_err(|_| OperationError::RecoveryRequired)?;
+            if version != 8 {
+                return Err(OperationError::UnsupportedOperation);
+            }
+        }
         let context = request.command().context();
         let workspace = context.workspace_id();
         let operation_id = context.operation_id();
@@ -241,6 +252,7 @@ impl Journal<'_> {
             operation::read(self.connection, self.selected, operation_id, self.crypto).await?;
         if let Some((snapshot, protected)) = existing {
             operation::check_digest(&snapshot, context.actor(), Some(digest))?;
+            same_binding(snapshot.request().binding(), request.binding())?;
             let anchor = snapshot.identity();
             let mut transaction = self
                 .connection
@@ -270,14 +282,9 @@ impl Journal<'_> {
             return Ok(AdmissionOutcome::Committed(snapshot));
         }
 
-        // This fresh local buyer namespace has no authenticated parent/order
+        // This fresh local outbox has no authenticated parent/order
         // history or protected approval origin. Selectors cannot create either.
-        if request.command().parent().is_some() || context.expected().is_some() {
-            return Err(OperationError::MissingHistory);
-        }
-        if context.approval().is_some() {
-            return Err(OperationError::UnverifiedApproval);
-        }
+        request.validate_fresh(observed.observed_at())?;
         if observed.observed_at() < request.binding().observed_at() {
             return Err(super::WorkspaceError::Unavailable.into());
         }
@@ -349,6 +356,7 @@ impl Journal<'_> {
             operation::read(self.connection, self.selected, operation_id, self.crypto).await?;
         if let Some((snapshot, _)) = &result {
             operation::check_digest(snapshot, binding.actor(), digest)?;
+            same_binding(snapshot.request().binding(), &binding)?;
         }
         let mut transaction = self
             .connection

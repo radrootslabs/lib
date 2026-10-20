@@ -266,7 +266,7 @@ impl InquiryRuntime {
         if now >= prepared.issuance_window().first_issue_not_after() {
             return Err(OperationError::DeadlineExceeded);
         }
-        let command = prepared.request().command();
+        let command = prepared.request().chat_command()?;
         let observed = signer
             .observe()
             .await

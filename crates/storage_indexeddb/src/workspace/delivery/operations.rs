@@ -31,7 +31,7 @@ fn contains_original(
         .participant();
     if candidate.work() != work
         || candidate.author() == actor
-        || candidate.author() == bound.prepared().request().command().peer()
+        || candidate.author() == bound.prepared().request().chat_command()?.peer()
         || candidate.author() == work.evidence().recipient()
         || source.digest() != work.evidence().digest()
     {

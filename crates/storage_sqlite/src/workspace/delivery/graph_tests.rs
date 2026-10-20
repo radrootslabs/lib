@@ -16,7 +16,7 @@ mod cases {
         let transaction = original.transaction_id();
         let time = original.bound_at();
         let (prepared, plan) = original.into_parts();
-        let command = prepared.request().command();
+        let command = prepared.request().chat_command().unwrap();
         let rumor = ChatRumor::from_command(command, plan.created_at()).unwrap();
         let seals = plan
             .seals()

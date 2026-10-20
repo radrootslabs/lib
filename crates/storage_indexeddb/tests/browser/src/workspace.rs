@@ -147,6 +147,29 @@ impl WorkspaceFixture {
             AdmissionOutcome::Unknown(_) => Err(JsValue::from_str("commit_unknown")),
         }
     }
+    pub async fn admit_public(&self, n: u8) -> Result<(), JsValue> {
+        let request = self.request(n, false).await?;
+        let input = serde_json::json!({"id":"01".repeat(16),"title":"Carrots","summary":"Quote required",
+            "description_markdown":"Public terms","published_at":"1000","profile":{
+            "profile":"radroots.listing","version":1,"state":"active",
+            "product":{"name":"Carrots","description":"","producer":null,"origin_summary":null},
+            "default_option":"02".repeat(32),"options":[{"id":"02".repeat(32),"label":"One bunch",
+            "unit":{"type":"package","label":"bunch","contents":{"type":"unspecified"}},
+            "increment":"1","minimum":"1","price":{"type":"quote_required"},
+            "supply":{"type":"unknown"},"lead_seconds":"0"}],
+            "fulfillment":{"modes":["pickup"],"area":"Example region","lead_seconds":"0"},
+            "authority":null,"media":[]}});
+        let wire = serde_json::to_vec(&serde_json::json!({"type":"listing.publish",
+            "context":request.command().context(),"input":input}))
+        .unwrap();
+        let public = AdmissionRequest::from_protected_wire(request.binding().clone(), &wire)
+            .map_err(|e| JsValue::from_str(e.code()))?;
+        self.journal()
+            .admit_command_and_hold(public, copied(&self.proof))
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?;
+        Err(JsValue::from_str("unexpected_public_commit"))
+    }
     pub async fn query(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let binding = self
             .owner

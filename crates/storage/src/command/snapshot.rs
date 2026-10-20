@@ -336,11 +336,12 @@ impl OperationSnapshot {
         recipients: Vec<RecipientSnapshot>,
         observed_at: UnixSeconds,
     ) -> Result<Self, OperationError> {
+        retained.prepared().request().chat_command()?;
         if recipients.is_empty() || recipients.len() > 2 || observed_at.get() == 0 {
             return Err(OperationError::RecoveryRequired);
         }
         let prepared = retained.prepared();
-        let command = prepared.request().command();
+        let command = prepared.request().chat_command()?;
         let mut expected = vec![command.context().actor().participant(), command.peer()];
         expected.sort_unstable();
         expected.dedup();
@@ -472,7 +473,7 @@ impl OperationSnapshot {
         if !basis_linked {
             return Err(OperationError::RecoveryRequired);
         }
-        let command = bound.prepared().request().command();
+        let command = bound.prepared().request().chat_command()?;
         let relation = match command.parent() {
             Some(parent) => ChatRelation::Reply { parent },
             None => ChatRelation::Inquire {

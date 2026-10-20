@@ -72,20 +72,28 @@ fn selectors(
     .map_err(|_| OperationError::RecoveryRequired)?;
     Ok((transaction, time, recipient))
 }
-pub(super) fn message(bound: &BoundSigningPlan, value: ChatInstallation) -> Zeroizing<Vec<u8>> {
-    encode(
+pub(super) fn message(
+    bound: &BoundSigningPlan,
+    value: ChatInstallation,
+) -> Result<Zeroizing<Vec<u8>>, OperationError> {
+    Ok(encode(
         MESSAGE,
         [
             value.plan_digest(),
             value.message_id().as_bytes(),
-            bound.prepared().request().command().thread_id().as_bytes(),
+            bound
+                .prepared()
+                .request()
+                .chat_command()?
+                .thread_id()
+                .as_bytes(),
             value.preparation_transaction_id().as_bytes(),
             value.plan_transaction_id().as_bytes(),
             value.transaction_id().as_bytes(),
         ],
         value.installed_at(),
         value.basis(),
-    )
+    ))
 }
 pub(super) fn decode_message(
     raw: &[u8],
@@ -99,7 +107,7 @@ pub(super) fn decode_message(
         transaction,
         time,
     )?;
-    if message(bound, report).as_slice() != raw {
+    if message(bound, report)?.as_slice() != raw {
         return Err(OperationError::RecoveryRequired);
     }
     Ok(report)

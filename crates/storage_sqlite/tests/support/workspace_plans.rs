@@ -98,7 +98,7 @@ async fn complete_private_plan_commits_reopens_and_replays_exact_original_bytes_
             .await
             .unwrap(),
     );
-    let original = plan(prepared.request().command(), 100, "original");
+    let original = plan(prepared.request().chat_command().unwrap(), 100, "original");
     let wire = original.protected_wire().to_vec();
     let digest = prepared.identity().command_digest();
     let operation = prepared.identity().operation_id();
@@ -122,7 +122,7 @@ async fn complete_private_plan_commits_reopens_and_replays_exact_original_bytes_
         prepared.transaction_id()
     );
     let transaction = retained.transaction_id();
-    let altered = plan(prepared.request().command(), 100, "changed");
+    let altered = plan(prepared.request().chat_command().unwrap(), 100, "changed");
     assert!(matches!(
         store
             .bind_signing_intents(binding.clone(), altered, copy(&proof))
@@ -130,7 +130,7 @@ async fn complete_private_plan_commits_reopens_and_replays_exact_original_bytes_
         Err(OperationError::IdempotencyConflict)
     ));
     fixture.clock.now.store(151, Ordering::SeqCst);
-    let replay = ChatSigningPlan::parse(prepared.request().command(), &wire).unwrap();
+    let replay = ChatSigningPlan::parse(prepared.request().chat_command().unwrap(), &wire).unwrap();
     assert_eq!(
         bound(
             store
@@ -186,7 +186,7 @@ async fn no_new_plan_commits_after_window_or_after_current_grant_revocation() {
                 .await
                 .unwrap(),
         );
-        let supplied = plan(prepared.request().command(), 100, "one");
+        let supplied = plan(prepared.request().chat_command().unwrap(), 100, "one");
         if revoked {
             store.revoke(input, &proof).await.unwrap();
         } else {
@@ -229,7 +229,11 @@ async fn admitted_plan_outlives_its_observer_and_byte_budget_refuses_unadmitted_
     let (arrived, resume) = fixture.clock.arm(0);
     let mut first = store.bind_signing_intents(
         binding.clone(),
-        plan(preparations[0].request().command(), 100, "one"),
+        plan(
+            preparations[0].request().chat_command().unwrap(),
+            100,
+            "one",
+        ),
         copy(&proof),
     );
     assert!(futures::poll!(first.as_mut()).is_pending());
@@ -239,7 +243,7 @@ async fn admitted_plan_outlives_its_observer_and_byte_budget_refuses_unadmitted_
     for prepared in &preparations[1..4] {
         let mut next = store.bind_signing_intents(
             binding.clone(),
-            plan(prepared.request().command(), 100, "one"),
+            plan(prepared.request().chat_command().unwrap(), 100, "one"),
             copy(&proof),
         );
         assert!(futures::poll!(next.as_mut()).is_pending());
@@ -249,7 +253,11 @@ async fn admitted_plan_outlives_its_observer_and_byte_budget_refuses_unadmitted_
         store
             .bind_signing_intents(
                 binding.clone(),
-                plan(preparations[4].request().command(), 100, "one"),
+                plan(
+                    preparations[4].request().chat_command().unwrap(),
+                    100,
+                    "one"
+                ),
                 copy(&proof)
             )
             .await,
@@ -298,7 +306,7 @@ async fn expiry_during_protection_and_known_sql_rollback_preserve_unbound_prepar
                 .await
                 .unwrap(),
         );
-        let supplied = plan(prepared.request().command(), 100, "one");
+        let supplied = plan(prepared.request().chat_command().unwrap(), 100, "one");
         let mut database = fixture.database().await;
         if !expire {
             sqlx::raw_sql("CREATE TRIGGER reject_plan BEFORE INSERT ON signing_plan_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ABORT,'synthetic storage failure'); END").execute(&mut database).await.unwrap();
@@ -355,7 +363,7 @@ async fn unknown_plan_completion_latches_until_reopen_and_preserves_original_ope
             .await
             .unwrap(),
     );
-    let supplied = plan(prepared.request().command(), 100, "one");
+    let supplied = plan(prepared.request().chat_command().unwrap(), 100, "one");
     let mut database = fixture.database().await;
     sqlx::raw_sql("CREATE TRIGGER unknown_plan BEFORE INSERT ON signing_plan_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ROLLBACK,'synthetic unknown completion'); END").execute(&mut database).await.unwrap();
     let outcome = store
@@ -420,7 +428,7 @@ async fn retained_plan_refuses_index_manifest_and_part_substitution_without_repa
         store
             .bind_signing_intents(
                 binding.clone(),
-                plan(prepared.request().command(), 100, "one"),
+                plan(prepared.request().chat_command().unwrap(), 100, "one"),
                 copy(&proof),
             )
             .await

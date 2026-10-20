@@ -589,6 +589,9 @@ impl Handle {
             Job::PrepareDelivery(..) => 1024 * 1024,
             Job::BindPlan(..) => 1024 * 1024,
             Job::Capture(..) | Job::RecoverCapture(..) => 256 * 1024,
+            // Public capture can retain a full 64 KiB wire plus decoded
+            // bounded fields. Include collection/descriptor ownership as well.
+            Job::Admit(request, ..) if request.command().listing().is_some() => 192 * 1024,
             Job::Admit(..) => 96 * 1024,
             _ => 16 * 1024,
         };
@@ -1010,7 +1013,7 @@ pub(super) async fn initialize(
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
         }
-        sqlx::query("PRAGMA user_version=7")
+        sqlx::query("PRAGMA user_version=8")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -1032,11 +1035,11 @@ pub(super) async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if version != 7 {
+    if !matches!(version, 7 | 8) {
         return Err(WorkspaceError::RecoveryRequired);
     }
     let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=20 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='table' AND name='signing_attempts' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_transaction_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence_parts' AND tbl_name='seal_evidence_parts' AND sql=? THEN 1 WHEN type='index' AND name='seal_evidence_transaction_identity' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='chat_messages' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_operation_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_transaction_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_thread' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='table' AND name='chat_publication_work' AND tbl_name='chat_publication_work' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_attempts' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_parts' AND tbl_name='chat_delivery_parts' AND sql=? THEN 1 WHEN type='index' AND name='chat_delivery_transaction_identity' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_observations' AND tbl_name='chat_delivery_observations' AND sql=? THEN 1 ELSE 0 END)=20 THEN 1 ELSE 0 END FROM sqlite_schema")
-        .bind(TABLE).bind(operation::TABLE).bind(plan::TABLE).bind(plan::PARTS).bind(attempt::TABLE).bind(attempt::ID_INDEX).bind(attempt::TX_INDEX).bind(evidence::TABLE).bind(evidence::PARTS).bind(evidence::TX_INDEX).bind(operation::INDEX).bind(installation::TABLE).bind(installation::OP_INDEX).bind(installation::TX_INDEX).bind(installation::THREAD_INDEX).bind(installation::WORK).bind(delivery::TABLE).bind(delivery::PARTS).bind(delivery::TX_INDEX).bind(delivery::OBSERVATIONS).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+        .bind(TABLE).bind(if version==7 {operation::TABLE_V7} else {operation::TABLE}).bind(plan::TABLE).bind(plan::PARTS).bind(attempt::TABLE).bind(attempt::ID_INDEX).bind(attempt::TX_INDEX).bind(evidence::TABLE).bind(evidence::PARTS).bind(evidence::TX_INDEX).bind(operation::INDEX).bind(installation::TABLE).bind(installation::OP_INDEX).bind(installation::TX_INDEX).bind(installation::THREAD_INDEX).bind(installation::WORK).bind(delivery::TABLE).bind(delivery::PARTS).bind(delivery::TX_INDEX).bind(delivery::OBSERVATIONS).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
     if catalog_matches != 1 {
         return Err(WorkspaceError::RecoveryRequired);
     }

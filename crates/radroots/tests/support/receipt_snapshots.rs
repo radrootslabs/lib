@@ -459,7 +459,7 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
                 && value.claim().is_none()
                 && value.obtained().is_none())
     );
-    let plan = plan(prepared.request().command(), 100, "snapshot");
+    let plan = plan(prepared.request().chat_command().unwrap(), 100, "snapshot");
     let plan_digest = *plan.digest();
     let message = plan.message_id();
     let plan_receipt = bound(

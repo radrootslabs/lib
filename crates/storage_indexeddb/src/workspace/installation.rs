@@ -205,7 +205,7 @@ impl BrowserWorkspace {
             };
             let mut extra = Vec::with_capacity(3);
             if original.is_none() {
-                let raw = codec::message(bound, installed);
+                let raw = codec::message(bound, installed)?;
                 let protected = crypto::seal_bound(
                     state.provider.as_ref(),
                     &state.reference,

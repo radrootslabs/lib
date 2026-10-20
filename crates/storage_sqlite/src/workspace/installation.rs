@@ -70,18 +70,18 @@ struct MessageRecord {
     basis: EvidenceRef,
 }
 impl MessageRecord {
-    fn new(bound: &BoundSigningPlan, value: ChatInstallation) -> Self {
-        Self {
+    fn new(bound: &BoundSigningPlan, value: ChatInstallation) -> Result<Self, OperationError> {
+        Ok(Self {
             version: 1,
             plan_digest: *value.plan_digest(),
             message: value.message_id(),
-            thread: bound.prepared().request().command().thread_id(),
+            thread: bound.prepared().request().chat_command()?.thread_id(),
             preparation_transaction: value.preparation_transaction_id(),
             plan_transaction: value.plan_transaction_id(),
             transaction: value.transaction_id(),
             installed_at: value.installed_at(),
             basis: EvidenceRef::new(value.basis()),
-        }
+        })
     }
 }
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
@@ -183,9 +183,15 @@ impl Records {
                 encoded.transaction,
                 encoded.installed_at,
             )?;
-            if encoded != MessageRecord::new(bound, report)
+            if encoded != MessageRecord::new(bound, report)?
                 || bytes(&row, 0)? != report.message_id().as_bytes()
-                || bytes(&row, 1)? != bound.prepared().request().command().thread_id().as_bytes()
+                || bytes(&row, 1)?
+                    != bound
+                        .prepared()
+                        .request()
+                        .chat_command()?
+                        .thread_id()
+                        .as_bytes()
                 || bytes(&row, 2)? != report.plan_digest()
                 || bytes(&row, 3)? != report.transaction_id().as_bytes()
             {
@@ -288,7 +294,7 @@ pub(super) async fn protect_message(
     crypto: &WorkspaceCrypto,
 ) -> Result<ProtectedMessage, OperationError> {
     let plaintext = Zeroizing::new(
-        serde_json::to_vec(&MessageRecord::new(bound, report))
+        serde_json::to_vec(&MessageRecord::new(bound, report)?)
             .map_err(|_| OperationError::InvalidCommand)?,
     );
     let protected = crypto
@@ -301,7 +307,7 @@ pub(super) async fn protect_message(
         .await?;
     Ok(ProtectedMessage {
         report,
-        thread: bound.prepared().request().command().thread_id(),
+        thread: bound.prepared().request().chat_command()?.thread_id(),
         protected,
     })
 }
@@ -332,7 +338,7 @@ pub(super) async fn insert_message(
 ) -> Result<(), OperationError> {
     let report = value.report;
     sqlx::query("INSERT INTO chat_messages(workspace,message_id,operation_id,thread_id,plan_digest,transaction_id,protected) VALUES(?,?,?,?,?,?,?)")
-        .bind(report.workspace_id().as_bytes().as_slice()).bind(report.message_id().as_bytes().as_slice()).bind(report.operation_id().as_bytes().as_slice()).bind(bound.prepared().request().command().thread_id().as_bytes().as_slice()).bind(report.plan_digest().as_slice()).bind(report.transaction_id().as_bytes().as_slice()).bind(&value.protected).execute(connection).await.map_err(write_error)?;
+        .bind(report.workspace_id().as_bytes().as_slice()).bind(report.message_id().as_bytes().as_slice()).bind(report.operation_id().as_bytes().as_slice()).bind(bound.prepared().request().chat_command()?.thread_id().as_bytes().as_slice()).bind(report.plan_digest().as_slice()).bind(report.transaction_id().as_bytes().as_slice()).bind(&value.protected).execute(connection).await.map_err(write_error)?;
     Ok(())
 }
 pub(super) async fn insert_work(

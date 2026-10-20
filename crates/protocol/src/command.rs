@@ -1,4 +1,5 @@
-//! Closed chat-command profile. Parsing and hashing are pure data operations.
+//! Common captured commands and the original closed chat-command profile.
+//! Parsing and hashing are pure data operations.
 //! They never authorize a principal, confirm a transaction or request signing.
 //!
 //! Canonical encoding follows the RFC 8785 subset specified for this profile:
@@ -28,8 +29,10 @@ const JSON_MAX_DEPTH: usize = 16;
 pub enum CommandError {
     /// The closed input shape or a value is invalid.
     InvalidInput,
-    /// This command type is not implemented by the chat profile.
+    /// This command type is not implemented by the selected profile.
     UnsupportedCommand,
+    /// A known command requires a profile feature not implemented here.
+    UnsupportedProfile,
     /// A byte/depth bound was exceeded.
     LimitExceeded,
 }
@@ -37,12 +40,16 @@ impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::InvalidInput => "invalid command input",
-            Self::UnsupportedCommand => "unsupported chat command",
+            Self::UnsupportedCommand => "unsupported command",
+            Self::UnsupportedProfile => "unsupported command profile",
             Self::LimitExceeded => "command limit exceeded",
         })
     }
 }
 impl core::error::Error for CommandError {}
+
+mod captured;
+pub use captured::{CapturedCommand, CommandKind};
 
 /// A captured public listing reference. This descriptor verifies neither its
 /// source event nor its availability, terms or stock backing.
@@ -365,13 +372,13 @@ impl fmt::Debug for CapturedChatCommand {
     }
 }
 
-fn hash(domain: &[u8], bytes: &[u8]) -> [u8; 32] {
+pub(crate) fn hash(domain: &[u8], bytes: &[u8]) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(domain);
     hash.update(bytes);
     hash.finalize().into()
 }
-fn check_frame(raw: &[u8]) -> Result<(), CommandError> {
+pub(crate) fn check_frame(raw: &[u8]) -> Result<(), CommandError> {
     if raw.len() > COMMAND_MAX_BYTES {
         return Err(CommandError::LimitExceeded);
     }
@@ -413,7 +420,7 @@ struct RawRoot<'a> {
     #[serde(borrow)]
     input: &'a serde_json::value::RawValue,
 }
-fn required_nullable<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+pub(crate) fn required_nullable<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
     d: D,
 ) -> Result<Option<T>, D::Error> {
     Option::deserialize(d)
@@ -486,7 +493,11 @@ impl Serialize for CanonicalCommand<'_> {
         o.end()
     }
 }
-struct Context<'a>(&'a CommandContextData, bool, bool);
+pub(crate) struct Context<'a>(
+    pub(crate) &'a CommandContextData,
+    pub(crate) bool,
+    pub(crate) bool,
+);
 impl Serialize for Context<'_> {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let v = self.0;

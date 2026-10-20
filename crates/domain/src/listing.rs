@@ -2,7 +2,7 @@
 //! Quote-required choices are supported independently of monetary registries.
 
 use crate::{AuthorityRef, Decimal, ListingOptionId, PositiveDecimal, PublicKey, Sequence};
-use alloc::{string::String, vec::Vec};
+use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{fmt, str::FromStr};
 
 /// A fixed, input-free public-offer value failure.
@@ -378,7 +378,7 @@ pub enum FulfillmentMode {
 #[derive(Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct PublicFulfillment {
-    modes: Vec<FulfillmentMode>,
+    modes: Box<[FulfillmentMode]>,
     area: String,
     lead_seconds: LeadSeconds,
 }
@@ -394,7 +394,7 @@ impl PublicFulfillment {
         }
         text(area, 160, true)?;
         Ok(Self {
-            modes,
+            modes: modes.into_boxed_slice(),
             area: area.into(),
             lead_seconds,
         })
@@ -418,7 +418,7 @@ pub struct ListingTerms {
     state: ListingState,
     product: Product,
     default_option: ListingOptionId,
-    options: Vec<ListingOption>,
+    options: Box<[ListingOption]>,
     fulfillment: PublicFulfillment,
     authority: Option<AuthorityRef>,
     #[cfg_attr(feature = "serde", serde(skip))]
@@ -451,7 +451,7 @@ impl ListingTerms {
             state,
             product,
             default_option,
-            options,
+            options: options.into_boxed_slice(),
             fulfillment,
             authority,
             default_index,

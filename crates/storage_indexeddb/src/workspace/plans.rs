@@ -155,7 +155,7 @@ impl State {
                 Ok(())
             })?;
         }
-        let plan = ChatSigningPlan::parse(prepared.request().command(), &wire)
+        let plan = ChatSigningPlan::parse(prepared.request().chat_command()?, &wire)
             .map_err(|_| OperationError::RecoveryRequired)?;
         if plan.digest() != manifest.plan_digest().as_bytes() {
             return Err(OperationError::RecoveryRequired);
@@ -247,9 +247,11 @@ impl BrowserWorkspace {
                 if observed >= window.first_issue_not_after() {
                     return Err(OperationError::DeadlineExceeded);
                 }
-                let checked =
-                    ChatSigningPlan::parse(prepared.request().command(), supplied.protected_wire())
-                        .map_err(|_| OperationError::InvalidCommand)?;
+                let checked = ChatSigningPlan::parse(
+                    prepared.request().chat_command()?,
+                    supplied.protected_wire(),
+                )
+                .map_err(|_| OperationError::InvalidCommand)?;
                 drop(supplied);
                 let transaction = TransactionId::from_bytes(*crypto::random::<32>()?);
                 let manifest = PlanManifest::capture(&prepared, &checked, transaction, observed)?;

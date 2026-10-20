@@ -162,7 +162,7 @@ mod tests {
     fn make_plan(prepared: &PreparedOperation, created: u64) -> ChatSigningPlan {
         // These are structural descriptors for pure codec tests. They supply
         // neither authenticated ciphertext nor a verified relay advertisement.
-        let command = prepared.request().command();
+        let command = prepared.request().chat_command().unwrap();
         let now = UnixSeconds::new(created).unwrap();
         let rumor = ChatRumor::from_command(command, now).unwrap();
         let recipient = rumor.recipients()[0];

@@ -108,7 +108,7 @@ impl Graph {
                 Some(RetainedOperation::Planned(Box::new(bound)))
             }
             Some(RetainedOperation::Prepared(prepared)) => {
-                let command = prepared.request().command();
+                let command = prepared.request().chat_command()?;
                 let mut keys = vec![command.context().actor().participant(), command.peer()];
                 keys.sort_unstable();
                 keys.dedup();

@@ -348,6 +348,11 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         let result = owned(work, async move {
             let access = state.operation_access(request.binding(), proof).await?;
+            // The current browser writer has no public signing/installation
+            // continuation. Refuse before admitting unsupported public work.
+            if request.command().listing().is_some() {
+                return Err(OperationError::UnsupportedOperation);
+            }
             let context = request.command().context();
             let operation = context.operation_id();
             let view = state.read_view(operation).await?;
@@ -364,14 +369,10 @@ impl BrowserWorkspace {
                         context.actor(),
                         Some(request.command().digest()),
                     )?;
+                    protected::same_binding(existing.request().binding(), request.binding())?;
                     (existing, None, false)
                 } else {
-                    if request.command().parent().is_some() || context.expected().is_some() {
-                        return Err(OperationError::MissingHistory);
-                    }
-                    if context.approval().is_some() {
-                        return Err(OperationError::UnverifiedApproval);
-                    }
+                    request.validate_fresh(access.binding.observed_at())?;
                     if access.binding.observed_at() < request.binding().observed_at() {
                         return Err(WorkspaceError::Unavailable.into());
                     }
@@ -444,6 +445,7 @@ impl BrowserWorkspace {
             let result = state.preparation(operation, &records).await?;
             if let Some(prepared) = &result {
                 protected::check_digest(prepared, binding.actor(), digest)?;
+                protected::same_binding(prepared.request().binding(), &binding)?;
             }
             let mut change = OperationChange::observe(records);
             if result.is_none() {

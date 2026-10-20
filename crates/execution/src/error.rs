@@ -223,6 +223,7 @@ impl Error {
             O::InvalidCommand => (Code::InvalidInput, RetryClass::Never),
             O::InvalidEvidence => (Code::RecoveryRequired, RetryClass::ManualReconciliation),
             O::Unauthorized | O::UnverifiedApproval => (Code::Unauthorized, RetryClass::Never),
+            O::UnsupportedOperation => (Code::CapabilityUnavailable, RetryClass::Never),
             O::MissingHistory => (Code::MissingHistory, RetryClass::AfterStateRefresh),
             O::DeadlineExceeded => (Code::DeadlineExceeded, RetryClass::AfterStateRefresh),
             O::IdempotencyConflict => (Code::IdempotencyConflict, RetryClass::Never),

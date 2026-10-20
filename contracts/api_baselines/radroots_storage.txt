@@ -848,6 +848,7 @@ pub radroots_storage::command::OperationError::MissingHistory
 pub radroots_storage::command::OperationError::RecoveryRequired
 pub radroots_storage::command::OperationError::StorageFailure
 pub radroots_storage::command::OperationError::Unauthorized
+pub radroots_storage::command::OperationError::UnsupportedOperation
 pub radroots_storage::command::OperationError::UnverifiedApproval
 pub radroots_storage::command::OperationError::Workspace(radroots_storage::workspace::WorkspaceError)
 impl radroots_storage::command::OperationError
@@ -873,10 +874,12 @@ pub fn radroots_storage::command::RetainedOperation::fmt(&self, &mut core::fmt::
 pub struct radroots_storage::command::AdmissionRequest
 impl radroots_storage::command::AdmissionRequest
 pub const fn radroots_storage::command::AdmissionRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
-pub const fn radroots_storage::command::AdmissionRequest::command(&self) -> &radroots_protocol::command::CapturedChatCommand
+pub fn radroots_storage::command::AdmissionRequest::chat_command(&self) -> core::result::Result<&radroots_protocol::command::CapturedChatCommand, radroots_storage::command::OperationError>
+pub const fn radroots_storage::command::AdmissionRequest::command(&self) -> &radroots_protocol::command::captured::CapturedCommand
 pub fn radroots_storage::command::AdmissionRequest::from_protected_wire(radroots_storage::workspace::WorkspaceBinding, &[u8]) -> core::result::Result<Self, radroots_storage::command::OperationError>
-pub fn radroots_storage::command::AdmissionRequest::into_parts(self) -> (radroots_storage::workspace::WorkspaceBinding, radroots_protocol::command::CapturedChatCommand)
-pub fn radroots_storage::command::AdmissionRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_protocol::command::CapturedChatCommand) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::AdmissionRequest::into_parts(self) -> (radroots_storage::workspace::WorkspaceBinding, radroots_protocol::command::captured::CapturedCommand)
+pub fn radroots_storage::command::AdmissionRequest::new(radroots_storage::workspace::WorkspaceBinding, impl core::convert::Into<radroots_protocol::command::captured::CapturedCommand>) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::AdmissionRequest::validate_fresh(&self, radroots_domain::context::UnixSeconds) -> core::result::Result<(), radroots_storage::command::OperationError>
 impl core::fmt::Debug for radroots_storage::command::AdmissionRequest
 pub fn radroots_storage::command::AdmissionRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::BoundSigningPlan

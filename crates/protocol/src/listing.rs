@@ -17,6 +17,10 @@ use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+mod command;
+mod input;
+pub use command::CapturedListingCommand;
+
 /// Assigned NIP-99 addressable classified-listing kind.
 pub const LISTING_KIND: u32 = 30402;
 /// Complete public event cap, including NIP-01 key, ID and signature framing.
@@ -209,7 +213,7 @@ impl fmt::Debug for ListingEvent {
 // RFC8785 subset: field names are fixed ASCII, quantities/IDs/times are strings,
 // numeric fields are exact safe unsigned integers, and Unicode is preserved.
 // Explicit sorting remains correct if a downstream crate enables preserve_order.
-fn canonical(value: &Value, out: &mut String) -> Result<(), WireError> {
+pub(crate) fn canonical(value: &Value, out: &mut String) -> Result<(), WireError> {
     match value {
         Value::Object(fields) => {
             let mut keys: Vec<_> = fields.keys().collect();

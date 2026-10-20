@@ -180,7 +180,7 @@ pub(super) async fn read(
         })?;
         parts.push(protected);
     }
-    let plan = ChatSigningPlan::parse(prepared.request().command(), &wire)
+    let plan = ChatSigningPlan::parse(prepared.request().chat_command()?, &wire)
         .map_err(|_| OperationError::RecoveryRequired)?;
     if plan.digest() != &digest {
         return Err(OperationError::RecoveryRequired);

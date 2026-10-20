@@ -139,7 +139,7 @@ async fn ordinary_inquiry_confirms_actual_t0_and_current_pending_receipt_without
         .unwrap()
         .unwrap();
     assert_eq!(
-        actual.prepared().request().command().text(),
+        actual.prepared().request().chat_command().unwrap().text(),
         "private ordinary inquiry"
     );
     assert!(actual.bound_plan().is_none());
@@ -388,7 +388,7 @@ async fn accepted_ordinary_inquiry_survives_observer_loss_and_client_close_drain
         .unwrap()
         .unwrap();
     assert_eq!(
-        snapshot.prepared().request().command().text(),
+        snapshot.prepared().request().chat_command().unwrap().text(),
         "retained after wait loss"
     );
     assert!(snapshot.bound_plan().is_none());
@@ -499,7 +499,10 @@ async fn ordinary_owned_budget_survives_lost_observers_and_all_accepted_commands
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(snapshot.prepared().request().command().text(), body);
+        assert_eq!(
+            snapshot.prepared().request().chat_command().unwrap().text(),
+            body
+        );
     }
     assert!(
         reopened
@@ -567,7 +570,7 @@ async fn owned_inquiry_continues_to_its_coherent_query_after_the_caller_disappea
         .unwrap()
         .unwrap();
     assert_eq!(
-        snapshot.prepared().request().command().text(),
+        snapshot.prepared().request().chat_command().unwrap().text(),
         "independent owner continuation"
     );
     reopened.close().await.unwrap();

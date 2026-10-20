@@ -278,7 +278,10 @@ impl WorkspaceFixture {
     }
     pub async fn query_envelope(&self, n: u8, index: u8, id: u8) -> Result<String, JsValue> {
         let request = self.request(n, false).await?;
-        let mut recipients = vec![self.input.participant(), request.command().peer()];
+        let mut recipients = vec![
+            self.input.participant(),
+            request.chat_command().unwrap().peer(),
+        ];
         recipients.sort_unstable();
         recipients.dedup();
         let recipient: PublicKey = *recipients

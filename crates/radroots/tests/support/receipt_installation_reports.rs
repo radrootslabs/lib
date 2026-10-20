@@ -17,8 +17,11 @@ fn restamp_plan(source: &BoundSigningPlan, transaction: TransactionId) -> BoundS
         original.issuance_window(),
     )
     .unwrap();
-    let plan = ChatSigningPlan::parse(prepared.request().command(), source.plan().protected_wire())
-        .unwrap();
+    let plan = ChatSigningPlan::parse(
+        prepared.request().chat_command().unwrap(),
+        source.plan().protected_wire(),
+    )
+    .unwrap();
     BoundSigningPlan::from_committed_store(prepared, plan, transaction, source.bound_at()).unwrap()
 }
 
@@ -95,7 +98,7 @@ async fn structural_installation_reports_bind_original_plan_capture_and_complete
     assert_eq!(reported.installation(), Some(installation));
     assert_eq!(
         reported.installed_message().unwrap().text(),
-        prepared.request().command().text()
+        prepared.request().chat_command().unwrap().text()
     );
     // No actual installation was performed by constructing any of these values.
     assert!(

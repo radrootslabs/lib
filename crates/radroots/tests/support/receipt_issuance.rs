@@ -74,7 +74,11 @@ pub(super) async fn prepare(
             .await
             .unwrap(),
     );
-    let plan = plan(prepared.request().command(), 100, "native-issuance");
+    let plan = plan(
+        prepared.request().chat_command().unwrap(),
+        100,
+        "native-issuance",
+    );
     let digest = *plan.digest();
     let recipients = plan.seals().iter().map(|seal| seal.recipient()).collect();
     bound(
