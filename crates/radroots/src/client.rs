@@ -31,16 +31,7 @@ const MISSING_WORKSPACE: Error = match Error::new(
     Err(_) => panic!("invalid constant pre-admission workspace error"),
 };
 
-/// Explicit task admission for a local resource session. No network is selected.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum StartMode {
-    /// Enables local resource work without opening sockets or replaying writes.
-    LocalOnly,
-    /// Permits explicit commands to use the configured transport. Startup
-    /// itself performs no query, publication or automatic outbox replay.
-    Online,
-}
+pub use radroots_execution::session::StartMode;
 /// A passive resource-start observation, independent of business authority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SessionStatus {

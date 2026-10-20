@@ -1,4 +1,8 @@
 //! Owned ordinary inquiry execution over explicit host IO and protected storage.
+#[path = "inquiry_routes.rs"]
+mod routes;
+pub use routes::{capture_dm_route, selected_dm_targets};
+
 use super::{HostBound, HostFuture, Shared, SignerSession};
 use alloc::{string::String, vec::Vec};
 use core::num::NonZeroU64;

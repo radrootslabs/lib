@@ -106,6 +106,12 @@ struct State {
     version_change: RefCell<Option<Callback>>,
 }
 impl State {
+    fn detach_callbacks(&self) {
+        self.db.set_onversionchange(None);
+        self.db.set_onclose(None);
+        let retired = { self.version_change.borrow_mut().take() };
+        drop(retired);
+    }
     fn wake(&self) {
         self.waiters.borrow_mut().retain(|weak| {
             if let Some(signal) = weak.upgrade() {
@@ -345,11 +351,13 @@ impl BrowserProvider {
     pub fn fingerprint(&self) -> [u8; 32] {
         self.state.fingerprint
     }
-    /// Stops admission, drains accepted jobs and closes the actual connection.
+    /// Stops admission, drains accepted jobs, closes the actual connection and
+    /// detaches its callbacks even while closed provider handles remain alive.
     /// Cancellation of this observation does not cancel accepted jobs.
     pub async fn close(&self) -> Result<(), BrowserError> {
         self.state.stop();
         if self.state.jobs.get() == 0 {
+            self.state.detach_callbacks();
             return Ok(());
         }
         let signal = Rc::new(RefCell::new(None));
@@ -370,6 +378,7 @@ impl BrowserProvider {
             }
         })
         .await;
+        self.state.detach_callbacks();
         Ok(())
     }
     fn check(&self, reference: &SecretRef) -> Result<(), Error> {

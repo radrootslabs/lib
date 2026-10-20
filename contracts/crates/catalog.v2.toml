@@ -7,7 +7,7 @@ rust_version = "1.99.0"
 edition = "2024"
 resolver = "3"
 public_package_count = 22
-package_count = 56
+package_count = 57
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
 native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
@@ -1133,6 +1133,24 @@ source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/sdk"
 source_tree_sha256 = "6cc78f544bd0a0d74783cbba118ea4815ce4b4bd094433193844621352411efb"
 compatibility = ["rust_api", "features", "package", "product"]
+replaces = []
+
+[[package]]
+name = "radroots_browser"
+path = "crates/radroots_browser"
+state = "active"
+tier = "facade"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["wasm32"]
+groups = ["coverage_required", "wasm"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter", "orchestration"]
+provenance_kind = "native"
+introduction_tree_sha256 = "3ccf885430e468d77cd0390d3893eac49df5d945445bba307602f546943d9e2b"
+compatibility = ["package_private", "rust_api", "behavior"]
 replaces = []
 
 [[package]]

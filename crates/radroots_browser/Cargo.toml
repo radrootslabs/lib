@@ -1,0 +1,43 @@
+[package]
+name = "radroots_browser"
+publish = false
+version = "0.1.0-alpha"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Origin-thread Radroots client over shared execution and protected IndexedDB"
+readme = "README.md"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+artifact_clock = ["dep:universal-time"]
+
+[dependencies]
+futures = { workspace = true }
+radroots_domain = { workspace = true, features = ["std"] }
+radroots_execution = { workspace = true, features = ["workspace_session"] }
+radroots_signing = { workspace = true, features = ["chat", "std"] }
+radroots_storage = { workspace = true, features = ["protected_outbox"] }
+radroots_transport = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+radroots_storage_indexeddb = { workspace = true, features = ["workspace"] }
+radroots_transport_nostr_browser = { workspace = true }
+radroots_transport_nostr = { workspace = true }
+radroots_nostr = { workspace = true, features = ["signing", "nip17"] }
+radroots_protocol = { workspace = true, features = ["chat"] }
+radroots_secrets = { workspace = true, features = ["browser"] }
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = ["Crypto"] }
+universal-time = { version = "=0.3.1", optional = true }
+
+[lints]
+workspace = true

@@ -48,6 +48,7 @@ members = [
   "crates/event_codec_wasm",
   "crates/identity_bindings",
   "crates/radroots",
+  "crates/radroots_browser",
   "crates/replica_schema_bindings",
   "crates/replica_store_wasm",
   "crates/replica_sync_wasm",
@@ -140,6 +141,7 @@ radroots_service_sqlite = { path = "crates/service_sqlite", version = "=0.1.0-al
 radroots_transport_nostr = { package = "radroots_transport_nostr", path = "crates/transport_nostr", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_nostr_native = { package = "radroots_transport_nostr_native", path = "crates/transport_nostr_native", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_nostr_browser = { path = "crates/transport_nostr_browser", version = "=0.1.0-alpha", default-features = false }
+radroots_browser = { path = "crates/radroots_browser", version = "=0.1.0-alpha", default-features = false }
 radroots_transport_reticulum = { path = "crates/transport_reticulum", version = "=0.1.0-alpha", default-features = false }
 radroots_simplex_agent_proto = { path = "crates/simplex_agent_proto", version = "=0.1.0-alpha", default-features = false }
 radroots_simplex_chat_proto = { path = "crates/simplex_chat_proto", version = "=0.1.0-alpha", default-features = false }

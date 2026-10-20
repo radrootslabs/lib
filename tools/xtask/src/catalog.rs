@@ -360,6 +360,8 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
         validate_identifier(&package.tier, "package tier")?;
         let expected_path = match package.name.as_str() {
             "radroots" => "crates/radroots".to_owned(),
+            // shared_sdk_refactor.v1.json fixes the browser artifact-root path.
+            "radroots_browser" => "crates/radroots_browser".to_owned(),
             "xtask" => "tools/xtask".to_owned(),
             name => format!(
                 "crates/{}",
@@ -1566,6 +1568,20 @@ mod tests {
         assert!(validate_relative_path("crates/./sdk").is_err());
         assert!(validate_sha256(&"a".repeat(64), "digest").is_ok());
         assert!(validate_sha256(&"A".repeat(64), "digest").is_err());
+    }
+
+    #[test]
+    fn browser_artifact_keeps_its_approved_directory_instead_of_prefix_stripping() {
+        let mut catalog = checked_in_catalog();
+        validate_catalog(&catalog).expect("approved catalog");
+        let browser = catalog
+            .package
+            .iter_mut()
+            .find(|package| package.name == "radroots_browser")
+            .expect("browser artifact");
+        assert_eq!(browser.path, "crates/radroots_browser");
+        browser.path = "crates/browser".to_owned();
+        assert!(validate_catalog(&catalog).is_err());
     }
 
     #[test]

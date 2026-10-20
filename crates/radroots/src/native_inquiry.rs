@@ -1,15 +1,16 @@
 use core::num::NonZeroU64;
 use radroots_domain::{PublicKey, UnixSeconds};
-use radroots_execution::session::{HostFuture, inquiry::InquiryIo};
+use radroots_execution::session::{
+    HostFuture,
+    inquiry::{InquiryIo, capture_dm_route, selected_dm_targets},
+};
 use radroots_nostr::signing::{
     OsNonceSource,
     gift_wrap::{randomized_past_time, wrap_retained_seal},
 };
 use radroots_protocol::chat::CapturedDmRoute;
 use radroots_signing::provider::NonceSource;
-use radroots_storage::command::{
-    EnvelopeCandidate, OperationError, PublicationWork, SignedDmRelaySource,
-};
+use radroots_storage::command::{EnvelopeCandidate, OperationError, PublicationWork};
 use radroots_transport::{
     EventSink, EventSource, TargetSet,
     policy::{SatisfactionClass, SatisfactionPolicy},
@@ -79,41 +80,7 @@ impl NativeInquiry {
         recipient: PublicKey,
         raw_sources: impl IntoIterator<Item = &'a str>,
     ) -> Result<CapturedDmRoute, OperationError> {
-        let mut head: Option<SignedDmRelaySource> = None;
-        for raw in raw_sources {
-            let source = SignedDmRelaySource::verify(raw)?;
-            if source.participant() != recipient {
-                return Err(OperationError::InvalidEvidence);
-            }
-            // NIP-01 replaceable head: latest time, then lowest event ID.
-            if head.as_ref().is_none_or(|old| {
-                source.created_at() > old.created_at()
-                    || (source.created_at() == old.created_at()
-                        && source.event_id() < old.event_id())
-            }) {
-                head = Some(source);
-            }
-        }
-        let head = head.ok_or(OperationError::MissingHistory)?;
-        let mut selected = Vec::new();
-        for uri in head.relay_uris() {
-            if self
-                .write
-                .targets()
-                .iter()
-                .any(|target| target.matches_nostr_relay(uri).unwrap_or(false))
-                && !selected.iter().any(|old| old == uri)
-            {
-                selected.push(uri.to_owned());
-            }
-        }
-        CapturedDmRoute::from_observed_descriptor(
-            recipient,
-            head.event_id(),
-            head.raw_json(),
-            &selected,
-        )
-        .map_err(|_| OperationError::UnverifiedApproval)
+        capture_dm_route(recipient, raw_sources, &self.write)
     }
 }
 impl InquiryIo for NativeInquiry {
@@ -167,20 +134,7 @@ impl InquiryIo for NativeInquiry {
         })
     }
     fn targets(&self, route: &CapturedDmRoute) -> Result<TargetSet, OperationError> {
-        SignedDmRelaySource::verify(route.raw_json())?.validate_capture(route)?;
-        let mut selected = Vec::new();
-        for uri in route.selected_relays() {
-            let target = self
-                .write
-                .targets()
-                .iter()
-                .find(|target| target.matches_nostr_relay(uri).unwrap_or(false))
-                .ok_or(OperationError::UnverifiedApproval)?;
-            if !selected.iter().any(|old| old == target) {
-                selected.push(target.clone());
-            }
-        }
-        TargetSet::new(selected).map_err(|_| OperationError::UnverifiedApproval)
+        selected_dm_targets(route, &self.write)
     }
     fn publication_policy(&self) -> SatisfactionPolicy {
         self.policy.clone()
@@ -335,6 +289,10 @@ mod tests {
             Err(OperationError::MissingHistory)
         ));
         assert!(matches!(
+            io.capture_route(key(), [older.as_str(), newer.as_str(), newer.as_str()]),
+            Err(OperationError::InvalidEvidence)
+        ));
+        assert!(matches!(
             io.capture_route(key(), [source(2, 100, "foreign", &[URI]).as_str()]),
             Err(OperationError::InvalidEvidence)
         ));
@@ -356,6 +314,14 @@ mod tests {
         assert_eq!(route.raw_json(), raw);
         assert_eq!(route.selected_relays().len(), 2);
         assert_eq!(io.targets(&route).unwrap().len(), 1);
+        let changed = radroots_transport::TargetSet::new(vec![
+            radroots_transport::Target::nostr_relay("wss://changed.example").unwrap(),
+        ])
+        .unwrap();
+        assert!(matches!(
+            radroots_execution::session::inquiry::selected_dm_targets(&route, &changed),
+            Err(OperationError::UnverifiedApproval)
+        ));
         let refused = source(1, 100, "no approved target", &["wss://other.example"]);
         assert!(matches!(
             io.capture_route(key(), [refused.as_str()]),

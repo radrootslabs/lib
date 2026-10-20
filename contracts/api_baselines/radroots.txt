@@ -12,13 +12,12 @@ pub use radroots::OperationId
 pub use radroots::OperationReceipt
 pub use radroots::RecoveryRequirement
 pub use radroots::Result
+pub use radroots::StartMode
 pub use radroots::TargetObservation
 pub use radroots::WaitTermination
 pub use radroots::WorkspaceSession
 pub mod radroots::client
-#[non_exhaustive] pub enum radroots::client::StartMode
-pub radroots::client::StartMode::LocalOnly
-pub radroots::client::StartMode::Online
+pub use radroots::client::StartMode
 pub struct radroots::client::Client
 impl radroots::client::Client
 pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
@@ -29,7 +28,7 @@ pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> r
 pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
 pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
-pub async fn radroots::client::Client::start(&self, radroots::client::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
+pub async fn radroots::client::Client::start(&self, radroots_execution::session::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
 pub fn radroots::client::Client::state(&self) -> radroots_execution::session::SessionState
 pub async fn radroots::client::Client::storage_status(&self) -> radroots_execution::Result<radroots_storage::status::StorageStatus>
 pub struct radroots::client::CloseReceipt
@@ -200,9 +199,6 @@ pub use radroots::transport::Target
 pub use radroots::transport::TargetPolicy
 pub use radroots::transport::TargetSet
 pub use radroots::transport::TransportId
-#[non_exhaustive] pub enum radroots::StartMode
-pub radroots::StartMode::LocalOnly
-pub radroots::StartMode::Online
 pub struct radroots::Client
 impl radroots::client::Client
 pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
@@ -213,7 +209,7 @@ pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> r
 pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
 pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
-pub async fn radroots::client::Client::start(&self, radroots::client::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
+pub async fn radroots::client::Client::start(&self, radroots_execution::session::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
 pub fn radroots::client::Client::state(&self) -> radroots_execution::session::SessionState
 pub async fn radroots::client::Client::storage_status(&self) -> radroots_execution::Result<radroots_storage::status::StorageStatus>
 pub struct radroots::CloseReceipt

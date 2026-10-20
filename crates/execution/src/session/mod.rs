@@ -35,6 +35,17 @@ use std::sync::{Mutex, MutexGuard};
 use crate::{Error, Reason, Result};
 use host::Shared;
 
+/// Explicit task admission for a local resource session. No network is selected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum StartMode {
+    /// Enables local resource work without opening sockets or replaying writes.
+    LocalOnly,
+    /// Permits explicit commands to use the configured transport. Startup
+    /// itself performs no query, publication or automatic outbox replay.
+    Online,
+}
+
 /// Session resource state, independent of durable operation state.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SessionState {

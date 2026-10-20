@@ -18,6 +18,8 @@ pub fn radroots_execution::session::inquiry::InquiryIo::publish(&self, radroots_
 pub fn radroots_execution::session::inquiry::InquiryIo::route(&self, radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_storage::command::OperationError>>
 pub fn radroots_execution::session::inquiry::InquiryIo::seal_time(&self, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
 pub fn radroots_execution::session::inquiry::InquiryIo::targets(&self, &radroots_protocol::chat::routes::CapturedDmRoute) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::inquiry::capture_dm_route<'a>(radroots_identity::key::PublicKey, impl core::iter::traits::collect::IntoIterator<Item = &'a str>, &radroots_transport::target::TargetSet) -> core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::inquiry::selected_dm_targets(&radroots_protocol::chat::routes::CapturedDmRoute, &radroots_transport::target::TargetSet) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
 pub mod radroots_execution::session::tasks
 pub trait radroots_execution::session::tasks::TaskHost: radroots_execution::session::HostBound
 pub fn radroots_execution::session::tasks::TaskHost::submit(&self, radroots_execution::session::HostFuture<'static, ()>) -> radroots_execution::Result<()>
@@ -27,6 +29,9 @@ pub radroots_execution::session::SessionState::Closing
 pub radroots_execution::session::SessionState::Ready
 pub radroots_execution::session::SessionState::Running
 pub radroots_execution::session::SessionState::Starting
+#[non_exhaustive] pub enum radroots_execution::session::StartMode
+pub radroots_execution::session::StartMode::LocalOnly
+pub radroots_execution::session::StartMode::Online
 pub struct radroots_execution::session::ClientSession<H: radroots_execution::session::SessionHost>
 impl<H: radroots_execution::session::SessionHost + 'static> radroots_execution::session::ClientSession<H>
 pub async fn radroots_execution::session::ClientSession<H>::inquire(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>

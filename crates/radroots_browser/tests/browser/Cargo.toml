@@ -1,0 +1,29 @@
+[package]
+name = "radroots_ordinary_browser_fixture"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.99.0"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+radroots_browser = { path = "../..", features = ["artifact_clock"] }
+radroots_domain = { path = "../../../domain", default-features = false, features = ["std"] }
+radroots_execution = { path = "../../../execution", default-features = false, features = ["workspace_session"] }
+radroots_nostr = { path = "../../../nostr", default-features = false, features = ["signing", "nip17"] }
+radroots_secrets = { path = "../../../secrets", default-features = false, features = ["browser"] }
+radroots_signing = { path = "../../../signing", default-features = false, features = ["chat", "std"] }
+radroots_storage = { path = "../../../storage", default-features = false, features = ["protected_outbox"] }
+radroots_storage_indexeddb = { path = "../../../storage_indexeddb", features = ["workspace"] }
+radroots_transport = { path = "../../../transport", default-features = false, features = ["std"] }
+radroots_transport_nostr = { path = "../../../transport_nostr", default-features = false }
+nostr = { version = "=0.44.7", default-features = false, features = ["std", "nip44", "nip59"] }
+serde_json = "=1.0.149"
+futures = "=0.3.32"
+js-sys = "=0.3.91"
+wasm-bindgen = "=0.2.114"
+wasm-bindgen-futures = "=0.4.64"

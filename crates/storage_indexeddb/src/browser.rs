@@ -127,6 +127,11 @@ struct State {
     version_change: RefCell<Option<EventCallback>>,
 }
 impl State {
+    fn detach_callbacks(&self) {
+        self.db.set_onversionchange(None);
+        let retired = { self.version_change.borrow_mut().take() };
+        drop(retired);
+    }
     fn stop(&self) {
         self.closing.set(true);
         if self.count.get() == 0 {
@@ -259,10 +264,12 @@ impl Database {
         observe.await.unwrap_or(Err(Error::CommitUnknown))
     }
     /// Stops admission immediately when polled, drains every accepted job and
-    /// closes the connection. A cancelled observer can explicitly resume close.
+    /// closes the connection and detaches callbacks even while closed handles
+    /// remain alive. A cancelled observer can explicitly resume close.
     pub async fn close(&self) -> Result<(), Error> {
         self.state.stop();
         if self.state.count.get() == 0 {
+            self.state.detach_callbacks();
             return Ok(());
         }
         let signal = Rc::new(RefCell::new(None));
@@ -282,6 +289,7 @@ impl Database {
             Poll::Pending
         })
         .await;
+        self.state.detach_callbacks();
         Ok(())
     }
 }
