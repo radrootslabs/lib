@@ -310,7 +310,11 @@ async fn native_delivery_retains_exact_outer_before_loopback_and_reopen_preserve
         .unwrap();
     assert_eq!(pending.delivery_attempts().len(), 1);
     assert!(pending.delivery_observations().is_empty());
-    let projected = radroots_execution::OperationReceipt::from_snapshot(&pending);
+    let projected =
+        radroots_execution::OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(
+            &pending,
+        )
+        .unwrap();
     assert_eq!(projected.delivery(), radroots_execution::Delivery::Unknown);
     assert_eq!(
         projected.delivery_attempts()[0].envelope_digest(),
@@ -383,7 +387,11 @@ async fn native_delivery_retains_exact_outer_before_loopback_and_reopen_preserve
         .unwrap()
         .unwrap();
     assert_ne!(complete.checkpoint_digest(), pending.checkpoint_digest());
-    let projected = radroots_execution::OperationReceipt::from_snapshot(&complete);
+    let projected =
+        radroots_execution::OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(
+            &complete,
+        )
+        .unwrap();
     assert_eq!(
         projected.business_installation(),
         radroots_execution::BusinessInstallation::Installed

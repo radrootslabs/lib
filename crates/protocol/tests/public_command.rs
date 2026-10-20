@@ -320,3 +320,40 @@ fn artifact_selection_has_no_public_participant_and_preserves_private_keys() {
         assert!(SigningTarget::from_key(invalid).is_err());
     }
 }
+
+#[test]
+fn public_plans_require_bounded_explicit_targets_without_scheme_or_whitespace_fallback() {
+    use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
+    let command = CapturedListingCommand::capture(
+        context(),
+        PublishInput::parse(&serde_json::to_vec(&input()).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let capture = |targets: &[String]| {
+        PublicSigningPlan::capture(
+            &command,
+            UnixSeconds::new(100).unwrap(),
+            targets,
+            SigningReplay::NonReplayable,
+        )
+    };
+    assert!(capture(&["wss://route.example/".into()]).is_ok());
+    let maximum = format!("wss://{}", "x".repeat(2048 - "wss://".len()));
+    assert_eq!(maximum.len(), 2048);
+    assert!(capture(std::slice::from_ref(&maximum)).is_ok());
+    let excessive = (0..17)
+        .map(|i| format!("wss://route.example/{i}"))
+        .collect::<Vec<_>>();
+    assert!(capture(&excessive).is_err());
+    for target in [
+        format!("{maximum}x"),
+        "https://route.example/".into(),
+        "wss://route.example/a ".into(),
+        "wss://route.example/a\nb".into(),
+    ] {
+        assert!(
+            capture(std::slice::from_ref(&target)).is_err(),
+            "{target:?}"
+        );
+    }
+}

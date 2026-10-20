@@ -94,7 +94,7 @@ pub struct ClientSession<H: SessionHost> {
     #[cfg(feature = "workspace_session")]
     pub(crate) task_budget: super::tasks::TaskBudget,
     #[cfg(feature = "workspace_session")]
-    pub(crate) inquiry: Option<Shared<super::inquiry::InquiryRuntime>>,
+    pub(crate) commands: Option<Shared<super::command::CommandRuntime>>,
 }
 impl<H: SessionHost> Clone for ClientSession<H> {
     fn clone(&self) -> Self {
@@ -108,7 +108,7 @@ impl<H: SessionHost> Clone for ClientSession<H> {
             #[cfg(feature = "workspace_session")]
             task_budget: self.task_budget.clone(),
             #[cfg(feature = "workspace_session")]
-            inquiry: self.inquiry.clone(),
+            commands: self.commands.clone(),
         }
     }
 }
@@ -137,7 +137,7 @@ impl<H: SessionHost> ClientSession<H> {
             #[cfg(feature = "workspace_session")]
             task_budget: super::tasks::TaskBudget::new(),
             #[cfg(feature = "workspace_session")]
-            inquiry: None,
+            commands: None,
         }
     }
     /// Pairs an explicit target task host with its owning lifecycle host. The
@@ -157,8 +157,8 @@ impl<H: SessionHost> ClientSession<H> {
     /// Pairs the workflow's obtained-material owner with the lifecycle host
     /// which must drain that same owner before closing resources.
     #[cfg(feature = "workspace_session")]
-    pub fn with_inquiry_runtime(mut self, runtime: Shared<super::inquiry::InquiryRuntime>) -> Self {
-        self.inquiry = Some(runtime);
+    pub fn with_command_runtime(mut self, runtime: Shared<super::command::CommandRuntime>) -> Self {
+        self.commands = Some(runtime);
         self
     }
     /// Reports resource lifecycle independently of business authority.

@@ -4,13 +4,13 @@ use crate::{
     WorkspaceSession,
 };
 use crate::{
-    inquiry::{BrowserInquiry, unix_seconds},
+    commands::{BrowserCommands, unix_seconds},
     tasks::OwnedTasks,
 };
 use radroots_domain::{ChatMessage, CommandDigest, UnixSeconds};
 use radroots_execution::{
     Code, Error, OperationContext, RetryClass,
-    session::{ClientSession, HostFuture, SessionHost, SignerSession, inquiry::InquiryRuntime},
+    session::{ClientSession, HostFuture, SessionHost, SignerSession, command::CommandRuntime},
 };
 use radroots_secrets::{SecretId, SecretRef, browser::BrowserProvider, provider::AccessPolicy};
 use radroots_signing::provider::SignerHandle;
@@ -43,7 +43,7 @@ pub struct BrowserConfig {
     input: AttachmentInput,
     proof: AttachmentProof,
     policy: AccessPolicy,
-    inquiry: Option<Rc<BrowserInquiry>>,
+    commands: Option<Rc<BrowserCommands>>,
 }
 impl BrowserConfig {
     /// Selects an existing key and workspace only. Missing/damaged state is an
@@ -63,7 +63,7 @@ impl BrowserConfig {
             input,
             proof,
             policy,
-            inquiry: None,
+            commands: None,
         }
     }
     /// Adds explicit destinations and a relay acceptance criterion. No I/O.
@@ -72,8 +72,8 @@ impl BrowserConfig {
         config: radroots_transport_nostr::Config,
         policy: radroots_transport::policy::SatisfactionPolicy,
     ) -> Result<Self> {
-        self.inquiry = Some(Rc::new(
-            BrowserInquiry::new(config, policy).map_err(operation)?,
+        self.commands = Some(Rc::new(
+            BrowserCommands::new(config, policy).map_err(operation)?,
         ));
         Ok(self)
     }
@@ -88,8 +88,8 @@ struct Resources {
     workspace: Rc<BrowserWorkspace>,
     provider: Rc<BrowserProvider>,
     tasks: Rc<OwnedTasks>,
-    inquiry: Option<Rc<InquiryRuntime>>,
-    io: Option<Rc<BrowserInquiry>>,
+    commands: Option<Rc<CommandRuntime>>,
+    io: Option<Rc<BrowserCommands>>,
     storage_closed: Rc<Cell<bool>>,
 }
 impl SessionHost for Resources {
@@ -102,8 +102,8 @@ impl SessionHost for Resources {
     fn drain(&self) -> HostFuture<'_, Result<()>> {
         Box::pin(async move {
             self.tasks.drain().await?;
-            if let Some(inquiry) = &self.inquiry {
-                inquiry.drain().await.map_err(operation)?;
+            if let Some(commands) = &self.commands {
+                commands.drain().await.map_err(operation)?;
             }
             Ok(())
         })
@@ -154,7 +154,7 @@ impl CloseReceipt {
 pub struct Client {
     session: ClientSession<Resources>,
     workspace: Rc<BrowserWorkspace>,
-    io: Option<Rc<BrowserInquiry>>,
+    io: Option<Rc<BrowserCommands>>,
     storage_closed: Rc<Cell<bool>>,
 }
 impl Client {
@@ -191,17 +191,17 @@ impl Client {
             }
         };
         let tasks = Rc::new(OwnedTasks::default());
-        let inquiry = config
-            .inquiry
+        let commands = config
+            .commands
             .as_ref()
-            .map(|io| Rc::new(InquiryRuntime::new(io.clone())));
+            .map(|io| Rc::new(CommandRuntime::new(io.clone())));
         let storage_closed = Rc::new(Cell::new(false));
         let host = Resources {
             workspace: workspace.clone(),
             provider,
             tasks: tasks.clone(),
-            inquiry: inquiry.clone(),
-            io: config.inquiry.clone(),
+            commands: commands.clone(),
+            io: config.commands.clone(),
             storage_closed: storage_closed.clone(),
         };
         const MAX: NonZeroU16 = match NonZeroU16::new(32) {
@@ -209,14 +209,14 @@ impl Client {
             None => panic!("nonzero constant"),
         };
         let session = ClientSession::new_with_task_host(host, MAX, tasks);
-        let session = match inquiry {
-            Some(inquiry) => session.with_inquiry_runtime(inquiry),
+        let session = match commands {
+            Some(commands) => session.with_command_runtime(commands),
             None => session,
         };
         Ok(Self {
             session,
             workspace,
-            io: config.inquiry,
+            io: config.commands,
             storage_closed,
         })
     }
@@ -253,7 +253,7 @@ impl Client {
         self.session.start().await?;
         Ok(self.state())
     }
-    /// Borrows the ordinary shared inquiry entry point without performing I/O.
+    /// Borrows the ordinary private inquiry entry point without performing I/O.
     pub const fn inbox(&self) -> Inbox<'_> {
         Inbox { client: self }
     }
@@ -301,7 +301,10 @@ pub struct Operations<'a> {
 }
 impl Operations<'_> {
     /// Reads original retained progress; absence proves no safe nonissuance.
-    pub async fn get(&self, id: OperationId) -> Result<Option<OperationReceipt<ChatMessage>>> {
+    pub async fn get(
+        &self,
+        id: OperationId,
+    ) -> Result<Option<radroots_execution::OperationStatus>> {
         self.get_matching(id, None).await
     }
     /// Requires the original command digest in addition to operation identity.
@@ -309,7 +312,7 @@ impl Operations<'_> {
         &self,
         id: OperationId,
         expected: Option<CommandDigest>,
-    ) -> Result<Option<OperationReceipt<ChatMessage>>> {
+    ) -> Result<Option<radroots_execution::OperationStatus>> {
         self.client
             .session
             .operation(self.client.workspace.clone(), &self.scope, id, expected)
@@ -320,10 +323,10 @@ impl Operations<'_> {
         &self,
         id: OperationId,
         expected: Option<CommandDigest>,
-    ) -> Result<OperationReceipt<ChatMessage>> {
+    ) -> Result<radroots_execution::OperationStatus> {
         self.client
             .session
-            .resume_inquiry(self.client.workspace.clone(), &self.scope, id, expected)
+            .resume_command(self.client.workspace.clone(), &self.scope, id, expected)
             .await
     }
 }

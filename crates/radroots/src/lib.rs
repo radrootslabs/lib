@@ -11,6 +11,7 @@ pub mod identity;
 pub mod inbox;
 pub mod knowledge;
 pub mod listing;
+pub mod listings;
 pub mod operations;
 pub mod signing;
 pub mod storage;
@@ -22,7 +23,7 @@ pub mod transport;
 mod native_tasks;
 
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-mod native_inquiry;
+mod native_commands;
 
 #[cfg(feature = "native")]
 pub use client::NativeConfig;
@@ -31,7 +32,8 @@ pub use radroots_domain::OperationId;
 pub use radroots_execution::workspace::{CommandContext, WorkspaceSession};
 pub use radroots_execution::{
     ArtifactObservation, BusinessInstallation, Delivery, DeliveryObservation, Issuance,
-    OperationReceipt, RecoveryRequirement, TargetObservation, WaitTermination,
+    OperationKind, OperationReceipt, OperationStatus, OperationValue, RecoveryRequirement,
+    TargetObservation, WaitTermination,
 };
 pub use radroots_execution::{Error, Result};
 pub use radroots_storage::workspace::{AttachmentInput, AttachmentProof};

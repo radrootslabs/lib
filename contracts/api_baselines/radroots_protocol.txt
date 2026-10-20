@@ -534,6 +534,7 @@ pub const fn radroots_protocol::listing::PublishInput::id(&self) -> radroots_dom
 pub fn radroots_protocol::listing::PublishInput::new(radroots_domain::listing::ListingId, &str, &str, &str, radroots_domain::context::UnixSeconds, radroots_domain::listing::ListingTerms) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub const fn radroots_protocol::listing::PublishInput::published_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_protocol::listing::PublishInput::terms(&self) -> &radroots_domain::listing::ListingTerms
+pub const fn radroots_protocol::listing::PublishInput::text(&self) -> &radroots_domain::listing::view::ListingText
 impl radroots_protocol::listing::PublishInput
 pub fn radroots_protocol::listing::PublishInput::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
 impl core::fmt::Debug for radroots_protocol::listing::PublishInput

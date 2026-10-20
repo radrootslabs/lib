@@ -19,6 +19,9 @@ use radroots_storage::command::{
 };
 use serde_json::{Value, json};
 use sqlx::{Connection, SqliteConnection};
+#[path = "public_delivery_records.rs"]
+mod public_delivery_records;
+
 struct Issued {
     fixture: CryptoFixture,
     selected: AttachmentInput,

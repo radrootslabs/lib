@@ -11,7 +11,7 @@ use alloc::{
 use core::fmt;
 use radroots_domain::{
     PublicKey, UnixSeconds,
-    listing::{ListingId, ListingState, ListingTerms, Price},
+    listing::{ListingId, ListingState, ListingTerms, ListingText, Price},
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -36,9 +36,8 @@ pub const LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT: usize = 16;
 #[derive(Clone, Serialize)]
 pub struct PublishInput {
     id: ListingId,
-    title: String,
-    summary: String,
-    description_markdown: String,
+    #[serde(flatten)]
+    text: ListingText,
     published_at: UnixSeconds,
     #[serde(rename = "profile", serialize_with = "serialize_profile")]
     terms: ListingTerms,
@@ -54,23 +53,11 @@ impl PublishInput {
         published_at: UnixSeconds,
         terms: ListingTerms,
     ) -> Result<Self, WireError> {
-        for (value, limit, empty) in [
-            (title, 160, false),
-            (summary, 280, false),
-            (description_markdown, 16_384, true),
-        ] {
-            if (!empty && value.is_empty())
-                || value.len() > limit * 4
-                || value.chars().count() > limit
-            {
-                return Err(WireError::InvalidInput);
-            }
-        }
+        let text = ListingText::new(title, summary, description_markdown)
+            .map_err(|_| WireError::InvalidInput)?;
         Ok(Self {
             id,
-            title: title.into(),
-            summary: summary.into(),
-            description_markdown: description_markdown.into(),
+            text,
             published_at,
             terms,
         })
@@ -86,6 +73,10 @@ impl PublishInput {
     /// Returns the captured original publication timestamp.
     pub const fn published_at(&self) -> UnixSeconds {
         self.published_at
+    }
+    /// Exact domain-owned public presentation values.
+    pub const fn text(&self) -> &ListingText {
+        &self.text
     }
 }
 impl fmt::Debug for PublishInput {
@@ -157,16 +148,16 @@ impl ListingEvent {
             ListingState::Withdrawn => Some("Withdrawn: unavailable"),
         };
         let summary = match inactive {
-            Some(label) => format!("[{label}] {}", input.summary),
-            None => input.summary.clone(),
+            Some(label) => format!("[{label}] {}", input.text.summary()),
+            None => input.text.summary().into(),
         };
         let content = match inactive {
-            Some(label) => format!("[{label}]\n\n{}", input.description_markdown),
-            None => input.description_markdown.clone(),
+            Some(label) => format!("[{label}]\n\n{}", input.text.description_markdown()),
+            None => input.text.description_markdown().into(),
         };
         let mut tags = vec![
             vec!["d".into(), input.id.to_string()],
-            vec!["title".into(), input.title.clone()],
+            vec!["title".into(), input.text.title().into()],
             vec!["summary".into(), summary],
             vec!["published_at".into(), input.published_at.to_string()],
             vec!["location".into(), input.terms.fulfillment().area().into()],

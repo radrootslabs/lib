@@ -5,6 +5,9 @@ use crate::{AuthorityRef, Decimal, ListingOptionId, PositiveDecimal, PublicKey, 
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{fmt, str::FromStr};
 
+mod view;
+pub use view::{Listing, ListingText};
+
 /// A fixed, input-free public-offer value failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -21,6 +24,8 @@ pub enum ListingError {
     InvalidFulfillment,
     /// A duration exceeds the cross-host exact integer bound.
     InvalidDuration,
+    /// Declared publication time follows the signed revision time.
+    InvalidTime,
 }
 impl fmt::Display for ListingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -31,6 +36,7 @@ impl fmt::Display for ListingError {
             Self::InvalidOptions => "invalid listing options",
             Self::InvalidFulfillment => "invalid public fulfillment",
             Self::InvalidDuration => "invalid listing duration",
+            Self::InvalidTime => "invalid listing time",
         })
     }
 }

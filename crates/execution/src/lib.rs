@@ -9,7 +9,8 @@ extern crate alloc;
 mod receipt;
 pub use receipt::{
     ArtifactObservation, BusinessInstallation, Delivery, DeliveryObservation, Issuance,
-    OperationReceipt, RecoveryRequirement, TargetObservation, WaitTermination,
+    OperationKind, OperationReceipt, OperationStatus, OperationValue, RecoveryRequirement,
+    TargetObservation, WaitTermination,
 };
 
 #[cfg(feature = "session")]

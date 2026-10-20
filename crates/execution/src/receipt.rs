@@ -256,10 +256,54 @@ impl fmt::Debug for DeliveryObservation {
     }
 }
 
+/// Actual retained command family, including before installation. This is an
+/// observation discriminator and supplies no authority to execute a command.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum OperationKind {
+    /// Retained private chat command.
+    Chat,
+    /// Retained public listing command.
+    Listing,
+}
+/// Actual installed business value in an original-operation observation.
+#[derive(Clone, Eq, PartialEq)]
+pub enum OperationValue {
+    /// Original installed private message, without a public-role conversion.
+    Chat(Box<radroots_domain::ChatMessage>),
+    /// Original installed public revision, without a private participant.
+    Listing(Box<radroots_domain::listing::Listing>),
+}
+impl OperationValue {
+    /// Borrows an actual private result only.
+    pub fn as_chat(&self) -> Option<&radroots_domain::ChatMessage> {
+        match self {
+            Self::Chat(v) => Some(v),
+            Self::Listing(_) => None,
+        }
+    }
+    /// Borrows an actual public result only.
+    pub fn as_listing(&self) -> Option<&radroots_domain::listing::Listing> {
+        match self {
+            Self::Listing(v) => Some(v),
+            Self::Chat(_) => None,
+        }
+    }
+}
+impl fmt::Debug for OperationValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("OperationValue(<redacted>)")
+    }
+}
+/// Common original-operation status. Querying preserves the actual family and
+/// never interprets a public listing as a message, signing or dispatch right.
+pub type OperationStatus = OperationReceipt<OperationValue>;
+
 /// Owned observation of one original operation. It does not authenticate a
 /// principal or qualify a custom host. Business, issuance, delivery and caller
 /// wait dimensions remain independent; private payloads never enter diagnostics.
 pub struct OperationReceipt<T> {
+    kind: OperationKind,
     context: CommandContextData,
     command_digest: CommandDigest,
     admission: Admission,
@@ -288,6 +332,10 @@ pub struct OperationReceipt<T> {
     error: Option<Error>,
 }
 impl<T> OperationReceipt<T> {
+    /// Actual original command family, independently of installed results.
+    pub const fn kind(&self) -> OperationKind {
+        self.kind
+    }
     /// Complete original outer/target intent references. These contain no raw
     /// payload and grant no dispatch permission or adapter qualification.
     #[cfg(feature = "receipts")]
@@ -444,11 +492,15 @@ impl<T> fmt::Debug for OperationReceipt<T> {
 }
 
 #[cfg(feature = "receipts")]
-impl OperationReceipt<ChatMessage> {
+impl<T> OperationReceipt<T> {
     /// Projects a structurally validated retained operation report. Only the concrete
     /// adapter's actual authenticated coherent query qualifies the facts. This
     /// conversion performs no I/O, issuance, installation or publication.
-    pub fn from_snapshot(snapshot: &radroots_storage::command::OperationSnapshot) -> Self {
+    fn project(
+        snapshot: &radroots_storage::command::OperationSnapshot,
+        kind: OperationKind,
+        business_result: Option<T>,
+    ) -> Self {
         use alloc::{vec, vec::Vec};
         let prepared = snapshot.prepared();
         let mut artifacts = Vec::with_capacity(snapshot.artifacts().len());
@@ -483,8 +535,15 @@ impl OperationReceipt<ChatMessage> {
                 publication_transaction: snapshot
                     .publications()
                     .iter()
-                    .find(|value| Some(value.evidence()) == obtained)
-                    .map(|value| value.transaction_id()),
+                    .map(|v| (v.evidence(), v.transaction_id()))
+                    .chain(
+                        snapshot
+                            .public_publications()
+                            .iter()
+                            .map(|v| (v.evidence(), v.transaction_id())),
+                    )
+                    .find(|(e, _)| Some(*e) == obtained)
+                    .map(|(_, tx)| tx),
                 obtained_digest: obtained.map(|value| *value.digest()),
                 observed_at: obtained.and_then(|value| value.observed_at_unix_ms()),
             });
@@ -513,8 +572,22 @@ impl OperationReceipt<ChatMessage> {
         let mut recovery = Vec::new();
         let observations = snapshot.delivery_observations();
         let attempts = snapshot.delivery_attempts();
-        let delivery_pending = snapshot
+        let publications = snapshot
             .publications()
+            .iter()
+            .copied()
+            .map(radroots_storage::command::PublicationArtifact::Private)
+            .chain(
+                snapshot
+                    .public_publications()
+                    .iter()
+                    .copied()
+                    .map(radroots_storage::command::PublicationArtifact::Public),
+            )
+            .collect::<Vec<_>>();
+        let installed =
+            snapshot.installation().is_some() || snapshot.listing_installation().is_some();
+        let delivery_pending = publications
             .iter()
             .any(|work| snapshot.publication_accepted(*work) != Ok(true));
         let delivery_unknown = attempts.iter().any(|attempt| {
@@ -569,47 +642,49 @@ impl OperationReceipt<ChatMessage> {
             recovery.push(RecoveryRequirement::ManualReconciliation);
         }
         if recovery.is_empty()
-            && (snapshot.installation().is_none()
-                || issuance == Issuance::Pending
-                || issuance == Issuance::None)
+            && (!installed || issuance == Issuance::Pending || issuance == Issuance::None)
         {
             recovery.push(RecoveryRequirement::ContinueOriginalOperation);
         }
         Self {
+            kind,
             context: prepared.request().command().context().clone(),
             command_digest: prepared.identity().command_digest(),
             admission: Admission::Confirmed,
             admission_transaction: prepared.transaction_id(),
             plan_transaction: snapshot.bound_plan().map(|value| value.transaction_id()),
-            installation_transaction: snapshot.installation().map(|value| value.transaction_id()),
-            installed_at: snapshot.installation().map(|value| value.installed_at()),
+            installation_transaction: snapshot
+                .installation()
+                .map(|value| value.transaction_id())
+                .or_else(|| snapshot.listing_installation().map(|v| v.transaction_id())),
+            installed_at: snapshot
+                .installation()
+                .map(|value| value.installed_at())
+                .or_else(|| snapshot.listing_installation().map(|v| v.installed_at())),
             issuance_window: prepared.issuance_window(),
             authority_checkpoint: prepared.request().binding().input().checkpoint().clone(),
             operation_checkpoint: snapshot.checkpoint_digest(),
             conflicting_records: vec![].into_boxed_slice(),
             conflicting_sources: vec![].into_boxed_slice(),
             observed_at: snapshot.observed_at(),
-            business_installation: if snapshot.installation().is_some() {
+            business_installation: if installed {
                 BusinessInstallation::Installed
             } else {
                 BusinessInstallation::NotInstalled
             },
-            business_result: snapshot.installed_message().cloned(),
+            business_result,
             message_id: snapshot.message_id(),
             record_ids: vec![].into_boxed_slice(),
             artifacts: artifacts.into_boxed_slice(),
             issuance,
-            delivery: if snapshot.publications().is_empty() {
+            delivery: if publications.is_empty() {
                 Delivery::NotStarted
             } else if delivery_unknown {
                 Delivery::Unknown
             } else if attempts.is_empty()
-                || snapshot.publications().iter().any(|work| {
-                    !attempts.iter().any(|attempt| {
-                        attempt.work()
-                            == radroots_storage::command::PublicationArtifact::Private(*work)
-                    })
-                })
+                || publications
+                    .iter()
+                    .any(|work| !attempts.iter().any(|attempt| attempt.work() == *work))
             {
                 Delivery::Pending
             } else {
@@ -630,6 +705,83 @@ impl OperationReceipt<ChatMessage> {
             } else {
                 None
             },
+        }
+    }
+}
+
+#[cfg(feature = "receipts")]
+fn listing_value(
+    snapshot: &radroots_storage::command::OperationSnapshot,
+) -> Result<Option<radroots_domain::listing::Listing>, radroots_storage::command::OperationError> {
+    use radroots_storage::command::OperationError;
+    let Some(command) = snapshot.prepared().request().command().listing() else {
+        return Err(OperationError::UnsupportedOperation);
+    };
+    let Some(installed) = snapshot.listing_installation() else {
+        return Ok(None);
+    };
+    let bound = snapshot
+        .bound_plan()
+        .ok_or(OperationError::RecoveryRequired)?;
+    let input = command.input();
+    radroots_domain::listing::Listing::new(
+        input.id(),
+        installed.author(),
+        installed.revision(),
+        bound.plan().created_at(),
+        input.published_at(),
+        input.text().clone(),
+        input.terms().clone(),
+    )
+    .map(Some)
+    .map_err(|_| OperationError::RecoveryRequired)
+}
+#[cfg(feature = "receipts")]
+impl OperationReceipt<ChatMessage> {
+    /// Projects only a structurally valid original private command. This checks
+    /// report shape; actual authenticated storage remains the adapter's duty.
+    pub fn try_from_snapshot(
+        snapshot: &radroots_storage::command::OperationSnapshot,
+    ) -> Result<Self, radroots_storage::command::OperationError> {
+        snapshot.prepared().request().chat_command()?;
+        Ok(Self::project(
+            snapshot,
+            OperationKind::Chat,
+            snapshot.installed_message().cloned(),
+        ))
+    }
+}
+#[cfg(feature = "receipts")]
+impl OperationReceipt<radroots_domain::listing::Listing> {
+    /// Projects actual original public result data without inventing a message,
+    /// private participant, stock effect or current relay-head observation.
+    pub fn try_from_snapshot(
+        snapshot: &radroots_storage::command::OperationSnapshot,
+    ) -> Result<Self, radroots_storage::command::OperationError> {
+        Ok(Self::project(
+            snapshot,
+            OperationKind::Listing,
+            listing_value(snapshot)?,
+        ))
+    }
+}
+#[cfg(feature = "receipts")]
+impl OperationStatus {
+    /// Observes the actual supported command family, including before any
+    /// installed value. This performs no authentication, issuance or dispatch.
+    pub fn try_from_snapshot(
+        snapshot: &radroots_storage::command::OperationSnapshot,
+    ) -> Result<Self, radroots_storage::command::OperationError> {
+        if snapshot.prepared().request().command().listing().is_some() {
+            let value = listing_value(snapshot)?.map(|v| OperationValue::Listing(Box::new(v)));
+            Ok(Self::project(snapshot, OperationKind::Listing, value))
+        } else {
+            snapshot.prepared().request().chat_command()?;
+            let value = snapshot
+                .installed_message()
+                .cloned()
+                .map(|v| OperationValue::Chat(Box::new(v)));
+            Ok(Self::project(snapshot, OperationKind::Chat, value))
         }
     }
 }

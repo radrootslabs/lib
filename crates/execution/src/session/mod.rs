@@ -8,7 +8,7 @@ pub(crate) mod host;
 pub mod tasks;
 
 #[cfg(feature = "workspace_session")]
-pub mod inquiry;
+pub mod command;
 
 #[cfg(feature = "client_session")]
 mod client;

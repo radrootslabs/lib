@@ -20,6 +20,11 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/chat.rs"),
     include_str!("../src/chat/routes.rs"),
     include_str!("../src/chat/plan.rs"),
+    include_str!("../src/listing.rs"),
+    include_str!("../src/listing/input.rs"),
+    include_str!("../src/listing/command.rs"),
+    include_str!("../src/listing/plan.rs"),
+    include_str!("../src/plan.rs"),
 ];
 
 #[test]
@@ -32,7 +37,7 @@ fn manifest_has_approved_data_only_features_and_dependencies() {
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
         BTreeSet::from([
-            "chat", "commands", "default", "intent", "nip01", "serde", "std"
+            "chat", "commands", "default", "intent", "listing", "nip01", "serde", "std"
         ])
     );
     assert_eq!(
@@ -65,6 +70,8 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             "event",
             "nip01",
             "intent",
+            "listing",
+            "plan",
             "radrootsd",
             "runtime",
             "schema"

@@ -2,7 +2,7 @@ use core::num::NonZeroU64;
 use radroots_domain::{PublicKey, UnixSeconds};
 use radroots_execution::session::{
     HostFuture,
-    inquiry::{InquiryIo, capture_dm_route, selected_dm_targets},
+    command::{CommandIo, capture_dm_route, selected_dm_targets},
 };
 use radroots_nostr::signing::{
     OsNonceSource,
@@ -22,14 +22,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub(crate) struct NativeInquiry {
+pub(crate) struct NativeCommands {
     transport: NostrTransport,
     read: TargetSet,
     write: TargetSet,
     policy: SatisfactionPolicy,
     mode: AtomicU8,
 }
-impl NativeInquiry {
+impl NativeCommands {
     pub(crate) fn new(config: Config, policy: SatisfactionPolicy) -> Result<Self, OperationError> {
         let read = TargetSet::new(
             config
@@ -83,7 +83,7 @@ impl NativeInquiry {
         capture_dm_route(recipient, raw_sources, &self.write)
     }
 }
-impl InquiryIo for NativeInquiry {
+impl CommandIo for NativeCommands {
     fn enabled(&self) -> bool {
         self.mode.load(Ordering::Acquire) == 2
     }
@@ -93,6 +93,12 @@ impl InquiryIo for NativeInquiry {
             .map_err(|_| OperationError::RecoveryRequired)?
             .as_secs();
         UnixSeconds::new(now).map_err(|_| OperationError::RecoveryRequired)
+    }
+    fn public_targets(&self) -> Result<TargetSet, OperationError> {
+        if !self.enabled() {
+            return Err(OperationError::Unauthorized);
+        }
+        Ok(self.write.clone())
     }
     fn seal_time(&self, now: UnixSeconds) -> Result<UnixSeconds, OperationError> {
         let time = randomized_past_time(
@@ -176,11 +182,11 @@ impl InquiryIo for NativeInquiry {
 
 #[cfg(test)]
 mod tests {
-    use super::NativeInquiry;
+    use super::NativeCommands;
     use futures::executor::block_on;
     use nostr::JsonUtil;
     use radroots_domain::PublicKey;
-    use radroots_execution::session::inquiry::InquiryIo;
+    use radroots_execution::session::command::CommandIo;
     use radroots_storage::command::{OperationError, SignedDmRelaySource};
     use radroots_transport::policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy};
     use radroots_transport_nostr::{
@@ -198,8 +204,8 @@ mod tests {
             .unwrap(),
         )
     }
-    fn io() -> NativeInquiry {
-        NativeInquiry::new(
+    fn io() -> NativeCommands {
+        NativeCommands::new(
             config(RelayAccess::ReadWrite),
             SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
         )
@@ -228,14 +234,14 @@ mod tests {
     #[tokio::test]
     async fn explicit_io_configuration_and_repeated_start_modes_never_imply_network_admission() {
         assert!(
-            NativeInquiry::new(
+            NativeCommands::new(
                 config(RelayAccess::ReadOnly),
                 SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all())
             )
             .is_err()
         );
         assert!(
-            NativeInquiry::new(
+            NativeCommands::new(
                 config(RelayAccess::ReadWrite),
                 SatisfactionPolicy::new(SatisfactionClass::Delivered, TargetPolicy::all())
             )
@@ -319,7 +325,7 @@ mod tests {
         ])
         .unwrap();
         assert!(matches!(
-            radroots_execution::session::inquiry::selected_dm_targets(&route, &changed),
+            radroots_execution::session::command::selected_dm_targets(&route, &changed),
             Err(OperationError::UnverifiedApproval)
         ));
         let refused = source(1, 100, "no approved target", &["wss://other.example"]);

@@ -11,6 +11,7 @@ pub radroots_domain::listing::ListingError::InvalidIdentifier
 pub radroots_domain::listing::ListingError::InvalidOptions
 pub radroots_domain::listing::ListingError::InvalidQuantity
 pub radroots_domain::listing::ListingError::InvalidText
+pub radroots_domain::listing::ListingError::InvalidTime
 impl core::error::Error for radroots_domain::listing::ListingError
 impl core::fmt::Display for radroots_domain::listing::ListingError
 pub fn radroots_domain::listing::ListingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -36,6 +37,18 @@ pub struct radroots_domain::listing::LeadSeconds(_)
 impl radroots_domain::listing::LeadSeconds
 pub const fn radroots_domain::listing::LeadSeconds::get(self) -> u64
 pub fn radroots_domain::listing::LeadSeconds::new(u64) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub struct radroots_domain::listing::Listing
+impl radroots_domain::listing::Listing
+pub const fn radroots_domain::listing::Listing::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::listing::Listing::created_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::listing::Listing::id(&self) -> radroots_domain::listing::ListingId
+pub fn radroots_domain::listing::Listing::new(radroots_domain::listing::ListingId, radroots_identity::key::PublicKey, radroots_domain::EnvelopeEventId, radroots_domain::UnixSeconds, radroots_domain::UnixSeconds, radroots_domain::listing::ListingText, radroots_domain::listing::ListingTerms) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub const fn radroots_domain::listing::Listing::published_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::listing::Listing::revision(&self) -> radroots_domain::EnvelopeEventId
+pub const fn radroots_domain::listing::Listing::terms(&self) -> &radroots_domain::listing::ListingTerms
+pub const fn radroots_domain::listing::Listing::text(&self) -> &radroots_domain::listing::ListingText
+impl core::fmt::Debug for radroots_domain::listing::Listing
+pub fn radroots_domain::listing::Listing::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::listing::ListingId(_)
 impl radroots_domain::listing::ListingId
 pub const fn radroots_domain::listing::ListingId::as_bytes(&self) -> &[u8; 16]
@@ -67,6 +80,14 @@ pub fn radroots_domain::listing::ListingTerms::options(&self) -> &[radroots_doma
 pub const fn radroots_domain::listing::ListingTerms::state(&self) -> radroots_domain::listing::ListingState
 impl core::fmt::Debug for radroots_domain::listing::ListingTerms
 pub fn radroots_domain::listing::ListingTerms::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::listing::ListingText
+impl radroots_domain::listing::ListingText
+pub fn radroots_domain::listing::ListingText::description_markdown(&self) -> &str
+pub fn radroots_domain::listing::ListingText::new(&str, &str, &str) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub fn radroots_domain::listing::ListingText::summary(&self) -> &str
+pub fn radroots_domain::listing::ListingText::title(&self) -> &str
+impl core::fmt::Debug for radroots_domain::listing::ListingText
+pub fn radroots_domain::listing::ListingText::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::listing::Product
 impl radroots_domain::listing::Product
 pub fn radroots_domain::listing::Product::name(&self) -> &str

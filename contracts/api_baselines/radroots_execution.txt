@@ -3,23 +3,24 @@ pub mod radroots_execution::inbox
 pub use radroots_execution::inbox::InquireInput
 pub use radroots_execution::inbox::ListingRevisionRef
 pub mod radroots_execution::session
-pub mod radroots_execution::session::inquiry
-pub struct radroots_execution::session::inquiry::InquiryRuntime
-impl radroots_execution::session::inquiry::InquiryRuntime
-pub async fn radroots_execution::session::inquiry::InquiryRuntime::drain(&self) -> core::result::Result<(), radroots_storage::command::OperationError>
-pub fn radroots_execution::session::inquiry::InquiryRuntime::new(alloc::sync::Arc<dyn radroots_execution::session::inquiry::InquiryIo>) -> Self
-pub trait radroots_execution::session::inquiry::InquiryIo: radroots_execution::session::HostBound
-pub fn radroots_execution::session::inquiry::InquiryIo::delivery_id(&self) -> core::result::Result<alloc::string::String, radroots_storage::command::OperationError>
-pub fn radroots_execution::session::inquiry::InquiryIo::enabled(&self) -> bool
-pub fn radroots_execution::session::inquiry::InquiryIo::envelope(&self, radroots_storage::command::installation::PublicationWork, &str) -> core::result::Result<radroots_storage::command::delivery::EnvelopeCandidate, radroots_storage::command::OperationError>
-pub fn radroots_execution::session::inquiry::InquiryIo::now(&self) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
-pub fn radroots_execution::session::inquiry::InquiryIo::publication_policy(&self) -> radroots_transport::policy::SatisfactionPolicy
-pub fn radroots_execution::session::inquiry::InquiryIo::publish(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
-pub fn radroots_execution::session::inquiry::InquiryIo::route(&self, radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_storage::command::OperationError>>
-pub fn radroots_execution::session::inquiry::InquiryIo::seal_time(&self, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
-pub fn radroots_execution::session::inquiry::InquiryIo::targets(&self, &radroots_protocol::chat::routes::CapturedDmRoute) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
-pub fn radroots_execution::session::inquiry::capture_dm_route<'a>(radroots_identity::key::PublicKey, impl core::iter::traits::collect::IntoIterator<Item = &'a str>, &radroots_transport::target::TargetSet) -> core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_storage::command::OperationError>
-pub fn radroots_execution::session::inquiry::selected_dm_targets(&radroots_protocol::chat::routes::CapturedDmRoute, &radroots_transport::target::TargetSet) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
+pub mod radroots_execution::session::command
+pub struct radroots_execution::session::command::CommandRuntime
+impl radroots_execution::session::command::CommandRuntime
+pub async fn radroots_execution::session::command::CommandRuntime::drain(&self) -> core::result::Result<(), radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::CommandRuntime::new(alloc::sync::Arc<dyn radroots_execution::session::command::CommandIo>) -> Self
+pub trait radroots_execution::session::command::CommandIo: radroots_execution::session::HostBound
+pub fn radroots_execution::session::command::CommandIo::delivery_id(&self) -> core::result::Result<alloc::string::String, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::CommandIo::enabled(&self) -> bool
+pub fn radroots_execution::session::command::CommandIo::envelope(&self, radroots_storage::command::installation::PublicationWork, &str) -> core::result::Result<radroots_storage::command::delivery::EnvelopeCandidate, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::CommandIo::now(&self) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::CommandIo::public_targets(&self) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::CommandIo::publication_policy(&self) -> radroots_transport::policy::SatisfactionPolicy
+pub fn radroots_execution::session::command::CommandIo::publish(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>
+pub fn radroots_execution::session::command::CommandIo::route(&self, radroots_identity::key::PublicKey, core::num::nonzero::NonZeroU64) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_storage::command::OperationError>>
+pub fn radroots_execution::session::command::CommandIo::seal_time(&self, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::CommandIo::targets(&self, &radroots_protocol::chat::routes::CapturedDmRoute) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::capture_dm_route<'a>(radroots_identity::key::PublicKey, impl core::iter::traits::collect::IntoIterator<Item = &'a str>, &radroots_transport::target::TargetSet) -> core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::selected_dm_targets(&radroots_protocol::chat::routes::CapturedDmRoute, &radroots_transport::target::TargetSet) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
 pub mod radroots_execution::session::tasks
 pub trait radroots_execution::session::tasks::TaskHost: radroots_execution::session::HostBound
 pub fn radroots_execution::session::tasks::TaskHost::submit(&self, radroots_execution::session::HostFuture<'static, ()>) -> radroots_execution::Result<()>
@@ -35,7 +36,8 @@ pub radroots_execution::session::StartMode::Online
 pub struct radroots_execution::session::ClientSession<H: radroots_execution::session::SessionHost>
 impl<H: radroots_execution::session::SessionHost + 'static> radroots_execution::session::ClientSession<H>
 pub async fn radroots_execution::session::ClientSession<H>::inquire(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
-pub async fn radroots_execution::session::ClientSession<H>::resume_inquiry(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
+pub async fn radroots_execution::session::ClientSession<H>::publish_listing(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::listing::PublishInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::listing::view::Listing>>
+pub async fn radroots_execution::session::ClientSession<H>::resume_command(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::OperationStatus>
 impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
 pub async fn radroots_execution::session::ClientSession<H>::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::SignerSession>
 pub async fn radroots_execution::session::ClientSession<H>::attach_workspace(&self, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceStore>, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
@@ -45,9 +47,9 @@ pub fn radroots_execution::session::ClientSession<H>::new_with_task_host(H, core
 pub fn radroots_execution::session::ClientSession<H>::signer_session(&self) -> core::option::Option<radroots_execution::session::SignerSession>
 pub async fn radroots_execution::session::ClientSession<H>::start(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::ClientSession<H>::state(&self) -> radroots_execution::session::SessionState
-pub fn radroots_execution::session::ClientSession<H>::with_inquiry_runtime(self, alloc::sync::Arc<radroots_execution::session::inquiry::InquiryRuntime>) -> Self
+pub fn radroots_execution::session::ClientSession<H>::with_command_runtime(self, alloc::sync::Arc<radroots_execution::session::command::CommandRuntime>) -> Self
 impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
-pub async fn radroots_execution::session::ClientSession<H>::operation(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>>
+pub async fn radroots_execution::session::ClientSession<H>::operation(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::OperationStatus>>
 impl<H: radroots_execution::session::SessionHost> core::clone::Clone for radroots_execution::session::ClientSession<H>
 pub fn radroots_execution::session::ClientSession<H>::clone(&self) -> Self
 pub struct radroots_execution::session::Session<H: radroots_execution::session::SessionHost>
@@ -184,6 +186,17 @@ pub radroots_execution::Issuance::Obtained
 pub radroots_execution::Issuance::Pending
 pub radroots_execution::Issuance::ProvablyUnissued
 pub radroots_execution::Issuance::Unknown
+#[non_exhaustive] pub enum radroots_execution::OperationKind
+pub radroots_execution::OperationKind::Chat
+pub radroots_execution::OperationKind::Listing
+pub enum radroots_execution::OperationValue
+pub radroots_execution::OperationValue::Chat(alloc::boxed::Box<radroots_domain::message::ChatMessage>)
+pub radroots_execution::OperationValue::Listing(alloc::boxed::Box<radroots_domain::listing::view::Listing>)
+impl radroots_execution::OperationValue
+pub fn radroots_execution::OperationValue::as_chat(&self) -> core::option::Option<&radroots_domain::message::ChatMessage>
+pub fn radroots_execution::OperationValue::as_listing(&self) -> core::option::Option<&radroots_domain::listing::view::Listing>
+impl core::fmt::Debug for radroots_execution::OperationValue
+pub fn radroots_execution::OperationValue::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_execution::Reason
 pub radroots_execution::Reason::Conflict
 pub radroots_execution::Reason::InvalidEncoding
@@ -273,8 +286,12 @@ pub const fn radroots_execution::OperationContext::operation_id(self) -> core::o
 pub const fn radroots_execution::OperationContext::proposed(core::option::Option<radroots_domain::identifier::OperationId>) -> Self
 pub const fn radroots_execution::OperationContext::retained(radroots_domain::identifier::OperationId) -> Self
 pub struct radroots_execution::OperationReceipt<T>
+impl radroots_execution::OperationReceipt<radroots_domain::listing::view::Listing>
+pub fn radroots_execution::OperationReceipt<radroots_domain::listing::view::Listing>::try_from_snapshot(&radroots_storage::command::snapshot::OperationSnapshot) -> core::result::Result<Self, radroots_storage::command::OperationError>
 impl radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>
-pub fn radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>::from_snapshot(&radroots_storage::command::snapshot::OperationSnapshot) -> Self
+pub fn radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>::try_from_snapshot(&radroots_storage::command::snapshot::OperationSnapshot) -> core::result::Result<Self, radroots_storage::command::OperationError>
+impl radroots_execution::OperationReceipt<radroots_execution::OperationValue>
+pub fn radroots_execution::OperationReceipt<radroots_execution::OperationValue>::try_from_snapshot(&radroots_storage::command::snapshot::OperationSnapshot) -> core::result::Result<Self, radroots_storage::command::OperationError>
 impl<T> radroots_execution::OperationReceipt<T>
 pub const fn radroots_execution::OperationReceipt<T>::admission(&self) -> radroots_execution::Admission
 pub const fn radroots_execution::OperationReceipt<T>::admission_transaction_id(&self) -> radroots_domain::identifier::TransactionId
@@ -295,6 +312,7 @@ pub const fn radroots_execution::OperationReceipt<T>::installation_transaction_i
 pub const fn radroots_execution::OperationReceipt<T>::installed_at(&self) -> core::option::Option<radroots_domain::context::UnixSeconds>
 pub const fn radroots_execution::OperationReceipt<T>::issuance(&self) -> radroots_execution::Issuance
 pub const fn radroots_execution::OperationReceipt<T>::issuance_window(&self) -> radroots_domain::issuance::IssuanceWindow
+pub const fn radroots_execution::OperationReceipt<T>::kind(&self) -> radroots_execution::OperationKind
 pub const fn radroots_execution::OperationReceipt<T>::message_id(&self) -> core::option::Option<radroots_domain::identifier::MessageId>
 pub fn radroots_execution::OperationReceipt<T>::missing_sources(&self) -> &[radroots_domain::identifier::SourceId]
 pub const fn radroots_execution::OperationReceipt<T>::observed_at(&self) -> radroots_domain::context::UnixSeconds
@@ -306,4 +324,5 @@ pub const fn radroots_execution::OperationReceipt<T>::wait_termination(&self) ->
 pub fn radroots_execution::OperationReceipt<T>::with_wait_termination(self, radroots_execution::WaitTermination) -> Self
 impl<T> core::fmt::Debug for radroots_execution::OperationReceipt<T>
 pub fn radroots_execution::OperationReceipt<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub type radroots_execution::OperationStatus = radroots_execution::OperationReceipt<radroots_execution::OperationValue>
 pub type radroots_execution::Result<T> = core::result::Result<T, radroots_execution::Error>

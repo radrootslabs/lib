@@ -33,8 +33,9 @@ without I/O or a clock read; admission must recheck current rights and expiry.
 A context does not submit a command or prove
 user consent. After explicit start, `client.inbox().inquire(context, input)`
 durably captures a known-kind inquiry through the actual protected journal.
-The returned coherent receipt reports pending preparation without claiming a
-signature, installed message or relay acceptance. `client.operations(&scope)`
+Local-only submission returns a coherent receipt for retained preparation;
+online submission owns continuation through signing, installation and delivery.
+Each dimension reports its actual independent facts. `client.operations(&scope)`
 selects an explicitly authenticated attachment for `get(operation_id)` and
 matching-digest reads. Every call enforces this client's attachment ownership
 and current persisted grant. An expired retained inquiry remains queryable and
@@ -43,8 +44,8 @@ new expired input and conflicting reuse are refused.
 
 The existing bounded native worker owns accepted admission after observer loss;
 client close drains it before releasing storage. Unpolled calls do nothing.
-Network pairing, seller authority, owned signing/install/delivery continuation,
-listing execution and browser qualification remain separate requirements.
+Network pairing, complete seller authority and final browser qualification
+remain separate requirements.
 
 `attach_signer` observes the concrete provider only after retaining its callback
 scope. The first successful key freezes and later drift invalidates that scope.
@@ -70,7 +71,7 @@ An explicitly opened protected workspace can be supplied with
 participant signer to the Client. `with_nostr` additionally selects exact relay
 destinations, directional access and a relay-acceptance criterion.
 `StartMode::Online` permits command IO without querying or replaying on startup;
-`LocalOnly` keeps inquiries at durable admission without network or signing.
+`LocalOnly` keeps commands at durable admission without network or signing.
 A started session cannot silently escalate from local to online mode.
 
 `client.inbox().inquire(context, input)` owns accepted native work through
@@ -84,6 +85,23 @@ retries preserve exact original bytes, the full criterion and prior accepted
 targets. A dropped observer does not cancel the native job. Obtained material
 whose capture fails stays owned; close reports recovery until its protected
 capture can be confirmed.
+
+## Native initial listings
+
+`client.listings().publish(context, input)` uses the same owned command runtime
+and protected journal for an authenticated seller's initial public listing.
+Its `OperationReceipt<domain::Listing>` contains a business result only after
+actual installation. Text and exact terms come from the captured command;
+author, revision and event time come from its retained public signing plan and
+obtained evidence. An existing coordinate cannot be replaced by publishing it
+again. Revision editing, pause/withdraw and stock remain separate requirements.
+
+Public planning uses the configured public relay targets and exact-event
+signing. It performs no private-route query, encryption or wrapping. Delivery
+sends the original signed event. Scoped queries and explicit resume return
+`OperationStatus`, whose `OperationValue` distinguishes Listing from Chat.
+Reopening, reading and command replay do not redispatch retained work; explicit
+resume preserves the original bytes, criterion, targets and retry budget.
 
 ## Values and retained capabilities
 
@@ -123,6 +141,7 @@ coherent retained snapshot for this projection. Native T2 can install a bounded
 logical chat result and retain independent recipient publication work; its
 original installation time/transaction remain separate from later work and
 unknown issuance. `domain::ChatMessage` is the owned private business view.
-The ordinary inquiry boundary admits and queries T0. Owned continuation through
-exact signing, native T2, wrapping and delivery remains required before the
-complete native submission workflow is available.
+The ordinary native inquiry and initial-listing boundaries continue accepted
+online work through exact signing, protected capture, installation and delivery.
+Full commerce behavior, final cross-platform acceptance and generated binding
+qualification remain separate requirements.

@@ -1,4 +1,4 @@
-//! Owned ordinary inquiry execution over explicit host IO and protected storage.
+//! Owned ordinary public/private command execution over explicit host IO and protected storage.
 #[path = "inquiry_routes.rs"]
 mod routes;
 pub use routes::{capture_dm_route, selected_dm_targets};
@@ -8,7 +8,10 @@ use alloc::{string::String, vec::Vec};
 use core::num::NonZeroU64;
 use radroots_domain::{PublicKey, UnixSeconds};
 use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
-use radroots_protocol::plan::SigningReplay;
+use radroots_protocol::{
+    listing::PublicSigningPlan,
+    plan::{CapturedSigningPlan, SigningReplay, SigningTarget},
+};
 use radroots_signing::{
     issuance::{OutcomeKind, SigningIntent},
     provider::{PrivateCiphertext, PrivateText, ProviderCall},
@@ -19,7 +22,8 @@ use radroots_storage::{
         ArtifactEvidence, BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest,
         DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryIntent, DeliveryObservation,
         EnvelopeCandidate, EvidenceCaptureOutcome, InstallationRequest, OperationError,
-        OperationJournal, PlanBindingOutcome, PreparedOperation, PublicationWork,
+        OperationJournal, PlanBindingOutcome, PreparedOperation, PublicationArtifact,
+        PublicationWork,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
@@ -29,11 +33,16 @@ use std::sync::Mutex;
 /// Target IO, not command authority. Construction/start/query must not perform
 /// network work or replay an outbox. Implementations must enforce their explicit
 /// destination policy and bound every actual request.
-pub trait InquiryIo: HostBound {
+pub trait CommandIo: HostBound {
     /// Whether explicit online startup permits this workflow's network work.
     fn enabled(&self) -> bool;
     /// Current positive supported time; never renews a first-issue window.
     fn now(&self) -> Result<UnixSeconds, OperationError>;
+    /// Explicit configured public publication targets. An unsupported host must
+    /// refuse; public work never borrows a private participant's route.
+    fn public_targets(&self) -> Result<TargetSet, OperationError> {
+        Err(OperationError::UnsupportedOperation)
+    }
     /// CSPRNG-backed NIP-59 past time within the supported two-day interval.
     fn seal_time(&self, now: UnixSeconds) -> Result<UnixSeconds, OperationError>;
     /// Authenticates a bounded current kind-10050 head and captures only its
@@ -81,8 +90,8 @@ struct PendingObservation {
 
 /// Shared workflow and obtained-material owner. Its lifecycle host must call
 /// `drain` before releasing work permits, callbacks or protected storage.
-pub struct InquiryRuntime {
-    io: Shared<dyn InquiryIo>,
+pub struct CommandRuntime {
+    io: Shared<dyn CommandIo>,
     pending: Mutex<Vec<Shared<PendingCapture>>>,
     observations: Mutex<Vec<Shared<PendingObservation>>>,
     draining: futures::lock::Mutex<()>,
@@ -91,9 +100,9 @@ pub(super) enum RunMode {
     Command,
     Resume,
 }
-impl InquiryRuntime {
+impl CommandRuntime {
     /// Owns explicit IO without performing effects or starting a runtime.
-    pub fn new(io: Shared<dyn InquiryIo>) -> Self {
+    pub fn new(io: Shared<dyn CommandIo>) -> Self {
         Self {
             io,
             pending: Mutex::new(Vec::new()),
@@ -210,7 +219,7 @@ impl InquiryRuntime {
                 let signer = signer.as_ref().ok_or(OperationError::Unauthorized)?;
                 let plan = self.plan(&prepared, signer).await?;
                 match journal
-                    .bind_signing_intents(binding.clone(), plan.into(), copy(proof)?)
+                    .bind_signing_intents(binding.clone(), plan, copy(proof)?)
                     .await?
                 {
                     PlanBindingOutcome::Committed(bound) => bound,
@@ -253,7 +262,7 @@ impl InquiryRuntime {
         &self,
         prepared: &PreparedOperation,
         signer: &SignerSession,
-    ) -> Result<ChatSigningPlan, OperationError> {
+    ) -> Result<CapturedSigningPlan, OperationError> {
         let now = self.io.now()?;
         let deadline = NonZeroU64::new(
             prepared
@@ -267,15 +276,11 @@ impl InquiryRuntime {
         if now >= prepared.issuance_window().first_issue_not_after() {
             return Err(OperationError::DeadlineExceeded);
         }
-        let command = prepared.request().chat_command()?;
         let observed = signer
             .observe()
             .await
             .map_err(|_| OperationError::Unauthorized)?;
-        if observed.identity() != command.context().actor().participant()
-            || observed.encryption() != radroots_signing::provider::PrivateCryptoCapability::Nip44V2
-            || observed.decryption() != radroots_signing::provider::PrivateCryptoCapability::Nip44V2
-        {
+        if observed.identity() != prepared.request().command().context().actor().participant() {
             return Err(OperationError::Unauthorized);
         }
         let replay = match observed
@@ -293,6 +298,23 @@ impl InquiryRuntime {
             }
             _ => return Err(OperationError::Unauthorized),
         };
+        if let Some(command) = prepared.request().command().listing() {
+            let targets = self.io.public_targets()?;
+            let urls = targets
+                .targets()
+                .iter()
+                .map(|target| target.uri().as_str().into())
+                .collect::<Vec<String>>();
+            return PublicSigningPlan::capture(command, now, &urls, replay)
+                .map(CapturedSigningPlan::Listing)
+                .map_err(|_| OperationError::InvalidCommand);
+        }
+        let command = prepared.request().chat_command()?;
+        if observed.encryption() != radroots_signing::provider::PrivateCryptoCapability::Nip44V2
+            || observed.decryption() != radroots_signing::provider::PrivateCryptoCapability::Nip44V2
+        {
+            return Err(OperationError::Unauthorized);
+        }
         let rumor =
             ChatRumor::from_command(command, now).map_err(|_| OperationError::InvalidCommand)?;
         let mut routes = Vec::new();
@@ -329,6 +351,7 @@ impl InquiryRuntime {
             );
         }
         ChatSigningPlan::new(command, now, seals, routes, replay)
+            .map(CapturedSigningPlan::Chat)
             .map_err(|_| OperationError::InvalidCommand)
     }
     async fn issue(
@@ -341,14 +364,22 @@ impl InquiryRuntime {
     ) -> Result<(), OperationError> {
         let prepared = bound.prepared();
         let binding = prepared.request().binding();
-        for seal in bound.chat_plan()?.seals() {
+        let targets = match bound.plan() {
+            CapturedSigningPlan::Listing(_) => alloc::vec![SigningTarget::PublicEvent],
+            CapturedSigningPlan::Chat(plan) => plan
+                .seals()
+                .iter()
+                .map(|seal| SigningTarget::BusinessSeal(seal.recipient()))
+                .collect(),
+        };
+        for target in targets {
             let select = || {
-                ClaimAttemptRequest::new(
+                ClaimAttemptRequest::for_artifact(
                     binding.clone(),
                     prepared.identity().operation_id(),
                     prepared.identity().command_digest(),
                     *bound.plan().digest(),
-                    seal.recipient(),
+                    target,
                 )
             };
             if journal
@@ -381,7 +412,13 @@ impl InquiryRuntime {
                 attempt.bound_plan().plan(),
                 attempt.target(),
                 ProviderCall::new(
-                    attempt.seal()?.fields().author,
+                    attempt
+                        .bound_plan()
+                        .plan()
+                        .artifact(attempt.target())
+                        .map_err(|_| OperationError::RecoveryRequired)?
+                        .fields()
+                        .author,
                     attempt.deadline_unix_ms(),
                     CancellationSignal::new(),
                 ),
@@ -440,41 +477,91 @@ impl InquiryRuntime {
             )
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
-        for work in snapshot.publications() {
-            if snapshot.publication_accepted(*work)? {
+        let work = snapshot
+            .publications()
+            .iter()
+            .copied()
+            .map(PublicationArtifact::Private)
+            .chain(
+                snapshot
+                    .public_publications()
+                    .iter()
+                    .copied()
+                    .map(PublicationArtifact::Public),
+            );
+        for work in work {
+            if snapshot.publication_accepted(work)? {
                 continue;
             }
             // Replaying a command never dispatches a previously claimed attempt.
-            let original = snapshot.delivery_attempts().iter().find(|attempt| {
-                attempt.work() == radroots_storage::command::PublicationArtifact::Private(*work)
-            });
+            let original = snapshot
+                .delivery_attempts()
+                .iter()
+                .find(|attempt| attempt.work() == work);
             if original.is_some() && matches!(mode, RunMode::Command) {
                 continue;
             }
-            let recipient = work.recipient();
-            let route = bound
-                .chat_plan()?
-                .routes()
-                .iter()
-                .find(|route| route.participant() == recipient)
-                .ok_or(OperationError::RecoveryRequired)?;
-            let targets = self.io.targets(route)?;
-            let captured = journal
-                .obtained_evidence(
-                    ClaimAttemptRequest::new(
-                        binding.clone(),
-                        prepared.identity().operation_id(),
-                        prepared.identity().command_digest(),
-                        *bound.plan().digest(),
-                        recipient,
-                    ),
-                    copy(proof)?,
-                )
-                .await?
-                .ok_or(OperationError::RecoveryRequired)?;
-            let envelope = match original {
-                Some(_) => None,
-                None => Some(self.io.envelope(*work, captured.evidence().raw_json())?),
+            let (targets, envelope, event) = match work {
+                PublicationArtifact::Private(private) => {
+                    let recipient = private.recipient();
+                    let route = bound
+                        .chat_plan()?
+                        .routes()
+                        .iter()
+                        .find(|route| route.participant() == recipient)
+                        .ok_or(OperationError::RecoveryRequired)?;
+                    let targets = self.io.targets(route)?;
+                    let captured = journal
+                        .obtained_evidence(
+                            ClaimAttemptRequest::new(
+                                binding.clone(),
+                                prepared.identity().operation_id(),
+                                prepared.identity().command_digest(),
+                                *bound.plan().digest(),
+                                recipient,
+                            ),
+                            copy(proof)?,
+                        )
+                        .await?
+                        .ok_or(OperationError::RecoveryRequired)?;
+                    let envelope = if original.is_none() {
+                        Some(self.io.envelope(private, captured.evidence().raw_json())?)
+                    } else {
+                        None
+                    };
+                    let event = match original {
+                        Some(v) => v.intent().event_id(),
+                        None => envelope
+                            .as_ref()
+                            .ok_or(OperationError::RecoveryRequired)?
+                            .event_id(),
+                    };
+                    (targets, envelope, event)
+                }
+                PublicationArtifact::Public(public) => {
+                    let configured = self.io.public_targets()?;
+                    let plan = bound
+                        .plan()
+                        .listing()
+                        .ok_or(OperationError::RecoveryRequired)?;
+                    let targets = TargetSet::new(
+                        plan.selected_targets()
+                            .iter()
+                            .map(|uri| radroots_transport::Target::nostr_relay(uri.as_ref()))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(|_| OperationError::RecoveryRequired)?,
+                    )
+                    .map_err(|_| OperationError::RecoveryRequired)?;
+                    if targets.targets().iter().any(|target| {
+                        !configured
+                            .targets()
+                            .iter()
+                            .any(|allowed| allowed.fingerprint() == target.fingerprint())
+                    }) {
+                        return Err(OperationError::UnverifiedApproval);
+                    }
+                    (targets, None, public.evidence().event_id())
+                }
             };
             let deadline = NonZeroU64::new(
                 self.io
@@ -491,22 +578,14 @@ impl InquiryRuntime {
                     original.intent().targets().clone(),
                     original.intent().policy().clone(),
                 ),
-                None => (
-                    envelope
-                        .as_ref()
-                        .ok_or(OperationError::RecoveryRequired)?
-                        .event_id(),
-                    targets,
-                    self.io.publication_policy(),
-                ),
+                None => (event, targets, self.io.publication_policy()),
             };
             let selected = targets
                 .targets()
                 .iter()
                 .filter(|target| {
                     !snapshot.delivery_observations().iter().any(|observation| {
-                        observation.work()
-                            == radroots_storage::command::PublicationArtifact::Private(*work)
+                        observation.work() == work
                             && observation.target_receipt().target().fingerprint()
                                 == target.fingerprint()
                             && observation.kind()
@@ -520,10 +599,17 @@ impl InquiryRuntime {
             }
             let selected =
                 TargetSet::new(selected).map_err(|_| OperationError::RecoveryRequired)?;
-            let intent =
-                DeliveryIntent::new(&self.io.delivery_id()?, event, &targets, &policy, deadline)?
-                    .with_selection(&selected)?;
-            let request = DeliveryAttemptRequest::new(binding.clone(), *work, intent)?;
+            let request_id = self.io.delivery_id()?;
+            let intent = match work {
+                PublicationArtifact::Private(_) => {
+                    DeliveryIntent::new(&request_id, event, &targets, &policy, deadline)
+                }
+                PublicationArtifact::Public(_) => {
+                    DeliveryIntent::public(&request_id, event, &targets, &policy, deadline)
+                }
+            }?
+            .with_selection(&selected)?;
+            let request = DeliveryAttemptRequest::new(binding.clone(), work, intent)?;
             let attempt = match journal
                 .prepare_delivery_attempt(request, copy(proof)?, envelope.as_ref())
                 .await?

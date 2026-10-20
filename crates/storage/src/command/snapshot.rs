@@ -537,6 +537,9 @@ impl OperationSnapshot {
         installation: Option<ListingInstallation>,
         publications: Vec<PublicPublicationWork>,
     ) -> Result<Self, OperationError> {
+        if !self.deliveries.is_empty() || !self.observations.is_empty() {
+            return Err(OperationError::RecoveryRequired);
+        }
         let Some(installed) = installation else {
             if !publications.is_empty() {
                 return Err(OperationError::RecoveryRequired);
@@ -545,12 +548,7 @@ impl OperationSnapshot {
             self.public_publications = Vec::new().into_boxed_slice();
             return Ok(self);
         };
-        if self.installation.is_some()
-            || self.message.is_some()
-            || !self.publications.is_empty()
-            || !self.deliveries.is_empty()
-            || !self.observations.is_empty()
-        {
+        if self.installation.is_some() || self.message.is_some() || !self.publications.is_empty() {
             return Err(OperationError::RecoveryRequired);
         }
         let bound = self.bound_plan().ok_or(OperationError::RecoveryRequired)?;

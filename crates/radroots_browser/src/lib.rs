@@ -10,15 +10,15 @@ mod client;
 #[cfg(all(target_arch = "wasm32", feature = "artifact_clock"))]
 mod clock;
 #[cfg(target_arch = "wasm32")]
-mod inquiry;
+mod commands;
 
 #[cfg(target_arch = "wasm32")]
 pub use client::{BrowserConfig, Client, CloseReceipt, Inbox, Operations};
 #[cfg(target_arch = "wasm32")]
-pub use inquiry::BrowserNonceSource;
+pub use commands::BrowserNonceSource;
 pub use radroots_domain::{CommandDigest, OperationId};
 pub use radroots_execution::{
-    OperationReceipt,
+    OperationKind, OperationReceipt, OperationStatus, OperationValue,
     inbox::InquireInput,
     session::{SessionState, StartMode},
     workspace::{CommandContext, WorkspaceSession},

@@ -2,7 +2,7 @@ use core::num::NonZeroU64;
 use radroots_domain::{PublicKey, UnixSeconds};
 use radroots_execution::session::{
     HostFuture,
-    inquiry::{InquiryIo, capture_dm_route, selected_dm_targets},
+    command::{CommandIo, capture_dm_route, selected_dm_targets},
 };
 use radroots_nostr::signing::gift_wrap::{randomized_past_time, wrap_retained_seal};
 use radroots_protocol::chat::CapturedDmRoute;
@@ -21,7 +21,7 @@ use std::{
 };
 use wasm_bindgen::JsCast;
 
-pub(crate) struct BrowserInquiry {
+pub(crate) struct BrowserCommands {
     transport: NostrTransport,
     connector: Arc<BrowserConnector>,
     read: TargetSet,
@@ -29,7 +29,7 @@ pub(crate) struct BrowserInquiry {
     policy: SatisfactionPolicy,
     mode: AtomicU8,
 }
-impl BrowserInquiry {
+impl BrowserCommands {
     pub(crate) fn new(config: Config, policy: SatisfactionPolicy) -> Result<Self, OperationError> {
         let read = TargetSet::new(
             config
@@ -91,7 +91,7 @@ impl BrowserInquiry {
         capture_dm_route(recipient, raw_sources, &self.write)
     }
 }
-impl InquiryIo for BrowserInquiry {
+impl CommandIo for BrowserCommands {
     fn enabled(&self) -> bool {
         self.mode.load(Ordering::Acquire) == 2
     }

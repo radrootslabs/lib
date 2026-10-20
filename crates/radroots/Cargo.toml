@@ -40,7 +40,7 @@ futures = { workspace = true, optional = true }
 radroots_core = { workspace = true }
 radroots_domain = { workspace = true, features = ["std", "serde"] }
 radroots_execution = { workspace = true, features = ["client_session", "workspace_session"] }
-radroots_protocol = { workspace = true, default-features = false, features = ["chat"] }
+radroots_protocol = { workspace = true, default-features = false, features = ["chat", "listing"] }
 radroots_event = { workspace = true }
 radroots_identity = { workspace = true, features = ["std"] }
 radroots_sdk = { workspace = true }
@@ -67,7 +67,7 @@ knowledge = ["client", "radroots_sdk/knowledge"]
 full = ["native", "radroots_sdk/full"]
 
 [dev-dependencies]
-radroots_protocol = { workspace = true, default-features = false, features = ["chat"] }
+radroots_protocol = { workspace = true, default-features = false, features = ["chat", "listing"] }
 radroots_signing = { workspace = true, features = ["chat"] }
 nostr = { workspace = true, default-features = false, features = ["std", "nip44", "nip59"] }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }

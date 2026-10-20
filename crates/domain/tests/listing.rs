@@ -1,5 +1,54 @@
 use radroots_domain::{ListingOptionId, listing::*};
 
+#[test]
+fn public_text_has_shared_unicode_bounds_and_revision_data_rejects_inverted_time() {
+    use radroots_domain::{EnvelopeEventId, PublicKey, UnixSeconds};
+    let title = "🥕".repeat(160);
+    let summary = "é".repeat(280);
+    let body = " ".repeat(16_384);
+    let value = ListingText::new(&title, &summary, &body).unwrap();
+    assert_eq!(
+        serde_json::to_value(&value).unwrap(),
+        serde_json::json!({"title":title,"summary":summary,"description_markdown":body})
+    );
+    for (title, summary, body) in [
+        ("🥕".repeat(161), "summary".into(), String::new()),
+        ("title".into(), "é".repeat(281), String::new()),
+        ("title".into(), "summary".into(), " ".repeat(16_385)),
+    ] {
+        assert_eq!(
+            ListingText::new(&title, &summary, &body).unwrap_err(),
+            ListingError::InvalidText
+        );
+    }
+    let terms = ListingTerms::new(
+        ListingState::Active,
+        product(),
+        ListingOptionId::from_bytes([1; 32]),
+        vec![option(1, SaleUnit::measured(MeasurementUnit::Each), "1", "1", "10").unwrap()],
+        fulfillment(),
+        None,
+    )
+    .unwrap();
+    let key =
+        PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+            .unwrap();
+    // These are structural public data, without a signed/installed claim.
+    assert_eq!(
+        Listing::new(
+            ListingId::from_bytes([1; 16]),
+            key,
+            EnvelopeEventId::from_bytes([2; 32]),
+            UnixSeconds::new(99).unwrap(),
+            UnixSeconds::new(100).unwrap(),
+            value,
+            terms
+        )
+        .unwrap_err(),
+        ListingError::InvalidTime
+    );
+}
+
 fn product() -> Product {
     Product::new(
         "Carrots",

@@ -70,7 +70,7 @@ pub struct NativeConfig {
     options: radroots_storage_sqlite::OpenOptions,
     workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
     #[cfg(not(target_arch = "wasm32"))]
-    inquiry: Option<Shared<crate::native_inquiry::NativeInquiry>>,
+    commands: Option<Shared<crate::native_commands::NativeCommands>>,
 }
 #[cfg(feature = "native")]
 impl NativeConfig {
@@ -81,7 +81,7 @@ impl NativeConfig {
             options,
             workspace: None,
             #[cfg(not(target_arch = "wasm32"))]
-            inquiry: None,
+            commands: None,
         }
     }
     /// Adds an explicitly opened protected local outbox. A public cache alone
@@ -102,8 +102,8 @@ impl NativeConfig {
         config: radroots_transport_nostr::Config,
         policy: radroots_transport::policy::SatisfactionPolicy,
     ) -> crate::Result<Self> {
-        self.inquiry = Some(Shared::new(
-            crate::native_inquiry::NativeInquiry::new(config, policy)
+        self.commands = Some(Shared::new(
+            crate::native_commands::NativeCommands::new(config, policy)
                 .map_err(|error| Error::operation(error, OperationContext::proposed(None)))?,
         ));
         Ok(self)
@@ -132,9 +132,9 @@ pub(crate) struct StoreHost {
     closed: Shared<Mutex<Option<CloseReceipt>>>,
     runtime: TargetRuntime,
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-    inquiry: Option<Shared<radroots_execution::session::inquiry::InquiryRuntime>>,
+    commands: Option<Shared<radroots_execution::session::command::CommandRuntime>>,
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-    native_inquiry: Option<Shared<crate::native_inquiry::NativeInquiry>>,
+    native_commands: Option<Shared<crate::native_commands::NativeCommands>>,
 }
 impl SessionHost for StoreHost {
     fn start(&self) -> HostFuture<'_, crate::Result<()>> {
@@ -159,13 +159,13 @@ impl SessionHost for StoreHost {
         Box::pin(async move {
             #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
             if let TargetRuntime::Native(tasks) = &self.runtime {
-                let inquiry = self.inquiry.clone();
+                let commands = self.commands.clone();
                 tasks
                     .control(
                         crate::native_tasks::ControlKind::Drain,
                         Box::pin(async move {
-                            if let Some(inquiry) = inquiry {
-                                inquiry.drain().await.map_err(|error| {
+                            if let Some(commands) = commands {
+                                commands.drain().await.map_err(|error| {
                                     Error::operation(error, OperationContext::proposed(None))
                                 })?;
                             }
@@ -181,13 +181,13 @@ impl SessionHost for StoreHost {
         Box::pin(async move {
             #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
             if let TargetRuntime::Native(tasks) = &self.runtime {
-                let inquiry = self.native_inquiry.clone();
+                let commands = self.native_commands.clone();
                 tasks
                     .control(
                         crate::native_tasks::ControlKind::Disconnect,
                         Box::pin(async move {
-                            if let Some(inquiry) = inquiry {
-                                inquiry.disconnect().await;
+                            if let Some(commands) = commands {
+                                commands.disconnect().await;
                             }
                             Ok(())
                         }),
@@ -234,7 +234,7 @@ pub struct Client {
     workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-    native_inquiry: Option<Shared<crate::native_inquiry::NativeInquiry>>,
+    native_commands: Option<Shared<crate::native_commands::NativeCommands>>,
 }
 impl Client {
     #[cfg(any(feature = "client", feature = "native"))]
@@ -242,29 +242,29 @@ impl Client {
         store: Shared<dyn Storage>,
         workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
         runtime: TargetRuntime,
-        #[cfg(all(feature = "native", not(target_arch = "wasm32")))] native_inquiry: Option<
-            Shared<crate::native_inquiry::NativeInquiry>,
+        #[cfg(all(feature = "native", not(target_arch = "wasm32")))] native_commands: Option<
+            Shared<crate::native_commands::NativeCommands>,
         >,
     ) -> Self {
         let closed = Shared::new(Mutex::new(None));
         let task_host = runtime.task_host();
         #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-        let inquiry = native_inquiry.as_ref().map(|io| {
-            Shared::new(radroots_execution::session::inquiry::InquiryRuntime::new(
+        let commands = native_commands.as_ref().map(|io| {
+            Shared::new(radroots_execution::session::command::CommandRuntime::new(
                 io.clone(),
             ))
         });
         #[cfg(not(all(feature = "native", not(target_arch = "wasm32"))))]
-        let inquiry: Option<Shared<radroots_execution::session::inquiry::InquiryRuntime>> = None;
+        let commands: Option<Shared<radroots_execution::session::command::CommandRuntime>> = None;
         let host = StoreHost {
             store: store.clone(),
             workspace: workspace.clone(),
             closed: closed.clone(),
             runtime,
             #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-            inquiry: inquiry.clone(),
+            commands: commands.clone(),
             #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-            native_inquiry: native_inquiry.clone(),
+            native_commands: native_commands.clone(),
         };
         const MAX_RESOURCES: NonZeroU16 = match NonZeroU16::new(32) {
             Some(limit) => limit,
@@ -274,8 +274,8 @@ impl Client {
             Some(tasks) => ClientSession::new_with_task_host(host, MAX_RESOURCES, tasks),
             None => ClientSession::new(host, MAX_RESOURCES),
         };
-        let session = match inquiry {
-            Some(inquiry) => session.with_inquiry_runtime(inquiry),
+        let session = match commands {
+            Some(commands) => session.with_command_runtime(commands),
             None => session,
         };
         Self {
@@ -284,7 +284,7 @@ impl Client {
             workspace,
             closed,
             #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-            native_inquiry,
+            native_commands,
         }
     }
     /// Creates a deterministic in-memory preview with no filesystem, network,
@@ -320,7 +320,7 @@ impl Client {
             config.workspace,
             runtime,
             #[cfg(not(target_arch = "wasm32"))]
-            config.inquiry,
+            config.commands,
         ))
     }
     /// Observes resource lifecycle without probing signer, store or network.
@@ -336,6 +336,10 @@ impl Client {
     pub const fn inbox(&self) -> crate::inbox::Inbox<'_> {
         crate::inbox::Inbox::new(self)
     }
+    /// Accesses initial public listing publication. Access alone has no effects.
+    pub const fn listings(&self) -> crate::listings::Listings<'_> {
+        crate::listings::Listings::new(self)
+    }
     /// Selects an explicitly authenticated scope for original-operation reads.
     /// Every query checks that this client owns the attachment and current grant.
     pub fn operations(
@@ -348,8 +352,8 @@ impl Client {
     /// transport, command writer or stock authority is implicitly constructed.
     pub async fn start(&self, mode: StartMode) -> crate::Result<SessionStatus> {
         #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
-        if let Some(inquiry) = &self.native_inquiry {
-            inquiry
+        if let Some(commands) = &self.native_commands {
+            commands
                 .select(mode == StartMode::Online)
                 .map_err(|error| Error::operation(error, OperationContext::proposed(None)))?;
         } else if mode == StartMode::Online {

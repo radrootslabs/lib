@@ -94,19 +94,23 @@ Closing the attachment invalidates its contexts. A custom adapter is an explicit
 host trust boundary and requires its own qualification; its observation cannot
 establish native SQL authority. An approval descriptor is not consent proof.
 
-`ClientSession::inquire` captures a validated inquiry from this client's own
+`ClientSession::inquire` and `publish_listing` capture a validated command from this client's own
 authenticated context, calls the actual journal admission and queries its
 coherent retained graph. It does not preempt original-operation lookup with a
 fresh deadline check. Known failure, uncertain initial commit and a failure
-after confirmed admission keep distinct original-ID dispositions. No signer or
-network operation occurs in this T0 boundary. `operation` reads original progress
+after confirmed admission keep distinct original-ID dispositions. T0 itself
+performs no signing or network work. An explicitly online `CommandRuntime`
+continues accepted work through original planning, exact signing, protected
+capture, installation and publication. Public listing work uses public targets
+without private routing, encryption or wrapping; private inquiry retains those
+requirements. `operation` reads original progress
 through an explicitly selected client-owned scope, independently of the old
 first-issue deadline. The qualified concrete bounded worker owns accepted native
 admission through observer loss; its close must drain accepted work.
 
-Package upload is not authorized. Owned signing/install/delivery continuation,
-inventory authority, listing execution, browser attachment and new bindings
-remain separate requirements. Revalidating a context is not durable admission;
+Package upload is not authorized. Inventory authority, complete listing revision
+behavior, final browser qualification and new bindings remain separate
+requirements. Revalidating a context is not durable admission;
 the authoritative transaction must recheck its scope.
 
 
@@ -116,8 +120,10 @@ It separates installation, per-recipient issuance, delivery and caller waiting.
 Its diagnostics contain no private command text or ciphertext. The optional
 `receipts` feature projects a Storage operation snapshot without I/O; the
 concrete adapter must qualify the underlying authenticated coherent query.
-The native T2 profile projects an owned bounded `ChatMessage` when the concrete
-owner reports a matching installed result. It preserves the original installation
+The native T2 profile projects an owned bounded `ChatMessage` or `Listing` when
+the concrete owner reports the matching installed result. `OperationStatus`
+uses an explicit `OperationValue`; a public listing never projects as a message.
+It preserves the original installation
 transaction/time separately from later recipient publication-work transactions.
 Pending wrapping/publication work does not establish transport acknowledgement.
 Newly captured recipient evidence may require T2 continuation while the original

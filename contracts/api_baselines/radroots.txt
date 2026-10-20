@@ -9,7 +9,10 @@ pub use radroots::DeliveryObservation
 pub use radroots::Error
 pub use radroots::Issuance
 pub use radroots::OperationId
+pub use radroots::OperationKind
 pub use radroots::OperationReceipt
+pub use radroots::OperationStatus
+pub use radroots::OperationValue
 pub use radroots::RecoveryRequirement
 pub use radroots::Result
 pub use radroots::StartMode
@@ -24,6 +27,7 @@ pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace
 pub async fn radroots::client::Client::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::close(&self) -> radroots_execution::Result<radroots::client::CloseReceipt>
 pub const fn radroots::client::Client::inbox(&self) -> radroots::inbox::Inbox<'_>
+pub const fn radroots::client::Client::listings(&self) -> radroots::listings::Listings<'_>
 pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
 pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
 pub fn radroots::client::Client::preview() -> Self
@@ -123,12 +127,18 @@ pub use radroots::listing::PrepareError
 pub use radroots::listing::PrepareErrorKind
 pub use radroots::listing::PrepareRequest
 pub use radroots::listing::prepare
+pub mod radroots::listings
+pub use radroots::listings::Listing
+pub use radroots::listings::PublishInput
+pub struct radroots::listings::Listings<'a>
+impl<'a> radroots::listings::Listings<'a>
+pub async fn radroots::listings::Listings<'a>::publish(&self, radroots_execution::workspace::CommandContext, radroots_protocol::listing::PublishInput) -> radroots_execution::Result<radroots_execution::receipt::OperationReceipt<radroots_domain::listing::view::Listing>>
 pub mod radroots::operations
 pub struct radroots::operations::Operations<'a>
 impl<'a> radroots::operations::Operations<'a>
-pub async fn radroots::operations::Operations<'a>::get(&self, radroots_domain::identifier::OperationId) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>>
-pub async fn radroots::operations::Operations<'a>::get_matching(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>>
-pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>
+pub async fn radroots::operations::Operations<'a>::get(&self, radroots_domain::identifier::OperationId) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationStatus>>
+pub async fn radroots::operations::Operations<'a>::get_matching(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationStatus>>
+pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::receipt::OperationStatus>
 pub mod radroots::signing
 pub use radroots::signing::ArtifactRole
 pub use radroots::signing::AuthorizationHeader
@@ -205,6 +215,7 @@ pub async fn radroots::client::Client::attach(&self, radroots_storage::workspace
 pub async fn radroots::client::Client::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::close(&self) -> radroots_execution::Result<radroots::client::CloseReceipt>
 pub const fn radroots::client::Client::inbox(&self) -> radroots::inbox::Inbox<'_>
+pub const fn radroots::client::Client::listings(&self) -> radroots::listings::Listings<'_>
 pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
 pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
 pub fn radroots::client::Client::preview() -> Self

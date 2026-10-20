@@ -359,7 +359,12 @@ pub async fn verify_client(base: String, label: String) -> Result<String, JsValu
         completed.durable() && completed.business_result().is_some(),
         "explicit resume must finish original inquiry",
     )?;
-    let resumed_message = completed.business_result().unwrap().id().to_string();
+    let resumed_message = completed
+        .business_result()
+        .and_then(|value| value.as_chat())
+        .ok_or_else(|| JsValue::from_str("resumed inquiry must retain its actual chat result"))?
+        .id()
+        .to_string();
     resumed.close().await.map_err(fail)?;
     storage_callbacks_closed()?;
     require(callbacks.closed.get() == 1, "resumed signer scope disposed")?;

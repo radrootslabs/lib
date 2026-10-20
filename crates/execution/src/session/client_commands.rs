@@ -1,28 +1,33 @@
 use super::{ClientSession, SessionHost, Shared};
-use crate::session::{HostBound, inquiry::InquiryRuntime};
+use crate::session::{HostBound, command::CommandRuntime};
 use crate::{
-    Error, OperationContext, OperationReceipt,
+    Error, OperationContext, OperationReceipt, OperationStatus,
     workspace::{CommandContext, WorkspaceSession},
 };
 use alloc::boxed::Box;
-use radroots_domain::{ChatMessage, CommandDigest, OperationId};
-use radroots_protocol::command::{CapturedChatCommand, InquireInput};
+use radroots_domain::{ChatMessage, CommandDigest, OperationId, listing::Listing};
+use radroots_protocol::{
+    command::{CapturedChatCommand, CapturedCommand, CommandError, InquireInput},
+    listing::{CapturedListingCommand, PublishInput},
+};
 use radroots_storage::command::{
-    AdmissionOutcome, AdmissionRequest, OperationError, OperationJournal,
+    AdmissionOutcome, AdmissionRequest, OperationError, OperationJournal, OperationSnapshot,
 };
 
+type ReceiptProjection<T> = fn(&OperationSnapshot) -> Result<OperationReceipt<T>, OperationError>;
+
 impl<H: SessionHost + 'static> ClientSession<H> {
-    /// Explicitly resumes an original inquiry under current attached access.
+    /// Explicitly resumes an original command under current attached access.
     /// Original claims are never signed again; delivery retries preserve exact
     /// retained outer bytes and the first publication criterion, selecting only
     /// targets without recorded acceptance. No first-issue deadline is renewed.
-    pub async fn resume_inquiry(
+    pub async fn resume_command(
         &self,
         journal: Shared<dyn OperationJournal>,
         scope: &WorkspaceSession,
         operation: OperationId,
         expected: Option<CommandDigest>,
-    ) -> crate::Result<OperationReceipt<ChatMessage>> {
+    ) -> crate::Result<OperationStatus> {
         let proposed = OperationContext::proposed(Some(operation));
         let permit = self
             .session
@@ -45,7 +50,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
             .captured_input()
             .map_err(|error| Error::operation(error.into(), proposed))?;
         let runtime = self
-            .inquiry
+            .commands
             .clone()
             .ok_or_else(|| Error::operation(OperationError::Unauthorized, proposed))?;
         let host = self
@@ -86,7 +91,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                         &proof,
                         signer,
                         lease,
-                        crate::session::inquiry::RunMode::Resume,
+                        crate::session::command::RunMode::Resume,
                     )
                     .await
                     .map_err(|error| Error::operation(error, retained))?;
@@ -95,7 +100,8 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                     .await
                     .map_err(|error| Error::operation(error, retained))?
                     .ok_or_else(|| Error::operation(OperationError::RecoveryRequired, retained))?;
-                Ok::<_, Error>(OperationReceipt::from_snapshot(&snapshot))
+                OperationStatus::try_from_snapshot(&snapshot)
+                    .map_err(|error| Error::operation(error, retained))
             }
             .await;
             let _ = reply.send(result);
@@ -118,13 +124,47 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         context: CommandContext,
         input: InquireInput,
     ) -> crate::Result<OperationReceipt<ChatMessage>> {
+        self.submit_command(
+            journal,
+            context,
+            move |data| CapturedChatCommand::inquire(data, input).map(CapturedCommand::Chat),
+            OperationReceipt::<ChatMessage>::try_from_snapshot,
+        )
+        .await
+    }
+    /// Captures an initial public listing under its actual attached seller
+    /// scope. The same owner retains T0/T1/S/T2/D after observer loss.
+    pub async fn publish_listing(
+        &self,
+        journal: Shared<dyn OperationJournal>,
+        context: CommandContext,
+        input: PublishInput,
+    ) -> crate::Result<OperationReceipt<Listing>> {
+        self.submit_command(
+            journal,
+            context,
+            move |data| CapturedListingCommand::capture(data, input).map(CapturedCommand::Listing),
+            OperationReceipt::<Listing>::try_from_snapshot,
+        )
+        .await
+    }
+    async fn submit_command<T: HostBound + 'static, F>(
+        &self,
+        journal: Shared<dyn OperationJournal>,
+        context: CommandContext,
+        capture: F,
+        project: ReceiptProjection<T>,
+    ) -> crate::Result<OperationReceipt<T>>
+    where
+        F: FnOnce(radroots_domain::CommandContextData) -> Result<CapturedCommand, CommandError>,
+    {
         let operation = context.data().operation_id();
         let proposed = OperationContext::proposed(Some(operation));
         let permit = self
             .session
             .admit()
             .map_err(|error| error.with_context(proposed))?;
-        let budget = if self.task_host.is_some() || self.inquiry.is_some() {
+        let budget = if self.task_host.is_some() || self.commands.is_some() {
             Some(
                 self.task_budget
                     .reserve()
@@ -145,17 +185,18 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         let (binding, proof) = context
             .captured_input()
             .map_err(|error| Error::operation(error.into(), proposed))?;
-        let command = CapturedChatCommand::inquire(context.data().clone(), input)
+        let command = capture(context.data().clone())
             .map_err(|_| Error::operation(OperationError::InvalidCommand, proposed))?;
         let request = AdmissionRequest::new(binding, command)
             .map_err(|error| Error::operation(error, proposed))?;
-        let runtime = self.inquiry.clone();
+        let runtime = self.commands.clone();
         let signer = self.signer_session();
         let lease: Shared<dyn HostBound> = Shared::new((permit, budget));
         if let Some(host) = &self.task_host {
             let (reply, observed) = futures::channel::oneshot::channel();
             let task = Box::pin(async move {
-                let result = execute_inquiry(journal, request, proof, runtime, signer, lease).await;
+                let result =
+                    execute_command(journal, request, proof, runtime, signer, lease, project).await;
                 let _ = reply.send(result);
             });
             host.submit(task)
@@ -164,7 +205,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                 .await
                 .unwrap_or_else(|_| Err(Error::admission_uncertain(operation)))
         } else {
-            execute_inquiry(journal, request, proof, runtime, signer, lease).await
+            execute_command(journal, request, proof, runtime, signer, lease, project).await
         }
     }
 }
@@ -179,7 +220,7 @@ impl<H: SessionHost> ClientSession<H> {
         scope: &WorkspaceSession,
         operation: OperationId,
         expected_digest: Option<CommandDigest>,
-    ) -> crate::Result<Option<OperationReceipt<ChatMessage>>> {
+    ) -> crate::Result<Option<OperationStatus>> {
         let proposed = OperationContext::proposed(Some(operation));
         let _permit = self
             .session
@@ -197,22 +238,27 @@ impl<H: SessionHost> ClientSession<H> {
         let (binding, proof) = scope
             .captured_input()
             .map_err(|error| Error::operation(error.into(), proposed))?;
-        journal
+        let snapshot = journal
             .operation_snapshot(binding, operation, expected_digest, proof)
             .await
-            .map(|snapshot| snapshot.as_ref().map(OperationReceipt::from_snapshot))
-            .map_err(|error| Error::operation(error, proposed))
+            .map_err(|error| Error::operation(error, proposed))?;
+        snapshot
+            .as_ref()
+            .map(OperationStatus::try_from_snapshot)
+            .transpose()
+            .map_err(|error| Error::operation(error, OperationContext::retained(operation)))
     }
 }
 
-async fn execute_inquiry(
+async fn execute_command<T: HostBound + 'static>(
     journal: Shared<dyn OperationJournal>,
     request: AdmissionRequest,
     proof: radroots_storage::workspace::AttachmentProof,
-    runtime: Option<Shared<InquiryRuntime>>,
+    runtime: Option<Shared<CommandRuntime>>,
     signer: Option<super::SignerSession>,
     lease: Shared<dyn HostBound>,
-) -> crate::Result<OperationReceipt<ChatMessage>> {
+    project: ReceiptProjection<T>,
+) -> crate::Result<OperationReceipt<T>> {
     let operation = request.command().context().operation_id();
     let proposed = OperationContext::proposed(Some(operation));
     let binding = request.binding().clone();
@@ -240,7 +286,7 @@ async fn execute_inquiry(
                         &query_proof,
                         signer,
                         lease,
-                        crate::session::inquiry::RunMode::Command,
+                        crate::session::command::RunMode::Command,
                     )
                     .await
                     .map_err(|error| Error::operation(error, retained))?;
@@ -250,7 +296,7 @@ async fn execute_inquiry(
                 .await
                 .map_err(|error| Error::operation(error, retained))?
                 .ok_or_else(|| Error::operation(OperationError::RecoveryRequired, retained))?;
-            Ok(OperationReceipt::from_snapshot(&snapshot))
+            project(&snapshot).map_err(|error| Error::operation(error, retained))
         }
     }
 }

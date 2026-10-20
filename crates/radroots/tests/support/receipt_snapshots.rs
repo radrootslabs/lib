@@ -215,7 +215,8 @@ async fn expiry_blocks_remaining_first_issuance_without_erasing_obtained_or_unkn
             .await
             .unwrap()
             .unwrap();
-        let receipt = OperationReceipt::from_snapshot(&snapshot);
+        let receipt =
+            OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
         assert!(receipt.durable());
         assert_eq!(
             receipt.admission_transaction_id(),
@@ -304,7 +305,8 @@ async fn full_receipts_keep_obtained_and_unknown_recipients_separate_and_bind_or
         .await
         .unwrap()
         .unwrap();
-    let view = OperationReceipt::from_snapshot(&snapshot);
+    let view =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
     assert_eq!(view.command_digest(), prepared.identity().command_digest());
     assert_eq!(view.artifacts()[0].issuance(), Issuance::Obtained);
     assert_eq!(view.artifacts()[1].issuance(), Issuance::Unknown);
@@ -372,7 +374,8 @@ async fn full_receipts_keep_obtained_and_unknown_recipients_separate_and_bind_or
         .await
         .unwrap()
         .unwrap();
-    let completed = OperationReceipt::from_snapshot(&snapshot);
+    let completed =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
     assert_eq!(completed.issuance(), Issuance::Obtained);
     assert_eq!(completed.error(), None);
     assert_eq!(
@@ -395,7 +398,8 @@ async fn full_receipts_keep_obtained_and_unknown_recipients_separate_and_bind_or
         .await
         .unwrap()
         .unwrap();
-    let later = OperationReceipt::from_snapshot(&later);
+    let later =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&later).unwrap();
     assert_eq!(later.observed_at().get(), 110);
     assert_eq!(later.operation_checkpoint(), checkpoint);
     assert_eq!(later.artifacts()[1].attempt_id(), Some(second.attempt_id()));
@@ -434,7 +438,8 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
         prepared.transaction_id()
     );
     assert!(snapshot.bound_plan().is_none());
-    let receipt = OperationReceipt::from_snapshot(&snapshot);
+    let receipt =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
     assert!(receipt.durable());
     assert_eq!(receipt.issuance(), Issuance::None);
     assert_eq!(
@@ -477,7 +482,8 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
         .unwrap()
         .unwrap();
     assert_eq!(snapshot.message_id(), Some(message));
-    let receipt = OperationReceipt::from_snapshot(&snapshot);
+    let receipt =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
     assert_eq!(receipt.issuance(), Issuance::Pending);
     assert_ne!(receipt.operation_checkpoint(), initial_checkpoint);
     assert_eq!(
@@ -511,7 +517,8 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
         attempt.attempt_id()
     );
     assert!(snapshot.artifacts()[0].obtained().is_none());
-    let receipt = OperationReceipt::from_snapshot(&snapshot);
+    let receipt =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
     assert_eq!(receipt.issuance(), Issuance::Unknown);
     assert_eq!(receipt.artifacts()[0].issuance(), Issuance::Unknown);
     assert_eq!(receipt.artifacts()[1].issuance(), Issuance::Pending);
@@ -540,7 +547,8 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
         .unwrap()
         .unwrap();
     assert_eq!(snapshot.artifacts()[0].obtained(), Some(receipt));
-    let view = OperationReceipt::from_snapshot(&snapshot);
+    let view =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
     assert_eq!(view.issuance(), Issuance::Pending);
     assert_eq!(view.artifacts()[0].issuance(), Issuance::Obtained);
     assert_eq!(view.artifacts()[1].issuance(), Issuance::Pending);
@@ -590,7 +598,8 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
     assert_eq!(snapshot.prepared().identity(), prepared.identity());
     assert_eq!(snapshot.message_id(), Some(message));
     assert_eq!(snapshot.artifacts()[0].obtained(), Some(receipt));
-    let view = OperationReceipt::from_snapshot(&snapshot);
+    let view =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
     assert_eq!(view.operation_checkpoint(), captured_checkpoint);
     assert_eq!(view.message_id(), Some(message));
     assert!(snapshot.artifacts()[1].obtained().is_none());

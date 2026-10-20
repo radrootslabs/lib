@@ -183,7 +183,7 @@ async fn actual_peer_installation_and_late_self_capture_keep_one_original_messag
     assert_eq!(state.publications().len(), 1);
     assert_eq!(state.publications()[0].evidence(), peer_capture);
     assert_ne!(before.checkpoint_digest(), state.checkpoint_digest());
-    let view = OperationReceipt::from_snapshot(&state);
+    let view = OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&state).unwrap();
     assert_eq!(
         view.business_installation(),
         BusinessInstallation::Installed
@@ -232,7 +232,7 @@ async fn actual_peer_installation_and_late_self_capture_keep_one_original_messag
         .unwrap();
     assert!(matches!(captured, EvidenceCaptureOutcome::Committed(_)));
     let late = snapshot(&reopened, &binding, &prepared, &proof).await;
-    let late = OperationReceipt::from_snapshot(&late);
+    let late = OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&late).unwrap();
     assert_eq!(
         late.business_installation(),
         BusinessInstallation::Installed
@@ -273,7 +273,8 @@ async fn actual_peer_installation_and_late_self_capture_keep_one_original_messag
     assert_eq!(peer_work.transaction_id(), first.transaction_id());
     assert_ne!(self_work.transaction_id(), first.transaction_id());
     assert_eq!(self_work.queued_at().get(), 151);
-    let receipt = OperationReceipt::from_snapshot(&complete);
+    let receipt =
+        OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&complete).unwrap();
     assert_eq!(receipt.installed_at(), Some(first.installed_at()));
     assert_eq!(receipt.business_result(), Some(&message));
     assert_eq!(receipt.recovery(), &[RecoveryRequirement::ResumeDelivery]);

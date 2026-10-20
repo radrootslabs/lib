@@ -28,6 +28,8 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 #[path = "receipt_workflow_faults.rs"]
 mod faults;
+#[path = "receipt_workflow_listing.rs"]
+mod listing;
 
 struct Callbacks;
 impl SignerCallbacks for Callbacks {
@@ -70,6 +72,7 @@ struct Relay {
     url: String,
     events: channel::UnboundedReceiver<String>,
     count: Arc<AtomicU64>,
+    requests: Arc<AtomicU64>,
     accepting: Arc<AtomicBool>,
     stop: oneshot::Sender<()>,
     task: tokio::task::JoinHandle<()>,
@@ -81,6 +84,8 @@ impl Relay {
         let sources = Arc::new([advertisement(1, &url), advertisement(2, &url)]);
         let count = Arc::new(AtomicU64::new(0));
         let counter = count.clone();
+        let requests = Arc::new(AtomicU64::new(0));
+        let read_counter = requests.clone();
         let accepting = Arc::new(AtomicBool::new(true));
         let acceptance = accepting.clone();
         let (send, events) = channel::unbounded_channel();
@@ -92,7 +97,7 @@ impl Relay {
                     _ = &mut stopping => break,
                     accepted = listener.accept() => {
                         let (tcp, _) = accepted.unwrap();
-                        let sources = sources.clone(); let send = send.clone(); let count = counter.clone(); let acceptance = acceptance.clone();
+                        let sources = sources.clone(); let send = send.clone(); let count = counter.clone(); let acceptance = acceptance.clone();let requests=read_counter.clone();
                         clients.spawn(async move {
                             let mut socket = accept_async(tcp).await.unwrap();
                             while let Some(Ok(message)) = socket.next().await {
@@ -100,6 +105,7 @@ impl Relay {
                                 let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
                                 match value[0].as_str().unwrap() {
                                     "REQ" => {
+                                        requests.fetch_add(1,Ordering::SeqCst);
                                         let author = value[2]["authors"][0].as_str().unwrap();
                                         for source in sources.iter() {
                                             let event: serde_json::Value = serde_json::from_str(source).unwrap();
@@ -130,6 +136,7 @@ impl Relay {
             url,
             events,
             count,
+            requests,
             accepting,
             stop,
             task,
@@ -262,6 +269,7 @@ async fn ordinary_online_inquiry_runs_t0_t1_sign_install_and_exact_peer_self_del
             .iter()
             .all(|work| snapshot.publication_accepted(*work).unwrap())
     );
+    assert!(relay.requests.load(Ordering::SeqCst) > 0);
     let original = receipt.operation_checkpoint();
     let replay = client.inbox().inquire(context(), inquire()).await.unwrap();
     assert_eq!(replay.operation_checkpoint(), original);
@@ -274,7 +282,11 @@ async fn ordinary_online_inquiry_runs_t0_t1_sign_install_and_exact_peer_self_del
         .unwrap()
         .unwrap();
     assert_eq!(
-        radroots_execution::OperationReceipt::from_snapshot(&snapshot).operation_checkpoint(),
+        radroots_execution::OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(
+            &snapshot
+        )
+        .unwrap()
+        .operation_checkpoint(),
         original
     );
     reopened.close_workspace().await.unwrap();

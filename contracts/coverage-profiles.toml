@@ -10,7 +10,8 @@ test_packages = ["radroots"]
 test_threads = 1
 
 [profiles.crates."radroots_protocol"]
-features = ["chat", "intent"]
+features = ["chat", "intent", "listing", "radroots/native"]
+test_packages = ["radroots"]
 
 [profiles.crates."radroots_signing"]
 features = ["chat"]

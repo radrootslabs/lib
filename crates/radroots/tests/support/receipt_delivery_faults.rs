@@ -164,7 +164,11 @@ async fn exhausted_optional_endpoint_does_not_starve_required_endpoint_or_weaken
         .unwrap()
         .unwrap();
     assert_eq!(snapshot.publication_accepted(ready.work), Ok(true));
-    let receipt = radroots_execution::OperationReceipt::from_snapshot(&snapshot);
+    let receipt =
+        radroots_execution::OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(
+            &snapshot,
+        )
+        .unwrap();
     assert_eq!(receipt.delivery(), radroots_execution::Delivery::Unknown);
     assert!(
         !receipt
@@ -228,7 +232,7 @@ async fn original_quorum_accumulates_acceptance_across_independent_selected_atte
             .unwrap()
             .unwrap();
         assert_eq!(snapshot.publication_accepted(ready.work), Ok(index == 1));
-        let receipt = radroots_execution::OperationReceipt::from_snapshot(&snapshot);
+        let receipt = radroots_execution::OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
         assert_eq!(
             receipt
                 .recovery()
@@ -388,7 +392,7 @@ async fn actual_loopback_wrong_ack_timeout_disconnect_and_rejection_remain_disti
             .unwrap()
             .unwrap();
         assert!(snapshot.installed_message().is_some());
-        let view = radroots_execution::OperationReceipt::from_snapshot(&snapshot);
+        let view = radroots_execution::OperationReceipt::<radroots_domain::ChatMessage>::try_from_snapshot(&snapshot).unwrap();
         assert!(
             view.recovery()
                 .contains(&radroots_execution::RecoveryRequirement::ResumeDelivery)
