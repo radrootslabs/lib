@@ -382,6 +382,14 @@ impl Journal<'_> {
             self.crypto,
         )
         .await?;
+        if graph
+            .bound_plan()
+            .is_some_and(|bound| bound.plan().listing().is_some())
+        {
+            return self
+                .install_listing(request, proof, record, grant, current, graph)
+                .await;
+        }
         let bound = graph.bound_plan().ok_or(OperationError::RecoveryRequired)?;
         if bound.plan().digest() != request.plan_digest() {
             return Err(OperationError::IdempotencyConflict);

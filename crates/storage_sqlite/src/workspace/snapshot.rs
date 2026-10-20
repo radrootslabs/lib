@@ -26,7 +26,7 @@ struct SeenArtifact {
     obtained: Option<ArtifactEvidence>,
 }
 pub(super) struct RetainedGraph {
-    retained: Option<(RetainedOperation, Vec<u8>)>,
+    retained: Option<(RetainedOperation, operation::ProtectedOperation)>,
     protected_plan: Option<ProtectedPlan>,
     artifacts: Vec<SeenArtifact>,
 }
@@ -217,10 +217,18 @@ impl RetainedGraph {
 pub(super) struct RetainedFacts {
     graph: RetainedGraph,
     records: Records,
+    listing: super::listing_installation::Records,
     deliveries: DeliveryGraph,
     observations: Observations,
 }
 impl RetainedFacts {
+    pub(super) fn graph(&self) -> &RetainedGraph {
+        &self.graph
+    }
+    pub(super) fn listing(&self) -> &super::listing_installation::Records {
+        &self.listing
+    }
+
     pub(super) async fn read(
         connection: &mut SqliteConnection,
         selected: &AttachmentInput,
@@ -231,7 +239,20 @@ impl RetainedFacts {
     ) -> Result<Self, OperationError> {
         let graph =
             RetainedGraph::read(connection, selected, binding, operation, digest, crypto).await?;
+        Self::from_graph(connection, selected, operation, graph, crypto).await
+    }
+    pub(super) async fn from_graph(
+        connection: &mut SqliteConnection,
+        selected: &AttachmentInput,
+        operation: OperationId,
+        graph: RetainedGraph,
+        crypto: &WorkspaceCrypto,
+    ) -> Result<Self, OperationError> {
         let records = Records::read(connection, selected, operation, &graph, crypto).await?;
+        let listing = super::listing_installation::Records::read(
+            connection, selected, operation, &graph, crypto,
+        )
+        .await?;
         let deliveries =
             DeliveryGraph::read(connection, selected, operation, &graph, &records, crypto).await?;
         let observations =
@@ -239,6 +260,7 @@ impl RetainedFacts {
         Ok(Self {
             graph,
             records,
+            listing,
             deliveries,
             observations,
         })
@@ -253,6 +275,9 @@ impl RetainedFacts {
             .unchanged(connection, selected, operation)
             .await?;
         self.records
+            .unchanged(connection, selected, operation)
+            .await?;
+        self.listing
             .unchanged(connection, selected, operation)
             .await?;
         self.deliveries
@@ -277,6 +302,10 @@ impl RetainedFacts {
                             .into_iter()
                             .map(|value| value.report)
                             .collect(),
+                    )?
+                    .with_public_installation(
+                        self.listing.installation(),
+                        self.listing.work().into_iter().collect(),
                     )?
                     .with_delivery(
                         self.deliveries

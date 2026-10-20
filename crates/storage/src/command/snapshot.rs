@@ -2,7 +2,8 @@
 //! dispatch permission; concrete owners must authenticate and compare all facts.
 use super::{
     BoundSigningPlan, ChatInstallation, DeliveryAttemptSummary, DeliveryObservation,
-    EvidenceReceipt, OperationError, PreparedOperation, PublicationWork, SigningAttempt,
+    EvidenceReceipt, ListingInstallation, OperationError, PreparedOperation, PublicPublicationWork,
+    PublicationWork, SigningAttempt,
 };
 use core::fmt;
 use radroots_domain::{
@@ -193,6 +194,8 @@ pub struct OperationSnapshot {
     installation: Option<ChatInstallation>,
     message: Option<ChatMessage>,
     publications: Box<[PublicationWork]>,
+    listing_installation: Option<ListingInstallation>,
+    public_publications: Box<[PublicPublicationWork]>,
     deliveries: Box<[DeliveryAttemptSummary]>,
     observations: Box<[DeliveryObservation]>,
 }
@@ -278,6 +281,20 @@ impl OperationSnapshot {
             digest.update(work.evidence().target().key());
             digest.update(work.transaction_id().as_bytes());
             digest.update(work.queued_at().get().to_be_bytes());
+        }
+        if let Some(installed) = self.listing_installation() {
+            // Preserve original private checkpoint bytes exactly. The public
+            // extension binds actual installation/work, never a message ID.
+            digest.update(b"radroots.operation.public_installation.v1\0");
+            digest.update(installed.author().as_bytes());
+            digest.update(installed.listing_id().as_bytes());
+            digest.update(installed.revision().as_bytes());
+            digest.update(installed.transaction_id().as_bytes());
+            digest.update(installed.installed_at().get().to_be_bytes());
+            for work in self.public_publications() {
+                digest.update(work.transaction_id().as_bytes());
+                digest.update(work.queued_at().get().to_be_bytes());
+            }
         }
         for attempt in self.delivery_attempts() {
             digest.update(attempt.work().evidence().target().key());
@@ -419,6 +436,8 @@ impl OperationSnapshot {
             installation: None,
             message: None,
             publications: Vec::new().into_boxed_slice(),
+            listing_installation: None,
+            public_publications: Vec::new().into_boxed_slice(),
             deliveries: Vec::new().into_boxed_slice(),
             observations: Vec::new().into_boxed_slice(),
         })
@@ -431,7 +450,11 @@ impl OperationSnapshot {
         installation: Option<ChatInstallation>,
         publications: Vec<PublicationWork>,
     ) -> Result<Self, OperationError> {
-        if !self.deliveries.is_empty() || !self.observations.is_empty() {
+        if self.listing_installation.is_some()
+            || !self.public_publications.is_empty()
+            || !self.deliveries.is_empty()
+            || !self.observations.is_empty()
+        {
             return Err(OperationError::RecoveryRequired);
         }
         let Some(installed) = installation else {
@@ -506,6 +529,67 @@ impl OperationSnapshot {
         self.message = Some(message);
         self.publications = publications.into_boxed_slice();
         Ok(self)
+    }
+    /// Adds structurally checked public T2 facts. The concrete store must
+    /// authenticate the creation decision and atomically retain both records.
+    pub fn with_public_installation(
+        mut self,
+        installation: Option<ListingInstallation>,
+        publications: Vec<PublicPublicationWork>,
+    ) -> Result<Self, OperationError> {
+        let Some(installed) = installation else {
+            if !publications.is_empty() {
+                return Err(OperationError::RecoveryRequired);
+            }
+            self.listing_installation = None;
+            self.public_publications = Vec::new().into_boxed_slice();
+            return Ok(self);
+        };
+        if self.installation.is_some()
+            || self.message.is_some()
+            || !self.publications.is_empty()
+            || !self.deliveries.is_empty()
+            || !self.observations.is_empty()
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let bound = self.bound_plan().ok_or(OperationError::RecoveryRequired)?;
+        if ListingInstallation::from_committed_store(
+            bound,
+            installed.basis(),
+            installed.transaction_id(),
+            installed.installed_at(),
+        )? != installed
+            || self.artifacts().len() != 1
+            || self.artifacts()[0].obtained() != Some(installed.basis())
+            || publications.len() != 1
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let work = publications[0];
+        if PublicPublicationWork::from_committed_store(
+            bound,
+            installed,
+            work.evidence(),
+            work.transaction_id(),
+            work.queued_at(),
+        )? != work
+            || work.transaction_id() != installed.transaction_id()
+            || work.queued_at() != installed.installed_at()
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        self.listing_installation = Some(installed);
+        self.public_publications = publications.into_boxed_slice();
+        Ok(self)
+    }
+    /// Actual original listing installation, when retained by the owner.
+    pub const fn listing_installation(&self) -> Option<ListingInstallation> {
+        self.listing_installation
+    }
+    /// Original pending direct-publication references, without wrapping or ACK.
+    pub fn public_publications(&self) -> &[PublicPublicationWork] {
+        &self.public_publications
     }
     /// Actual retained installation report, when supplied by the concrete owner.
     pub const fn installation(&self) -> Option<ChatInstallation> {

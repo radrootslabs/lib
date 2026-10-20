@@ -353,6 +353,13 @@ command and plan, with validated installation/basis/work reports. Structural
 constructors supply no authentication or persistence guarantee. Uncertain T2
 completion never releases claims or obtained evidence.
 
+Public T2 reports use `ListingInstallation` and `PublicPublicationWork`. The
+snapshot exposes the original coordinate/revision and exact evidence/work
+references without inventing a message or private recipient. Concrete owners
+must fence the initial coordinate before issuance and atomically retain the
+revision and work once. First-issue expiry does not erase authenticated obtained
+evidence or impose a new T2 deadline; current access still gates installation.
+
 Delivery preparation retains an exact outer representation and complete bounded
 target intent against actual original publication work before transport. Only
 an actual fresh confirmed claim may proceed once through its qualified owner;

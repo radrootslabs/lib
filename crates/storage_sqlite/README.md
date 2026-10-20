@@ -1,12 +1,19 @@
 # radroots_storage_sqlite
 
-The separate execution-workspace database creates exact schema generation 8
-for shared chat/public non-stock preparation. `listing.publish` uses the same
-operation identity, protected preparation, bounded worker and confirmed commit
-classification as chat. Current seller authentication is required. T0 retains
-data only; public signing, installation and delivery are separate stages.
-The exact generation 7 catalog remains accepted for original chat recovery and
-continuation. It refuses public admission without rewriting its catalog.
+The separate execution-workspace database creates exact schema generation 10.
+Chat and initial `listing.publish` share the operation journal, protected
+preparation and owned bounded worker. Seller authentication and a retained T0
+coordinate decision precede public issuance. A conflicting initial publish
+cannot replace that decision or reach a new signature. T2 rechecks the original
+T0/T1/claim/obtained graph, then atomically retains its exact signed listing
+revision and pending direct-publication work. It creates no private message,
+recipient, wrapping identity, stock allocation or relay acknowledgement.
+
+Exact generation 7/8/9 catalogs preserve their original encrypted records and
+private continuation without catalog rewrites. Original public T1/S remains
+readable where supported. Unsupported new public admission, binding, issuance
+or installation refuses explicitly; retained claims never permit reissue.
+Actual transport dispatch and ordinary listing execution are separate stages.
 
 SQLite storage backend for Radroots.
 

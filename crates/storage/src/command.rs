@@ -29,7 +29,8 @@ pub use delivery::{
 pub use delivery_summary::DeliveryAttemptSummary;
 pub use dm_source::SignedDmRelaySource;
 pub use installation::{
-    ChatInstallation, InstallationOutcome, InstallationRequest, PublicationWork,
+    ChatInstallation, InstallationOutcome, InstallationRequest, ListingInstallation,
+    PublicPublicationWork, PublicationWork,
 };
 pub use issuance::{
     ArtifactEvidence, CapturedArtifact, ClaimAttemptOutcome, ClaimAttemptRequest,
@@ -60,6 +61,8 @@ pub enum OperationError {
     DeadlineExceeded,
     /// The retained operation identity binds a different command commitment.
     IdempotencyConflict,
+    /// The selected publication coordinate has another retained decision/head.
+    StaleState,
     /// A known storage failure preceded writes or had confirmed rollback.
     StorageFailure,
     /// State, completion or decoding requires explicit reconciliation.
@@ -80,6 +83,7 @@ impl OperationError {
             Self::UnverifiedApproval => "unverified_approval",
             Self::DeadlineExceeded => "deadline_exceeded",
             Self::IdempotencyConflict => "idempotency_conflict",
+            Self::StaleState => "stale_state",
             Self::StorageFailure => "storage_failure",
             Self::RecoveryRequired => "recovery_required",
             Self::DeliveryAttemptLimit => "delivery_attempt_limit",
@@ -364,9 +368,10 @@ pub trait OperationJournal: WorkspaceStore {
         request: radroots_transport::sink::DeliveryRequestId,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Option<DeliveryAttempt>, OperationError>>;
-    /// Atomically installs the original logical chat result and retains distinct
-    /// publication work for actual obtained recipients. No signing or transport
-    /// occurs here; unknown completion retains all original claims and evidence.
+    /// Atomically installs the original chat result or initial listing revision
+    /// with publication work for actual obtained artifacts. Concrete hosts must
+    /// enforce the command's retained decision and current access. No signing or
+    /// transport occurs here; unknown completion retains claims and evidence.
     fn install_transition_and_outbox(
         &self,
         request: InstallationRequest,

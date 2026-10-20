@@ -1,7 +1,7 @@
 use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
     WorkspaceError, admission::Journal, attempt, delivery, evidence, fs::Namespace, installation,
-    operation, plan, record::GrantRecord,
+    listing, operation, plan, record::GrantRecord,
 };
 use radroots_domain::{CommandDigest, OperationId, PublicKey};
 use radroots_storage::command::{
@@ -1007,13 +1007,18 @@ pub(super) async fn initialize(
             delivery::PARTS,
             delivery::TX_INDEX,
             delivery::OBSERVATIONS,
+            listing::CREATIONS,
+            listing::COORDINATE_INDEX,
+            super::listing_installation::TABLE,
+            super::listing_installation::TX_INDEX,
+            super::listing_installation::WORK,
         ] {
             sqlx::raw_sql(definition)
                 .execute(&mut *transaction)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
         }
-        sqlx::query("PRAGMA user_version=9")
+        sqlx::query("PRAGMA user_version=10")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -1035,16 +1040,32 @@ pub(super) async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if !matches!(version, 7..=9) {
+    if !matches!(version, 7..=10) {
         return Err(WorkspaceError::RecoveryRequired);
     }
     let catalog_sql = "SELECT CASE WHEN count(*)=20 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='table' AND name='signing_attempts' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_transaction_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence_parts' AND tbl_name='seal_evidence_parts' AND sql=? THEN 1 WHEN type='index' AND name='seal_evidence_transaction_identity' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='chat_messages' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_operation_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_transaction_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_thread' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='table' AND name='chat_publication_work' AND tbl_name='chat_publication_work' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_attempts' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_parts' AND tbl_name='chat_delivery_parts' AND sql=? THEN 1 WHEN type='index' AND name='chat_delivery_transaction_identity' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_observations' AND tbl_name='chat_delivery_observations' AND sql=? THEN 1 ELSE 0 END)=20 THEN 1 ELSE 0 END FROM sqlite_schema";
-    let catalog_sql = if version == 9 {
+    let catalog_sql = if matches!(version, 9 | 10) {
         catalog_sql.replace("seal_evidence", "artifact_evidence")
     } else {
         catalog_sql.to_owned()
     };
-    let catalog_matches: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(catalog_sql))
+    let catalog_sql = if version == 10 {
+        catalog_sql.replace("count(*)=20", "count(*)=25").replace("END)=20", "END)=25").replace("WHEN type='table' AND name='workspace_grant'", "WHEN type='table' AND name='listing_creations' AND tbl_name='listing_creations' AND sql=? THEN 1 WHEN type='index' AND name='listing_coordinate_identity' AND tbl_name='listing_creations' AND sql=? THEN 1 WHEN type='table' AND name='listing_installations' AND tbl_name='listing_installations' AND sql=? THEN 1 WHEN type='index' AND name='listing_installation_transaction_identity' AND tbl_name='listing_installations' AND sql=? THEN 1 WHEN type='table' AND name='public_publication_work' AND tbl_name='public_publication_work' AND sql=? THEN 1 WHEN type='table' AND name='workspace_grant'")
+    } else {
+        catalog_sql
+    };
+    let catalog_query = sqlx::query_scalar(sqlx::AssertSqlSafe(catalog_sql));
+    let catalog_query = if version == 10 {
+        catalog_query
+            .bind(listing::CREATIONS)
+            .bind(listing::COORDINATE_INDEX)
+            .bind(super::listing_installation::TABLE)
+            .bind(super::listing_installation::TX_INDEX)
+            .bind(super::listing_installation::WORK)
+    } else {
+        catalog_query
+    };
+    let catalog_matches: i64 = catalog_query
         .bind(TABLE)
         .bind(if version == 7 {
             operation::TABLE_V7
@@ -1053,24 +1074,24 @@ pub(super) async fn initialize(
         })
         .bind(plan::TABLE)
         .bind(plan::PARTS)
-        .bind(if version == 9 {
+        .bind(if matches!(version, 9 | 10) {
             attempt::TABLE
         } else {
             attempt::TABLE_V8
         })
         .bind(attempt::ID_INDEX)
         .bind(attempt::TX_INDEX)
-        .bind(if version == 9 {
+        .bind(if matches!(version, 9 | 10) {
             evidence::TABLE
         } else {
             evidence::TABLE_V8
         })
-        .bind(if version == 9 {
+        .bind(if matches!(version, 9 | 10) {
             evidence::PARTS
         } else {
             evidence::PARTS_V8
         })
-        .bind(if version == 9 {
+        .bind(if matches!(version, 9 | 10) {
             evidence::TX_INDEX
         } else {
             evidence::TX_INDEX_V8
@@ -1080,7 +1101,7 @@ pub(super) async fn initialize(
         .bind(installation::OP_INDEX)
         .bind(installation::TX_INDEX)
         .bind(installation::THREAD_INDEX)
-        .bind(if version == 9 {
+        .bind(if matches!(version, 9 | 10) {
             installation::WORK
         } else {
             installation::WORK_V8

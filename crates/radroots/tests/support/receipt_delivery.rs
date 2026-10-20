@@ -442,7 +442,7 @@ async fn predecessor_schema_six_preserves_original_installation_and_seal_without
     let ready = Ready::new(&[String::from("ws://127.0.0.1:9")], 236).await;
     ready.store.close().await.unwrap();
     let mut database = ready.fixture.database().await;
-    sqlx::raw_sql("DROP TABLE chat_delivery_observations; DROP TABLE chat_delivery_parts; DROP TABLE chat_delivery_attempts; PRAGMA user_version=6").execute(&mut database).await.unwrap();
+    sqlx::raw_sql("DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations; DROP TABLE chat_delivery_observations; DROP TABLE chat_delivery_parts; DROP TABLE chat_delivery_attempts; PRAGMA user_version=6").execute(&mut database).await.unwrap();
     let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM sqlite_schema),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM artifact_evidence)").fetch_one(&mut database).await.unwrap();
     assert_eq!(counts, (16, 1, 1));
     database.close().await.unwrap();

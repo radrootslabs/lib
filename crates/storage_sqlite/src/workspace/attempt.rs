@@ -150,7 +150,7 @@ pub(super) async fn sql(
         .map_err(|_| OperationError::RecoveryRequired)?;
     match version {
         7 | 8 => Ok(sqlx::AssertSqlSafe(legacy.to_owned())),
-        9 => Ok(sqlx::AssertSqlSafe(
+        9 | 10 => Ok(sqlx::AssertSqlSafe(
             legacy
                 .replace("seal_evidence", "artifact_evidence")
                 .replace("recipient", "artifact_key"),
@@ -167,7 +167,7 @@ pub(super) async fn require_target(
             .fetch_one(connection)
             .await
             .map_err(|_| OperationError::RecoveryRequired)?;
-        if version != 9 {
+        if !matches!(version, 9 | 10) {
             return Err(OperationError::UnsupportedOperation);
         }
     }

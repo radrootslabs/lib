@@ -27,6 +27,9 @@ fn request_install(
 fn installed(outcome: InstallationOutcome) -> ChatInstallation {
     match outcome {
         InstallationOutcome::Committed(value) => *value,
+        InstallationOutcome::ListingCommitted(_) => {
+            panic!("chat fixture must not install a listing")
+        }
         InstallationOutcome::Unknown(_) => panic!("fixture must observe confirmed T2"),
     }
 }
@@ -484,7 +487,7 @@ async fn predecessor_schema_five_retains_actual_claims_and_obtained_bytes_withou
     store.close().await.unwrap();
     let mut database = fixture.database().await;
     sqlx::raw_sql(
-        "DROP TABLE chat_delivery_observations; DROP TABLE chat_delivery_parts; DROP TABLE chat_delivery_attempts; DROP TABLE chat_publication_work; DROP TABLE chat_messages; PRAGMA user_version=5",
+        "DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations; DROP TABLE chat_delivery_observations; DROP TABLE chat_delivery_parts; DROP TABLE chat_delivery_attempts; DROP TABLE chat_publication_work; DROP TABLE chat_messages; PRAGMA user_version=5",
     )
     .execute(&mut database)
     .await

@@ -101,7 +101,7 @@ async fn protected_operation_read_refuses_each_inconsistent_payload_and_sql_proj
         recovered.request().binding().scope(),
         radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
     );
-    assert_eq!(legacy_retained, legacy);
+    assert_eq!(legacy_retained.bytes, legacy);
     assert_eq!(
         sqlx::query_scalar::<_, Vec<u8>>("SELECT protected FROM operations")
             .fetch_one(&mut database)
@@ -189,7 +189,15 @@ async fn protected_operation_read_refuses_each_inconsistent_payload_and_sql_proj
     }
     let mut transaction = database.begin_with("BEGIN IMMEDIATE").await.unwrap();
     assert!(matches!(
-        operation::unchanged(&mut transaction, &retained, &original).await,
+        operation::unchanged(
+            &mut transaction,
+            &retained,
+            &operation::ProtectedOperation {
+                bytes: original.clone(),
+                creation: None
+            }
+        )
+        .await,
         Err(OperationError::RecoveryRequired)
     ));
     transaction.rollback().await.unwrap();
@@ -219,7 +227,15 @@ async fn protected_operation_read_refuses_each_inconsistent_payload_and_sql_proj
         .await
         .unwrap();
     let mut transaction = database.begin_with("BEGIN IMMEDIATE").await.unwrap();
-    let checked = operation::unchanged(&mut transaction, &retained, &original).await;
+    let checked = operation::unchanged(
+        &mut transaction,
+        &retained,
+        &operation::ProtectedOperation {
+            bytes: original.clone(),
+            creation: None,
+        },
+    )
+    .await;
     transaction.rollback().await.unwrap();
     database.close().await.unwrap();
     assert!(

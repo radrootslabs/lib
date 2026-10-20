@@ -18,7 +18,7 @@ use sqlx::{Connection, SqliteConnection};
 
 struct Loaded {
     bound: BoundSigningPlan,
-    operation: Vec<u8>,
+    operation: operation::ProtectedOperation,
     plan: plan::ProtectedPlan,
 }
 impl Journal<'_> {
@@ -115,6 +115,11 @@ impl Journal<'_> {
                 false,
             )
         } else {
+            if request.target() == SigningTarget::PublicEvent
+                && !super::listing::current(self.connection).await?
+            {
+                return Err(OperationError::UnsupportedOperation);
+            }
             if current.observed_at() < bound.bound_at() {
                 return Err(WorkspaceError::Unavailable.into());
             }

@@ -249,7 +249,7 @@ fn public_request(
     )
     .unwrap();
     let wire = json!({"type":"listing.publish", "context":context,"input":{
-        "id":"01".repeat(16),"title":title,"summary":"Quote required","description_markdown":"Public terms",
+        "id":format!("{id:02x}").repeat(16),"title":title,"summary":"Quote required","description_markdown":"Public terms",
         "published_at":"100","profile":{"profile":"radroots.listing","version":1,"state":"active",
         "product":{"name":"Carrots","description":"Public description","producer":null,"origin_summary":null},
         "default_option":"02".repeat(32),"options":[{"id":"02".repeat(32),"label":"One bunch",
@@ -1101,9 +1101,605 @@ mod public_issuance {
         assert_eq!(captured.evidence().raw_json(), evidence.raw_json());
         reopened.close().await.unwrap();
     }
+    fn install_request(
+        binding: &WorkspaceBinding,
+        prepared: &PreparedOperation,
+        digest: [u8; 32],
+    ) -> radroots_storage::command::InstallationRequest {
+        radroots_storage::command::InstallationRequest::new(
+            binding.clone(),
+            prepared.identity().operation_id(),
+            prepared.identity().command_digest(),
+            digest,
+        )
+    }
+    fn installed(
+        outcome: radroots_storage::command::InstallationOutcome,
+    ) -> radroots_storage::command::ListingInstallation {
+        match outcome {
+            radroots_storage::command::InstallationOutcome::ListingCommitted(v) => *v,
+            _ => panic!("public T2 must confirm original listing installation"),
+        }
+    }
+    async fn signed(
+        fixture: &Fixture,
+        store: &NativeWorkspace,
+        binding: &WorkspaceBinding,
+        input: &AttachmentInput,
+        proof: &AttachmentProof,
+        id: u8,
+    ) -> (PreparedOperation, [u8; 32], ArtifactEvidence) {
+        let (prepared, digest) = prepared(fixture, store, binding, proof, id).await;
+        let attempt = claimed(
+            store
+                .claim_attempt(selection(binding, &prepared, digest), copy(proof))
+                .await
+                .unwrap(),
+        );
+        let evidence = obtain(&attempt).await;
+        captured(
+            store
+                .capture_evidence(input.clone(), proof, &evidence)
+                .await
+                .unwrap(),
+        );
+        (prepared, digest, evidence)
+    }
+    async fn t2_counts(fixture: &Fixture) -> (i64, i64, i64) {
+        let mut db = fixture.database().await;
+        let counts=sqlx::query_as("SELECT (SELECT count(*) FROM listing_creations),(SELECT count(*) FROM listing_installations),(SELECT count(*) FROM public_publication_work)").fetch_one(&mut db).await.unwrap();
+        db.close().await.unwrap();
+        counts
+    }
+    #[tokio::test]
+    async fn public_t2_requires_actual_obtained_evidence_then_installs_once_after_first_issue_expiry()
+     {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest) = prepared(&fixture, &store, &binding, &proof, 170).await;
+        assert!(matches!(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::InvalidEvidence)
+        ));
+        let attempt = claimed(
+            store
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+        );
+        assert!(matches!(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::InvalidEvidence)
+        ));
+        assert_eq!(t2_counts(&fixture).await, (1, 0, 0));
+        let evidence = obtain(&attempt).await;
+        let receipt = captured(
+            store
+                .capture_evidence(input.clone(), &proof, &evidence)
+                .await
+                .unwrap(),
+        );
+        let before = store
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                Some(prepared.identity().command_digest()),
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .checkpoint_digest();
+        fixture.clock.now.store(160, Ordering::SeqCst);
+        let result = installed(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        assert_eq!(result.basis(), receipt);
+        assert_eq!(result.revision(), receipt.event_id());
+        assert_eq!(result.author(), key());
+        assert_eq!(result.installed_at().get(), 160);
+        assert_eq!(
+            result.listing_id(),
+            prepared.request().command().listing().unwrap().input().id()
+        );
+        assert_eq!(t2_counts(&fixture).await, (1, 1, 1));
+        let snapshot = store
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                Some(prepared.identity().command_digest()),
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.listing_installation(), Some(result));
+        assert!(snapshot.installation().is_none());
+        assert!(snapshot.installed_message().is_none());
+        assert!(snapshot.publications().is_empty());
+        assert!(snapshot.delivery_attempts().is_empty());
+        assert_eq!(snapshot.public_publications().len(), 1);
+        let work = snapshot.public_publications()[0];
+        assert_eq!(work.evidence().target(), SigningTarget::PublicEvent);
+        assert_eq!(work.evidence().target().recipient(), None);
+        assert_eq!(work.transaction_id(), result.transaction_id());
+        assert_eq!(work.queued_at(), result.installed_at());
+        let checkpoint = snapshot.checkpoint_digest();
+        assert_ne!(checkpoint, before);
+        store.close().await.unwrap();
+        fixture.clock.now.store(170, Ordering::SeqCst);
+        let reopened = fixture.reopen(input).await;
+        let replay = installed(
+            reopened
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        assert_eq!(replay, result);
+        let snapshot = reopened
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                Some(prepared.identity().command_digest()),
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.checkpoint_digest(), checkpoint);
+        let retained = reopened
+            .obtained_evidence(selection(&binding, &prepared, digest), copy(&proof))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained.evidence().raw_json(), evidence.raw_json());
+        assert_eq!(t2_counts(&fixture).await, (1, 1, 1));
+        reopened.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn another_initial_publish_cannot_claim_same_coordinate_before_any_signing() {
+        let fixture = Fixture::new();
+        let (store, _, proof, binding) = fixture.create_scoped(200, true).await;
+        let first = committed(
+            store
+                .admit_command_and_hold(
+                    public_request(&binding, 171, "first coordinate", "one"),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        let second = public_request(&binding, 172, "other operation", "two");
+        let mut wire: serde_json::Value =
+            serde_json::from_slice(second.command().protected_wire()).unwrap();
+        wire["input"]["id"] = json!(first.request().command().listing().unwrap().input().id());
+        let second = AdmissionRequest::from_protected_wire(
+            binding.clone(),
+            &serde_json::to_vec(&wire).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            store.admit_command_and_hold(second, copy(&proof)).await,
+            Err(OperationError::StaleState)
+        ));
+        assert_eq!(count(&fixture).await, 1);
+        assert_eq!(t2_counts(&fixture).await, (1, 0, 0));
+        let mut db = fixture.database().await;
+        let claims: i64 = sqlx::query_scalar("SELECT count(*) FROM signing_attempts")
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+        assert_eq!(claims, 0);
+        db.close().await.unwrap();
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn public_t2_refuses_wrong_proof_digest_and_clock_rollback_without_partial_rows() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, _) = signed(&fixture, &store, &binding, &input, &proof, 173).await;
+        let wrong = AttachmentProof::from_protected_input(&[0x19; 32]).unwrap();
+        assert!(matches!(
+            store
+                .install_transition_and_outbox(install_request(&binding, &prepared, digest), wrong)
+                .await,
+            Err(OperationError::Workspace(WorkspaceError::Unauthorized))
+        ));
+        assert!(matches!(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, [9; 32]),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::IdempotencyConflict)
+        ));
+        let (arrived, resume) = fixture.clock.arm(1);
+        let mut pending = store.install_transition_and_outbox(
+            install_request(&binding, &prepared, digest),
+            copy(&proof),
+        );
+        assert!(futures::poll!(pending.as_mut()).is_pending());
+        reached(arrived).await;
+        fixture.clock.now.store(99, Ordering::SeqCst);
+        resume.send(()).unwrap();
+        assert!(matches!(
+            pending.await,
+            Err(OperationError::Workspace(WorkspaceError::Unavailable))
+        ));
+        assert_eq!(t2_counts(&fixture).await, (1, 0, 0));
+        fixture.clock.now.store(100, Ordering::SeqCst);
+        installed(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn public_work_insertion_fault_rolls_back_revision_and_preserves_original_signature() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, evidence) =
+            signed(&fixture, &store, &binding, &input, &proof, 174).await;
+        let mut db = fixture.database().await;
+        sqlx::raw_sql("CREATE TRIGGER fail_public_work BEFORE INSERT ON public_publication_work BEGIN SELECT RAISE(ABORT,'isolated fixture'); END").execute(&mut db).await.unwrap();
+        assert!(matches!(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::StorageFailure)
+        ));
+        assert_eq!(t2_counts(&fixture).await, (1, 0, 0));
+        let retained = store
+            .obtained_evidence(selection(&binding, &prepared, digest), copy(&proof))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained.evidence().raw_json(), evidence.raw_json());
+        sqlx::query("DROP TRIGGER fail_public_work")
+            .execute(&mut db)
+            .await
+            .unwrap();
+        db.close().await.unwrap();
+        installed(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        assert_eq!(t2_counts(&fixture).await, (1, 1, 1));
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn public_t2_observer_loss_drains_and_reopens_original_installation() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, _) = signed(&fixture, &store, &binding, &input, &proof, 175).await;
+        let (arrived, resume) = fixture.clock.arm(1);
+        let mut pending = store.install_transition_and_outbox(
+            install_request(&binding, &prepared, digest),
+            copy(&proof),
+        );
+        assert!(futures::poll!(pending.as_mut()).is_pending());
+        reached(arrived).await;
+        drop(pending);
+        resume.send(()).unwrap();
+        store.close().await.unwrap();
+        let reopened = fixture.reopen(input).await;
+        let snapshot = reopened
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                Some(prepared.identity().command_digest()),
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let original = snapshot.listing_installation().unwrap();
+        assert_eq!(
+            installed(
+                reopened
+                    .install_transition_and_outbox(
+                        install_request(&binding, &prepared, digest),
+                        copy(&proof)
+                    )
+                    .await
+                    .unwrap()
+            ),
+            original
+        );
+        assert_eq!(t2_counts(&fixture).await, (1, 1, 1));
+        reopened.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn public_t2_actual_commit_failure_is_unknown_and_blocks_until_reopen() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, _) = signed(&fixture, &store, &binding, &input, &proof, 176).await;
+        let mut db = fixture.database().await;
+        sqlx::raw_sql("CREATE TABLE deferred_fault(value INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER fail_public_commit AFTER INSERT ON listing_installations BEGIN INSERT INTO deferred_fault VALUES(2); END").execute(&mut db).await.unwrap();
+        let radroots_storage::command::InstallationOutcome::Unknown(anchor) = store
+            .install_transition_and_outbox(
+                install_request(&binding, &prepared, digest),
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+        else {
+            panic!("actual failed COMMIT must remain unknown")
+        };
+        assert_eq!(anchor.operation_id(), prepared.identity().operation_id());
+        assert!(anchor.transaction_id().is_some());
+        assert!(matches!(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::RecoveryRequired)
+        ));
+        store.close().await.unwrap();
+        sqlx::raw_sql("DROP TRIGGER fail_public_commit; DROP TABLE deferred_fault")
+            .execute(&mut db)
+            .await
+            .unwrap();
+        db.close().await.unwrap();
+        let reopened = fixture.reopen(input).await;
+        assert_eq!(t2_counts(&fixture).await, (1, 0, 0));
+        installed(
+            reopened
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        reopened.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn exact_generation_nine_preserves_public_s_and_refuses_unfenced_new_effects() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, evidence) =
+            signed(&fixture, &store, &binding, &input, &proof, 177).await;
+        store.close().await.unwrap();
+        let mut db = fixture.database().await;
+        sqlx::raw_sql("DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations; PRAGMA user_version=9").execute(&mut db).await.unwrap();
+        db.close().await.unwrap();
+        let reopened = fixture.reopen(input).await;
+        let retained = reopened
+            .obtained_evidence(selection(&binding, &prepared, digest), copy(&proof))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained.evidence().raw_json(), evidence.raw_json());
+        assert!(matches!(
+            reopened
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::UnsupportedOperation)
+        ));
+        assert!(matches!(
+            reopened
+                .admit_command_and_hold(
+                    public_request(&binding, 178, "fresh unsupported", "new"),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::UnsupportedOperation)
+        ));
+        assert!(matches!(
+            reopened
+                .admit_command_and_hold(
+                    public_request(&binding, 177, "changed terms", "replay"),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::IdempotencyConflict)
+        ));
+        let replay = AdmissionRequest::from_protected_wire(
+            binding.clone(),
+            prepared.request().command().protected_wire(),
+        )
+        .unwrap();
+        assert_eq!(
+            committed(
+                reopened
+                    .admit_command_and_hold(replay, copy(&proof))
+                    .await
+                    .unwrap()
+            )
+            .identity(),
+            prepared.identity()
+        );
+        assert!(matches!(
+            reopened
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+            ClaimAttemptOutcome::Retained(_)
+        ));
+        committed(
+            reopened
+                .admit_command_and_hold(
+                    request(&binding, 179, "legacy private continuation", "private"),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        reopened.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn public_t2_requires_current_grant_even_after_obtained_capture() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, _) = signed(&fixture, &store, &binding, &input, &proof, 180).await;
+        store.revoke(input, &proof).await.unwrap();
+        assert!(matches!(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::Workspace(WorkspaceError::GrantRevoked))
+        ));
+        assert_eq!(t2_counts(&fixture).await, (1, 0, 0));
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn retained_listing_graph_refuses_changed_decision_and_orphaned_installation_without_repair()
+     {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, _) = signed(&fixture, &store, &binding, &input, &proof, 181).await;
+        installed(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        let mut db = fixture.database().await;
+        sqlx::query("PRAGMA foreign_keys=OFF")
+            .execute(&mut db)
+            .await
+            .unwrap();
+        let original: Vec<u8> = sqlx::query_scalar("SELECT protected FROM listing_creations")
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE listing_creations SET transaction_id=zeroblob(32)")
+            .execute(&mut db)
+            .await
+            .unwrap();
+        assert!(matches!(
+            store
+                .operation_snapshot(
+                    binding.clone(),
+                    prepared.identity().operation_id(),
+                    Some(prepared.identity().command_digest()),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::RecoveryRequired)
+        ));
+        sqlx::query("UPDATE listing_creations SET transaction_id=?,protected=?")
+            .bind(prepared.transaction_id().as_bytes().as_slice())
+            .bind(&original)
+            .execute(&mut db)
+            .await
+            .unwrap();
+        let event: Vec<u8> = sqlx::query_scalar("SELECT event_id FROM listing_installations")
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+        let installed_row: Vec<u8> =
+            sqlx::query_scalar("SELECT protected FROM listing_installations")
+                .fetch_one(&mut db)
+                .await
+                .unwrap();
+        for update in [
+            "UPDATE listing_installations SET event_id=zeroblob(32)",
+            "UPDATE public_publication_work SET plan_digest=zeroblob(32)",
+        ] {
+            sqlx::query(update).execute(&mut db).await.unwrap();
+            assert!(matches!(
+                store
+                    .operation_snapshot(
+                        binding.clone(),
+                        prepared.identity().operation_id(),
+                        Some(prepared.identity().command_digest()),
+                        copy(&proof)
+                    )
+                    .await,
+                Err(OperationError::RecoveryRequired)
+            ));
+            sqlx::query("UPDATE listing_installations SET event_id=?,protected=?")
+                .bind(&event)
+                .bind(&installed_row)
+                .execute(&mut db)
+                .await
+                .unwrap();
+            sqlx::query("UPDATE public_publication_work SET plan_digest=?")
+                .bind(digest.as_slice())
+                .execute(&mut db)
+                .await
+                .unwrap();
+        }
+        sqlx::query("DELETE FROM listing_installations")
+            .execute(&mut db)
+            .await
+            .unwrap();
+        assert!(matches!(
+            store
+                .operation_snapshot(
+                    binding.clone(),
+                    prepared.identity().operation_id(),
+                    Some(prepared.identity().command_digest()),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::RecoveryRequired)
+        ));
+        sqlx::raw_sql("DELETE FROM listing_creations; DELETE FROM artifact_evidence_parts; DELETE FROM artifact_evidence; DELETE FROM signing_attempts; DELETE FROM signing_plan_parts; DELETE FROM signing_plans; DELETE FROM operations").execute(&mut db).await.unwrap();
+        assert!(matches!(
+            store
+                .operation(
+                    binding.clone(),
+                    prepared.identity().operation_id(),
+                    Some(prepared.identity().command_digest()),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::RecoveryRequired)
+        ));
+        db.close().await.unwrap();
+        store.close().await.unwrap();
+    }
 }
 
 pub(super) async fn retain_legacy_issuance_catalog(db: &mut SqliteConnection) {
+    sqlx::raw_sql("DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations").execute(&mut *db).await.unwrap();
     use sqlx::Row;
     let rows=sqlx::query("SELECT name,sql FROM sqlite_schema WHERE name IN ('signing_attempts','signing_attempt_identity','signing_attempt_transaction_identity','artifact_evidence','artifact_evidence_transaction_identity','artifact_evidence_parts','chat_publication_work')").fetch_all(&mut *db).await.unwrap();
     let definitions = rows

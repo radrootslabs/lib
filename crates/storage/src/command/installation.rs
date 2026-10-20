@@ -3,9 +3,12 @@
 use super::{BoundSigningPlan, CommitAttempt, EvidenceReceipt, OperationError};
 use crate::workspace::WorkspaceBinding;
 use core::fmt;
+use radroots_domain::listing::ListingId;
 use radroots_domain::{
-    CommandDigest, EnvelopeEventId, MessageId, OperationId, TransactionId, UnixSeconds, WorkspaceId,
+    CommandDigest, EnvelopeEventId, MessageId, OperationId, PublicKey, TransactionId, UnixSeconds,
+    WorkspaceId,
 };
+use radroots_protocol::plan::SigningTarget;
 use std::boxed::Box;
 
 /// Original-operation selectors for native installation. The concrete owner
@@ -226,6 +229,9 @@ impl fmt::Debug for PublicationWork {
 pub enum InstallationOutcome {
     /// The logical installation and eligible publication links are confirmed.
     Committed(Box<ChatInstallation>),
+    /// Original public listing revision and direct-publication work, confirmed
+    /// together by the actual authoritative transaction. No delivery is implied.
+    ListingCommitted(Box<ListingInstallation>),
     /// Completion is unknown; retained claims/evidence are never discarded.
     Unknown(CommitAttempt),
 }
@@ -233,6 +239,7 @@ impl fmt::Debug for InstallationOutcome {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Committed(_) => "InstallationOutcome::Committed(<redacted>)",
+            Self::ListingCommitted(_) => "InstallationOutcome::ListingCommitted(<redacted>)",
             Self::Unknown(_) => "InstallationOutcome::Unknown(<retained>)",
         })
     }
@@ -253,6 +260,195 @@ fn check_evidence(
         || evidence.operation_id() != identity.operation_id()
         || evidence.command_digest() != identity.command_digest()
         || evidence.event_id() != EnvelopeEventId::from_bytes(seal.event_id())
+    {
+        return Err(OperationError::RecoveryRequired);
+    }
+    Ok(())
+}
+
+/// Original confirmed public listing revision, without a private message or
+/// participant placeholder. Data construction does not qualify a transaction.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct ListingInstallation {
+    plan: [u8; 32],
+    author: PublicKey,
+    listing: ListingId,
+    preparation_transaction: TransactionId,
+    plan_transaction: TransactionId,
+    transaction: TransactionId,
+    installed_at: UnixSeconds,
+    basis: EvidenceReceipt,
+}
+impl ListingInstallation {
+    /// Checks exact original scope and public artifact identity. The backend
+    /// must also authenticate its actual evidence, creation fence and rows.
+    pub fn from_committed_store(
+        bound: &BoundSigningPlan,
+        basis: EvidenceReceipt,
+        transaction: TransactionId,
+        installed_at: UnixSeconds,
+    ) -> Result<Self, OperationError> {
+        check_public_evidence(bound, basis)?;
+        if installed_at < bound.bound_at() {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let command = bound
+            .prepared()
+            .request()
+            .command()
+            .listing()
+            .ok_or(OperationError::UnsupportedOperation)?;
+        let event = bound
+            .plan()
+            .listing()
+            .ok_or(OperationError::UnsupportedOperation)?
+            .event();
+        Ok(Self {
+            plan: *bound.plan().digest(),
+            author: event.fields().author,
+            listing: command.input().id(),
+            preparation_transaction: bound.prepared().transaction_id(),
+            plan_transaction: bound.transaction_id(),
+            transaction,
+            installed_at,
+            basis,
+        })
+    }
+    /// Original workspace.
+    pub const fn workspace_id(&self) -> WorkspaceId {
+        self.basis.workspace_id()
+    }
+    /// Original operation.
+    pub const fn operation_id(&self) -> OperationId {
+        self.basis.operation_id()
+    }
+    /// Original complete command commitment.
+    pub const fn command_digest(&self) -> CommandDigest {
+        self.basis.command_digest()
+    }
+    /// Exact retained complete plan commitment.
+    pub const fn plan_digest(&self) -> &[u8; 32] {
+        &self.plan
+    }
+    /// Actual author of this fixed listing coordinate.
+    pub const fn author(&self) -> PublicKey {
+        self.author
+    }
+    /// Stable128-bit discriminator; parsing never proves novelty.
+    pub const fn listing_id(&self) -> ListingId {
+        self.listing
+    }
+    /// Original actual signed event ID for this immutable revision.
+    pub const fn revision(&self) -> EnvelopeEventId {
+        self.basis.event_id()
+    }
+    /// Original T0 transaction.
+    pub const fn preparation_transaction_id(&self) -> TransactionId {
+        self.preparation_transaction
+    }
+    /// Original T1 transaction.
+    pub const fn plan_transaction_id(&self) -> TransactionId {
+        self.plan_transaction
+    }
+    /// Actual original installation transaction.
+    pub const fn transaction_id(&self) -> TransactionId {
+        self.transaction
+    }
+    /// Original installation observation; it never renews an issuance window.
+    pub const fn installed_at(&self) -> UnixSeconds {
+        self.installed_at
+    }
+    /// Exact original retained evidence reference.
+    pub const fn basis(&self) -> EvidenceReceipt {
+        self.basis
+    }
+}
+impl fmt::Debug for ListingInstallation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ListingInstallation(<redacted>)")
+    }
+}
+/// Pending direct public work, referencing retained original signed bytes. It
+/// carries no private recipient, wrapping key, new signature or relay outcome.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct PublicPublicationWork {
+    installation: TransactionId,
+    plan: [u8; 32],
+    evidence: EvidenceReceipt,
+    transaction: TransactionId,
+    queued_at: UnixSeconds,
+}
+impl PublicPublicationWork {
+    /// Checks structural scope only. Concrete hosts must authenticate actual
+    /// original evidence and link this work atomically with the installation.
+    pub fn from_committed_store(
+        bound: &BoundSigningPlan,
+        installation: ListingInstallation,
+        evidence: EvidenceReceipt,
+        transaction: TransactionId,
+        queued_at: UnixSeconds,
+    ) -> Result<Self, OperationError> {
+        check_public_evidence(bound, evidence)?;
+        let checked = ListingInstallation::from_committed_store(
+            bound,
+            installation.basis(),
+            installation.transaction_id(),
+            installation.installed_at(),
+        )?;
+        if checked != installation
+            || installation.basis() != evidence
+            || queued_at < installation.installed_at()
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        Ok(Self {
+            installation: installation.transaction_id(),
+            plan: *bound.plan().digest(),
+            evidence,
+            transaction,
+            queued_at,
+        })
+    }
+    /// Original installation transaction.
+    pub const fn installation_transaction_id(&self) -> TransactionId {
+        self.installation
+    }
+    /// Original complete plan with its captured target descriptors.
+    pub const fn plan_digest(&self) -> &[u8; 32] {
+        &self.plan
+    }
+    /// Original exact public signed artifact reference.
+    pub const fn evidence(&self) -> EvidenceReceipt {
+        self.evidence
+    }
+    /// Actual first work-retention transaction.
+    pub const fn transaction_id(&self) -> TransactionId {
+        self.transaction
+    }
+    /// Original work observation, not an issuance or delivery deadline.
+    pub const fn queued_at(&self) -> UnixSeconds {
+        self.queued_at
+    }
+}
+impl fmt::Debug for PublicPublicationWork {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PublicPublicationWork(<redacted>)")
+    }
+}
+fn check_public_evidence(
+    bound: &BoundSigningPlan,
+    evidence: EvidenceReceipt,
+) -> Result<(), OperationError> {
+    let identity = bound.prepared().identity();
+    let public = bound
+        .plan()
+        .listing()
+        .ok_or(OperationError::UnsupportedOperation)?;
+    if evidence.target() != SigningTarget::PublicEvent
+        || evidence.workspace_id() != identity.workspace_id()
+        || evidence.operation_id() != identity.operation_id()
+        || evidence.command_digest() != identity.command_digest()
+        || evidence.event_id().as_bytes() != public.event().event_id()
     {
         return Err(OperationError::RecoveryRequired);
     }

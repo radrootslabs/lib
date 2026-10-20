@@ -53,6 +53,9 @@ impl WorkspaceFixture {
             .map_err(|e| JsValue::from_str(e.code()))?
         {
             InstallationOutcome::Committed(value) => Ok(installation(*value).to_string()),
+            InstallationOutcome::ListingCommitted(_) => {
+                Err(JsValue::from_str("unexpected_listing_installation"))
+            }
             InstallationOutcome::Unknown(_) => Err(JsValue::from_str("commit_unknown")),
         }
     }

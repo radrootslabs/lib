@@ -28,6 +28,7 @@ pub(super) enum IssuancePayload {
     Attempt,
     Evidence,
     Publication,
+    ListingInstallation,
 }
 
 #[derive(Clone, Copy)]
@@ -176,6 +177,30 @@ impl WorkspaceCrypto {
     ) -> Result<SecretMaterial, WorkspaceError> {
         self.open_bound(
             plan_context(workspace, operation, digest, part)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
+    pub(super) async fn seal_listing(
+        &self,
+        scope: ListingScope,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            listing_context(scope)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            plaintext,
+        )
+        .await
+    }
+    pub(super) async fn open_listing(
+        &self,
+        scope: ListingScope,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            listing_context(scope)?,
             PRIVATE_PAYLOAD_MAX_BYTES,
             protected,
         )
@@ -415,6 +440,11 @@ fn issuance_context(
             "radroots.workspace.chat_publication_work",
             "radroots.workspace.chat_publication_work.v1",
         ),
+        IssuancePayload::ListingInstallation => (
+            3u8,
+            "radroots.workspace.listing_installation",
+            "radroots.workspace.listing_installation.v1",
+        ),
     };
     let mut hash = Sha256::new();
     hash.update(b"radroots.workspace.issuance.context.v1\0");
@@ -425,19 +455,29 @@ fn issuance_context(
     hash.update(scope.attempt.as_bytes());
     match scope.target {
         radroots_storage::command::SigningTarget::BusinessSeal(recipient) => {
+            if matches!(payload, IssuancePayload::ListingInstallation) {
+                return Err(WorkspaceError::InvalidInput);
+            }
             hash.update(recipient.as_bytes())
         }
         radroots_storage::command::SigningTarget::PublicEvent => {
-            if matches!(payload, IssuancePayload::Publication) {
-                return Err(WorkspaceError::InvalidInput);
-            }
-            purpose = match payload {
-                IssuancePayload::Attempt => "radroots.workspace.public_signing_attempt",
-                _ => "radroots.workspace.public_artifact_evidence",
-            };
-            schema = match payload {
-                IssuancePayload::Attempt => "radroots.workspace.public_signing_attempt.v1",
-                _ => "radroots.workspace.public_artifact_evidence.v1",
+            (purpose, schema) = match payload {
+                IssuancePayload::Attempt => (
+                    "radroots.workspace.public_signing_attempt",
+                    "radroots.workspace.public_signing_attempt.v1",
+                ),
+                IssuancePayload::Evidence => (
+                    "radroots.workspace.public_artifact_evidence",
+                    "radroots.workspace.public_artifact_evidence.v1",
+                ),
+                IssuancePayload::Publication => (
+                    "radroots.workspace.public_publication_work",
+                    "radroots.workspace.public_publication_work.v1",
+                ),
+                IssuancePayload::ListingInstallation => (
+                    "radroots.workspace.listing_installation",
+                    "radroots.workspace.listing_installation.v1",
+                ),
             };
             hash.update(b"public_event.no_recipient.v1\0");
         }
@@ -470,5 +510,39 @@ fn message_context(
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse("radroots.workspace.chat_message.v1")
             .map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum ListingScope {
+    Decision {
+        workspace: WorkspaceId,
+        operation: OperationId,
+    },
+}
+fn listing_context(scope: ListingScope) -> Result<EnvelopeContext, WorkspaceError> {
+    use sha2::{Digest, Sha256};
+    let mut hash = Sha256::new();
+    hash.update(b"radroots.workspace.listing.state.context.v1\0");
+    let (purpose, schema) = match scope {
+        ListingScope::Decision {
+            workspace,
+            operation,
+        } => {
+            hash.update([0]);
+            hash.update(workspace.as_bytes());
+            hash.update(operation.as_bytes());
+            (
+                "radroots.workspace.listing_decision",
+                "radroots.workspace.listing_decision.v1",
+            )
+        }
+    };
+    let digest = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("workspace_listing", digest.to_string())
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
     ))
 }

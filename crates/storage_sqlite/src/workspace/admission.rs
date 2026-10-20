@@ -71,6 +71,10 @@ impl Journal<'_> {
                 }
                 (plan, transaction, bound_at, protected, false)
             } else {
+                if supplied.listing().is_some() && !super::listing::current(self.connection).await?
+                {
+                    return Err(OperationError::UnsupportedOperation);
+                }
                 let window = prepared.issuance_window();
                 if current.observed_at() < window.prepared_at() {
                     return Err(super::WorkspaceError::Unavailable.into());
@@ -234,15 +238,6 @@ impl Journal<'_> {
         proof: AttachmentProof,
     ) -> Result<AdmissionOutcome, OperationError> {
         let (record, grant, observed) = self.access(request.binding(), &proof).await?;
-        if request.command().listing().is_some() {
-            let version: i64 = sqlx::query_scalar("PRAGMA user_version")
-                .fetch_one(&mut *self.connection)
-                .await
-                .map_err(|_| OperationError::RecoveryRequired)?;
-            if !matches!(version, 8 | 9) {
-                return Err(OperationError::UnsupportedOperation);
-            }
-        }
         let context = request.command().context();
         let workspace = context.workspace_id();
         let operation_id = context.operation_id();
@@ -282,6 +277,12 @@ impl Journal<'_> {
             return Ok(AdmissionOutcome::Committed(snapshot));
         }
 
+        if request.command().listing().is_some()
+            && !super::listing::current(self.connection).await?
+        {
+            return Err(OperationError::UnsupportedOperation);
+        }
+
         // This fresh local outbox has no authenticated parent/order
         // history or protected approval origin. Selectors cannot create either.
         request.validate_fresh(observed.observed_at())?;
@@ -294,6 +295,8 @@ impl Journal<'_> {
         let anchor = CommitAttempt::new(workspace, operation_id, digest, Some(transaction_id));
         // Encryption/provider work finishes before opening the write transaction.
         let protected = operation::protect(&request, transaction_id, window, self.crypto).await?;
+        let creation =
+            super::listing::Creation::protect(&request, transaction_id, self.crypto).await?;
         let mut transaction = self
             .connection
             .begin_with("BEGIN IMMEDIATE")
@@ -320,7 +323,11 @@ impl Journal<'_> {
                 return Err(OperationError::DeadlineExceeded);
             }
             operation::absent(&mut transaction, self.selected, operation_id).await?;
-            operation::insert(&mut transaction, &request, transaction_id, &protected).await
+            operation::insert(&mut transaction, &request, transaction_id, &protected).await?;
+            if let Some(creation) = &creation {
+                creation.insert(&mut transaction).await?;
+            }
+            Ok(())
         }
         .await;
         if let Err(error) = inserted {
