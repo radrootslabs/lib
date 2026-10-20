@@ -1,9 +1,8 @@
 # Radroots domain
 
 Independently implemented exact values for the shared SDK successor. This
-package is under construction and is not published or part of the current
-public release closure. It does not yet implement listings, agreements or
-command execution.
+pre-release package provides validated values and public quote-required offer
+terms. It does not execute commands, install agreements or establish stock.
 
 `Decimal` has a nonnegative coefficient up to 999999999999 and scale 0–6.
 Construction normalizes fractional trailing zeros. String admission requires
@@ -20,6 +19,15 @@ Order, thread, workspace, executor and operation IDs have distinct Rust types.
 Each stores 32 bytes and uses exactly 64 lowercase hexadecimal characters in
 strings and JSON. Byte/string construction validates representation; generation
 belongs to the execution owner's qualified CSPRNG boundary.
+
+`listing::ListingId` is the distinct 128-bit stable coordinate discriminator;
+`ListingOptionId` is a 256-bit sale-choice identity. Public listing terms bound
+and deduplicate options, retain an exact selected default, and validate positive
+increments/minimums without floating conversion. Package and `each` quantities
+remain integral; measured units imply no conversion. Quote-required prices
+contain no invented zero amount or currency. Optional opaque authority and
+producer metadata establish no permission or endpoint trust. These immutable
+terms serialize public data explicitly and redact ordinary diagnostics.
 
 Namespaces remain separate across native calls:
 

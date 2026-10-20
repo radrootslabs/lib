@@ -112,6 +112,10 @@ macro_rules! identifier {
 }
 
 identifier!(OrderId, "An exact 256-bit bilateral order identifier.");
+identifier!(
+    ListingOptionId,
+    "An exact 256-bit public sale-option identifier."
+);
 identifier!(ThreadId, "An exact 256-bit private thread identifier.");
 identifier!(
     WorkspaceId,

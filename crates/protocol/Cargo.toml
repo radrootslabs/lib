@@ -38,6 +38,7 @@ commands = ["serde", "dep:radroots_domain", "dep:serde_json", "dep:sha2", "dep:z
 intent = ["dep:radroots_domain", "dep:sha2"]
 nip01 = ["dep:radroots_identity", "dep:sha2", "dep:zeroize"]
 chat = ["commands", "nip01"]
+listing = ["commands", "nip01"]
 
 [dependencies]
 radroots_identity = { workspace = true, default-features = false, optional = true }

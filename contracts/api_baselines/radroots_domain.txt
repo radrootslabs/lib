@@ -1,5 +1,92 @@
 pub mod radroots_domain
 pub use radroots_domain::PublicKey
+pub mod radroots_domain::listing
+pub enum radroots_domain::listing::FulfillmentMode
+pub radroots_domain::listing::FulfillmentMode::Delivery
+pub radroots_domain::listing::FulfillmentMode::Pickup
+#[non_exhaustive] pub enum radroots_domain::listing::ListingError
+pub radroots_domain::listing::ListingError::InvalidDuration
+pub radroots_domain::listing::ListingError::InvalidFulfillment
+pub radroots_domain::listing::ListingError::InvalidIdentifier
+pub radroots_domain::listing::ListingError::InvalidOptions
+pub radroots_domain::listing::ListingError::InvalidQuantity
+pub radroots_domain::listing::ListingError::InvalidText
+impl core::error::Error for radroots_domain::listing::ListingError
+impl core::fmt::Display for radroots_domain::listing::ListingError
+pub fn radroots_domain::listing::ListingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_domain::listing::ListingState
+pub radroots_domain::listing::ListingState::Active
+pub radroots_domain::listing::ListingState::Paused
+pub radroots_domain::listing::ListingState::Withdrawn
+pub enum radroots_domain::listing::MeasurementUnit
+pub radroots_domain::listing::MeasurementUnit::Each
+pub radroots_domain::listing::MeasurementUnit::Gram
+pub radroots_domain::listing::MeasurementUnit::Kilogram
+pub radroots_domain::listing::MeasurementUnit::Litre
+pub radroots_domain::listing::MeasurementUnit::Millilitre
+impl radroots_domain::listing::MeasurementUnit
+pub const fn radroots_domain::listing::MeasurementUnit::symbol(self) -> &'static str
+#[non_exhaustive] pub enum radroots_domain::listing::Price
+pub radroots_domain::listing::Price::QuoteRequired
+#[non_exhaustive] pub enum radroots_domain::listing::Supply
+pub radroots_domain::listing::Supply::Available
+pub radroots_domain::listing::Supply::Available::amount: radroots_domain::Decimal
+pub radroots_domain::listing::Supply::Unknown
+pub struct radroots_domain::listing::LeadSeconds(_)
+impl radroots_domain::listing::LeadSeconds
+pub const fn radroots_domain::listing::LeadSeconds::get(self) -> u64
+pub fn radroots_domain::listing::LeadSeconds::new(u64) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub struct radroots_domain::listing::ListingId(_)
+impl radroots_domain::listing::ListingId
+pub const fn radroots_domain::listing::ListingId::as_bytes(&self) -> &[u8; 16]
+pub const fn radroots_domain::listing::ListingId::from_bytes([u8; 16]) -> Self
+impl core::fmt::Display for radroots_domain::listing::ListingId
+pub fn radroots_domain::listing::ListingId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::listing::ListingId
+pub type radroots_domain::listing::ListingId::Err = radroots_domain::listing::ListingError
+pub fn radroots_domain::listing::ListingId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::listing::ListingId
+pub fn radroots_domain::listing::ListingId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::listing::ListingId
+pub fn radroots_domain::listing::ListingId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::listing::ListingOption
+impl radroots_domain::listing::ListingOption
+pub const fn radroots_domain::listing::ListingOption::id(&self) -> radroots_domain::ListingOptionId
+pub fn radroots_domain::listing::ListingOption::label(&self) -> &str
+pub const fn radroots_domain::listing::ListingOption::price(&self) -> radroots_domain::listing::Price
+pub fn radroots_domain::listing::ListingOption::quote_required(radroots_domain::ListingOptionId, &str, radroots_domain::listing::SaleUnit, radroots_domain::PositiveDecimal, radroots_domain::PositiveDecimal, radroots_domain::listing::Supply, radroots_domain::listing::LeadSeconds) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub const fn radroots_domain::listing::ListingOption::unit(&self) -> &radroots_domain::listing::SaleUnit
+impl core::fmt::Debug for radroots_domain::listing::ListingOption
+pub fn radroots_domain::listing::ListingOption::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::listing::ListingTerms
+impl radroots_domain::listing::ListingTerms
+pub fn radroots_domain::listing::ListingTerms::default_option(&self) -> &radroots_domain::listing::ListingOption
+pub const fn radroots_domain::listing::ListingTerms::fulfillment(&self) -> &radroots_domain::listing::PublicFulfillment
+pub fn radroots_domain::listing::ListingTerms::new(radroots_domain::listing::ListingState, radroots_domain::listing::Product, radroots_domain::ListingOptionId, alloc::vec::Vec<radroots_domain::listing::ListingOption>, radroots_domain::listing::PublicFulfillment, core::option::Option<radroots_domain::AuthorityRef>) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub fn radroots_domain::listing::ListingTerms::options(&self) -> &[radroots_domain::listing::ListingOption]
+pub const fn radroots_domain::listing::ListingTerms::state(&self) -> radroots_domain::listing::ListingState
+impl core::fmt::Debug for radroots_domain::listing::ListingTerms
+pub fn radroots_domain::listing::ListingTerms::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::listing::Product
+impl radroots_domain::listing::Product
+pub fn radroots_domain::listing::Product::name(&self) -> &str
+pub fn radroots_domain::listing::Product::new(&str, &str, core::option::Option<radroots_identity::key::PublicKey>, core::option::Option<&str>) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+impl core::fmt::Debug for radroots_domain::listing::Product
+pub fn radroots_domain::listing::Product::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::listing::PublicFulfillment
+impl radroots_domain::listing::PublicFulfillment
+pub fn radroots_domain::listing::PublicFulfillment::area(&self) -> &str
+pub fn radroots_domain::listing::PublicFulfillment::new(alloc::vec::Vec<radroots_domain::listing::FulfillmentMode>, &str, radroots_domain::listing::LeadSeconds) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+impl core::fmt::Debug for radroots_domain::listing::PublicFulfillment
+pub fn radroots_domain::listing::PublicFulfillment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::listing::SaleUnit(_)
+impl radroots_domain::listing::SaleUnit
+pub const fn radroots_domain::listing::SaleUnit::integral(&self) -> bool
+pub fn radroots_domain::listing::SaleUnit::label(&self) -> &str
+pub const fn radroots_domain::listing::SaleUnit::measured(radroots_domain::listing::MeasurementUnit) -> Self
+pub fn radroots_domain::listing::SaleUnit::package_unspecified(&str) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+impl core::fmt::Debug for radroots_domain::listing::SaleUnit
+pub fn radroots_domain::listing::SaleUnit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::ActorRole
 pub radroots_domain::ActorRole::Buyer
 pub radroots_domain::ActorRole::Coordinator
@@ -260,6 +347,20 @@ pub fn radroots_domain::IssuanceWindow::capture(radroots_domain::UnixSeconds, ra
 pub const fn radroots_domain::IssuanceWindow::first_issue_not_after(self) -> radroots_domain::UnixSeconds
 pub fn radroots_domain::IssuanceWindow::new(radroots_domain::UnixSeconds, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::ContextError>
 pub const fn radroots_domain::IssuanceWindow::prepared_at(self) -> radroots_domain::UnixSeconds
+pub struct radroots_domain::ListingOptionId(_)
+impl radroots_domain::ListingOptionId
+pub const fn radroots_domain::ListingOptionId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::ListingOptionId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::ListingOptionId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::ListingOptionId
+pub fn radroots_domain::ListingOptionId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::ListingOptionId
+pub type radroots_domain::ListingOptionId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::ListingOptionId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::ListingOptionId
+pub fn radroots_domain::ListingOptionId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ListingOptionId
+pub fn radroots_domain::ListingOptionId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::MessageId(_)
 impl radroots_domain::MessageId
 pub const fn radroots_domain::MessageId::as_bytes(&self) -> &[u8; 32]

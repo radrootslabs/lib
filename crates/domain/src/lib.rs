@@ -9,6 +9,8 @@ mod amount;
 mod context;
 mod identifier;
 mod issuance;
+/// Validated public-offer values; these establish no stock or command authority.
+pub mod listing;
 mod message;
 
 /// The identity-owned validated participant key; no second key type is defined.
@@ -21,8 +23,8 @@ pub use context::{
 };
 pub use identifier::{
     ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId, ExecutorId, GrantId,
-    IdentifierError, MessageId, OperationId, OrderId, RecordId, RouteDigest, SigningAttemptId,
-    SourceId, ThreadId, TransactionId, WorkspaceId,
+    IdentifierError, ListingOptionId, MessageId, OperationId, OrderId, RecordId, RouteDigest,
+    SigningAttemptId, SourceId, ThreadId, TransactionId, WorkspaceId,
 };
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};
 pub use message::{CHAT_MAX_BYTES, ChatMessage, ChatRelation, MessageError};

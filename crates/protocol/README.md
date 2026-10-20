@@ -34,6 +34,7 @@ numbers embedded in wire and schema contracts.
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
 | `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |
 | `chat` (`chat` feature) | bounded kind-14/13 data, complete immutable signing-plan codec and observed DM route descriptors |
+| `listing` (`listing` feature) | typed quote-required input and bounded kind-30402/profile-v1 preimages without command or publication authority |
 
 Versioned DTOs live below an explicit generation module. The command codec
 implements its fixed v1 profile without exposing automatic serialization of
@@ -52,6 +53,19 @@ they use.
 | `nip01` | no | enables pure exact NIP-01 serialization and complete byte counting |
 | `intent` | no | enables pure domain-separated v1 signing commitment data |
 | `chat` | no | enables commands, NIP-01 and the bounded known-kind chat/plan data profile |
+| `listing` | no | enables portable typed quote-required listing input and exact public profile/event production |
+
+The listing producer emits one canonical `radroots.listing` version-1 profile,
+explicit default units and no fabricated price. Paused/withdrawn projections
+keep the same addressable coordinate, state non-availability in summary and
+content, and omit a standard status that cannot represent that state. Complete
+signed-event framing is bounded to 64 KiB before the canonical preimage is
+allocated. Canonical profile ordering remains explicit when a consumer enables
+JSON insertion-order preservation. The early producer supports unspecified
+package contents, unknown/available public supply and empty media. Full prices,
+registered currencies and the remaining profile modes require their own
+validated implementation. Pure input/preimage construction supplies no workspace
+permission, durable preparation, signature, installed record or delivery receipt.
 
 Disabling default features leaves the catalog and structural validation APIs
 available with `alloc` only. Enable `serde` without `std` for portable encoded

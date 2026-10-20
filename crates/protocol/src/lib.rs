@@ -21,6 +21,11 @@ pub mod nip01;
 #[cfg(feature = "chat")]
 pub mod chat;
 
+/// Assigned kind30402 quote-required listing preimages. Pure construction does
+/// not authenticate a workspace, prepare a command or publish an event.
+#[cfg(feature = "listing")]
+pub mod listing;
+
 #[cfg(all(test, not(feature = "std")))]
 extern crate std;
 

@@ -465,6 +465,24 @@ pub struct radroots_protocol::intent::InvalidIntentBinding
 impl core::error::Error for radroots_protocol::intent::InvalidIntentBinding
 impl core::fmt::Display for radroots_protocol::intent::InvalidIntentBinding
 pub fn radroots_protocol::intent::InvalidIntentBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_protocol::listing
+pub struct radroots_protocol::listing::ListingEvent
+impl radroots_protocol::listing::ListingEvent
+pub const fn radroots_protocol::listing::ListingEvent::event_id(&self) -> &[u8; 32]
+pub fn radroots_protocol::listing::ListingEvent::fields(&self) -> radroots_protocol::nip01::EventFields<'_>
+pub fn radroots_protocol::listing::ListingEvent::new(&radroots_protocol::listing::PublishInput, radroots_identity::key::PublicKey, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+impl core::fmt::Debug for radroots_protocol::listing::ListingEvent
+pub fn radroots_protocol::listing::ListingEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::listing::PublishInput
+impl radroots_protocol::listing::PublishInput
+pub const fn radroots_protocol::listing::PublishInput::id(&self) -> radroots_domain::listing::ListingId
+pub fn radroots_protocol::listing::PublishInput::new(radroots_domain::listing::ListingId, &str, &str, &str, radroots_domain::context::UnixSeconds, radroots_domain::listing::ListingTerms) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::listing::PublishInput::published_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_protocol::listing::PublishInput::terms(&self) -> &radroots_domain::listing::ListingTerms
+impl core::fmt::Debug for radroots_protocol::listing::PublishInput
+pub fn radroots_protocol::listing::PublishInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_protocol::listing::LISTING_EVENT_MAX_BYTES: usize
+pub const radroots_protocol::listing::LISTING_KIND: u32
 pub mod radroots_protocol::nip01
 pub enum radroots_protocol::nip01::WireError
 pub radroots_protocol::nip01::WireError::InvalidInput
