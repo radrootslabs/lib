@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use wasm_bindgen::prelude::*;
 
 fn installation(value: ChatInstallation) -> Value {
-    json!({"transaction":value.transaction_id().to_string(),"message":value.message_id().to_string(),"at":value.installed_at().get(),"basis_capture":value.basis().transaction_id().to_string(),"basis_recipient":value.basis().recipient().to_string()})
+    json!({"transaction":value.transaction_id().to_string(),"message":value.message_id().to_string(),"at":value.installed_at().get(),"basis_capture":value.basis().transaction_id().to_string(),"basis_recipient":value.basis().recipient().unwrap().to_string()})
 }
 fn snapshot(value: &OperationSnapshot) -> Value {
     json!({
@@ -16,8 +16,8 @@ fn snapshot(value: &OperationSnapshot) -> Value {
         "preparation":value.prepared().transaction_id().to_string(),
         "plan":value.bound_plan().map(|bound|bound.transaction_id().to_string()),
         "installation":value.installation().map(installation),
-        "publications":value.publications().iter().map(|work|json!({"recipient":work.evidence().recipient().to_string(),"transaction":work.transaction_id().to_string(),"capture":work.evidence().transaction_id().to_string(),"installation":work.installation_transaction_id().to_string(),"at":work.queued_at().get()})).collect::<Vec<_>>(),
-        "claims":value.recipients().iter().map(|recipient|json!({"recipient":recipient.recipient().to_string(),"claim":recipient.claim().map(|claim|claim.attempt_id().to_string()),"capture":recipient.obtained().map(|capture|capture.transaction_id().to_string())})).collect::<Vec<_>>(),
+        "publications":value.publications().iter().map(|work|json!({"recipient":work.recipient().to_string(),"transaction":work.transaction_id().to_string(),"capture":work.evidence().transaction_id().to_string(),"installation":work.installation_transaction_id().to_string(),"at":work.queued_at().get()})).collect::<Vec<_>>(),
+        "claims":value.artifacts().iter().map(|recipient|json!({"recipient":recipient.recipient().unwrap().to_string(),"claim":recipient.claim().map(|claim|claim.attempt_id().to_string()),"capture":recipient.obtained().map(|capture|capture.transaction_id().to_string())})).collect::<Vec<_>>(),
         "message":value.installed_message().map(|message|json!({"id":message.id().to_string(),"peer":message.peer().to_string(),"text":message.text(),"created_at":message.created_at().get()})),
         "deliveries":value.delivery_attempts().len(),"observations":value.delivery_observations().len(),
     })

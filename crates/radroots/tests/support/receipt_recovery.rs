@@ -8,7 +8,7 @@ struct Issued {
     proof: AttachmentProof,
     binding: WorkspaceBinding,
     attempt: SigningAttempt,
-    evidence: SealEvidence,
+    evidence: ArtifactEvidence,
 }
 impl Issued {
     async fn new(id: u8, large: bool) -> Self {
@@ -28,7 +28,7 @@ impl Issued {
         let original = obtain(&attempt, true).await;
         let raw = format!(" \n{}\t", original.raw_json());
         let evidence =
-            SealEvidence::verify(&attempt, &raw, original.observed_at_unix_ms()).unwrap();
+            ArtifactEvidence::verify(&attempt, &raw, original.observed_at_unix_ms()).unwrap();
         Self {
             fixture,
             store,
@@ -65,7 +65,7 @@ async fn original_capture_recovery_retries_known_rollback_without_reissuing_and_
     let issued = Issued::new(101, false).await;
     let original = issued.evidence.raw_json().to_owned();
     let mut database = issued.fixture.database().await;
-    sqlx::query("CREATE TRIGGER capture_insert_fault BEFORE INSERT ON seal_evidence BEGIN SELECT RAISE(ABORT,'synthetic capture fault'); END").execute(&mut database).await.unwrap();
+    sqlx::query("CREATE TRIGGER capture_insert_fault BEFORE INSERT ON artifact_evidence BEGIN SELECT RAISE(ABORT,'synthetic capture fault'); END").execute(&mut database).await.unwrap();
     assert!(
         issued
             .store
@@ -127,7 +127,7 @@ async fn unknown_capture_recovery_preserves_writer_during_refused_preflight_and_
     let issued = Issued::new(102, true).await;
     let original = issued.evidence.raw_json().to_owned();
     let mut database = issued.fixture.database().await;
-    sqlx::raw_sql("CREATE TABLE capture_commit_fault (parent INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER capture_commit_fault_trigger AFTER INSERT ON seal_evidence BEGIN INSERT INTO capture_commit_fault VALUES(2); END").execute(&mut database).await.unwrap();
+    sqlx::raw_sql("CREATE TABLE capture_commit_fault (parent INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER capture_commit_fault_trigger AFTER INSERT ON artifact_evidence BEGIN INSERT INTO capture_commit_fault VALUES(2); END").execute(&mut database).await.unwrap();
     assert!(matches!(
         issued
             .store

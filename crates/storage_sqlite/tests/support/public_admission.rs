@@ -1,4 +1,4 @@
-//! Actual encrypted T0 only. No signature, installation or delivery is claimed.
+//! Actual encrypted public T0/T1/S. Installation and delivery remain separate.
 use super::*;
 use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
 use radroots_storage::command::{BoundSigningPlan, ClaimAttemptRequest, PlanBindingOutcome};
@@ -536,6 +536,7 @@ async fn exact_generation_seven_retains_chat_without_rewrite_and_explicitly_refu
     // Construct the exact old catalog around unchanged encrypted rows. This is
     // a retained-schema fixture, not a claim that an old binary was executed.
     let mut db = fixture.database().await;
+    retain_legacy_issuance_catalog(&mut db).await;
     let current: String =
         sqlx::query_scalar("SELECT sql FROM sqlite_schema WHERE name='operations'")
             .fetch_one(&mut db)
@@ -629,4 +630,628 @@ async fn exact_generation_seven_retains_chat_without_rewrite_and_explicitly_refu
         .await,
         Err(WorkspaceError::RecoveryRequired)
     ));
+}
+
+mod public_issuance {
+    use super::*;
+    use core::{cell::Cell, num::NonZeroU64};
+    use nostr::JsonUtil;
+    use radroots_nostr::{
+        key::parse_secret_key,
+        signing::{LocalSigner, OsNonceSource},
+    };
+    use radroots_protocol::plan::SigningTarget;
+    use radroots_signing::{
+        issuance::{OutcomeKind, SigningIntent},
+        provider::{ParticipantProvider, ProviderCall},
+        request::CancellationSignal,
+    };
+    use radroots_storage::command::{
+        ArtifactEvidence, ClaimAttemptOutcome, EvidenceCaptureOutcome, SigningAttempt,
+    };
+    thread_local! { static CALLS:Cell<usize>=const {Cell::new(0)}; }
+    fn signer_clock() -> Result<u64, radroots_signing::Error> {
+        let first = CALLS.with(|calls| {
+            let n = calls.get();
+            calls.set(n + 1);
+            n == 0
+        });
+        if first {
+            Ok(100_000)
+        } else {
+            Err(radroots_signing::Error::new(
+                radroots_signing::error::Kind::InternalError,
+            ))
+        }
+    }
+    fn selection(
+        binding: &WorkspaceBinding,
+        prepared: &PreparedOperation,
+        digest: [u8; 32],
+    ) -> ClaimAttemptRequest {
+        ClaimAttemptRequest::for_artifact(
+            binding.clone(),
+            prepared.identity().operation_id(),
+            prepared.identity().command_digest(),
+            digest,
+            SigningTarget::PublicEvent,
+        )
+    }
+    fn claimed(outcome: ClaimAttemptOutcome) -> SigningAttempt {
+        match outcome {
+            ClaimAttemptOutcome::Claimed(attempt) => attempt,
+            _ => panic!("first claim must confirm commit"),
+        }
+    }
+    async fn prepared(
+        fixture: &Fixture,
+        store: &NativeWorkspace,
+        binding: &WorkspaceBinding,
+        proof: &AttachmentProof,
+        id: u8,
+    ) -> (PreparedOperation, [u8; 32]) {
+        let request = public_request(binding, id, "public signature fixture", "original");
+        let mut wire: serde_json::Value =
+            serde_json::from_slice(request.command().protected_wire()).unwrap();
+        wire["input"]["profile"]["product"]["description"] = json!("x".repeat(4096));
+        let request = AdmissionRequest::from_protected_wire(
+            binding.clone(),
+            &serde_json::to_vec(&wire).unwrap(),
+        )
+        .unwrap();
+        let prepared = committed(
+            store
+                .admit_command_and_hold(request, copy(proof))
+                .await
+                .unwrap(),
+        );
+        let plan = public_plan(
+            &prepared,
+            100,
+            &["wss://public-signature.fixture.example/a".into()],
+        );
+        assert!(
+            plan.event()
+                .fields()
+                .tags
+                .iter()
+                .any(|tag| tag.iter().any(|field| field.len() > 4096))
+        );
+        let digest = *plan.digest();
+        planned(
+            store
+                .bind_signing_intents(binding.clone(), plan.into(), copy(proof))
+                .await
+                .unwrap(),
+        );
+        let _ = fixture;
+        (prepared, digest)
+    }
+    async fn obtain(attempt: &SigningAttempt) -> ArtifactEvidence {
+        CALLS.with(|calls| calls.set(0));
+        // Published synthetic scalar, independent of workstation custody.
+        let signer = LocalSigner::with_clock(
+            parse_secret_key("0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            signer_clock,
+        )
+        .unwrap()
+        .with_nonce_source(Arc::new(OsNonceSource));
+        let state = signer.provider_state().await.unwrap();
+        assert_eq!(state.identity(), key());
+        assert_eq!(
+            state.exact_issuance(),
+            Some(radroots_signing::recovery::ReplayCapability::NonReplayable)
+        );
+        let cancellation = CancellationSignal::new();
+        let intent = SigningIntent::from_plan(
+            attempt.bound_plan().plan(),
+            SigningTarget::PublicEvent,
+            ProviderCall::new(key(), attempt.deadline_unix_ms(), cancellation.clone()),
+        )
+        .unwrap();
+        assert_eq!(intent.binding(), attempt.binding());
+        assert_eq!(intent.recipient(), None);
+        let outcome = signer.sign_exact(intent).await;
+        cancellation.cancel();
+        let (_, kind) = outcome.into_parts();
+        let OutcomeKind::Obtained(artifact) = kind else {
+            panic!("qualified local signer must obtain public event")
+        };
+        assert_eq!(artifact.observed_at_unix_ms(), None);
+        artifact.with_json(|raw| {
+            let independent = nostr::Event::from_json(raw).unwrap();
+            independent.verify().unwrap();
+            assert_eq!(independent.kind.as_u16(), 30402);
+            assert_eq!(
+                independent.id.as_bytes(),
+                &attempt.artifact().unwrap().event_id()
+            );
+            ArtifactEvidence::verify(attempt, raw, None).unwrap()
+        })
+    }
+    fn captured(outcome: EvidenceCaptureOutcome) -> radroots_storage::command::EvidenceReceipt {
+        match outcome {
+            EvidenceCaptureOutcome::Committed(receipt) => receipt,
+            _ => panic!("capture must confirm commit"),
+        }
+    }
+    #[tokio::test]
+    async fn actual_public_signature_captures_original_bytes_reopens_and_never_reclaims() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest) = prepared(&fixture, &store, &binding, &proof, 160).await;
+        let attempt = claimed(
+            store
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+        );
+        assert!(matches!(
+            attempt.seal(),
+            Err(OperationError::UnsupportedOperation)
+        ));
+        assert!(matches!(
+            store
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+            ClaimAttemptOutcome::Retained(_)
+        ));
+        let evidence = obtain(&attempt).await;
+        assert_eq!(evidence.target().recipient(), None);
+        use radroots_storage::command::protected::issuance::{ClaimRecord, EvidenceManifest};
+        let claim_bytes = ClaimRecord::capture(&attempt).unwrap().encode().unwrap();
+        let claim_json: serde_json::Value = serde_json::from_slice(&claim_bytes).unwrap();
+        assert_eq!(claim_json["version"], 2);
+        assert_eq!(claim_json["role"], 0);
+        assert!(claim_json["recipient"].is_null());
+        for field in [
+            "version",
+            "role",
+            "recipient",
+            "missing_role",
+            "missing_recipient",
+            "unknown",
+        ] {
+            let mut changed = claim_json.clone();
+            match field {
+                "version" => changed["version"] = json!(1),
+                "role" => changed["role"] = json!(1),
+                "recipient" => changed["recipient"] = json!(key()),
+                "missing_role" => {
+                    changed.as_object_mut().unwrap().remove("role");
+                }
+                "missing_recipient" => {
+                    changed.as_object_mut().unwrap().remove("recipient");
+                }
+                _ => changed["unknown"] = json!(true),
+            }
+            let bound = store
+                .signing_plan(
+                    binding.clone(),
+                    prepared.identity().operation_id(),
+                    prepared.identity().command_digest(),
+                    copy(&proof),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                ClaimRecord::decode(
+                    &serde_json::to_vec(&changed).unwrap(),
+                    bound,
+                    SigningTarget::PublicEvent
+                )
+                .is_err(),
+                "{field}"
+            );
+        }
+        let manifest = EvidenceManifest::capture(
+            &attempt,
+            &evidence,
+            radroots_domain::TransactionId::from_bytes([9; 32]),
+        )
+        .unwrap()
+        .encode()
+        .unwrap();
+        let metadata: serde_json::Value = serde_json::from_slice(&manifest).unwrap();
+        assert_eq!(metadata["version"], 2);
+        assert_eq!(metadata["role"], 0);
+        assert!(metadata["recipient"].is_null());
+        for field in ["version", "role", "recipient"] {
+            let mut changed = metadata.clone();
+            changed[field] = match field {
+                "recipient" => json!(key()),
+                _ => json!(1),
+            };
+            assert!(
+                EvidenceManifest::decode(&serde_json::to_vec(&changed).unwrap(), &attempt).is_err()
+            );
+        }
+        for (field, value) in [
+            ("sig", json!("00".repeat(64))),
+            ("id", json!("00".repeat(32))),
+            ("kind", json!(13)),
+            ("tags", json!([])),
+            ("content", json!("other")),
+            ("pubkey", json!("00".repeat(32))),
+            ("created_at", json!(99)),
+        ] {
+            let mut changed: serde_json::Value = serde_json::from_str(evidence.raw_json()).unwrap();
+            changed[field] = value;
+            assert!(
+                matches!(
+                    ArtifactEvidence::verify(&attempt, &changed.to_string(), None),
+                    Err(OperationError::InvalidEvidence)
+                ),
+                "{field}"
+            );
+        }
+        assert!(ArtifactEvidence::verify(&attempt, &"x".repeat(65537), None).is_err());
+
+        let raw = evidence.raw_json().to_owned();
+        let receipt = captured(
+            store
+                .capture_evidence(input.clone(), &proof, &evidence)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(receipt.target(), SigningTarget::PublicEvent);
+        assert_eq!(receipt.observed_at_unix_ms(), None);
+        let repeated = ArtifactEvidence::verify(&attempt, &raw, NonZeroU64::new(112_000)).unwrap();
+        assert_eq!(
+            captured(
+                store
+                    .capture_evidence(input.clone(), &proof, &repeated)
+                    .await
+                    .unwrap()
+            ),
+            receipt
+        );
+        // The same valid event with another exact JSON encoding is a conflicting
+        // callback, not permission to replace the original obtained bytes.
+        let different =
+            serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(&raw).unwrap())
+                .unwrap();
+        assert_ne!(raw, different);
+        let alternate = ArtifactEvidence::verify(&attempt, &different, None).unwrap();
+        assert!(matches!(
+            store
+                .capture_evidence(input.clone(), &proof, &alternate)
+                .await,
+            Err(OperationError::IdempotencyConflict)
+        ));
+        let snapshot = store
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                Some(prepared.identity().command_digest()),
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.artifacts().len(), 1);
+        assert_eq!(snapshot.artifacts()[0].target(), SigningTarget::PublicEvent);
+        assert_eq!(snapshot.artifacts()[0].obtained(), Some(receipt));
+        assert!(snapshot.installation().is_none());
+        store.close().await.unwrap();
+        for name in ["execution_v1.sqlite", "execution_v1.sqlite-wal"] {
+            if let Ok(bytes) = std::fs::read(fixture.path.join(name)) {
+                assert!(!bytes.windows(raw.len()).any(|part| part == raw.as_bytes()));
+            }
+        }
+        fixture.clock.now.store(160, Ordering::SeqCst);
+        let reopened = fixture.reopen(input).await;
+        let recovered = reopened
+            .obtained_evidence(selection(&binding, &prepared, digest), copy(&proof))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(recovered.receipt(), receipt);
+        assert_eq!(recovered.evidence().raw_json(), raw);
+        assert_eq!(recovered.attempt().attempt_id(), attempt.attempt_id());
+        assert!(matches!(
+            reopened
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+            ClaimAttemptOutcome::Retained(_)
+        ));
+        reopened.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn public_obtained_capture_survives_revocation_expiry_and_later_clock_failure() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest) = prepared(&fixture, &store, &binding, &proof, 161).await;
+        let attempt = claimed(
+            store
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+        );
+        let evidence = obtain(&attempt).await;
+        store.revoke(input.clone(), &proof).await.unwrap();
+        fixture.clock.now.store(0, Ordering::SeqCst);
+        let receipt = captured(
+            store
+                .capture_evidence(input.clone(), &proof, &evidence)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(
+            captured(
+                store
+                    .capture_evidence(input.clone(), &proof, &evidence)
+                    .await
+                    .unwrap()
+            ),
+            receipt
+        );
+        assert!(
+            store
+                .signing_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .is_err()
+        );
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn public_claim_checks_current_proof_window_and_exact_target_without_dispatch() {
+        let fixture = Fixture::new();
+        let (store, _, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest) = prepared(&fixture, &store, &binding, &proof, 162).await;
+        assert!(matches!(
+            store
+                .claim_attempt(
+                    selection(&binding, &prepared, digest),
+                    AttachmentProof::from_protected_input(&[0; 32]).unwrap()
+                )
+                .await,
+            Err(OperationError::Workspace(WorkspaceError::Unauthorized))
+        ));
+        assert!(matches!(
+            store
+                .claim_attempt(
+                    ClaimAttemptRequest::new(
+                        binding.clone(),
+                        prepared.identity().operation_id(),
+                        prepared.identity().command_digest(),
+                        digest,
+                        key()
+                    ),
+                    copy(&proof)
+                )
+                .await,
+            Err(OperationError::UnsupportedOperation)
+        ));
+        fixture.clock.now.store(150, Ordering::SeqCst);
+        assert!(matches!(
+            store
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await,
+            Err(OperationError::DeadlineExceeded)
+        ));
+        let mut db = fixture.database().await;
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM signing_attempts")
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+        assert_eq!(count, 0);
+        db.close().await.unwrap();
+        store.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn lost_public_claim_observer_retains_potential_issuance_without_new_dispatch() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest) = prepared(&fixture, &store, &binding, &proof, 163).await;
+        let (arrived, resume) = fixture.clock.arm(1);
+        let mut pending = store.claim_attempt(selection(&binding, &prepared, digest), copy(&proof));
+        assert!(futures::poll!(pending.as_mut()).is_pending());
+        reached(arrived).await;
+        drop(pending);
+        resume.send(()).unwrap();
+        store.close().await.unwrap();
+        let reopened = fixture.reopen(input).await;
+        assert!(matches!(
+            reopened
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+            ClaimAttemptOutcome::Retained(_)
+        ));
+        assert!(
+            reopened
+                .obtained_evidence(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap()
+                .is_none()
+        );
+        reopened.close().await.unwrap();
+    }
+    #[tokio::test]
+    async fn accepted_public_capture_survives_observer_loss_and_drains_on_close() {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest) = prepared(&fixture, &store, &binding, &proof, 164).await;
+        let attempt = claimed(
+            store
+                .claim_attempt(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap(),
+        );
+        let evidence = obtain(&attempt).await;
+        let mut db = fixture.database().await;
+        let transaction = db.begin_with("BEGIN IMMEDIATE").await.unwrap();
+        let mut pending = store.capture_evidence(input.clone(), &proof, &evidence);
+        assert!(futures::poll!(pending.as_mut()).is_pending());
+        drop(pending);
+        transaction.rollback().await.unwrap();
+        db.close().await.unwrap();
+        store.close().await.unwrap();
+        let reopened = fixture.reopen(input).await;
+        let captured = reopened
+            .obtained_evidence(selection(&binding, &prepared, digest), copy(&proof))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(captured.evidence().raw_json(), evidence.raw_json());
+        reopened.close().await.unwrap();
+    }
+}
+
+pub(super) async fn retain_legacy_issuance_catalog(db: &mut SqliteConnection) {
+    use sqlx::Row;
+    let rows=sqlx::query("SELECT name,sql FROM sqlite_schema WHERE name IN ('signing_attempts','signing_attempt_identity','signing_attempt_transaction_identity','artifact_evidence','artifact_evidence_transaction_identity','artifact_evidence_parts','chat_publication_work')").fetch_all(&mut *db).await.unwrap();
+    let definitions = rows
+        .into_iter()
+        .map(|row| {
+            let name: String = row.get(0);
+            let ddl: String = row.get(1);
+            let ddl = ddl
+                .replace("artifact_evidence", "seal_evidence")
+                .replace("artifact_key", "recipient")
+                .replace(
+                    "CHECK(length(recipient)=32 OR (length(recipient)=1 AND hex(recipient)='00'))",
+                    "CHECK(length(recipient)=32)",
+                );
+            (name, ddl)
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for table in [
+        "signing_attempts",
+        "artifact_evidence",
+        "artifact_evidence_parts",
+        "chat_publication_work",
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "CREATE TEMP TABLE retained_{table} AS SELECT * FROM {table}"
+        )))
+        .execute(&mut *db)
+        .await
+        .unwrap();
+    }
+    for table in [
+        "chat_publication_work",
+        "artifact_evidence_parts",
+        "artifact_evidence",
+        "signing_attempts",
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE {table}")))
+            .execute(&mut *db)
+            .await
+            .unwrap();
+    }
+    for name in [
+        "signing_attempts",
+        "signing_attempt_identity",
+        "signing_attempt_transaction_identity",
+        "artifact_evidence",
+        "artifact_evidence_transaction_identity",
+        "artifact_evidence_parts",
+        "chat_publication_work",
+    ] {
+        sqlx::query(sqlx::AssertSqlSafe(definitions[name].clone()))
+            .execute(&mut *db)
+            .await
+            .unwrap();
+    }
+    for table in [
+        "signing_attempts",
+        "artifact_evidence",
+        "artifact_evidence_parts",
+        "chat_publication_work",
+    ] {
+        let legacy = table.replace("artifact_evidence", "seal_evidence");
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "INSERT INTO {legacy} SELECT * FROM retained_{table}"
+        )))
+        .execute(&mut *db)
+        .await
+        .unwrap();
+        sqlx::query(sqlx::AssertSqlSafe(format!("DROP TABLE retained_{table}")))
+            .execute(&mut *db)
+            .await
+            .unwrap();
+    }
+    sqlx::query("PRAGMA user_version=8")
+        .execute(db)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn exact_generation_eight_preserves_public_t1_and_refuses_public_s_without_rewrite() {
+    use radroots_protocol::plan::SigningTarget;
+    let fixture = Fixture::new();
+    let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+    let prepared = committed(
+        store
+            .admit_command_and_hold(
+                public_request(&binding, 165, "retained generation8 public plan", "first"),
+                copy(&proof),
+            )
+            .await
+            .unwrap(),
+    );
+    let plan = public_plan(
+        &prepared,
+        100,
+        &["wss://public-signature.fixture.example/a".into()],
+    );
+    let wire = plan.protected_wire().to_vec();
+    let digest = *plan.digest();
+    planned(
+        store
+            .bind_signing_intents(binding.clone(), plan.into(), copy(&proof))
+            .await
+            .unwrap(),
+    );
+    store.close().await.unwrap();
+    let mut db = fixture.database().await;
+    retain_legacy_issuance_catalog(&mut db).await;
+    db.close().await.unwrap();
+    let reopened = fixture.reopen(input).await;
+    let retained = reopened
+        .signing_plan(
+            binding.clone(),
+            prepared.identity().operation_id(),
+            prepared.identity().command_digest(),
+            copy(&proof),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retained.plan().protected_wire(), wire);
+    let request = || {
+        ClaimAttemptRequest::for_artifact(
+            binding.clone(),
+            prepared.identity().operation_id(),
+            prepared.identity().command_digest(),
+            digest,
+            SigningTarget::PublicEvent,
+        )
+    };
+    assert!(
+        reopened
+            .obtained_evidence(request(), copy(&proof))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(matches!(
+        reopened.claim_attempt(request(), copy(&proof)).await,
+        Err(OperationError::UnsupportedOperation)
+    ));
+    reopened.close().await.unwrap();
+    let mut db = fixture.database().await;
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut db)
+        .await
+        .unwrap();
+    assert_eq!(version, 8);
+    db.close().await.unwrap();
 }

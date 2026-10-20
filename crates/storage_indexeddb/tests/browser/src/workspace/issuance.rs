@@ -4,8 +4,8 @@ use core::num::NonZeroU64;
 use futures::FutureExt;
 use nostr::JsonUtil;
 use radroots_storage::command::{
-    ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome, EvidenceReceipt,
-    SealEvidence, SigningAttempt,
+    ArtifactEvidence, ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome,
+    EvidenceReceipt, SigningAttempt,
 };
 use wasm_bindgen::prelude::*;
 
@@ -34,7 +34,7 @@ fn receipt(value: EvidenceReceipt) -> Vec<u8> {
 fn signed_output(
     attempt: &SigningAttempt,
     observed: Option<NonZeroU64>,
-) -> Result<SealEvidence, JsValue> {
+) -> Result<ArtifactEvidence, JsValue> {
     let fields = attempt.seal().unwrap().fields();
     let context = nostr::secp256k1::Secp256k1::new();
     let mut scalar = [0; 32];
@@ -52,13 +52,13 @@ fn signed_output(
     .sign_with_ctx(&context, &mut BrowserRng, &keys)
     .unwrap();
     signed.verify_with_ctx(&context).unwrap();
-    SealEvidence::verify(attempt, &signed.as_json(), observed)
+    ArtifactEvidence::verify(attempt, &signed.as_json(), observed)
         .map_err(|e| JsValue::from_str(e.code()))
 }
 /// The test caller keeps its opaque original through failed/unknown capture.
 #[wasm_bindgen]
 pub struct ObtainedSeal {
-    value: SealEvidence,
+    value: ArtifactEvidence,
     attempt: SigningAttempt,
 }
 #[wasm_bindgen]
@@ -82,8 +82,12 @@ impl ObtainedSeal {
                     "kind" => serde_json::json!(14),
                     _ => unreachable!(),
                 };
-                SealEvidence::verify(&self.attempt, &serde_json::to_string(&wrong).unwrap(), None)
-                    .is_err()
+                ArtifactEvidence::verify(
+                    &self.attempt,
+                    &serde_json::to_string(&wrong).unwrap(),
+                    None,
+                )
+                .is_err()
             })
     }
 }
@@ -234,7 +238,7 @@ impl WorkspaceFixture {
             .map_err(|e| JsValue::from_str(e.code()))
     }
     pub async fn capture_reobserved(&self, original: &ObtainedSeal) -> Result<Vec<u8>, JsValue> {
-        let evidence = SealEvidence::verify(
+        let evidence = ArtifactEvidence::verify(
             &original.attempt,
             original.value.raw_json(),
             NonZeroU64::new(1_000_100),

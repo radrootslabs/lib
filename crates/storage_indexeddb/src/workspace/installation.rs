@@ -172,14 +172,14 @@ impl BrowserWorkspace {
             }
             let original = snapshot.installation();
             let missing = snapshot
-                .recipients()
+                .artifacts()
                 .iter()
                 .filter_map(|value| value.obtained())
                 .filter(|evidence| {
                     !snapshot
                         .publications()
                         .iter()
-                        .any(|value| value.evidence().recipient() == evidence.recipient())
+                        .any(|value| value.evidence().target() == evidence.target())
                 })
                 .collect::<Vec<_>>();
             if original.is_none() && missing.is_empty() {
@@ -227,7 +227,7 @@ impl BrowserWorkspace {
                     .chat_plan()?
                     .seals()
                     .iter()
-                    .position(|seal| seal.recipient() == evidence.recipient())
+                    .position(|seal| Some(seal.recipient()) == evidence.target().recipient())
                     .ok_or(OperationError::RecoveryRequired)? as u8;
                 let value = PublicationWork::from_committed_store(
                     bound,

@@ -26,7 +26,7 @@ fn contains_original(
         .bound_plan()
         .ok_or(OperationError::RecoveryRequired)?;
     let source = original
-        .obtained(work.evidence().recipient())
+        .obtained(work.recipient())
         .ok_or(OperationError::RecoveryRequired)?;
     let actor = bound
         .prepared()
@@ -38,7 +38,7 @@ fn contains_original(
     if candidate.work() != work
         || candidate.author() == actor
         || candidate.author() == bound.prepared().request().chat_command()?.peer()
-        || candidate.author() == work.evidence().recipient()
+        || candidate.author() == work.recipient()
         || source.digest() != work.evidence().digest()
     {
         return Err(OperationError::InvalidEvidence);
@@ -48,7 +48,7 @@ fn contains_original(
     event
         .verify()
         .map_err(|_| OperationError::InvalidEvidence)?;
-    let recipient = nostr::PublicKey::from_slice(work.evidence().recipient().as_bytes())
+    let recipient = nostr::PublicKey::from_slice(work.recipient().as_bytes())
         .map_err(|_| OperationError::InvalidEvidence)?;
     let opened = candidate.with_wrapping_key(|key| {
         let secret =
@@ -73,7 +73,7 @@ fn work(records: &Records, requested: PublicationWork) -> Result<PublicationWork
     let actual = records
         .work
         .iter()
-        .find(|value| value.report.evidence().recipient() == requested.evidence().recipient())
+        .find(|value| value.report.recipient() == requested.recipient())
         .ok_or(OperationError::InvalidEvidence)?
         .report;
     if actual != requested {
@@ -126,7 +126,7 @@ impl Journal<'_> {
         )
         .await?;
         let existing = deliveries.attempts.iter().position(|value| {
-            value.work().evidence().recipient() == evidence.recipient()
+            Some(value.work().recipient()) == evidence.target().recipient()
                 && value.intent().request_id() == request.intent().request_id()
         });
         let observations = Observations::read(
@@ -160,8 +160,8 @@ impl Journal<'_> {
             let bound = original
                 .bound_plan()
                 .ok_or(OperationError::RecoveryRequired)?;
-            deliveries.authorize_routes(bound, evidence.recipient())?;
-            let ordinals = deliveries.ordinals(evidence.recipient(), request.intent())?;
+            deliveries.authorize_routes(bound, evidence.recipient()?)?;
+            let ordinals = deliveries.ordinals(evidence.recipient()?, request.intent())?;
             if current.observed_at() < actual.queued_at()
                 || deliveries
                     .attempts
@@ -405,8 +405,7 @@ impl Journal<'_> {
             .attempts
             .iter()
             .position(|value| {
-                value.work().evidence().recipient() == recipient
-                    && value.intent().request_id() == &request
+                value.work().recipient() == recipient && value.intent().request_id() == &request
             })
             .map(|index| deliveries.attempts.remove(index)))
     }

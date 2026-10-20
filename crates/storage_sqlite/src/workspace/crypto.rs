@@ -21,7 +21,7 @@ pub(super) struct IssuanceScope {
     pub operation: OperationId,
     pub plan_digest: [u8; 32],
     pub attempt: radroots_domain::SigningAttemptId,
-    pub recipient: radroots_domain::PublicKey,
+    pub target: radroots_storage::command::SigningTarget,
 }
 #[derive(Clone, Copy)]
 pub(super) enum IssuancePayload {
@@ -399,7 +399,7 @@ fn issuance_context(
     part: u8,
 ) -> Result<EnvelopeContext, WorkspaceError> {
     use sha2::{Digest, Sha256};
-    let (tag, purpose, schema) = match payload {
+    let (tag, mut purpose, mut schema) = match payload {
         IssuancePayload::Attempt => (
             0u8,
             "radroots.workspace.signing_attempt",
@@ -423,7 +423,25 @@ fn issuance_context(
     hash.update(scope.operation.as_bytes());
     hash.update(scope.plan_digest);
     hash.update(scope.attempt.as_bytes());
-    hash.update(scope.recipient.as_bytes());
+    match scope.target {
+        radroots_storage::command::SigningTarget::BusinessSeal(recipient) => {
+            hash.update(recipient.as_bytes())
+        }
+        radroots_storage::command::SigningTarget::PublicEvent => {
+            if matches!(payload, IssuancePayload::Publication) {
+                return Err(WorkspaceError::InvalidInput);
+            }
+            purpose = match payload {
+                IssuancePayload::Attempt => "radroots.workspace.public_signing_attempt",
+                _ => "radroots.workspace.public_artifact_evidence",
+            };
+            schema = match payload {
+                IssuancePayload::Attempt => "radroots.workspace.public_signing_attempt.v1",
+                _ => "radroots.workspace.public_artifact_evidence.v1",
+            };
+            hash.update(b"public_event.no_recipient.v1\0");
+        }
+    }
     let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
     Ok(EnvelopeContext::new(
         EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,

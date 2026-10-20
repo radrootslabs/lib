@@ -149,12 +149,7 @@ impl OperationJournal for Journal {
             assert!(expected_digest.is_none_or(|digest| digest == request.command().digest()));
             let snapshot = OperationSnapshot::from_store_report(
                 RetainedOperation::Prepared(prepared(request)),
-                vec![RecipientSnapshot::from_store_report(
-                    key(),
-                    None,
-                    None,
-                    None,
-                )],
+                vec![ArtifactSnapshot::from_store_report(key(), None, None, None)],
                 UnixSeconds::new(101).unwrap(),
             )
             .unwrap();
@@ -179,7 +174,7 @@ impl OperationJournal for Journal {
         &'a self,
         _input: radroots_storage::workspace::AttachmentInput,
         _proof: &'a AttachmentProof,
-        _evidence: &'a SealEvidence,
+        _evidence: &'a ArtifactEvidence,
     ) -> BoxFuture<'a, Result<EvidenceCaptureOutcome, OperationError>> {
         panic!("unexpected journal effect")
     }
@@ -187,7 +182,7 @@ impl OperationJournal for Journal {
         &self,
         _request: ClaimAttemptRequest,
         _proof: AttachmentProof,
-    ) -> BoxFuture<'_, Result<Option<CapturedSeal>, OperationError>> {
+    ) -> BoxFuture<'_, Result<Option<CapturedArtifact>, OperationError>> {
         panic!("unexpected journal effect")
     }
     fn bind_signing_intents(

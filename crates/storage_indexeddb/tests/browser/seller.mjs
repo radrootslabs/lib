@@ -23,6 +23,9 @@ async function workflow({WorkspaceFixture}, previous) {
   const original = Array.from(await old.admit(243, false));
   const originalPlanWire = Uint8Array.from(await old.new_plan(243));
   const originalPlan = Array.from(await old.bind_plan(243, originalPlanWire));
+  const obtained = await old.obtain(243, 0, false);
+  const originalClaim = Array.from(obtained.original_claim());
+  const originalCapture = Array.from(await old.capture(obtained));
   await old.close();
   const current = await WorkspaceFixture.open(244, oldFingerprint, oldSelection, oldProof);
   check(!await current.is_seller());
@@ -30,8 +33,11 @@ async function workflow({WorkspaceFixture}, previous) {
   check(JSON.stringify(Array.from(await current.admit(243, false))) === JSON.stringify(original));
   check(JSON.stringify(Array.from(await current.plan_query(243))) === JSON.stringify(originalPlan));
   check(JSON.stringify(Array.from(await current.bind_plan(243, originalPlanWire))) === JSON.stringify(originalPlan));
+  check(JSON.stringify(Array.from(await current.attempt(243, 0))) === JSON.stringify(originalClaim));
+  check(JSON.stringify(Array.from(await current.captured(243, 0))) === JSON.stringify(originalCapture));
+  await refuses(() => current.obtain(243, 0, false), 'retained_no_dispatch');
   await current.close();
-  tests.push('original published buyer preparation and signing plan reopen and replay without replacement');
+  tests.push('original published buyer T0, T1, claim and obtained capture reopen without replacement or reissue');
   const seller = await WorkspaceFixture.create_seller(245);
   check(await seller.is_seller());
   check(await seller.authenticate() === 1);

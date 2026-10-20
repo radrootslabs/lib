@@ -27,6 +27,10 @@ pub use plan::PublicSigningPlan;
 pub const LISTING_KIND: u32 = 30402;
 /// Complete public event cap, including NIP-01 key, ID and signature framing.
 pub const LISTING_EVENT_MAX_BYTES: usize = 65_536;
+/// The closed public profile emits at most eight ordered two-field tags.
+pub const LISTING_TAG_MAX_COUNT: usize = 8;
+/// Both key and value count toward the closed public profile's field budget.
+pub const LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT: usize = 16;
 
 /// Explicit immutable public-offer input; no IDs, time or authority are inferred.
 #[derive(Clone, Serialize)]
@@ -125,6 +129,7 @@ fn serialize_profile<S: serde::Serializer>(
 
 /// Retained exact public event fields. This value contains no signature and
 /// supplies no evidence of T0/T1, signer invocation, installation or delivery.
+#[derive(Clone)]
 pub struct ListingEvent {
     author: PublicKey,
     created_at: UnixSeconds,

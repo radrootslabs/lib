@@ -41,7 +41,7 @@ impl BrowserWorkspace {
                     &t0,
                     binding.observed_at(),
                     Some(Selection {
-                        recipient: evidence.recipient(),
+                        recipient: evidence.recipient()?,
                         request: supplied.request_id(),
                         event: None,
                         retain_seal: false,
@@ -165,8 +165,7 @@ impl BrowserWorkspace {
                         .delivery_observations()
                         .iter()
                         .filter(|value| {
-                            value.work().evidence().recipient() == recipient
-                                && value.request_id() == &request
+                            value.work().recipient() == recipient && value.request_id() == &request
                         })
                         .cloned()
                         .collect()

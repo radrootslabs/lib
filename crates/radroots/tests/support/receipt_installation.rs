@@ -95,9 +95,9 @@ async fn existing_peer_installation_allows_first_self_claim_within_original_wind
     assert_eq!(partial.publications().len(), 1);
     assert!(
         partial
-            .recipients()
+            .artifacts()
             .iter()
-            .find(|value| value.recipient() == key())
+            .find(|value| value.recipient() == Ok(key()))
             .unwrap()
             .claim()
             .is_none()
@@ -260,12 +260,12 @@ async fn actual_peer_installation_and_late_self_capture_keep_one_original_messag
     let peer_work = complete
         .publications()
         .iter()
-        .find(|value| value.evidence().recipient() == peer)
+        .find(|value| value.recipient() == peer)
         .unwrap();
     let self_work = complete
         .publications()
         .iter()
-        .find(|value| value.evidence().recipient() == key())
+        .find(|value| value.recipient() == key())
         .unwrap();
     assert_eq!(peer_work.transaction_id(), first.transaction_id());
     assert_ne!(self_work.transaction_id(), first.transaction_id());
@@ -322,7 +322,7 @@ async fn actual_work_insert_failure_rolls_back_the_message_but_keeps_original_cl
     assert!(state.installation().is_none());
     assert_eq!(
         state
-            .recipients()
+            .artifacts()
             .iter()
             .filter_map(|value| value.obtained())
             .collect::<Vec<_>>(),
@@ -406,7 +406,7 @@ async fn actual_t2_commit_uncertainty_latches_and_reopen_reconciles_original_obt
     assert!(state.installation().is_none());
     assert_eq!(
         state
-            .recipients()
+            .artifacts()
             .iter()
             .filter_map(|value| value.obtained())
             .collect::<Vec<_>>(),

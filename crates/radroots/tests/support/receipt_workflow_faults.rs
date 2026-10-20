@@ -365,7 +365,7 @@ async fn explicit_delivery_retry_after_first_issue_expiry_preserves_original_byt
                 ready.scope.binding().clone(),
                 OperationId::from_bytes([203; 32]),
                 first.command_digest(),
-                attempt.work().evidence().recipient(),
+                attempt.work().recipient(),
                 attempt.intent().request_id().clone(),
                 copy(&ready.proof),
             )
@@ -457,7 +457,7 @@ async fn uncertain_second_recipient_never_reissues_and_preserves_actual_first_co
     let snapshot = ready.snapshot(204).await;
     assert_eq!(
         snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .filter(|recipient| recipient.obtained().is_some())
             .count(),
@@ -482,7 +482,7 @@ async fn failed_obtained_capture_blocks_close_retains_writer_and_retries_without
     let relay = Relay::new().await;
     let ready = Ready::new(&relay, StartMode::Online, RecordedSigner::new(None)).await;
     let mut db = ready.fixture.database().await;
-    sqlx::query("CREATE TRIGGER capture_insert_fault BEFORE INSERT ON seal_evidence BEGIN SELECT RAISE(ABORT, 'capture_insert_fault'); END").execute(&mut db).await.unwrap();
+    sqlx::query("CREATE TRIGGER capture_insert_fault BEFORE INSERT ON artifact_evidence BEGIN SELECT RAISE(ABORT, 'capture_insert_fault'); END").execute(&mut db).await.unwrap();
     let error = ready
         .client
         .inbox()
@@ -517,7 +517,7 @@ async fn failed_obtained_capture_blocks_close_retains_writer_and_retries_without
         .unwrap();
     assert_eq!(
         snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .filter(|recipient| recipient.obtained().is_some())
             .count(),
@@ -537,7 +537,7 @@ async fn explicit_resume_recovers_unknown_capture_under_same_writer_before_conti
         .await
         .unwrap();
     sqlx::query("CREATE TABLE capture_commit_fault (parent INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED)").execute(&mut db).await.unwrap();
-    sqlx::query("CREATE TRIGGER capture_commit_fault AFTER INSERT ON seal_evidence BEGIN INSERT INTO capture_commit_fault(parent) VALUES(2); END").execute(&mut db).await.unwrap();
+    sqlx::query("CREATE TRIGGER capture_commit_fault AFTER INSERT ON artifact_evidence BEGIN INSERT INTO capture_commit_fault(parent) VALUES(2); END").execute(&mut db).await.unwrap();
     let error = ready
         .client
         .inbox()
@@ -589,7 +589,7 @@ async fn explicit_resume_recovers_unknown_capture_under_same_writer_before_conti
     let snapshot = ready.snapshot(207).await;
     assert!(
         snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .all(|recipient| recipient.obtained().is_some())
     );
@@ -645,7 +645,7 @@ async fn lost_observer_and_cancelled_close_preserve_actual_obtained_signature_un
         .unwrap();
     assert!(
         snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .any(|recipient| recipient.obtained().is_some())
     );

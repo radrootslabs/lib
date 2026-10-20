@@ -53,6 +53,43 @@ pub(crate) fn unsigned_event_from_plan(
 }
 
 #[cfg(feature = "signing")]
+pub(crate) fn unsigned_event_from_fields(
+    fields: radroots_protocol::nip01::EventFields<'_>,
+    expected_id: radroots_event::id::EventId,
+) -> Result<nostr::UnsignedEvent, Error> {
+    let kind = u16::try_from(fields.kind).map_err(|_| Error::KindOutOfRange {
+        kind: fields.kind,
+        max: u16::MAX,
+    })?;
+    let tags = fields
+        .tags
+        .iter()
+        .cloned()
+        .map(RadrootsNostrTag::parse)
+        .collect::<Result<alloc::vec::Vec<_>, _>>()
+        .map_err(|_| Error::TagConversion)?;
+    let pubkey = RadrootsNostrPublicKey::from_slice(fields.author.as_bytes())
+        .map_err(|_| Error::EventConversion { field: "author" })?;
+    let created_at = RadrootsNostrTimestamp::from_secs(fields.created_at);
+    let kind = RadrootsNostrKind::Custom(kind);
+    let tags = nostr::Tags::from_list(tags);
+    let id = RadrootsNostrEventId::new(&pubkey, &created_at, &kind, &tags, fields.content);
+    if id.as_bytes() != expected_id.as_bytes() {
+        return Err(Error::ExternalSigningPlanMismatch {
+            field: "expected_event_id",
+        });
+    }
+    Ok(nostr::UnsignedEvent {
+        id: Some(id),
+        pubkey,
+        created_at,
+        kind,
+        tags,
+        content: fields.content.into(),
+    })
+}
+
+#[cfg(feature = "signing")]
 fn unsigned_event_from_request(request: &SignRequest) -> Result<nostr::UnsignedEvent, Error> {
     let kind = u16::try_from(request.kind()).map_err(|_| Error::KindOutOfRange {
         kind: request.kind(),

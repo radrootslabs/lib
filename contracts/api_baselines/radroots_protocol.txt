@@ -540,6 +540,8 @@ impl core::fmt::Debug for radroots_protocol::listing::PublishInput
 pub fn radroots_protocol::listing::PublishInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_protocol::listing::LISTING_EVENT_MAX_BYTES: usize
 pub const radroots_protocol::listing::LISTING_KIND: u32
+pub const radroots_protocol::listing::LISTING_TAG_MAX_COUNT: usize
+pub const radroots_protocol::listing::LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT: usize
 pub mod radroots_protocol::nip01
 pub enum radroots_protocol::nip01::WireError
 pub radroots_protocol::nip01::WireError::InvalidInput
@@ -570,6 +572,7 @@ pub enum radroots_protocol::plan::CapturedSigningPlan
 pub radroots_protocol::plan::CapturedSigningPlan::Chat(radroots_protocol::chat::ChatSigningPlan)
 pub radroots_protocol::plan::CapturedSigningPlan::Listing(radroots_protocol::listing::PublicSigningPlan)
 impl radroots_protocol::plan::CapturedSigningPlan
+pub fn radroots_protocol::plan::CapturedSigningPlan::artifact(&self, radroots_protocol::plan::SigningTarget) -> core::result::Result<radroots_protocol::plan::SigningArtifact<'_>, radroots_protocol::nip01::WireError>
 pub const fn radroots_protocol::plan::CapturedSigningPlan::chat(&self) -> core::option::Option<&radroots_protocol::chat::ChatSigningPlan>
 pub const fn radroots_protocol::plan::CapturedSigningPlan::command_digest(&self) -> radroots_domain::identifier::CommandDigest
 pub const fn radroots_protocol::plan::CapturedSigningPlan::created_at(&self) -> radroots_domain::context::UnixSeconds
@@ -585,10 +588,31 @@ impl core::convert::From<radroots_protocol::listing::PublicSigningPlan> for radr
 pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::listing::PublicSigningPlan) -> Self
 impl core::fmt::Debug for radroots_protocol::plan::CapturedSigningPlan
 pub fn radroots_protocol::plan::CapturedSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::plan::SigningArtifact<'a>
+pub radroots_protocol::plan::SigningArtifact::Public(&'a radroots_protocol::listing::ListingEvent)
+pub radroots_protocol::plan::SigningArtifact::Seal(&'a radroots_protocol::chat::ChatSeal)
+impl radroots_protocol::plan::SigningArtifact<'_>
+pub fn radroots_protocol::plan::SigningArtifact<'_>::event_id(&self) -> [u8; 32]
+pub fn radroots_protocol::plan::SigningArtifact<'_>::fields(&self) -> radroots_protocol::nip01::EventFields<'_>
+pub fn radroots_protocol::plan::SigningArtifact<'_>::target(&self) -> radroots_protocol::plan::SigningTarget
+impl core::fmt::Debug for radroots_protocol::plan::SigningArtifact<'_>
+pub fn radroots_protocol::plan::SigningArtifact<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_protocol::plan::SigningReplay
 pub radroots_protocol::plan::SigningReplay::ExactReplayByRequestId
 pub radroots_protocol::plan::SigningReplay::LocalReplaySafe
 pub radroots_protocol::plan::SigningReplay::NonReplayable
+pub enum radroots_protocol::plan::SigningTarget
+pub radroots_protocol::plan::SigningTarget::BusinessSeal(radroots_identity::key::PublicKey)
+pub radroots_protocol::plan::SigningTarget::PublicEvent
+impl radroots_protocol::plan::SigningTarget
+pub fn radroots_protocol::plan::SigningTarget::from_key(&[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::plan::SigningTarget::key(self) -> alloc::vec::Vec<u8>
+pub const fn radroots_protocol::plan::SigningTarget::recipient(self) -> core::option::Option<radroots_identity::key::PublicKey>
+pub const fn radroots_protocol::plan::SigningTarget::role(self) -> radroots_protocol::intent::ArtifactRole
+impl core::convert::From<radroots_identity::key::PublicKey> for radroots_protocol::plan::SigningTarget
+pub fn radroots_protocol::plan::SigningTarget::from(radroots_identity::key::PublicKey) -> Self
+impl core::fmt::Debug for radroots_protocol::plan::SigningTarget
+pub fn radroots_protocol::plan::SigningTarget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_protocol::radrootsd
 pub mod radroots_protocol::radrootsd::transport_publish
 pub mod radroots_protocol::radrootsd::transport_publish::v5

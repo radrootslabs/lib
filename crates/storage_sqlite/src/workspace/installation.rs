@@ -26,7 +26,8 @@ pub(super) const OP_INDEX: &str =
 pub(super) const TX_INDEX: &str = "CREATE UNIQUE INDEX chat_message_transaction_identity ON chat_messages(workspace,transaction_id)";
 pub(super) const THREAD_INDEX: &str =
     "CREATE INDEX chat_message_thread ON chat_messages(workspace,thread_id,message_id)";
-pub(super) const WORK: &str = "CREATE TABLE chat_publication_work (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, recipient BLOB NOT NULL CHECK(length(recipient)=32), installation_transaction BLOB NOT NULL CHECK(length(installation_transaction)=32), capture_transaction BLOB NOT NULL CHECK(length(capture_transaction)=32), event_id BLOB NOT NULL CHECK(length(event_id)=32), evidence_digest BLOB NOT NULL CHECK(length(evidence_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,recipient), FOREIGN KEY(workspace,operation_id) REFERENCES chat_messages(workspace,operation_id), FOREIGN KEY(workspace,operation_id,recipient) REFERENCES seal_evidence(workspace,operation_id,recipient)) STRICT, WITHOUT ROWID";
+pub(super) const WORK: &str = "CREATE TABLE chat_publication_work (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, recipient BLOB NOT NULL CHECK(length(recipient)=32), installation_transaction BLOB NOT NULL CHECK(length(installation_transaction)=32), capture_transaction BLOB NOT NULL CHECK(length(capture_transaction)=32), event_id BLOB NOT NULL CHECK(length(event_id)=32), evidence_digest BLOB NOT NULL CHECK(length(evidence_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,recipient), FOREIGN KEY(workspace,operation_id) REFERENCES chat_messages(workspace,operation_id), FOREIGN KEY(workspace,operation_id,recipient) REFERENCES artifact_evidence(workspace,operation_id,artifact_key)) STRICT, WITHOUT ROWID";
+pub(super) const WORK_V8: &str = "CREATE TABLE chat_publication_work (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, recipient BLOB NOT NULL CHECK(length(recipient)=32), installation_transaction BLOB NOT NULL CHECK(length(installation_transaction)=32), capture_transaction BLOB NOT NULL CHECK(length(capture_transaction)=32), event_id BLOB NOT NULL CHECK(length(event_id)=32), evidence_digest BLOB NOT NULL CHECK(length(evidence_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,recipient), FOREIGN KEY(workspace,operation_id) REFERENCES chat_messages(workspace,operation_id), FOREIGN KEY(workspace,operation_id,recipient) REFERENCES seal_evidence(workspace,operation_id,recipient)) STRICT, WITHOUT ROWID";
 
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -42,12 +43,12 @@ pub(super) struct EvidenceRef {
     observed_at: Option<u64>,
 }
 impl EvidenceRef {
-    pub(super) fn new(value: EvidenceReceipt) -> Self {
+    pub(super) fn new(value: EvidenceReceipt, recipient: PublicKey) -> Self {
         Self {
             workspace: value.workspace_id(),
             operation: value.operation_id(),
             command: value.command_digest(),
-            recipient: value.recipient(),
+            recipient,
             attempt: value.attempt_id(),
             event: value.event_id(),
             digest: *value.digest(),
@@ -80,7 +81,7 @@ impl MessageRecord {
             plan_transaction: value.plan_transaction_id(),
             transaction: value.transaction_id(),
             installed_at: value.installed_at(),
-            basis: EvidenceRef::new(value.basis()),
+            basis: EvidenceRef::new(value.basis(), value.basis().recipient()?),
         })
     }
 }
@@ -108,7 +109,7 @@ impl WorkRecord {
             plan_transaction: installed.plan_transaction_id(),
             transaction: value.transaction_id(),
             queued_at: value.queued_at(),
-            evidence: EvidenceRef::new(value.evidence()),
+            evidence: EvidenceRef::new(value.evidence(), value.recipient()),
         }
     }
 }
@@ -131,7 +132,7 @@ fn scope(bound: &BoundSigningPlan, receipt: EvidenceReceipt) -> IssuanceScope {
         operation: receipt.operation_id(),
         plan_digest: *bound.plan().digest(),
         attempt: receipt.attempt_id(),
-        recipient: receipt.recipient(),
+        target: receipt.target(),
     }
 }
 fn bytes(row: &sqlx::sqlite::SqliteRow, index: usize) -> Result<Vec<u8>, OperationError> {
@@ -145,7 +146,7 @@ fn obtained(
 ) -> Result<EvidenceReceipt, OperationError> {
     graph
         .reports()
-        .find(|value| value.recipient() == recipient)
+        .find(|value| value.target().recipient() == Some(recipient))
         .and_then(|value| value.obtained())
         .ok_or(OperationError::RecoveryRequired)
 }
@@ -207,7 +208,10 @@ impl Records {
         };
         let mut work = Vec::new();
         if let Some(bound) = graph.bound_plan() {
-            for recipient in graph.reports().map(|value| value.recipient()) {
+            for recipient in graph
+                .reports()
+                .filter_map(|value| value.target().recipient())
+            {
                 let row=sqlx::query("SELECT CASE WHEN length(installation_transaction)=32 THEN installation_transaction END,CASE WHEN length(capture_transaction)=32 THEN capture_transaction END,CASE WHEN length(event_id)=32 THEN event_id END,CASE WHEN length(evidence_digest)=32 THEN evidence_digest END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_publication_work WHERE workspace=? AND operation_id=? AND recipient=?")
                     .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(recipient.as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
                 if let Some(row) = row {
@@ -280,7 +284,7 @@ impl Records {
             let work = value.report;
             let evidence = work.evidence();
             let count:i64=sqlx::query_scalar("SELECT count(*) FROM chat_publication_work WHERE workspace=? AND operation_id=? AND recipient=? AND installation_transaction=? AND capture_transaction=? AND event_id=? AND evidence_digest=? AND transaction_id=? AND protected=?")
-                .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(evidence.recipient().as_bytes().as_slice()).bind(work.installation_transaction_id().as_bytes().as_slice()).bind(evidence.transaction_id().as_bytes().as_slice()).bind(evidence.event_id().as_bytes().as_slice()).bind(evidence.digest().as_slice()).bind(work.transaction_id().as_bytes().as_slice()).bind(&value.protected).fetch_one(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
+                .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(evidence.recipient()?.as_bytes().as_slice()).bind(work.installation_transaction_id().as_bytes().as_slice()).bind(evidence.transaction_id().as_bytes().as_slice()).bind(evidence.event_id().as_bytes().as_slice()).bind(evidence.digest().as_slice()).bind(work.transaction_id().as_bytes().as_slice()).bind(&value.protected).fetch_one(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
             if count != 1 {
                 return Err(OperationError::RecoveryRequired);
             }
@@ -348,7 +352,7 @@ pub(super) async fn insert_work(
     let work = value.report;
     let evidence = work.evidence();
     sqlx::query("INSERT INTO chat_publication_work(workspace,operation_id,recipient,installation_transaction,capture_transaction,event_id,evidence_digest,transaction_id,protected) VALUES(?,?,?,?,?,?,?,?,?)")
-        .bind(evidence.workspace_id().as_bytes().as_slice()).bind(evidence.operation_id().as_bytes().as_slice()).bind(evidence.recipient().as_bytes().as_slice()).bind(work.installation_transaction_id().as_bytes().as_slice()).bind(evidence.transaction_id().as_bytes().as_slice()).bind(evidence.event_id().as_bytes().as_slice()).bind(evidence.digest().as_slice()).bind(work.transaction_id().as_bytes().as_slice()).bind(&value.protected).execute(connection).await.map_err(write_error)?;
+        .bind(evidence.workspace_id().as_bytes().as_slice()).bind(evidence.operation_id().as_bytes().as_slice()).bind(evidence.recipient()?.as_bytes().as_slice()).bind(work.installation_transaction_id().as_bytes().as_slice()).bind(evidence.transaction_id().as_bytes().as_slice()).bind(evidence.event_id().as_bytes().as_slice()).bind(evidence.digest().as_slice()).bind(work.transaction_id().as_bytes().as_slice()).bind(&value.protected).execute(connection).await.map_err(write_error)?;
     Ok(())
 }
 fn write_error(error: sqlx::Error) -> OperationError {
@@ -397,7 +401,7 @@ impl Journal<'_> {
                 !records
                     .work
                     .iter()
-                    .any(|value| value.report.evidence().recipient() == evidence.recipient())
+                    .any(|value| value.report.evidence().target() == evidence.target())
             })
             .collect();
         let fresh = records.message.is_none() || !missing.is_empty();

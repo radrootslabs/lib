@@ -229,9 +229,7 @@ impl Journal<'_> {
         Ok(observations
             .reports
             .into_iter()
-            .filter(|value| {
-                value.request_id() == &request && value.work().evidence().recipient() == recipient
-            })
+            .filter(|value| value.request_id() == &request && value.work().recipient() == recipient)
             .collect())
     }
 }

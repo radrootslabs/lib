@@ -3,7 +3,7 @@ use super::{
     AttachmentInput, AttachmentProof, WorkspaceClock, WorkspaceCrypto, admission::Journal,
     fs::Namespace, record::GrantRecord, worker,
 };
-use radroots_storage::command::{EvidenceCaptureOutcome, OperationError, SealEvidence};
+use radroots_storage::command::{ArtifactEvidence, EvidenceCaptureOutcome, OperationError};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 
 pub(super) struct RecoveryAuthorization {
@@ -25,7 +25,7 @@ impl RecoveryTurn<'_> {
         &mut self,
         input: AttachmentInput,
         proof: AttachmentProof,
-        evidence: SealEvidence,
+        evidence: ArtifactEvidence,
     ) -> Result<EvidenceCaptureOutcome, OperationError> {
         if input != *self.selected {
             return Err(OperationError::Unauthorized);

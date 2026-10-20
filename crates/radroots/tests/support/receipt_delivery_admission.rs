@@ -69,7 +69,7 @@ async fn self_copy_delivery_refuses_the_original_peer_as_temporary_author() {
     }
     .sign_with_keys(&participant)
     .unwrap();
-    let evidence = SealEvidence::verify(&claim, &signed.as_json(), None).unwrap();
+    let evidence = ArtifactEvidence::verify(&claim, &signed.as_json(), None).unwrap();
     assert!(matches!(
         ready
             .store
@@ -113,7 +113,7 @@ async fn self_copy_delivery_refuses_the_original_peer_as_temporary_author() {
     let work = *snapshot
         .publications()
         .iter()
-        .find(|work| work.evidence().recipient() == key())
+        .find(|work| work.recipient() == key())
         .unwrap();
     let peer = keys(2);
     let content = nostr::nips::nip44::encrypt(
@@ -201,8 +201,7 @@ async fn self_copy_delivery_refuses_the_original_peer_as_temporary_author() {
 
 fn signed_candidate(ready: &Ready, scalar: u8, content: String) -> EnvelopeCandidate {
     let signer = keys(scalar);
-    let recipient =
-        nostr::PublicKey::from_slice(ready.work.evidence().recipient().as_bytes()).unwrap();
+    let recipient = nostr::PublicKey::from_slice(ready.work.recipient().as_bytes()).unwrap();
     let event = nostr::UnsignedEvent {
         id: None,
         pubkey: signer.public_key(),
@@ -245,8 +244,7 @@ async fn rebound_work(ready: &Ready) -> PublicationWork {
 #[tokio::test]
 async fn native_delivery_independently_checks_temporary_keys_exact_seal_and_original_work() {
     let ready = Ready::new(&[String::from("ws://127.0.0.1:9")], 248).await;
-    let receiver =
-        nostr::PublicKey::from_slice(ready.work.evidence().recipient().as_bytes()).unwrap();
+    let receiver = nostr::PublicKey::from_slice(ready.work.recipient().as_bytes()).unwrap();
     let temp = keys(3);
     let wrong_plaintext = nostr::nips::nip44::encrypt(
         temp.secret_key(),
@@ -395,7 +393,7 @@ async fn native_delivery_refuses_backward_clock_expired_attempt_and_unbound_obse
                     ready.binding.clone(),
                     e.operation_id(),
                     e.command_digest(),
-                    e.recipient(),
+                    e.recipient().unwrap(),
                     DeliveryRequestId::parse(id).unwrap(),
                     copy(&ready.proof)
                 )

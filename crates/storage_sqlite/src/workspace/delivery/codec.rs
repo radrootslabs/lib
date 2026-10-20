@@ -29,7 +29,7 @@ impl WorkRef {
         Self {
             installation: work.installation_transaction_id(),
             plan: *work.plan_digest(),
-            evidence: EvidenceRef::new(work.evidence()),
+            evidence: EvidenceRef::new(work.evidence(), work.recipient()),
             transaction: work.transaction_id(),
             queued_at: work.queued_at(),
         }
@@ -148,7 +148,7 @@ pub(super) fn scope(work: PublicationWork, key: [u8; 32]) -> DeliveryScope {
     DeliveryScope {
         workspace: e.workspace_id(),
         operation: e.operation_id(),
-        recipient: e.recipient(),
+        recipient: work.recipient(),
         request: key,
     }
 }

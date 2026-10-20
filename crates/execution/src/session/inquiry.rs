@@ -16,10 +16,10 @@ use radroots_signing::{
 };
 use radroots_storage::{
     command::{
-        BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest, DeliveryAttemptOutcome,
-        DeliveryAttemptRequest, DeliveryIntent, DeliveryObservation, EnvelopeCandidate,
-        EvidenceCaptureOutcome, InstallationRequest, OperationError, OperationJournal,
-        PlanBindingOutcome, PreparedOperation, PublicationWork, SealEvidence,
+        ArtifactEvidence, BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest,
+        DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryIntent, DeliveryObservation,
+        EnvelopeCandidate, EvidenceCaptureOutcome, InstallationRequest, OperationError,
+        OperationJournal, PlanBindingOutcome, PreparedOperation, PublicationWork,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
@@ -67,7 +67,7 @@ struct PendingCapture {
     journal: Shared<dyn OperationJournal>,
     binding: WorkspaceBinding,
     proof: AttachmentProof,
-    evidence: SealEvidence,
+    evidence: ArtifactEvidence,
     // Keeps both the resource permit and conservative live-byte reservation.
     _lease: Shared<dyn HostBound>,
 }
@@ -231,7 +231,7 @@ impl InquiryRuntime {
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
         if snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .any(|recipient| recipient.obtained().is_some())
         {
@@ -377,10 +377,9 @@ impl InquiryRuntime {
                     ClaimAttemptOutcome::Retained(_) | ClaimAttemptOutcome::Unknown(_) => continue,
                 },
             };
-            let intent = SigningIntent::from_chat_seal(
-                prepared.identity().operation_id(),
-                prepared.identity().command_digest(),
-                attempt.seal()?,
+            let intent = SigningIntent::from_plan(
+                attempt.bound_plan().plan(),
+                attempt.target(),
                 ProviderCall::new(
                     attempt.seal()?.fields().author,
                     attempt.deadline_unix_ms(),
@@ -395,7 +394,7 @@ impl InquiryRuntime {
             let (_, kind) = outcome.into_parts();
             if let OutcomeKind::Obtained(artifact) = kind {
                 let evidence = artifact.with_json(|raw| {
-                    SealEvidence::verify(&attempt, raw, artifact.observed_at_unix_ms())
+                    ArtifactEvidence::verify(&attempt, raw, artifact.observed_at_unix_ms())
                 })?;
                 let entry = Shared::new(PendingCapture {
                     journal: journal.clone(),
@@ -453,7 +452,7 @@ impl InquiryRuntime {
             if original.is_some() && matches!(mode, RunMode::Command) {
                 continue;
             }
-            let recipient = work.evidence().recipient();
+            let recipient = work.recipient();
             let route = bound
                 .chat_plan()?
                 .routes()

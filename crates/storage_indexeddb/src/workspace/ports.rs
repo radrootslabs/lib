@@ -3,12 +3,12 @@ use super::BrowserWorkspace;
 use radroots_domain::{CommandDigest, OperationId, PublicKey};
 use radroots_storage::{
     command::{
-        AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSeal, CapturedSigningPlan,
-        ClaimAttemptOutcome, ClaimAttemptRequest, DeliveryAttempt, DeliveryAttemptOutcome,
-        DeliveryAttemptRequest, DeliveryObservation, DeliveryObservationOutcome, EnvelopeCandidate,
-        EvidenceCaptureOutcome, InstallationOutcome, InstallationRequest, OperationError,
-        OperationJournal, OperationSnapshot, PlanBindingOutcome, PreparedOperation, SealEvidence,
-        SigningAttempt,
+        AdmissionOutcome, AdmissionRequest, ArtifactEvidence, BoundSigningPlan, CapturedArtifact,
+        CapturedSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest, DeliveryAttempt,
+        DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryObservation,
+        DeliveryObservationOutcome, EnvelopeCandidate, EvidenceCaptureOutcome, InstallationOutcome,
+        InstallationRequest, OperationError, OperationJournal, OperationSnapshot,
+        PlanBindingOutcome, PreparedOperation, SigningAttempt,
     },
     workspace::{AttachmentInput, AttachmentProof, WorkspaceBinding},
 };
@@ -19,7 +19,7 @@ impl OperationJournal for BrowserWorkspace {
         &'a self,
         input: AttachmentInput,
         proof: &'a AttachmentProof,
-        evidence: &'a SealEvidence,
+        evidence: &'a ArtifactEvidence,
     ) -> BoxFuture<'a, Result<EvidenceCaptureOutcome, OperationError>> {
         Box::pin(BrowserWorkspace::capture_evidence(
             self, input, proof, evidence,
@@ -112,7 +112,7 @@ impl OperationJournal for BrowserWorkspace {
         &'a self,
         input: AttachmentInput,
         proof: &'a AttachmentProof,
-        evidence: &'a SealEvidence,
+        evidence: &'a ArtifactEvidence,
     ) -> BoxFuture<'a, Result<EvidenceCaptureOutcome, OperationError>> {
         Box::pin(BrowserWorkspace::capture_evidence(
             self, input, proof, evidence,
@@ -122,7 +122,7 @@ impl OperationJournal for BrowserWorkspace {
         &self,
         request: ClaimAttemptRequest,
         proof: AttachmentProof,
-    ) -> BoxFuture<'_, Result<Option<CapturedSeal>, OperationError>> {
+    ) -> BoxFuture<'_, Result<Option<CapturedArtifact>, OperationError>> {
         Box::pin(BrowserWorkspace::obtained_evidence(self, request, proof))
     }
     fn bind_signing_intents(

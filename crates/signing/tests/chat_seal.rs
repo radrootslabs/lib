@@ -108,14 +108,14 @@ fn known_kind_conversion_signs_and_authenticates_the_same_rumor_for_peer_and_sel
         intent
             .check_before_effect(rumor.author(), NOW * 1000)
             .unwrap();
-        let event = intent.with_plan(|plan| {
+        let event = intent.with_event(|fields, event_id| {
             nostr::UnsignedEvent {
-                id: Some(nostr::EventId::from_slice(plan.expected_event_id().as_bytes()).unwrap()),
+                id: Some(nostr::EventId::from_slice(event_id.as_bytes()).unwrap()),
                 pubkey: author.public_key(),
-                created_at: nostr::Timestamp::from_secs(plan.created_at()),
-                kind: nostr::Kind::Custom(plan.body().kind() as u16),
+                created_at: nostr::Timestamp::from_secs(fields.created_at),
+                kind: nostr::Kind::Custom(fields.kind as u16),
                 tags: nostr::Tags::new(),
-                content: plan.body().content().into(),
+                content: fields.content.into(),
             }
             .sign_with_keys(&author)
             .unwrap()

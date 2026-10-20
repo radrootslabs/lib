@@ -1,7 +1,114 @@
 //! Common immutable signing-plan data, with explicit artifact families.
-use crate::{command::CapturedCommand, nip01::WireError};
+use crate::{
+    command::CapturedCommand,
+    intent::ArtifactRole,
+    nip01::{EventFields, WireError},
+};
+use alloc::vec::Vec;
 use core::fmt;
-use radroots_domain::{CommandDigest, OperationId, UnixSeconds};
+use radroots_domain::{CommandDigest, OperationId, PublicKey, UnixSeconds};
+
+/// Exact T1 artifact selection. Public events have no invented private peer.
+/// Selection is data only and establishes neither authority nor an invocation.
+#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+pub enum SigningTarget {
+    /// The single exact public event in a public plan.
+    PublicEvent,
+    /// One exact recipient's business seal in a private plan.
+    BusinessSeal(PublicKey),
+}
+impl SigningTarget {
+    /// Role bound by the selected plan artifact.
+    pub const fn role(self) -> ArtifactRole {
+        match self {
+            Self::PublicEvent => ArtifactRole::PublicEvent,
+            Self::BusinessSeal(_) => ArtifactRole::BusinessSeal,
+        }
+    }
+    /// No public event is represented by a participant key.
+    pub const fn recipient(self) -> Option<PublicKey> {
+        match self {
+            Self::PublicEvent => None,
+            Self::BusinessSeal(peer) => Some(peer),
+        }
+    }
+    /// Bounded unambiguous storage selector. Its public tag is not a recipient.
+    pub fn key(self) -> Vec<u8> {
+        match self {
+            Self::PublicEvent => alloc::vec![0],
+            Self::BusinessSeal(peer) => peer.as_bytes().to_vec(),
+        }
+    }
+    /// Decodes only the exact supported tagged selector profiles.
+    pub fn from_key(key: &[u8]) -> Result<Self, WireError> {
+        match key {
+            [0] => Ok(Self::PublicEvent),
+            rest if rest.len() == 32 => {
+                PublicKey::from_bytes(rest.try_into().map_err(|_| WireError::InvalidInput)?)
+                    .map(Self::BusinessSeal)
+                    .map_err(|_| WireError::InvalidInput)
+            }
+            _ => Err(WireError::InvalidInput),
+        }
+    }
+}
+impl From<PublicKey> for SigningTarget {
+    fn from(recipient: PublicKey) -> Self {
+        Self::BusinessSeal(recipient)
+    }
+}
+impl fmt::Debug for SigningTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::PublicEvent => "SigningTarget::PublicEvent",
+            Self::BusinessSeal(_) => "SigningTarget::BusinessSeal(<redacted>)",
+        })
+    }
+}
+
+/// Borrowed exact known artifact. This authenticates no signer or store fact.
+pub enum SigningArtifact<'a> {
+    /// Exact assigned-kind public listing.
+    #[cfg(feature = "listing")]
+    Public(&'a crate::listing::ListingEvent),
+    /// Exact private business seal, with its actual recipient.
+    #[cfg(feature = "chat")]
+    Seal(&'a crate::chat::ChatSeal),
+}
+impl SigningArtifact<'_> {
+    /// Borrows original NIP-01 fields without rebuilding content or tags.
+    pub fn fields(&self) -> EventFields<'_> {
+        match self {
+            #[cfg(feature = "listing")]
+            Self::Public(event) => event.fields(),
+            #[cfg(feature = "chat")]
+            Self::Seal(seal) => seal.fields(),
+        }
+    }
+    /// Original exact event ID.
+    pub fn event_id(&self) -> [u8; 32] {
+        match self {
+            #[cfg(feature = "listing")]
+            Self::Public(event) => *event.event_id(),
+            #[cfg(feature = "chat")]
+            Self::Seal(seal) => seal.event_id(),
+        }
+    }
+    /// Exact role/recipient pair without a public-peer fallback.
+    pub fn target(&self) -> SigningTarget {
+        match self {
+            #[cfg(feature = "listing")]
+            Self::Public(_) => SigningTarget::PublicEvent,
+            #[cfg(feature = "chat")]
+            Self::Seal(seal) => SigningTarget::BusinessSeal(seal.recipient()),
+        }
+    }
+}
+impl fmt::Debug for SigningArtifact<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SigningArtifact(<redacted>)")
+    }
+}
 
 /// Captured provider declaration. Execution must independently verify current
 /// support before any reissue; this data authenticates no provider guarantee.
@@ -43,6 +150,23 @@ pub enum CapturedSigningPlan {
     Listing(crate::listing::PublicSigningPlan),
 }
 impl CapturedSigningPlan {
+    /// Resolves only an actual retained artifact in this exact plan family.
+    pub fn artifact(&self, target: SigningTarget) -> Result<SigningArtifact<'_>, WireError> {
+        match (self, target) {
+            #[cfg(feature = "listing")]
+            (Self::Listing(plan), SigningTarget::PublicEvent) => {
+                Ok(SigningArtifact::Public(plan.event()))
+            }
+            #[cfg(feature = "chat")]
+            (Self::Chat(plan), SigningTarget::BusinessSeal(peer)) => plan
+                .seals()
+                .iter()
+                .find(|seal| seal.recipient() == peer)
+                .map(SigningArtifact::Seal)
+                .ok_or(WireError::InvalidInput),
+            _ => Err(WireError::InvalidInput),
+        }
+    }
     /// Reconstructs only the family of the independently retained command.
     pub fn parse(command: &CapturedCommand, wire: &[u8]) -> Result<Self, WireError> {
         match command {

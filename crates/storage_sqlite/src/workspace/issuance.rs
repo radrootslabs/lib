@@ -8,10 +8,11 @@ use super::{
     snapshot::RetainedFacts,
     worker,
 };
-use radroots_domain::{CommandDigest, OperationId, PublicKey, SigningAttemptId, TransactionId};
+use radroots_domain::{CommandDigest, OperationId, SigningAttemptId, TransactionId};
+use radroots_storage::command::SigningTarget;
 use radroots_storage::command::{
-    BoundSigningPlan, CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt,
-    EvidenceCaptureOutcome, OperationError, SealEvidence, SigningAttempt,
+    ArtifactEvidence, BoundSigningPlan, CapturedArtifact, ClaimAttemptOutcome, ClaimAttemptRequest,
+    CommitAttempt, EvidenceCaptureOutcome, OperationError, SigningAttempt,
 };
 use sqlx::{Connection, SqliteConnection};
 
@@ -59,6 +60,7 @@ impl Journal<'_> {
         proof: AttachmentProof,
     ) -> Result<ClaimAttemptOutcome, OperationError> {
         let (grant_record, grant, current) = self.access(request.binding(), &proof).await?;
+        attempt::require_target(self.connection, request.target()).await?;
         let loaded = self
             .load_issuance_plan(request.operation_id(), request.command_digest())
             .await?
@@ -79,7 +81,7 @@ impl Journal<'_> {
             self.connection,
             self.selected,
             bound,
-            request.recipient(),
+            request.target(),
             self.crypto,
         )
         .await?;
@@ -104,7 +106,7 @@ impl Journal<'_> {
             (
                 SigningAttempt::from_committed_store(
                     bound,
-                    request.recipient(),
+                    request.target(),
                     id,
                     transaction,
                     time,
@@ -121,7 +123,7 @@ impl Journal<'_> {
             }
             let snapshot = SigningAttempt::from_committed_store(
                 bound,
-                request.recipient(),
+                request.target(),
                 SigningAttemptId::from_bytes(super::random()?),
                 TransactionId::from_bytes(super::random()?),
                 current.observed_at(),
@@ -181,7 +183,7 @@ impl Journal<'_> {
                     &mut transaction,
                     self.selected,
                     request.operation_id(),
-                    request.recipient(),
+                    request.target(),
                 )
                 .await?;
                 attempt::insert(&mut transaction, &snapshot, &protected).await?;
@@ -234,7 +236,7 @@ impl Journal<'_> {
                 self.connection,
                 self.selected,
                 loaded.bound,
-                request.recipient(),
+                request.target(),
                 self.crypto,
             )
             .await?;
@@ -242,7 +244,7 @@ impl Journal<'_> {
                 Some((id, transaction, time, protected)) => Some((
                     SigningAttempt::from_committed_store(
                         bound,
-                        request.recipient(),
+                        request.target(),
                         id,
                         transaction,
                         time,
@@ -312,7 +314,7 @@ impl Journal<'_> {
                     &mut transaction,
                     self.selected,
                     request.operation_id(),
-                    request.recipient(),
+                    request.target(),
                 )
                 .await?;
             }
@@ -359,7 +361,7 @@ impl Journal<'_> {
         &mut self,
         input: AttachmentInput,
         proof: AttachmentProof,
-        supplied: SealEvidence,
+        supplied: ArtifactEvidence,
     ) -> Result<EvidenceCaptureOutcome, OperationError> {
         let (record, grant) = self.capture_access(&input, &proof).await?;
         if supplied.workspace_id() != self.selected.workspace_id() {
@@ -377,7 +379,7 @@ impl Journal<'_> {
             self.connection,
             self.selected,
             bound,
-            supplied.recipient(),
+            supplied.target(),
             self.crypto,
         )
         .await?;
@@ -385,7 +387,7 @@ impl Journal<'_> {
             claim.ok_or(OperationError::RecoveryRequired)?;
         let snapshot = SigningAttempt::from_committed_store(
             bound,
-            supplied.recipient(),
+            supplied.target(),
             id,
             claim_transaction,
             claimed_at,
@@ -395,7 +397,7 @@ impl Journal<'_> {
         }
         // The supplied typed value was already independently verified. Recheck
         // it against the backend's actual immutable claim, not its descriptor.
-        let checked = SealEvidence::verify(
+        let checked = ArtifactEvidence::verify(
             &snapshot,
             supplied.raw_json(),
             supplied.observed_at_unix_ms(),
@@ -480,7 +482,7 @@ impl Journal<'_> {
         &mut self,
         request: ClaimAttemptRequest,
         proof: AttachmentProof,
-    ) -> Result<Option<CapturedSeal>, OperationError> {
+    ) -> Result<Option<CapturedArtifact>, OperationError> {
         let (record, grant, _) = self.access(request.binding(), &proof).await?;
         let loaded = self
             .load_issuance_plan(request.operation_id(), request.command_digest())
@@ -497,14 +499,14 @@ impl Journal<'_> {
                 self.connection,
                 self.selected,
                 loaded.bound,
-                request.recipient(),
+                request.target(),
                 self.crypto,
             )
             .await?;
             if let Some((id, transaction, time, protected)) = value {
                 let snapshot = SigningAttempt::from_committed_store(
                     bound,
-                    request.recipient(),
+                    request.target(),
                     id,
                     transaction,
                     time,
@@ -579,7 +581,7 @@ impl Journal<'_> {
                     &mut transaction,
                     self.selected,
                     request.operation_id(),
-                    request.recipient(),
+                    request.target(),
                 )
                 .await?;
             }
@@ -593,7 +595,7 @@ impl Journal<'_> {
         checked?;
         match retained {
             Some((attempt, _, _, _, Some((evidence, protected)))) => {
-                Ok(Some(CapturedSeal::from_committed_store(
+                Ok(Some(CapturedArtifact::from_committed_store(
                     attempt,
                     evidence,
                     protected.receipt.transaction_id(),
@@ -607,10 +609,11 @@ pub(super) async fn absent_claim(
     connection: &mut SqliteConnection,
     selected: &AttachmentInput,
     operation: OperationId,
-    recipient: PublicKey,
+    target: impl Into<SigningTarget>,
 ) -> Result<(), OperationError> {
-    let count:i64=sqlx::query_scalar("SELECT (SELECT count(*) FROM signing_attempts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3)+(SELECT count(*) FROM seal_evidence WHERE workspace=?1 AND operation_id=?2 AND recipient=?3)+(SELECT count(*) FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3)")
-        .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(recipient.as_bytes().as_slice()).fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
+    let target = target.into();
+    let count:i64=sqlx::query_scalar(attempt::sql(connection, "SELECT (SELECT count(*) FROM signing_attempts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3)+(SELECT count(*) FROM seal_evidence WHERE workspace=?1 AND operation_id=?2 AND recipient=?3)+(SELECT count(*) FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3)").await?)
+        .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(target.key().as_slice()).fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
     if count != 0 {
         return Err(OperationError::RecoveryRequired);
     }

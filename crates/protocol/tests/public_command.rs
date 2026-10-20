@@ -300,3 +300,23 @@ fn exact_public_plan_reconstructs_original_event_and_refuses_changed_framing_or_
         .is_err()
     );
 }
+
+#[test]
+fn artifact_selection_has_no_public_participant_and_preserves_private_keys() {
+    use radroots_protocol::plan::SigningTarget;
+    let public = SigningTarget::PublicEvent;
+    assert_eq!(public.recipient(), None);
+    assert_eq!(public.key(), [0]);
+    assert_eq!(SigningTarget::from_key(&[0]).unwrap(), public);
+    let key = radroots_domain::PublicKey::from_hex(
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    )
+    .unwrap();
+    let private = SigningTarget::BusinessSeal(key);
+    assert_eq!(private.recipient(), Some(key));
+    assert_eq!(private.key(), key.as_bytes());
+    assert_eq!(SigningTarget::from_key(key.as_bytes()).unwrap(), private);
+    for invalid in [&[][..], &[1][..], &[0, 0][..], &[1; 31][..], &[1; 33][..]] {
+        assert!(SigningTarget::from_key(invalid).is_err());
+    }
+}

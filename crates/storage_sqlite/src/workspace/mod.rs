@@ -140,7 +140,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
         &'a self,
         input: AttachmentInput,
         proof: &'a AttachmentProof,
-        evidence: &'a radroots_storage::command::SealEvidence,
+        evidence: &'a radroots_storage::command::ArtifactEvidence,
     ) -> BoxFuture<
         'a,
         Result<
@@ -282,7 +282,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
         &'a self,
         input: AttachmentInput,
         proof: &'a AttachmentProof,
-        evidence: &'a radroots_storage::command::SealEvidence,
+        evidence: &'a radroots_storage::command::ArtifactEvidence,
     ) -> BoxFuture<
         'a,
         Result<
@@ -299,7 +299,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
     ) -> BoxFuture<
         '_,
         Result<
-            Option<radroots_storage::command::CapturedSeal>,
+            Option<radroots_storage::command::CapturedArtifact>,
             radroots_storage::command::OperationError,
         >,
     > {

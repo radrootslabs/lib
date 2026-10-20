@@ -239,7 +239,7 @@ impl Journal<'_> {
                 .fetch_one(&mut *self.connection)
                 .await
                 .map_err(|_| OperationError::RecoveryRequired)?;
-            if version != 8 {
+            if !matches!(version, 8 | 9) {
                 return Err(OperationError::UnsupportedOperation);
             }
         }

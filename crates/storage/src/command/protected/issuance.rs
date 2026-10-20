@@ -1,12 +1,13 @@
 //! Opaque original claim and obtained-evidence metadata for protecting hosts.
 //! Decoding supplies no current access, actual commit or dispatch permission.
 use super::plan::PART_BYTES;
-use crate::command::{BoundSigningPlan, OperationError, SealEvidence, SigningAttempt};
+use crate::command::{ArtifactEvidence, BoundSigningPlan, OperationError, SigningAttempt};
 use core::num::NonZeroU64;
 use radroots_domain::{
     CommandDigest, EnvelopeEventId, GrantId, OperationId, PublicKey, SigningAttemptId,
     TransactionId, UnixSeconds, WorkspaceId,
 };
+use radroots_protocol::plan::SigningTarget;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
@@ -18,7 +19,14 @@ struct ClaimWire {
     operation_id: OperationId,
     command_digest: CommandDigest,
     plan_digest: [u8; 32],
-    recipient: PublicKey,
+    #[serde(deserialize_with = "required_recipient")]
+    recipient: Option<PublicKey>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_role"
+    )]
+    role: Option<u8>,
     attempt_id: SigningAttemptId,
     transaction_id: TransactionId,
     claimed_at: UnixSeconds,
@@ -35,12 +43,13 @@ impl ClaimWire {
         let prepared = plan.prepared();
         let identity = prepared.identity();
         Ok(Self {
-            version: 1,
+            version: version(attempt.target()),
             workspace: identity.workspace_id(),
             operation_id: identity.operation_id(),
             command_digest: identity.command_digest(),
             plan_digest: *plan.plan().digest(),
-            recipient: attempt.seal()?.recipient(),
+            recipient: attempt.target().recipient(),
+            role: role(attempt.target()),
             attempt_id: attempt.attempt_id(),
             transaction_id: attempt.transaction_id(),
             claimed_at: attempt.claimed_at(),
@@ -49,7 +58,7 @@ impl ClaimWire {
             preparation_transaction: prepared.transaction_id(),
             plan_transaction: plan.transaction_id(),
             grant_id: prepared.request().binding().input().grant_id(),
-            expected_event: EnvelopeEventId::from_bytes(attempt.seal()?.event_id()),
+            expected_event: EnvelopeEventId::from_bytes(attempt.artifact()?.event_id()),
         })
     }
 }
@@ -66,7 +75,7 @@ impl ClaimRecord {
     pub fn decode(
         raw: &[u8],
         bound: BoundSigningPlan,
-        recipient: PublicKey,
+        target: impl Into<SigningTarget>,
     ) -> Result<SigningAttempt, OperationError> {
         if raw.len() > PART_BYTES {
             return Err(OperationError::RecoveryRequired);
@@ -75,7 +84,7 @@ impl ClaimRecord {
             serde_json::from_slice(raw).map_err(|_| OperationError::RecoveryRequired)?;
         let attempt = SigningAttempt::from_committed_store(
             bound,
-            recipient,
+            target,
             wire.attempt_id,
             wire.transaction_id,
             wire.claimed_at,
@@ -94,7 +103,14 @@ struct EvidenceWire {
     operation_id: OperationId,
     command_digest: CommandDigest,
     plan_digest: [u8; 32],
-    recipient: PublicKey,
+    #[serde(deserialize_with = "required_recipient")]
+    recipient: Option<PublicKey>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_role"
+    )]
+    role: Option<u8>,
     attempt_id: SigningAttemptId,
     claim_transaction: TransactionId,
     intent_digest: [u8; 32],
@@ -111,19 +127,20 @@ pub struct EvidenceManifest(EvidenceWire);
 impl EvidenceManifest {
     pub fn capture(
         attempt: &SigningAttempt,
-        evidence: &SealEvidence,
+        evidence: &ArtifactEvidence,
         transaction: TransactionId,
     ) -> Result<Self, OperationError> {
         if !evidence.matches_attempt(attempt) {
             return Err(OperationError::InvalidEvidence);
         }
         let result = Self(EvidenceWire {
-            version: 1,
+            version: version(evidence.target()),
             workspace: evidence.workspace_id(),
             operation_id: evidence.operation_id(),
             command_digest: evidence.command_digest(),
             plan_digest: *evidence.plan_digest(),
-            recipient: evidence.recipient(),
+            recipient: evidence.target().recipient(),
+            role: role(evidence.target()),
             attempt_id: evidence.attempt_id(),
             claim_transaction: attempt.transaction_id(),
             intent_digest: *evidence.intent().digest(),
@@ -153,16 +170,17 @@ impl EvidenceManifest {
         let w = &self.0;
         let bound = attempt.bound_plan();
         let identity = bound.prepared().identity();
-        if w.version != 1
+        if w.version != version(attempt.target())
+            || w.role != role(attempt.target())
             || w.workspace != identity.workspace_id()
             || w.operation_id != identity.operation_id()
             || w.command_digest != identity.command_digest()
             || &w.plan_digest != bound.plan().digest()
-            || w.recipient != attempt.seal()?.recipient()
+            || w.recipient != attempt.target().recipient()
             || w.attempt_id != attempt.attempt_id()
             || w.claim_transaction != attempt.transaction_id()
             || &w.intent_digest != attempt.binding().digest()
-            || w.event_id.as_bytes() != &attempt.seal()?.event_id()
+            || w.event_id.as_bytes() != &attempt.artifact()?.event_id()
             || !(1..=65536).contains(&w.byte_count)
             || !(1..=4).contains(&w.part_count)
             || w.byte_count.div_ceil(PART_BYTES) != w.part_count
@@ -195,13 +213,13 @@ impl EvidenceManifest {
         &self,
         attempt: &SigningAttempt,
         raw: &str,
-    ) -> Result<SealEvidence, OperationError> {
+    ) -> Result<ArtifactEvidence, OperationError> {
         self.validate(attempt)?;
         if raw.len() != self.byte_count() {
             return Err(OperationError::RecoveryRequired);
         }
         let evidence =
-            SealEvidence::verify(attempt, raw, self.0.observed_at.and_then(NonZeroU64::new))
+            ArtifactEvidence::verify(attempt, raw, self.0.observed_at.and_then(NonZeroU64::new))
                 .map_err(|_| OperationError::RecoveryRequired)?;
         if evidence.digest() != self.evidence_digest() {
             return Err(OperationError::RecoveryRequired);
@@ -216,4 +234,27 @@ fn encode(value: &impl Serialize) -> Result<Zeroizing<Vec<u8>>, OperationError> 
         return Err(OperationError::RecoveryRequired);
     }
     Ok(raw)
+}
+
+// Private v1 bytes remain unchanged. Public v2 explicitly carries role 0 and a
+// required null recipient; omitted/null roles never masquerade as public data.
+fn version(target: SigningTarget) -> u8 {
+    match target {
+        SigningTarget::PublicEvent => 2,
+        SigningTarget::BusinessSeal(_) => 1,
+    }
+}
+fn role(target: SigningTarget) -> Option<u8> {
+    match target {
+        SigningTarget::PublicEvent => Some(0),
+        SigningTarget::BusinessSeal(_) => None,
+    }
+}
+fn required_recipient<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<PublicKey>, D::Error> {
+    Option::<PublicKey>::deserialize(d)
+}
+fn present_role<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<u8>, D::Error> {
+    u8::deserialize(d).map(Some)
 }

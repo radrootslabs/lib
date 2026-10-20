@@ -2,7 +2,7 @@
 use super::{Database, OpenMode, State, WorkspaceError, namespace, stored};
 use radroots_domain::OperationId;
 use radroots_storage::command::{
-    DeliveryObservation, DeliveryObservationKind, PublicationWork, SealEvidence,
+    ArtifactEvidence, DeliveryObservation, DeliveryObservationKind, PublicationWork,
 };
 use radroots_storage::workspace::{
     AttachmentInput, AttachmentProof, local_outbox::LocalOutboxGrant,
@@ -23,7 +23,7 @@ pub(super) enum CaptureIdentity {
     },
 }
 impl CaptureIdentity {
-    pub fn seal(value: &SealEvidence) -> Self {
+    pub fn artifact(value: &ArtifactEvidence) -> Self {
         Self::Seal {
             operation: value.operation_id(),
             digest: *value.digest(),

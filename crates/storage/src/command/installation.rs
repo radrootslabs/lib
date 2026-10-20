@@ -152,6 +152,7 @@ impl fmt::Debug for ChatInstallation {
 /// a signed outer envelope nor a transport acknowledgement.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct PublicationWork {
+    recipient: radroots_domain::PublicKey,
     installation: TransactionId,
     plan: [u8; 32],
     evidence: EvidenceReceipt,
@@ -181,6 +182,7 @@ impl PublicationWork {
             return Err(OperationError::RecoveryRequired);
         }
         Ok(Self {
+            recipient: evidence.recipient()?,
             installation: installation.transaction_id(),
             plan: *bound.plan().digest(),
             evidence,
@@ -195,6 +197,10 @@ impl PublicationWork {
     /// Original immutable plan holding the exact selected routes.
     pub const fn plan_digest(&self) -> &[u8; 32] {
         &self.plan
+    }
+    /// Actual private participant validated against the retained plan.
+    pub const fn recipient(&self) -> radroots_domain::PublicKey {
+        self.recipient
     }
     /// Exact recipient, seal and protected capture reference.
     pub const fn evidence(&self) -> EvidenceReceipt {
@@ -241,7 +247,7 @@ fn check_evidence(
         .chat_plan()?
         .seals()
         .iter()
-        .find(|seal| seal.recipient() == evidence.recipient())
+        .find(|seal| Some(seal.recipient()) == evidence.target().recipient())
         .ok_or(OperationError::RecoveryRequired)?;
     if evidence.workspace_id() != identity.workspace_id()
         || evidence.operation_id() != identity.operation_id()

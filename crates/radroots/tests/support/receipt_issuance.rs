@@ -12,7 +12,7 @@ use radroots_signing::{
     request::CancellationSignal,
 };
 use radroots_storage::command::{
-    ClaimAttemptOutcome, ClaimAttemptRequest, SealEvidence, SigningAttempt,
+    ArtifactEvidence, ClaimAttemptOutcome, ClaimAttemptRequest, SigningAttempt,
 };
 thread_local! {static CALLS:Cell<usize>=const {Cell::new(0)};static MISSING:Cell<bool>=const {Cell::new(false)};}
 fn signer_clock() -> Result<u64, radroots_signing::Error> {
@@ -90,7 +90,7 @@ pub(super) async fn prepare(
     let _ = fixture;
     (prepared, digest, recipients)
 }
-pub(super) async fn obtain(attempt: &SigningAttempt, missing: bool) -> SealEvidence {
+pub(super) async fn obtain(attempt: &SigningAttempt, missing: bool) -> ArtifactEvidence {
     CALLS.with(|calls| calls.set(0));
     MISSING.with(|value| value.set(missing));
     // Published synthetic key in a qualified local provider, isolated from all host custody.
@@ -123,6 +123,6 @@ pub(super) async fn obtain(attempt: &SigningAttempt, missing: bool) -> SealEvide
     };
     assert_eq!(artifact.observed_at_unix_ms().is_none(), missing);
     artifact.with_json(|raw| {
-        SealEvidence::verify(attempt, raw, artifact.observed_at_unix_ms()).unwrap()
+        ArtifactEvidence::verify(attempt, raw, artifact.observed_at_unix_ms()).unwrap()
     })
 }

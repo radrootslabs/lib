@@ -85,7 +85,7 @@ impl Graph {
             let work = installed
                 .work
                 .iter()
-                .find(|work| work.evidence().recipient() == participant)
+                .find(|work| work.recipient() == participant)
                 .copied()
                 .ok_or(OperationError::RecoveryRequired)?;
             let commitment = work_commitment(

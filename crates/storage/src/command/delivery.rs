@@ -72,7 +72,7 @@ impl EnvelopeCandidate {
         raw: &str,
         wrapping_key: &[u8; 32],
     ) -> Result<Self, OperationError> {
-        let carrier = outer(raw, work.evidence().recipient())?;
+        let carrier = outer(raw, work.recipient())?;
         Ok(Self {
             work,
             event: EnvelopeEventId::from_bytes(*carrier.envelope().id().as_bytes()),
@@ -383,7 +383,7 @@ impl DeliveryAttempt {
         retained_at: UnixSeconds,
         ordinals: Vec<u8>,
     ) -> Result<Self, OperationError> {
-        let event = outer(raw, work.evidence().recipient())?;
+        let event = outer(raw, work.recipient())?;
         if event.envelope().id().as_bytes() != intent.event_id().as_bytes()
             || retained_at < work.queued_at()
             || event.envelope().created_at_u64() > retained_at.get()
@@ -439,7 +439,7 @@ impl DeliveryAttempt {
     /// unselected endpoints have no retained invocation. This data conversion
     /// grants no dispatch permission or automatic retry.
     pub fn transport_request(&self) -> Result<DeliveryRequest, OperationError> {
-        let event = outer(self.raw_json(), self.work.evidence().recipient())?;
+        let event = outer(self.raw_json(), self.work.recipient())?;
         DeliveryRequest::new(
             self.intent.request_id().as_str(),
             DeliveryPayload::new(event),

@@ -3,8 +3,8 @@ use super::{State, address, issuance::Claim, journal::Records};
 use crate::ReadSnapshot;
 use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, PublicKey, UnixSeconds};
 use radroots_storage::command::{
-    BoundSigningPlan, ClaimSnapshot, EvidenceReceipt, OperationError, OperationSnapshot,
-    RecipientSnapshot, RetainedOperation, SealEvidence, protected,
+    ArtifactEvidence, ArtifactSnapshot, BoundSigningPlan, ClaimSnapshot, EvidenceReceipt,
+    OperationError, OperationSnapshot, RetainedOperation, protected,
 };
 
 pub(super) async fn header(
@@ -52,8 +52,8 @@ pub(super) async fn header(
 
 pub(super) struct Graph {
     retained: Option<RetainedOperation>,
-    recipients: Vec<RecipientSnapshot>,
-    output: Option<SealEvidence>,
+    recipients: Vec<ArtifactSnapshot>,
+    output: Option<ArtifactEvidence>,
 }
 impl Graph {
     pub(super) async fn read_for_output(
@@ -81,7 +81,7 @@ impl Graph {
                         EnvelopeEventId::from_bytes(bound.chat_plan()?.seals()[index].event_id());
                     match state.claim(view, bound, recipient, index as u8).await? {
                         Claim::Absent(returned, _) => {
-                            recipients.push(RecipientSnapshot::from_store_report(
+                            recipients.push(ArtifactSnapshot::from_store_report(
                                 recipient,
                                 Some(expected),
                                 None,
@@ -98,7 +98,7 @@ impl Graph {
                             if Some(recipient) == selected {
                                 output = obtained.map(|(value, _)| value);
                             }
-                            recipients.push(RecipientSnapshot::from_store_report(
+                            recipients.push(ArtifactSnapshot::from_store_report(
                                 recipient,
                                 Some(expected),
                                 Some(claim),
@@ -116,7 +116,7 @@ impl Graph {
                 keys.sort_unstable();
                 keys.dedup();
                 for recipient in keys {
-                    recipients.push(RecipientSnapshot::from_store_report(
+                    recipients.push(ArtifactSnapshot::from_store_report(
                         recipient, None, None, None,
                     ));
                 }
@@ -130,7 +130,7 @@ impl Graph {
             output,
         })
     }
-    pub(super) fn take_output(&mut self) -> Option<SealEvidence> {
+    pub(super) fn take_output(&mut self) -> Option<ArtifactEvidence> {
         self.output.take()
     }
     pub(super) fn bound(&self) -> Option<&BoundSigningPlan> {
@@ -141,7 +141,7 @@ impl Graph {
     pub(super) fn receipt(&self, recipient: PublicKey) -> Result<EvidenceReceipt, OperationError> {
         self.recipients
             .iter()
-            .find(|value| value.recipient() == recipient)
+            .find(|value| value.target().recipient() == Some(recipient))
             .and_then(|value| value.obtained())
             .ok_or(OperationError::RecoveryRequired)
     }

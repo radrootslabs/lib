@@ -71,7 +71,7 @@ mod cases {
     #[tokio::test]
     async fn original_route_authentication_refuses_invalid_sources_and_unadvertised_selection() {
         let mut data = delivery_data().await;
-        let recipient = data.report.work().evidence().recipient();
+        let recipient = data.report.work().recipient();
         let selected = [String::from("wss://route.example/")];
         assert!(
             allowed_routes(&data.bound().await, recipient)
@@ -160,7 +160,7 @@ mod cases {
     #[tokio::test]
     async fn route_scope_budget_and_complete_fact_count_fences_are_independent() {
         let mut data = delivery_data().await;
-        let recipient = data.report.work().evidence().recipient();
+        let recipient = data.report.work().recipient();
         let mut graph = Graph {
             attempts: vec![],
             facts: vec![],
@@ -342,7 +342,7 @@ mod cases {
         for index in 0..2305u32 {
             let mut target = [0; 32];
             target[..4].copy_from_slice(&index.to_be_bytes());
-            sqlx::query("INSERT INTO chat_delivery_observations(workspace,operation_id,recipient,request_key,target_key,kind,protected) VALUES(?,?,?,?,?,1,x'01')").bind(e.workspace_id().as_bytes().as_slice()).bind(e.operation_id().as_bytes().as_slice()).bind(e.recipient().as_bytes().as_slice()).bind(request.as_slice()).bind(target.as_slice()).execute(&mut data.database).await.unwrap();
+            sqlx::query("INSERT INTO chat_delivery_observations(workspace,operation_id,recipient,request_key,target_key,kind,protected) VALUES(?,?,?,?,?,1,x'01')").bind(e.workspace_id().as_bytes().as_slice()).bind(e.operation_id().as_bytes().as_slice()).bind(e.recipient().unwrap().as_bytes().as_slice()).bind(request.as_slice()).bind(target.as_slice()).execute(&mut data.database).await.unwrap();
         }
         let error = observation::Observations::read(
             &mut data.database,

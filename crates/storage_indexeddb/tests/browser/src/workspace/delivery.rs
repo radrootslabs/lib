@@ -157,7 +157,7 @@ impl WorkspaceFixture {
         let work = snapshot
             .publications()
             .iter()
-            .find(|work| work.evidence().recipient() == recipient)
+            .find(|work| work.recipient() == recipient)
             .copied()
             .ok_or(JsValue::from_str("missing_work"))?;
         let retained = self

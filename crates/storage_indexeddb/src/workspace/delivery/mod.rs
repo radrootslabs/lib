@@ -13,8 +13,8 @@ use radroots_secrets::context::{
     EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
 };
 use radroots_storage::command::{
-    BoundSigningPlan, DeliveryAttempt, DeliveryIntent, OperationError, OperationSnapshot,
-    SealEvidence, SignedDmRelaySource,
+    ArtifactEvidence, BoundSigningPlan, DeliveryAttempt, DeliveryIntent, OperationError,
+    OperationSnapshot, SignedDmRelaySource,
 };
 use sha2::{Digest, Sha256};
 
@@ -98,7 +98,7 @@ pub(super) struct Facts {
     pub snapshot: Option<OperationSnapshot>,
     pub selected: Option<DeliveryAttempt>,
     selected_slot: Option<Slot>,
-    pub original: Option<SealEvidence>,
+    pub original: Option<ArtifactEvidence>,
     pub slots: [u16; 2],
 }
 impl State {

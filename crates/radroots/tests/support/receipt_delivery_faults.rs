@@ -283,7 +283,7 @@ async fn a_fresh_delivery_deadline_after_first_issuance_expiry_reuses_original_b
         original.intent().deadline_unix_ms()
     );
     let mut database = ready.fixture.database().await;
-    let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM signing_attempts),(SELECT count(*) FROM seal_evidence),(SELECT count(*) FROM chat_messages)").fetch_one(&mut database).await.unwrap();
+    let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM signing_attempts),(SELECT count(*) FROM artifact_evidence),(SELECT count(*) FROM chat_messages)").fetch_one(&mut database).await.unwrap();
     assert_eq!(counts, (1, 1, 1));
     database.close().await.unwrap();
     ready.store.close().await.unwrap();

@@ -5,12 +5,12 @@ use super::{
 };
 use radroots_domain::{CommandDigest, OperationId, PublicKey};
 use radroots_storage::command::{
-    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, CapturedSeal, CapturedSigningPlan,
-    ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt, DeliveryAttempt,
+    AdmissionOutcome, AdmissionRequest, ArtifactEvidence, BoundSigningPlan, CapturedArtifact,
+    CapturedSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt, DeliveryAttempt,
     DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryObservation,
     DeliveryObservationOutcome, EnvelopeCandidate, EvidenceCaptureOutcome, InstallationOutcome,
     InstallationRequest, OperationError, OperationSnapshot, PlanBindingOutcome, PreparedOperation,
-    SealEvidence, SigningAttempt,
+    SigningAttempt,
 };
 use radroots_transport::sink::DeliveryRequestId;
 use sqlx::{
@@ -91,19 +91,19 @@ enum Job {
     Capture(
         Box<AttachmentInput>,
         AttachmentProof,
-        Box<SealEvidence>,
+        Box<ArtifactEvidence>,
         Reply<EvidenceCaptureOutcome, OperationError>,
     ),
     RecoverCapture(
         Box<AttachmentInput>,
         AttachmentProof,
-        Box<SealEvidence>,
+        Box<ArtifactEvidence>,
         Reply<EvidenceCaptureOutcome, OperationError>,
     ),
     Captured(
         Box<ClaimAttemptRequest>,
         AttachmentProof,
-        Reply<Option<CapturedSeal>, OperationError>,
+        Reply<Option<CapturedArtifact>, OperationError>,
     ),
     BindPlan(
         Box<WorkspaceBinding>,
@@ -758,7 +758,7 @@ impl Handle {
         &self,
         input: AttachmentInput,
         proof: &AttachmentProof,
-        evidence: &SealEvidence,
+        evidence: &ArtifactEvidence,
     ) -> Result<EvidenceCaptureOutcome, OperationError> {
         let anchor = CommitAttempt::new(
             evidence.workspace_id(),
@@ -783,7 +783,7 @@ impl Handle {
         &self,
         input: AttachmentInput,
         proof: &AttachmentProof,
-        evidence: &SealEvidence,
+        evidence: &ArtifactEvidence,
     ) -> Result<EvidenceCaptureOutcome, OperationError> {
         let anchor = CommitAttempt::new(
             evidence.workspace_id(),
@@ -807,7 +807,7 @@ impl Handle {
         &self,
         request: ClaimAttemptRequest,
         proof: AttachmentProof,
-    ) -> Result<Option<CapturedSeal>, OperationError> {
+    ) -> Result<Option<CapturedArtifact>, OperationError> {
         let (reply, result) = oneshot::channel();
         self.send(Job::Captured(Box::new(request), proof, reply))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
@@ -1013,7 +1013,7 @@ pub(super) async fn initialize(
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
         }
-        sqlx::query("PRAGMA user_version=8")
+        sqlx::query("PRAGMA user_version=9")
             .execute(&mut *transaction)
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -1035,11 +1035,63 @@ pub(super) async fn initialize(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if !matches!(version, 7 | 8) {
+    if !matches!(version, 7..=9) {
         return Err(WorkspaceError::RecoveryRequired);
     }
-    let catalog_matches: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=20 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='table' AND name='signing_attempts' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_transaction_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence_parts' AND tbl_name='seal_evidence_parts' AND sql=? THEN 1 WHEN type='index' AND name='seal_evidence_transaction_identity' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='chat_messages' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_operation_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_transaction_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_thread' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='table' AND name='chat_publication_work' AND tbl_name='chat_publication_work' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_attempts' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_parts' AND tbl_name='chat_delivery_parts' AND sql=? THEN 1 WHEN type='index' AND name='chat_delivery_transaction_identity' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_observations' AND tbl_name='chat_delivery_observations' AND sql=? THEN 1 ELSE 0 END)=20 THEN 1 ELSE 0 END FROM sqlite_schema")
-        .bind(TABLE).bind(if version==7 {operation::TABLE_V7} else {operation::TABLE}).bind(plan::TABLE).bind(plan::PARTS).bind(attempt::TABLE).bind(attempt::ID_INDEX).bind(attempt::TX_INDEX).bind(evidence::TABLE).bind(evidence::PARTS).bind(evidence::TX_INDEX).bind(operation::INDEX).bind(installation::TABLE).bind(installation::OP_INDEX).bind(installation::TX_INDEX).bind(installation::THREAD_INDEX).bind(installation::WORK).bind(delivery::TABLE).bind(delivery::PARTS).bind(delivery::TX_INDEX).bind(delivery::OBSERVATIONS).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let catalog_sql = "SELECT CASE WHEN count(*)=20 AND sum(CASE WHEN type='table' AND name='workspace_grant' AND tbl_name='workspace_grant' AND sql=? THEN 1 WHEN type='table' AND name='operations' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='signing_plans' AND tbl_name='signing_plans' AND sql=? THEN 1 WHEN type='table' AND name='signing_plan_parts' AND tbl_name='signing_plan_parts' AND sql=? THEN 1 WHEN type='table' AND name='signing_attempts' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='index' AND name='signing_attempt_transaction_identity' AND tbl_name='signing_attempts' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='table' AND name='seal_evidence_parts' AND tbl_name='seal_evidence_parts' AND sql=? THEN 1 WHEN type='index' AND name='seal_evidence_transaction_identity' AND tbl_name='seal_evidence' AND sql=? THEN 1 WHEN type='index' AND name='operation_transaction_identity' AND tbl_name='operations' AND sql=? THEN 1 WHEN type='table' AND name='chat_messages' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_operation_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_transaction_identity' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='index' AND name='chat_message_thread' AND tbl_name='chat_messages' AND sql=? THEN 1 WHEN type='table' AND name='chat_publication_work' AND tbl_name='chat_publication_work' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_attempts' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_parts' AND tbl_name='chat_delivery_parts' AND sql=? THEN 1 WHEN type='index' AND name='chat_delivery_transaction_identity' AND tbl_name='chat_delivery_attempts' AND sql=? THEN 1 WHEN type='table' AND name='chat_delivery_observations' AND tbl_name='chat_delivery_observations' AND sql=? THEN 1 ELSE 0 END)=20 THEN 1 ELSE 0 END FROM sqlite_schema";
+    let catalog_sql = if version == 9 {
+        catalog_sql.replace("seal_evidence", "artifact_evidence")
+    } else {
+        catalog_sql.to_owned()
+    };
+    let catalog_matches: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(catalog_sql))
+        .bind(TABLE)
+        .bind(if version == 7 {
+            operation::TABLE_V7
+        } else {
+            operation::TABLE
+        })
+        .bind(plan::TABLE)
+        .bind(plan::PARTS)
+        .bind(if version == 9 {
+            attempt::TABLE
+        } else {
+            attempt::TABLE_V8
+        })
+        .bind(attempt::ID_INDEX)
+        .bind(attempt::TX_INDEX)
+        .bind(if version == 9 {
+            evidence::TABLE
+        } else {
+            evidence::TABLE_V8
+        })
+        .bind(if version == 9 {
+            evidence::PARTS
+        } else {
+            evidence::PARTS_V8
+        })
+        .bind(if version == 9 {
+            evidence::TX_INDEX
+        } else {
+            evidence::TX_INDEX_V8
+        })
+        .bind(operation::INDEX)
+        .bind(installation::TABLE)
+        .bind(installation::OP_INDEX)
+        .bind(installation::TX_INDEX)
+        .bind(installation::THREAD_INDEX)
+        .bind(if version == 9 {
+            installation::WORK
+        } else {
+            installation::WORK_V8
+        })
+        .bind(delivery::TABLE)
+        .bind(delivery::PARTS)
+        .bind(delivery::TX_INDEX)
+        .bind(delivery::OBSERVATIONS)
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
     if catalog_matches != 1 {
         return Err(WorkspaceError::RecoveryRequired);
     }

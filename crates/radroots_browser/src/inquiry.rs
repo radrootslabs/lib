@@ -149,7 +149,7 @@ impl InquiryIo for BrowserInquiry {
         raw_seal: &str,
     ) -> Result<EnvelopeCandidate, OperationError> {
         let now = NonZeroU64::new(self.now()?.get()).ok_or(OperationError::RecoveryRequired)?;
-        let recipient = work.evidence().recipient();
+        let recipient = work.recipient();
         let wrapped = wrap_retained_seal(raw_seal, recipient, now, &BrowserNonceSource)
             .map_err(|_| OperationError::InvalidEvidence)?;
         wrapped.with_wrapping_key(|key| {

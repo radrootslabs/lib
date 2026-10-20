@@ -13,8 +13,9 @@ use radroots_protocol::{
     plan::SigningReplay,
 };
 use radroots_storage::command::{
-    AdmissionOutcome, AdmissionRequest, BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest,
-    EvidenceCaptureOutcome, OperationJournal, PlanBindingOutcome, SealEvidence, SigningAttempt,
+    AdmissionOutcome, AdmissionRequest, ArtifactEvidence, BoundSigningPlan, ClaimAttemptOutcome,
+    ClaimAttemptRequest, EvidenceCaptureOutcome, OperationJournal, PlanBindingOutcome,
+    SigningAttempt,
 };
 use serde_json::{Value, json};
 use sqlx::{Connection, SqliteConnection};
@@ -22,7 +23,7 @@ struct Issued {
     fixture: CryptoFixture,
     selected: AttachmentInput,
     attempt: SigningAttempt,
-    evidence: SealEvidence,
+    evidence: ArtifactEvidence,
     proof: AttachmentProof,
     path: std::path::PathBuf,
 }
@@ -80,7 +81,7 @@ pub(in crate::workspace) async fn delivery_data() -> DeliveryData {
     let mut scalar = [0; 32];
     scalar[31] = 3;
     let keys = nostr::Keys::new(nostr::SecretKey::from_slice(&scalar).unwrap());
-    let recipient = nostr::PublicKey::from_slice(work.evidence().recipient().as_bytes()).unwrap();
+    let recipient = nostr::PublicKey::from_slice(work.recipient().as_bytes()).unwrap();
     let raw = nostr::UnsignedEvent {
         id: None,
         pubkey: keys.public_key(),
@@ -262,7 +263,7 @@ impl Issued {
         .sign_with_keys(&keys)
         .unwrap();
         signed.verify().unwrap();
-        let evidence = SealEvidence::verify(&attempt, &signed.as_json(), None).unwrap();
+        let evidence = ArtifactEvidence::verify(&attempt, &signed.as_json(), None).unwrap();
         assert!(evidence.raw_json().len() > 16384);
         assert!(matches!(
             store
@@ -423,7 +424,7 @@ async fn authenticated_attempt_headers_and_all_indexed_facts_are_checked_without
     for change in [
         "UPDATE signing_attempts SET workspace=zeroblob(32)",
         "UPDATE signing_attempts SET operation_id=zeroblob(32)",
-        "UPDATE signing_attempts SET recipient=zeroblob(32)",
+        "UPDATE signing_attempts SET artifact_key=zeroblob(32)",
         "UPDATE signing_attempts SET attempt_id=zeroblob(32)",
         "UPDATE signing_attempts SET transaction_id=zeroblob(32)",
         "UPDATE signing_attempts SET plan_digest=zeroblob(32)",
@@ -439,7 +440,7 @@ async fn authenticated_attempt_headers_and_all_indexed_facts_are_checked_without
             "{change}"
         );
         transaction.rollback().await.unwrap();
-        sqlx::query("UPDATE signing_attempts SET workspace=?,operation_id=?,recipient=?,attempt_id=?,transaction_id=?,plan_digest=?,intent_digest=?,protected=?").bind(identity.workspace_id().as_bytes().as_slice()).bind(identity.operation_id().as_bytes().as_slice()).bind(participant().as_bytes().as_slice()).bind(issued.attempt.attempt_id().as_bytes().as_slice()).bind(issued.attempt.transaction_id().as_bytes().as_slice()).bind(issued.attempt.bound_plan().plan().digest().as_slice()).bind(issued.attempt.binding().digest().as_slice()).bind(&original).execute(&mut database).await.unwrap();
+        sqlx::query("UPDATE signing_attempts SET workspace=?,operation_id=?,artifact_key=?,attempt_id=?,transaction_id=?,plan_digest=?,intent_digest=?,protected=?").bind(identity.workspace_id().as_bytes().as_slice()).bind(identity.operation_id().as_bytes().as_slice()).bind(participant().as_bytes().as_slice()).bind(issued.attempt.attempt_id().as_bytes().as_slice()).bind(issued.attempt.transaction_id().as_bytes().as_slice()).bind(issued.attempt.bound_plan().plan().digest().as_slice()).bind(issued.attempt.binding().digest().as_slice()).bind(&original).execute(&mut database).await.unwrap();
     }
     database.close().await.unwrap();
 }
@@ -449,7 +450,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
     let mut database = issued.database().await;
     let crypto = issued.fixture.crypto();
     let scope = attempt_store::scope(&issued.attempt).unwrap();
-    let original: Vec<u8> = sqlx::query_scalar("SELECT protected FROM seal_evidence")
+    let original: Vec<u8> = sqlx::query_scalar("SELECT protected FROM artifact_evidence")
         .fetch_one(&mut database)
         .await
         .unwrap();
@@ -490,7 +491,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
             )
             .await
             .unwrap();
-        sqlx::query("UPDATE seal_evidence SET protected=?")
+        sqlx::query("UPDATE artifact_evidence SET protected=?")
             .bind(&protected)
             .execute(&mut database)
             .await
@@ -500,7 +501,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
             .err()
             .expect("inconsistent authenticated evidence must fail");
         assert_eq!(error.code(), "recovery_required", "{field}");
-        let retained: Vec<u8> = sqlx::query_scalar("SELECT protected FROM seal_evidence")
+        let retained: Vec<u8> = sqlx::query_scalar("SELECT protected FROM artifact_evidence")
             .fetch_one(&mut database)
             .await
             .unwrap();
@@ -527,7 +528,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
             )
             .await
             .unwrap();
-        sqlx::query("UPDATE seal_evidence SET protected=?")
+        sqlx::query("UPDATE artifact_evidence SET protected=?")
             .bind(&protected)
             .execute(&mut database)
             .await
@@ -540,27 +541,27 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
                 .code(),
             "recovery_required"
         );
-        let retained: Vec<u8> = sqlx::query_scalar("SELECT protected FROM seal_evidence")
+        let retained: Vec<u8> = sqlx::query_scalar("SELECT protected FROM artifact_evidence")
             .fetch_one(&mut database)
             .await
             .unwrap();
         assert_eq!(retained, protected);
     }
-    sqlx::query("UPDATE seal_evidence SET protected=?")
+    sqlx::query("UPDATE artifact_evidence SET protected=?")
         .bind(&original)
         .execute(&mut database)
         .await
         .unwrap();
-    let header:(Vec<u8>,Vec<u8>,Vec<u8>,Vec<u8>,i64,i64)=sqlx::query_as("SELECT attempt_id,event_id,evidence_digest,transaction_id,part_count,byte_count FROM seal_evidence").fetch_one(&mut database).await.unwrap();
+    let header:(Vec<u8>,Vec<u8>,Vec<u8>,Vec<u8>,i64,i64)=sqlx::query_as("SELECT attempt_id,event_id,evidence_digest,transaction_id,part_count,byte_count FROM artifact_evidence").fetch_one(&mut database).await.unwrap();
     for change in [
-        "UPDATE seal_evidence SET attempt_id=zeroblob(32)",
-        "UPDATE seal_evidence SET event_id=zeroblob(32)",
-        "UPDATE seal_evidence SET evidence_digest=zeroblob(32)",
-        "UPDATE seal_evidence SET transaction_id=zeroblob(32)",
-        "UPDATE seal_evidence SET part_count=5",
-        "UPDATE seal_evidence SET byte_count=65537",
-        "UPDATE seal_evidence SET part_count=1",
-        "UPDATE seal_evidence SET protected=zeroblob(262145)",
+        "UPDATE artifact_evidence SET attempt_id=zeroblob(32)",
+        "UPDATE artifact_evidence SET event_id=zeroblob(32)",
+        "UPDATE artifact_evidence SET evidence_digest=zeroblob(32)",
+        "UPDATE artifact_evidence SET transaction_id=zeroblob(32)",
+        "UPDATE artifact_evidence SET part_count=5",
+        "UPDATE artifact_evidence SET byte_count=65537",
+        "UPDATE artifact_evidence SET part_count=1",
+        "UPDATE artifact_evidence SET protected=zeroblob(262145)",
     ] {
         sqlx::query(change).execute(&mut database).await.unwrap();
         assert_eq!(
@@ -572,7 +573,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
             "recovery_required",
             "{change}"
         );
-        sqlx::query("UPDATE seal_evidence SET attempt_id=?,event_id=?,evidence_digest=?,transaction_id=?,part_count=?,byte_count=?,protected=?").bind(&header.0).bind(&header.1).bind(&header.2).bind(&header.3).bind(header.4).bind(header.5).bind(&original).execute(&mut database).await.unwrap();
+        sqlx::query("UPDATE artifact_evidence SET attempt_id=?,event_id=?,evidence_digest=?,transaction_id=?,part_count=?,byte_count=?,protected=?").bind(&header.0).bind(&header.1).bind(&header.2).bind(&header.3).bind(header.4).bind(header.5).bind(&original).execute(&mut database).await.unwrap();
     }
     // A valid protected manifest matching a changed SQL digest still cannot
     // redefine the hash of the original authenticated raw signature bytes.
@@ -587,7 +588,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
         )
         .await
         .unwrap();
-    sqlx::query("UPDATE seal_evidence SET evidence_digest=?,protected=?")
+    sqlx::query("UPDATE artifact_evidence SET evidence_digest=?,protected=?")
         .bind([9u8; 32].as_slice())
         .bind(&protected)
         .execute(&mut database)
@@ -601,49 +602,49 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
             .code(),
         "recovery_required"
     );
-    sqlx::query("UPDATE seal_evidence SET evidence_digest=?,protected=?")
+    sqlx::query("UPDATE artifact_evidence SET evidence_digest=?,protected=?")
         .bind(&header.2)
         .bind(&original)
         .execute(&mut database)
         .await
         .unwrap();
     let parts: Vec<(i64, Vec<u8>)> =
-        sqlx::query_as("SELECT part,protected FROM seal_evidence_parts ORDER BY part")
+        sqlx::query_as("SELECT part,protected FROM artifact_evidence_parts ORDER BY part")
             .fetch_all(&mut database)
             .await
             .unwrap();
     assert!(parts.len() > 1);
     for fault in 0..5 {
-        sqlx::query("DELETE FROM seal_evidence_parts")
+        sqlx::query("DELETE FROM artifact_evidence_parts")
             .execute(&mut database)
             .await
             .unwrap();
         for (part, protected) in &parts {
-            sqlx::query("INSERT INTO seal_evidence_parts(workspace,operation_id,recipient,part,protected) VALUES(?,?,?,?,?)").bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.recipient.as_bytes().as_slice()).bind(part).bind(protected).execute(&mut database).await.unwrap();
+            sqlx::query("INSERT INTO artifact_evidence_parts(workspace,operation_id,artifact_key,part,protected) VALUES(?,?,?,?,?)").bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.target.key().as_slice()).bind(part).bind(protected).execute(&mut database).await.unwrap();
         }
         match fault {
             0 => {
-                sqlx::query("DELETE FROM seal_evidence_parts WHERE part=1")
+                sqlx::query("DELETE FROM artifact_evidence_parts WHERE part=1")
                     .execute(&mut database)
                     .await
                     .unwrap();
             }
             1 => {
-                sqlx::query("UPDATE seal_evidence_parts SET protected=zeroblob(0)")
+                sqlx::query("UPDATE artifact_evidence_parts SET protected=zeroblob(0)")
                     .execute(&mut database)
                     .await
                     .unwrap();
             }
             2 => {
                 sqlx::query(
-                    "UPDATE seal_evidence_parts SET protected=zeroblob(1048577) WHERE part=1",
+                    "UPDATE artifact_evidence_parts SET protected=zeroblob(1048577) WHERE part=1",
                 )
                 .execute(&mut database)
                 .await
                 .unwrap();
             }
             3 => {
-                sqlx::query("UPDATE seal_evidence_parts SET part=0 WHERE part=1")
+                sqlx::query("UPDATE artifact_evidence_parts SET part=0 WHERE part=1")
                     .execute(&mut database)
                     .await
                     .unwrap();
@@ -653,7 +654,7 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
                     .seal_issuance(scope, IssuancePayload::Evidence, 1, &[0])
                     .await
                     .unwrap();
-                sqlx::query("UPDATE seal_evidence_parts SET protected=? WHERE part=1")
+                sqlx::query("UPDATE artifact_evidence_parts SET protected=? WHERE part=1")
                     .bind(protected)
                     .execute(&mut database)
                     .await
@@ -671,12 +672,12 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
             "part fault {fault}"
         );
     }
-    sqlx::query("DELETE FROM seal_evidence_parts")
+    sqlx::query("DELETE FROM artifact_evidence_parts")
         .execute(&mut database)
         .await
         .unwrap();
     for (part, protected) in &parts {
-        sqlx::query("INSERT INTO seal_evidence_parts(workspace,operation_id,recipient,part,protected) VALUES(?,?,?,?,?)").bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.recipient.as_bytes().as_slice()).bind(part).bind(protected).execute(&mut database).await.unwrap();
+        sqlx::query("INSERT INTO artifact_evidence_parts(workspace,operation_id,artifact_key,part,protected) VALUES(?,?,?,?,?)").bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.target.key().as_slice()).bind(part).bind(protected).execute(&mut database).await.unwrap();
     }
     let (_, protected) = evidence_store::read(&mut database, &issued.attempt, &crypto)
         .await
@@ -690,25 +691,27 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
     for fault in 0..4 {
         match fault {
             0 => {
-                sqlx::query("UPDATE seal_evidence SET transaction_id=zeroblob(32)")
+                sqlx::query("UPDATE artifact_evidence SET transaction_id=zeroblob(32)")
                     .execute(&mut database)
                     .await
                     .unwrap();
             }
             1 => {
-                sqlx::query("UPDATE seal_evidence_parts SET protected=zeroblob(1) WHERE part=1")
-                    .execute(&mut database)
-                    .await
-                    .unwrap();
+                sqlx::query(
+                    "UPDATE artifact_evidence_parts SET protected=zeroblob(1) WHERE part=1",
+                )
+                .execute(&mut database)
+                .await
+                .unwrap();
             }
             2 => {
-                sqlx::query("DELETE FROM seal_evidence_parts WHERE part=1")
+                sqlx::query("DELETE FROM artifact_evidence_parts WHERE part=1")
                     .execute(&mut database)
                     .await
                     .unwrap();
             }
             3 => {
-                sqlx::query("DELETE FROM seal_evidence")
+                sqlx::query("DELETE FROM artifact_evidence")
                     .execute(&mut database)
                     .await
                     .unwrap();
@@ -721,21 +724,21 @@ async fn authenticated_evidence_manifests_parts_and_exact_original_observations_
                 .is_err()
         );
         if fault == 0 {
-            sqlx::query("UPDATE seal_evidence SET transaction_id=?")
+            sqlx::query("UPDATE artifact_evidence SET transaction_id=?")
                 .bind(&header.3)
                 .execute(&mut database)
                 .await
                 .unwrap();
         }
         if fault == 1 {
-            sqlx::query("UPDATE seal_evidence_parts SET protected=? WHERE part=1")
+            sqlx::query("UPDATE artifact_evidence_parts SET protected=? WHERE part=1")
                 .bind(&parts[0].1)
                 .execute(&mut database)
                 .await
                 .unwrap();
         }
         if fault == 2 {
-            sqlx::query("INSERT INTO seal_evidence_parts(workspace,operation_id,recipient,part,protected) VALUES(?,?,?,1,?)").bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.recipient.as_bytes().as_slice()).bind(&parts[0].1).execute(&mut database).await.unwrap();
+            sqlx::query("INSERT INTO artifact_evidence_parts(workspace,operation_id,artifact_key,part,protected) VALUES(?,?,?,1,?)").bind(scope.workspace.as_bytes().as_slice()).bind(scope.operation.as_bytes().as_slice()).bind(scope.target.key().as_slice()).bind(&parts[0].1).execute(&mut database).await.unwrap();
         }
     }
     assert!(
@@ -781,7 +784,7 @@ async fn actual_capture_turn_refuses_uncertainty_foreign_scope_and_fabricated_cl
         UnixSeconds::new(100).unwrap(),
     )
     .unwrap();
-    let fabricated = SealEvidence::verify(&fake, issued.evidence.raw_json(), None).unwrap();
+    let fabricated = ArtifactEvidence::verify(&fake, issued.evidence.raw_json(), None).unwrap();
     let mut uncertain = true;
     let clock = FixedClock(0); // Any accidental clock consultation must fail.
     let mut journal = Journal {
@@ -913,8 +916,8 @@ async fn installed_descendant_case(mode: u8) {
     ));
     let mut database = issued.database().await;
     for statement in [
-        "DELETE FROM seal_evidence_parts",
-        "DELETE FROM seal_evidence",
+        "DELETE FROM artifact_evidence_parts",
+        "DELETE FROM artifact_evidence",
         "DELETE FROM signing_attempts",
     ] {
         if mode == 3 && statement == "DELETE FROM signing_attempts" {

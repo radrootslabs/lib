@@ -4,7 +4,7 @@ use radroots_execution::{
     BusinessInstallation, Delivery, Issuance, OperationReceipt, RecoveryRequirement,
     WaitTermination,
 };
-use radroots_storage::command::{OperationSnapshot, RecipientSnapshot, RetainedOperation};
+use radroots_storage::command::{ArtifactSnapshot, OperationSnapshot, RetainedOperation};
 
 #[tokio::test]
 async fn structural_reports_reject_incomplete_recipient_sets_and_cross_operation_evidence() {
@@ -62,9 +62,9 @@ async fn structural_reports_reject_incomplete_recipient_sets_and_cross_operation
         .await
         .unwrap()
         .unwrap();
-    let first = original.recipients()[0];
-    let second = original.recipients()[1];
-    let foreign = other.recipients()[0];
+    let first = original.artifacts()[0];
+    let second = original.artifacts()[1];
+    let foreign = other.artifacts()[0];
     let cases = [
         (vec![], 100),
         (vec![first], 100),
@@ -74,8 +74,8 @@ async fn structural_reports_reject_incomplete_recipient_sets_and_cross_operation
         (vec![first, second], 0),
         (
             vec![
-                RecipientSnapshot::from_store_report(
-                    first.recipient(),
+                ArtifactSnapshot::from_store_report(
+                    first.recipient().unwrap(),
                     None,
                     first.claim(),
                     first.obtained(),
@@ -86,8 +86,8 @@ async fn structural_reports_reject_incomplete_recipient_sets_and_cross_operation
         ),
         (
             vec![
-                RecipientSnapshot::from_store_report(
-                    first.recipient(),
+                ArtifactSnapshot::from_store_report(
+                    first.recipient().unwrap(),
                     first.expected_event(),
                     None,
                     first.obtained(),
@@ -98,8 +98,8 @@ async fn structural_reports_reject_incomplete_recipient_sets_and_cross_operation
         ),
         (
             vec![
-                RecipientSnapshot::from_store_report(
-                    first.recipient(),
+                ArtifactSnapshot::from_store_report(
+                    first.recipient().unwrap(),
                     first.expected_event(),
                     foreign.claim(),
                     foreign.obtained(),
@@ -110,8 +110,8 @@ async fn structural_reports_reject_incomplete_recipient_sets_and_cross_operation
         ),
         (
             vec![
-                RecipientSnapshot::from_store_report(
-                    first.recipient(),
+                ArtifactSnapshot::from_store_report(
+                    first.recipient().unwrap(),
                     first.expected_event(),
                     first.claim(),
                     foreign.obtained(),
@@ -154,7 +154,7 @@ async fn structural_reports_reject_incomplete_recipient_sets_and_cross_operation
     assert!(matches!(
         OperationSnapshot::from_store_report(
             RetainedOperation::Prepared(report),
-            original.recipients().to_vec(),
+            original.artifacts().to_vec(),
             UnixSeconds::new(100).unwrap()
         ),
         Err(OperationError::RecoveryRequired)
@@ -352,7 +352,7 @@ async fn full_receipts_keep_obtained_and_unknown_recipients_separate_and_bind_or
     assert_eq!(original.obtained_digest(), Some(*first_bytes.digest()));
     assert_eq!(
         original.capture_transaction_id(),
-        snapshot.recipients()[0]
+        snapshot.artifacts()[0]
             .obtained()
             .map(|value| value.transaction_id())
     );
@@ -453,10 +453,10 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
     assert_eq!(receipt.authority_checkpoint(), binding.input().checkpoint());
     let initial_checkpoint = receipt.operation_checkpoint();
     assert_eq!(snapshot.message_id(), None);
-    assert_eq!(snapshot.recipients().len(), 2);
+    assert_eq!(snapshot.artifacts().len(), 2);
     assert!(
         snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .all(|value| value.expected_event().is_none()
                 && value.claim().is_none()
@@ -486,12 +486,12 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
     );
     assert!(
         snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .all(|value| value.expected_event().is_some() && value.claim().is_none())
     );
-    let first = snapshot.recipients()[0].recipient();
-    let second = snapshot.recipients()[1].recipient();
+    let first = snapshot.artifacts()[0].recipient().unwrap();
+    let second = snapshot.artifacts()[1].recipient().unwrap();
     let attempt = claim(
         store
             .claim_attempt(
@@ -507,10 +507,10 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
         .unwrap()
         .unwrap();
     assert_eq!(
-        snapshot.recipients()[0].claim().unwrap().attempt_id(),
+        snapshot.artifacts()[0].claim().unwrap().attempt_id(),
         attempt.attempt_id()
     );
-    assert!(snapshot.recipients()[0].obtained().is_none());
+    assert!(snapshot.artifacts()[0].obtained().is_none());
     let receipt = OperationReceipt::from_snapshot(&snapshot);
     assert_eq!(receipt.issuance(), Issuance::Unknown);
     assert_eq!(receipt.artifacts()[0].issuance(), Issuance::Unknown);
@@ -524,7 +524,7 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
             .recovery()
             .contains(&RecoveryRequirement::ReconcileIssuance)
     );
-    assert!(snapshot.recipients()[1].claim().is_none());
+    assert!(snapshot.artifacts()[1].claim().is_none());
     let evidence = obtain(&attempt, true).await;
     let receipt = match store
         .capture_evidence(input.clone(), &proof, &evidence)
@@ -539,7 +539,7 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(snapshot.recipients()[0].obtained(), Some(receipt));
+    assert_eq!(snapshot.artifacts()[0].obtained(), Some(receipt));
     let view = OperationReceipt::from_snapshot(&snapshot);
     assert_eq!(view.issuance(), Issuance::Pending);
     assert_eq!(view.artifacts()[0].issuance(), Issuance::Obtained);
@@ -570,14 +570,14 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
     assert_eq!(stopped.delivery(), Delivery::NotStarted);
     assert!(stopped.durable());
     assert_eq!(
-        snapshot.recipients()[0]
+        snapshot.artifacts()[0]
             .obtained()
             .unwrap()
             .observed_at_unix_ms(),
         None
     );
-    assert_eq!(snapshot.recipients()[1].recipient(), second);
-    assert!(snapshot.recipients()[1].claim().is_none());
+    assert_eq!(snapshot.artifacts()[1].recipient().unwrap(), second);
+    assert!(snapshot.artifacts()[1].claim().is_none());
     assert_eq!(format!("{snapshot:?}"), "OperationSnapshot(<redacted>)");
     store.close().await.unwrap();
     fixture.clock.now.store(151, Ordering::SeqCst);
@@ -589,11 +589,11 @@ async fn coherent_snapshots_retain_t0_t1_and_independent_recipient_claim_and_cap
         .unwrap();
     assert_eq!(snapshot.prepared().identity(), prepared.identity());
     assert_eq!(snapshot.message_id(), Some(message));
-    assert_eq!(snapshot.recipients()[0].obtained(), Some(receipt));
+    assert_eq!(snapshot.artifacts()[0].obtained(), Some(receipt));
     let view = OperationReceipt::from_snapshot(&snapshot);
     assert_eq!(view.operation_checkpoint(), captured_checkpoint);
     assert_eq!(view.message_id(), Some(message));
-    assert!(snapshot.recipients()[1].obtained().is_none());
+    assert!(snapshot.artifacts()[1].obtained().is_none());
     assert!(matches!(
         reopened
             .operation_snapshot(
@@ -637,7 +637,7 @@ async fn complete_snapshot_rejects_extra_recipient_claims_and_orphan_parts_witho
         .unwrap();
     let third = keys(3).public_key();
     for number in 3u8..=12 {
-        sqlx::query("INSERT INTO signing_attempts(workspace,operation_id,recipient,attempt_id,transaction_id,plan_digest,intent_digest,protected) SELECT workspace,operation_id,?,?,?,plan_digest,intent_digest,protected FROM signing_attempts LIMIT 1")
+        sqlx::query("INSERT INTO signing_attempts(workspace,operation_id,artifact_key,attempt_id,transaction_id,plan_digest,intent_digest,protected) SELECT workspace,operation_id,?,?,?,plan_digest,intent_digest,protected FROM signing_attempts LIMIT 1")
             .bind(keys(number).public_key().as_bytes().as_slice()).bind([number;32].as_slice()).bind([number;32].as_slice()).execute(&mut database).await.unwrap();
     }
     assert!(matches!(
@@ -656,13 +656,13 @@ async fn complete_snapshot_rejects_extra_recipient_claims_and_orphan_parts_witho
         .await
         .unwrap();
     assert_eq!(count, 11);
-    sqlx::query("DELETE FROM signing_attempts WHERE recipient!=?")
+    sqlx::query("DELETE FROM signing_attempts WHERE artifact_key!=?")
         .bind(recipients[0].as_bytes().as_slice())
         .execute(&mut database)
         .await
         .unwrap();
     for number in 3u8..=12 {
-        sqlx::query("INSERT INTO seal_evidence_parts(workspace,operation_id,recipient,part,protected) VALUES(?,?,?,1,zeroblob(1))")
+        sqlx::query("INSERT INTO artifact_evidence_parts(workspace,operation_id,artifact_key,part,protected) VALUES(?,?,?,1,zeroblob(1))")
             .bind(binding.input().workspace_id().as_bytes().as_slice()).bind(prepared.identity().operation_id().as_bytes().as_slice()).bind(keys(number).public_key().as_bytes().as_slice()).execute(&mut database).await.unwrap();
     }
     assert!(matches!(
@@ -676,17 +676,17 @@ async fn complete_snapshot_rejects_extra_recipient_claims_and_orphan_parts_witho
             .await,
         Err(OperationError::RecoveryRequired)
     ));
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM seal_evidence_parts")
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM artifact_evidence_parts")
         .fetch_one(&mut database)
         .await
         .unwrap();
     assert_eq!(count, 10);
-    sqlx::query("DELETE FROM seal_evidence_parts")
+    sqlx::query("DELETE FROM artifact_evidence_parts")
         .execute(&mut database)
         .await
         .unwrap();
     let missing = OperationId::from_bytes([237; 32]);
-    sqlx::query("INSERT INTO seal_evidence_parts(workspace,operation_id,recipient,part,protected) VALUES(?,?,?,1,zeroblob(1))")
+    sqlx::query("INSERT INTO artifact_evidence_parts(workspace,operation_id,artifact_key,part,protected) VALUES(?,?,?,1,zeroblob(1))")
         .bind(binding.input().workspace_id().as_bytes().as_slice()).bind(missing.as_bytes().as_slice()).bind(third.as_bytes().as_slice()).execute(&mut database).await.unwrap();
     assert!(matches!(
         store
@@ -694,12 +694,12 @@ async fn complete_snapshot_rejects_extra_recipient_claims_and_orphan_parts_witho
             .await,
         Err(OperationError::RecoveryRequired)
     ));
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM seal_evidence_parts")
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM artifact_evidence_parts")
         .fetch_one(&mut database)
         .await
         .unwrap();
     assert_eq!(count, 1);
-    sqlx::query("DELETE FROM seal_evidence_parts")
+    sqlx::query("DELETE FROM artifact_evidence_parts")
         .execute(&mut database)
         .await
         .unwrap();

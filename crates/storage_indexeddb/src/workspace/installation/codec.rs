@@ -19,6 +19,7 @@ fn encode(
     fields: [&[u8; 32]; 6],
     time: UnixSeconds,
     receipt: EvidenceReceipt,
+    recipient: PublicKey,
 ) -> Zeroizing<Vec<u8>> {
     let mut raw = Zeroizing::new(Vec::with_capacity(LENGTH));
     raw.extend_from_slice(magic);
@@ -30,7 +31,7 @@ fn encode(
         receipt.workspace_id().as_bytes(),
         receipt.operation_id().as_bytes(),
         receipt.command_digest().as_bytes(),
-        receipt.recipient().as_bytes(),
+        recipient.as_bytes(),
         receipt.attempt_id().as_bytes(),
         receipt.event_id().as_bytes(),
         receipt.digest(),
@@ -93,6 +94,7 @@ pub(super) fn message(
         ],
         value.installed_at(),
         value.basis(),
+        value.basis().recipient()?,
     ))
 }
 pub(super) fn decode_message(
@@ -125,6 +127,7 @@ pub(super) fn work(installed: ChatInstallation, value: PublicationWork) -> Zeroi
         ],
         value.queued_at(),
         value.evidence(),
+        value.recipient(),
     )
 }
 pub(super) fn decode_work(

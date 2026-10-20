@@ -451,8 +451,8 @@ impl OperationReceipt<ChatMessage> {
     pub fn from_snapshot(snapshot: &radroots_storage::command::OperationSnapshot) -> Self {
         use alloc::{vec, vec::Vec};
         let prepared = snapshot.prepared();
-        let mut artifacts = Vec::with_capacity(snapshot.recipients().len());
-        for recipient in snapshot.recipients() {
+        let mut artifacts = Vec::with_capacity(snapshot.artifacts().len());
+        for recipient in snapshot.artifacts() {
             let claim = recipient.claim();
             let obtained = recipient.obtained();
             let issuance = if obtained.is_some() {
@@ -465,8 +465,15 @@ impl OperationReceipt<ChatMessage> {
                 Issuance::None
             };
             artifacts.push(ArtifactObservation {
-                role: ArtifactRole::BusinessSeal,
-                recipient: Some(recipient.recipient()),
+                role: match recipient.target() {
+                    radroots_protocol::plan::SigningTarget::PublicEvent => {
+                        ArtifactRole::PublicEvent
+                    }
+                    radroots_protocol::plan::SigningTarget::BusinessSeal(_) => {
+                        ArtifactRole::BusinessSeal
+                    }
+                },
+                recipient: recipient.target().recipient(),
                 expected_event: recipient.expected_event(),
                 issuance,
                 attempt: claim.map(|value| value.attempt_id()),
@@ -527,7 +534,7 @@ impl OperationReceipt<ChatMessage> {
                 use radroots_storage::command::DeliveryObservationKind as Kind;
                 DeliveryObservation {
                     event: value.event_id(),
-                    recipient: Some(value.work().evidence().recipient()),
+                    recipient: value.work().evidence().target().recipient(),
                     target: value.target_receipt().target().uri().as_str().into(),
                     request: value.request_id().as_str().into(),
                     target_fingerprint: value

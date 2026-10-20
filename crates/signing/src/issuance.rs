@@ -6,7 +6,6 @@ use alloc::string::String;
 use core::{fmt, num::NonZeroU64};
 use radroots_domain::OperationId;
 use radroots_event::{
-    SignedEvent,
     id::EventId,
     wire::{EventWireLimits, Nip01EventWire},
 };
@@ -38,11 +37,38 @@ pub use radroots_protocol::intent::{ArtifactRole, IntentBinding};
 /// It has no automatic input-bearing diagnostics or serialization.
 pub struct SigningIntent {
     binding: IntentBinding,
-    plan: AuthoredEventPlan,
+    plan: ExactPreimage,
     role: ArtifactRole,
     recipient: Option<PublicKey>,
     call: ProviderCall,
     signed_json_bytes: usize,
+}
+enum ExactPreimage {
+    Authored(AuthoredEventPlan),
+    #[cfg(feature = "artifacts")]
+    Listing(radroots_protocol::listing::ListingEvent),
+}
+impl ExactPreimage {
+    fn fields(&self) -> radroots_protocol::nip01::EventFields<'_> {
+        match self {
+            Self::Authored(plan) => radroots_protocol::nip01::EventFields {
+                author: *plan.author(),
+                created_at: plan.created_at(),
+                kind: plan.body().kind(),
+                tags: plan.body().tags(),
+                content: plan.body().content(),
+            },
+            #[cfg(feature = "artifacts")]
+            Self::Listing(event) => event.fields(),
+        }
+    }
+    fn event_id(&self) -> radroots_event::id::EventId {
+        match self {
+            Self::Authored(plan) => *plan.expected_event_id(),
+            #[cfg(feature = "artifacts")]
+            Self::Listing(event) => radroots_event::id::EventId::from_bytes(*event.event_id()),
+        }
+    }
 }
 impl fmt::Debug for SigningIntent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -50,6 +76,52 @@ impl fmt::Debug for SigningIntent {
     }
 }
 impl SigningIntent {
+    /// Converts one exact retained-plan artifact to the existing signing port.
+    /// This verifies structural identity only; actual T1/first-claim commits,
+    /// current grant, destination policy and provider support remain required.
+    #[cfg(feature = "artifacts")]
+    pub fn from_plan(
+        plan: &radroots_protocol::plan::CapturedSigningPlan,
+        target: radroots_protocol::plan::SigningTarget,
+        call: ProviderCall,
+    ) -> Result<Self, ProviderError> {
+        use radroots_protocol::plan::SigningArtifact;
+        match plan
+            .artifact(target)
+            .map_err(|_| ProviderError::InvalidInput)?
+        {
+            SigningArtifact::Seal(seal) => {
+                Self::from_chat_seal(plan.operation_id(), plan.command_digest(), seal, call)
+            }
+            SigningArtifact::Public(event) => {
+                let fields = event.fields();
+                if fields.author != call.identity()
+                    || fields.created_at > MAX_EVENT_UNIX_SECONDS
+                    || call.deadline_unix_ms().get() > MAX_OBSERVATION_UNIX_MS
+                {
+                    return Err(ProviderError::InvalidInput);
+                }
+                let signed_json_bytes = signed_json_len(&fields, public_event_limits())?;
+                let binding = IntentBinding::from_components(
+                    plan.operation_id(),
+                    *plan.command_digest().as_bytes(),
+                    *plan.digest(),
+                    ArtifactRole::PublicEvent,
+                    None,
+                    call.deadline_unix_ms(),
+                )
+                .map_err(|_| ProviderError::InvalidInput)?;
+                Ok(Self {
+                    binding,
+                    plan: ExactPreimage::Listing(event.clone()),
+                    role: ArtifactRole::PublicEvent,
+                    recipient: None,
+                    call,
+                    signed_json_bytes,
+                })
+            }
+        }
+    }
     /// Freezes an already validated authored preimage and its captured context.
     /// Complete-event and parser budgets are checked without serializing or
     /// cloning the plan. A tighter business profile remains executor-owned.
@@ -91,7 +163,16 @@ impl SigningIntent {
         if !role_valid {
             return Err(ProviderError::InvalidInput);
         }
-        let signed_json_bytes = signed_json_len(&plan)?;
+        let signed_json_bytes = signed_json_len(
+            &radroots_protocol::nip01::EventFields {
+                author: *plan.author(),
+                created_at: plan.created_at(),
+                kind: plan.body().kind(),
+                tags: plan.body().tags(),
+                content: plan.body().content(),
+            },
+            EventWireLimits::default(),
+        )?;
         let binding = IntentBinding::from_components(
             operation_id,
             command_digest,
@@ -103,7 +184,7 @@ impl SigningIntent {
         .map_err(|_| ProviderError::InvalidInput)?;
         Ok(Self {
             binding,
-            plan,
+            plan: ExactPreimage::Authored(plan),
             role,
             recipient,
             call,
@@ -113,7 +194,7 @@ impl SigningIntent {
     /// Converts one bounded known-kind seal into the existing exact signer
     /// contract. This codec conversion grants no command, route or journal
     /// authority; the executor must retain the full plan before dispatch.
-    #[cfg(feature = "chat")]
+    #[cfg(any(feature = "chat", feature = "artifacts"))]
     pub fn from_chat_seal(
         operation_id: OperationId,
         command_digest: radroots_domain::CommandDigest,
@@ -156,8 +237,8 @@ impl SigningIntent {
         self.signed_json_bytes
     }
     /// Returns the expected author, independently of any business actor claim.
-    pub const fn author(&self) -> PublicKey {
-        *self.plan.author()
+    pub fn author(&self) -> PublicKey {
+        self.plan.fields().author
     }
     /// Returns the exact artifact role.
     pub const fn role(&self) -> ArtifactRole {
@@ -167,9 +248,16 @@ impl SigningIntent {
     pub const fn recipient(&self) -> Option<PublicKey> {
         self.recipient
     }
-    /// Exposes the bounded preimage only within an explicit host conversion.
-    pub fn with_plan<T>(&self, use_plan: impl FnOnce(&AuthoredEventPlan) -> T) -> T {
-        use_plan(&self.plan)
+    /// Borrows exact NIP-01 fields and ID for one concrete conversion. The
+    /// typed public profile does not pass through a predecessor generic registry.
+    pub fn with_event<T>(
+        &self,
+        use_event: impl FnOnce(
+            radroots_protocol::nip01::EventFields<'_>,
+            radroots_event::id::EventId,
+        ) -> T,
+    ) -> T {
+        use_event(self.plan.fields(), self.plan.event_id())
     }
     /// Checks scheduling before effects. Never repeat this after obtaining bytes.
     pub fn check_before_effect(
@@ -181,17 +269,19 @@ impl SigningIntent {
     }
 }
 
-fn signed_json_len(plan: &AuthoredEventPlan) -> Result<usize, ProviderError> {
-    if plan.body().kind() > u32::from(u16::MAX) {
+fn signed_json_len(
+    fields: &radroots_protocol::nip01::EventFields<'_>,
+    limits: EventWireLimits,
+) -> Result<usize, ProviderError> {
+    if fields.kind > u32::from(u16::MAX) {
         return Err(ProviderError::UnsupportedVersion);
     }
-    let limits = EventWireLimits::default();
     let mut elements = 0usize;
     let mut tag_bytes = 0usize;
-    if plan.body().tags().len() > limits.max_tag_count {
+    if fields.tags.len() > limits.max_tag_count {
         return Err(ProviderError::LimitExceeded);
     }
-    for tag in plan.body().tags() {
+    for tag in fields.tags {
         elements = elements
             .checked_add(tag.len())
             .filter(|n| *n <= limits.max_total_tag_elements)
@@ -206,17 +296,8 @@ fn signed_json_len(plan: &AuthoredEventPlan) -> Result<usize, ProviderError> {
                 .ok_or(ProviderError::LimitExceeded)?;
         }
     }
-    radroots_protocol::nip01::signed_json_len(
-        &radroots_protocol::nip01::EventFields {
-            author: *plan.author(),
-            created_at: plan.created_at(),
-            kind: plan.body().kind(),
-            tags: plan.body().tags(),
-            content: plan.body().content(),
-        },
-        SIGNED_EVENT_MAX_BYTES,
-    )
-    .map_err(|_| ProviderError::LimitExceeded)
+    radroots_protocol::nip01::signed_json_len(fields, SIGNED_EVENT_MAX_BYTES)
+        .map_err(|_| ProviderError::LimitExceeded)
 }
 
 /// Scope of a forensic digest. A prefix digest never claims full coverage.
@@ -357,29 +438,33 @@ impl SigningOutcome {
         if raw.len() > SIGNED_EVENT_MAX_BYTES {
             return reject(RejectionReason::TooLarge);
         }
-        let limits = EventWireLimits {
-            max_raw_json_bytes: SIGNED_EVENT_MAX_BYTES,
-            max_extra_fields: 0,
-            max_total_extra_json_bytes: 0,
-            ..EventWireLimits::default()
+        let limits = match &intent.plan {
+            #[cfg(feature = "artifacts")]
+            ExactPreimage::Listing(_) => public_event_limits(),
+            _ => EventWireLimits {
+                max_raw_json_bytes: SIGNED_EVENT_MAX_BYTES,
+                max_extra_fields: 0,
+                max_total_extra_json_bytes: 0,
+                ..EventWireLimits::default()
+            },
         };
         let Ok(wire) = Nip01EventWire::parse_json_exact_with_limits(&raw, limits) else {
             return reject(RejectionReason::InvalidArtifact);
         };
-        let plan = &intent.plan;
-        if wire.pubkey != plan.author().to_hex()
-            || wire.created_at != plan.created_at()
-            || wire.kind != plan.body().kind()
-            || wire.tags != plan.body().tags()
-            || wire.content != plan.body().content()
-            || wire.id != plan.expected_event_id().to_hex()
+        let fields = intent.plan.fields();
+        if wire.pubkey != fields.author.to_hex()
+            || wire.created_at != fields.created_at
+            || wire.kind != fields.kind
+            || wire.tags != fields.tags
+            || wire.content != fields.content
+            || wire.id != intent.plan.event_id().to_hex()
         {
             return reject(RejectionReason::InvalidArtifact);
         }
-        let Ok(event) = SignedEvent::from_wire_verified_id(wire, raw.as_str()) else {
+        let Ok(envelope) = checked_envelope(wire, limits) else {
             return reject(RejectionReason::InvalidArtifact);
         };
-        let Ok(verified_id) = verify::id(RawEvent::new(event.envelope().clone())) else {
+        let Ok(verified_id) = verify::id(RawEvent::new(envelope)) else {
             return reject(RejectionReason::InvalidArtifact);
         };
         if verify::signature(verified_id, &Nip01SignatureVerifier).is_err() {
@@ -389,7 +474,7 @@ impl SigningOutcome {
             binding: intent.binding(),
             kind: OutcomeKind::Obtained(SignedArtifact {
                 raw_json: raw,
-                event_id: *plan.expected_event_id(),
+                event_id: intent.plan.event_id(),
                 observed_at_unix_ms: observed_at_unix_ms
                     .filter(|at| at.get() <= MAX_OBSERVATION_UNIX_MS),
             }),
@@ -428,4 +513,43 @@ impl SigningOutcome {
             }),
         }
     }
+}
+
+#[cfg(feature = "artifacts")]
+fn public_event_limits() -> EventWireLimits {
+    EventWireLimits {
+        max_raw_json_bytes: SIGNED_EVENT_MAX_BYTES,
+        max_content_bytes: SIGNED_EVENT_MAX_BYTES,
+        max_tag_count: radroots_protocol::listing::LISTING_TAG_MAX_COUNT,
+        max_total_tag_elements: radroots_protocol::listing::LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT,
+        max_tag_element_bytes: SIGNED_EVENT_MAX_BYTES,
+        max_total_tag_bytes: SIGNED_EVENT_MAX_BYTES,
+        max_extra_fields: 0,
+        max_total_extra_json_bytes: 0,
+    }
+}
+
+fn checked_envelope(
+    wire: Nip01EventWire,
+    limits: EventWireLimits,
+) -> Result<radroots_event::envelope::EventEnvelope, radroots_event::envelope::EventEnvelopeError> {
+    use radroots_event::envelope::{EventEnvelope, EventEnvelopeLimits, EventEnvelopeParts};
+    EventEnvelope::new_with_limits(
+        EventEnvelopeParts {
+            id: wire.id,
+            author: wire.pubkey,
+            created_at: wire.created_at,
+            kind: wire.kind,
+            tags: wire.tags,
+            content: wire.content,
+            sig: wire.sig,
+        },
+        EventEnvelopeLimits {
+            max_content_bytes: limits.max_content_bytes,
+            max_tag_count: limits.max_tag_count,
+            max_total_tag_elements: limits.max_total_tag_elements,
+            max_tag_element_bytes: limits.max_tag_element_bytes,
+            max_total_tag_bytes: limits.max_total_tag_bytes,
+        },
+    )
 }

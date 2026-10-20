@@ -157,7 +157,7 @@ impl Observations {
                 .attempts
                 .iter()
                 .find(|attempt| {
-                    attempt.work().evidence().recipient().as_bytes() == &recipient
+                    attempt.work().recipient().as_bytes() == &recipient
                         && codec::request_key(attempt.intent().request_id().as_str()) == request
                 })
                 .ok_or(OperationError::RecoveryRequired)?;

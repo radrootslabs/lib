@@ -8,8 +8,9 @@ use radroots_secrets::context::{
 };
 use radroots_storage::{
     command::{
-        BoundSigningPlan, CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, CommitAttempt,
-        EvidenceCaptureOutcome, EvidenceReceipt, OperationError, SealEvidence, SigningAttempt,
+        ArtifactEvidence, BoundSigningPlan, CapturedArtifact, ClaimAttemptOutcome,
+        ClaimAttemptRequest, CommitAttempt, EvidenceCaptureOutcome, EvidenceReceipt,
+        OperationError, SigningAttempt,
         protected::{
             self,
             issuance::{ClaimRecord, EvidenceManifest},
@@ -130,7 +131,7 @@ impl State {
         view: &ReadSnapshot,
         attempt: &SigningAttempt,
         index: u8,
-    ) -> Result<Option<(SealEvidence, EvidenceReceipt)>, OperationError> {
+    ) -> Result<Option<(ArtifactEvidence, EvidenceReceipt)>, OperationError> {
         let operation = attempt.bound_plan().prepared().identity().operation_id();
         let mut records = Vec::with_capacity(5);
         for part in 0..=4 {
@@ -198,7 +199,7 @@ impl State {
         &self,
         attempt: &SigningAttempt,
         index: u8,
-        supplied: &SealEvidence,
+        supplied: &ArtifactEvidence,
         transaction: TransactionId,
     ) -> Result<Vec<Mutation>, OperationError> {
         let manifest = EvidenceManifest::capture(attempt, supplied, transaction)?;
@@ -270,9 +271,9 @@ impl BrowserWorkspace {
                 return Err(OperationError::IdempotencyConflict);
             }
             let index =
-                position(&bound, request.recipient())?.ok_or(OperationError::InvalidCommand)?;
+                position(&bound, request.recipient()?)?.ok_or(OperationError::InvalidCommand)?;
             let (attempt, fresh, extra) = match state
-                .claim(&view, bound, request.recipient(), index)
+                .claim(&view, bound, request.recipient()?, index)
                 .await?
             {
                 Claim::Present(attempt) => (attempt, false, Vec::new()),
@@ -295,7 +296,7 @@ impl BrowserWorkspace {
                     }
                     let attempt = SigningAttempt::from_committed_store(
                         bound,
-                        request.recipient(),
+                        request.recipient()?,
                         SigningAttemptId::from_bytes(*crypto::random::<32>()?),
                         TransactionId::from_bytes(*crypto::random::<32>()?),
                         now,
@@ -370,9 +371,9 @@ impl BrowserWorkspace {
                 if bound.plan().digest() != request.plan_digest() {
                     return Err(OperationError::IdempotencyConflict);
                 }
-                if let Some(index) = position(&bound, request.recipient())? {
+                if let Some(index) = position(&bound, request.recipient()?)? {
                     match state
-                        .claim(&view, bound, request.recipient(), index)
+                        .claim(&view, bound, request.recipient()?, index)
                         .await?
                     {
                         Claim::Present(attempt) => Some(attempt),
@@ -410,9 +411,9 @@ impl BrowserWorkspace {
         &self,
         input: AttachmentInput,
         proof: &AttachmentProof,
-        supplied: &SealEvidence,
+        supplied: &ArtifactEvidence,
     ) -> Result<EvidenceCaptureOutcome, OperationError> {
-        let capture_identity = super::recovery::CaptureIdentity::seal(supplied);
+        let capture_identity = super::recovery::CaptureIdentity::artifact(supplied);
         let owned_identity = capture_identity.clone();
         let fallback = CommitAttempt::new(
             supplied.workspace_id(),
@@ -437,9 +438,9 @@ impl BrowserWorkspace {
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?;
             let index =
-                position(&bound, supplied.recipient())?.ok_or(OperationError::InvalidEvidence)?;
+                position(&bound, supplied.recipient()?)?.ok_or(OperationError::InvalidEvidence)?;
             let attempt = match state
-                .claim(&view, bound, supplied.recipient(), index)
+                .claim(&view, bound, supplied.recipient()?, index)
                 .await?
             {
                 Claim::Present(attempt) => attempt,
@@ -448,7 +449,7 @@ impl BrowserWorkspace {
             if !supplied.matches_attempt(&attempt) {
                 return Err(OperationError::InvalidEvidence);
             }
-            let checked = SealEvidence::verify(
+            let checked = ArtifactEvidence::verify(
                 &attempt,
                 supplied.raw_json(),
                 supplied.observed_at_unix_ms(),
@@ -517,7 +518,7 @@ impl BrowserWorkspace {
         &self,
         request: ClaimAttemptRequest,
         proof: AttachmentProof,
-    ) -> Result<Option<CapturedSeal>, OperationError> {
+    ) -> Result<Option<CapturedArtifact>, OperationError> {
         let work = self.state.admit()?;
         let state = self.state.clone();
         owned(work, async move {
@@ -533,9 +534,9 @@ impl BrowserWorkspace {
                 if bound.plan().digest() != request.plan_digest() {
                     return Err(OperationError::IdempotencyConflict);
                 }
-                if let Some(index) = position(&bound, request.recipient())? {
+                if let Some(index) = position(&bound, request.recipient()?)? {
                     match state
-                        .claim(&view, bound, request.recipient(), index)
+                        .claim(&view, bound, request.recipient()?, index)
                         .await?
                     {
                         Claim::Present(attempt) => {
@@ -553,7 +554,7 @@ impl BrowserWorkspace {
                             }
                             obtained
                                 .map(|(evidence, receipt)| {
-                                    CapturedSeal::from_committed_store(
+                                    CapturedArtifact::from_committed_store(
                                         attempt,
                                         evidence,
                                         receipt.transaction_id(),

@@ -50,21 +50,21 @@ fn signed(intent: &SigningIntent) -> String {
         })
         .unwrap(),
     );
-    intent.with_plan(|plan| {
+    intent.with_event(|fields, event_id| {
         nostr::UnsignedEvent {
-            id: Some(nostr::EventId::from_slice(plan.expected_event_id().as_bytes()).unwrap()),
+            id: Some(nostr::EventId::from_slice(event_id.as_bytes()).unwrap()),
             pubkey: keys.public_key(),
-            created_at: nostr::Timestamp::from_secs(plan.created_at()),
-            kind: nostr::Kind::Custom(plan.body().kind() as u16),
+            created_at: nostr::Timestamp::from_secs(fields.created_at),
+            kind: nostr::Kind::Custom(fields.kind as u16),
             tags: nostr::Tags::from_list(
-                plan.body()
-                    .tags()
+                fields
+                    .tags
                     .iter()
                     .cloned()
                     .map(|tag| nostr::Tag::parse(tag).unwrap())
                     .collect(),
             ),
-            content: plan.body().content().into(),
+            content: fields.content.into(),
         }
         .sign_with_keys(&keys)
         .unwrap()
@@ -117,10 +117,7 @@ fn authenticated_bytes_survive_unknown_or_out_of_range_observation_and_never_ser
             panic!("valid artifact lost: {outcome:?}");
         };
         assert_eq!(artifact.with_json(str::to_owned), raw);
-        assert_eq!(
-            artifact.event_id(),
-            intent.with_plan(|plan| *plan.expected_event_id())
-        );
+        assert_eq!(artifact.event_id(), intent.with_event(|_, id| id));
         assert_eq!(
             artifact.observed_at_unix_ms(),
             observed.filter(|at| at.get() <= MAX_EVENT_UNIX_SECONDS * 1000 + 999)

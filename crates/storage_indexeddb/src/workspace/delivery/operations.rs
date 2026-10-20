@@ -7,9 +7,9 @@ use nostr::JsonUtil;
 use radroots_domain::{CommandDigest, OperationId, PublicKey, TransactionId};
 use radroots_storage::{
     command::{
-        BoundSigningPlan, CommitAttempt, DeliveryAttempt, DeliveryAttemptOutcome,
+        ArtifactEvidence, BoundSigningPlan, CommitAttempt, DeliveryAttempt, DeliveryAttemptOutcome,
         DeliveryAttemptRequest, DeliveryAttemptSummary, EnvelopeCandidate, OperationError,
-        PublicationWork, SealEvidence,
+        PublicationWork,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
@@ -20,7 +20,7 @@ fn contains_original(
     candidate: &EnvelopeCandidate,
     work: PublicationWork,
     bound: &BoundSigningPlan,
-    source: &SealEvidence,
+    source: &ArtifactEvidence,
 ) -> Result<(), OperationError> {
     let actor = bound
         .prepared()
@@ -32,7 +32,7 @@ fn contains_original(
     if candidate.work() != work
         || candidate.author() == actor
         || candidate.author() == bound.prepared().request().chat_command()?.peer()
-        || candidate.author() == work.evidence().recipient()
+        || candidate.author() == work.recipient()
         || source.digest() != work.evidence().digest()
     {
         return Err(OperationError::InvalidEvidence);
@@ -44,7 +44,7 @@ fn contains_original(
     event
         .verify_with_ctx(&secp)
         .map_err(|_| OperationError::InvalidEvidence)?;
-    let recipient = nostr::PublicKey::from_slice(work.evidence().recipient().as_bytes())
+    let recipient = nostr::PublicKey::from_slice(work.recipient().as_bytes())
         .map_err(|_| OperationError::InvalidEvidence)?;
     let opened = candidate.with_wrapping_key(|key| {
         let secret =
@@ -94,7 +94,7 @@ impl BrowserWorkspace {
                     &t0,
                     access.binding.observed_at(),
                     Some(Selection {
-                        recipient: evidence.recipient(),
+                        recipient: evidence.recipient()?,
                         request: request.intent().request_id(),
                         event: Some(request.intent().event_id()),
                         retain_seal: true,
@@ -116,7 +116,7 @@ impl BrowserWorkspace {
                 .chat_plan()?
                 .seals()
                 .iter()
-                .position(|seal| seal.recipient() == evidence.recipient())
+                .position(|seal| Some(seal.recipient()) == evidence.target().recipient())
                 .ok_or(OperationError::InvalidEvidence)? as u8;
             let retained = facts
                 .selected
@@ -133,7 +133,7 @@ impl BrowserWorkspace {
             }
             let fresh = retained.is_none();
             let (report, extra) = if fresh {
-                routes(bound, evidence.recipient(), request.intent())?;
+                routes(bound, evidence.recipient()?, request.intent())?;
                 if snapshot.delivery_attempts().iter().any(|value| {
                     value.work() == actual
                         && value.intent().publication_policy_digest()

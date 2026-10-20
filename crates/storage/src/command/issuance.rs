@@ -1,4 +1,4 @@
-//! Exact attempt and independently verified obtained-seal data. Constructors
+//! Exact attempt and independently verified obtained-artifact data. Constructors
 //! provide no proof that a backend retained a claim or authorized dispatch.
 use super::{BoundSigningPlan, CommitAttempt, OperationError};
 use crate::workspace::WorkspaceBinding;
@@ -8,7 +8,7 @@ use radroots_domain::{
     UnixSeconds, WorkspaceId,
 };
 use radroots_event::{
-    GenericEventDraft, SignedEvent,
+    GenericEventDraft,
     wire::{EventWireLimits, Nip01EventWire},
 };
 use radroots_event_codec::{
@@ -17,7 +17,8 @@ use radroots_event_codec::{
 };
 use radroots_protocol::{
     chat::ChatSeal,
-    intent::{ArtifactRole, IntentBinding},
+    intent::IntentBinding,
+    plan::{SigningArtifact, SigningTarget},
 };
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
@@ -29,7 +30,7 @@ pub struct ClaimAttemptRequest {
     operation_id: OperationId,
     command_digest: CommandDigest,
     plan_digest: [u8; 32],
-    recipient: PublicKey,
+    target: SigningTarget,
 }
 impl ClaimAttemptRequest {
     pub const fn new(
@@ -39,12 +40,27 @@ impl ClaimAttemptRequest {
         plan_digest: [u8; 32],
         recipient: PublicKey,
     ) -> Self {
+        Self::for_artifact(
+            binding,
+            operation_id,
+            command_digest,
+            plan_digest,
+            SigningTarget::BusinessSeal(recipient),
+        )
+    }
+    pub const fn for_artifact(
+        binding: WorkspaceBinding,
+        operation_id: OperationId,
+        command_digest: CommandDigest,
+        plan_digest: [u8; 32],
+        target: SigningTarget,
+    ) -> Self {
         Self {
             binding,
             operation_id,
             command_digest,
             plan_digest,
-            recipient,
+            target,
         }
     }
     pub const fn binding(&self) -> &WorkspaceBinding {
@@ -59,8 +75,14 @@ impl ClaimAttemptRequest {
     pub const fn plan_digest(&self) -> &[u8; 32] {
         &self.plan_digest
     }
-    pub const fn recipient(&self) -> PublicKey {
-        self.recipient
+    pub const fn target(&self) -> SigningTarget {
+        self.target
+    }
+    /// Private-only projection; a public artifact has no recipient.
+    pub fn recipient(&self) -> Result<PublicKey, OperationError> {
+        self.target
+            .recipient()
+            .ok_or(OperationError::UnsupportedOperation)
     }
     pub fn identity(&self) -> CommitAttempt {
         CommitAttempt::new(
@@ -82,7 +104,7 @@ impl fmt::Debug for ClaimAttemptRequest {
 /// retrieving this snapshot never proves a previous invocation did not begin.
 pub struct SigningAttempt {
     bound: BoundSigningPlan,
-    recipient_index: usize,
+    target: SigningTarget,
     attempt_id: SigningAttemptId,
     transaction_id: TransactionId,
     claimed_at: UnixSeconds,
@@ -92,7 +114,7 @@ pub struct SigningAttempt {
 impl SigningAttempt {
     pub fn from_committed_store(
         bound: BoundSigningPlan,
-        recipient: PublicKey,
+        target: impl Into<SigningTarget>,
         attempt_id: SigningAttemptId,
         transaction_id: TransactionId,
         claimed_at: UnixSeconds,
@@ -101,13 +123,16 @@ impl SigningAttempt {
         if claimed_at < bound.bound_at() || claimed_at >= window.first_issue_not_after() {
             return Err(OperationError::RecoveryRequired);
         }
-        let recipient_index = bound
-            .chat_plan()?
-            .seals()
-            .iter()
-            .position(|seal| seal.recipient() == recipient)
-            .ok_or(OperationError::InvalidCommand)?;
-        let seal = &bound.chat_plan()?.seals()[recipient_index];
+        let target = target.into();
+        if matches!(target, SigningTarget::PublicEvent) && bound.plan().listing().is_none()
+            || matches!(target, SigningTarget::BusinessSeal(_)) && bound.plan().chat().is_none()
+        {
+            return Err(OperationError::UnsupportedOperation);
+        }
+        let artifact = bound
+            .plan()
+            .artifact(target)
+            .map_err(|_| OperationError::InvalidCommand)?;
         let deadline = NonZeroU64::new(
             window
                 .first_issue_not_after()
@@ -116,36 +141,42 @@ impl SigningAttempt {
                 .ok_or(OperationError::RecoveryRequired)?,
         )
         .ok_or(OperationError::RecoveryRequired)?;
-        let fields = seal.fields();
-        // Internal reuse of the qualified v1 authored-plan hash. No predecessor
-        // event model escapes this new API; downward parser retirement remains
-        // separately governed by the shared target architecture.
-        let draft = GenericEventDraft::new(
-            "radroots.message.seal.v1",
-            fields.kind,
-            fields.created_at,
-            Vec::new(),
-            fields.content,
-            fields.author.to_hex(),
-        )
-        .map_err(|_| OperationError::InvalidCommand)?;
-        let plan =
-            AuthoredEventPlan::from_generic(draft).map_err(|_| OperationError::InvalidCommand)?;
-        if plan.expected_event_id().as_bytes() != &seal.event_id() {
-            return Err(OperationError::RecoveryRequired);
-        }
+        let preimage_digest = match target {
+            SigningTarget::PublicEvent => *bound.plan().digest(),
+            SigningTarget::BusinessSeal(_) => {
+                let fields = artifact.fields();
+                // Internal reuse of the qualified v1 authored-plan hash. No predecessor
+                // event model escapes this new API; downward parser retirement remains
+                // separately governed by the shared target architecture.
+                let draft = GenericEventDraft::new(
+                    "radroots.message.seal.v1",
+                    fields.kind,
+                    fields.created_at,
+                    fields.tags.to_vec(),
+                    fields.content,
+                    fields.author.to_hex(),
+                )
+                .map_err(|_| OperationError::InvalidCommand)?;
+                let plan = AuthoredEventPlan::from_generic(draft)
+                    .map_err(|_| OperationError::InvalidCommand)?;
+                if plan.expected_event_id().as_bytes() != &artifact.event_id() {
+                    return Err(OperationError::RecoveryRequired);
+                }
+                *plan.digest().as_bytes()
+            }
+        };
         let binding = IntentBinding::from_components(
-            seal.operation_id(),
-            *seal.command_digest().as_bytes(),
-            *plan.digest().as_bytes(),
-            ArtifactRole::BusinessSeal,
-            Some(recipient),
+            bound.plan().operation_id(),
+            *bound.plan().command_digest().as_bytes(),
+            preimage_digest,
+            target.role(),
+            target.recipient(),
             deadline,
         )
         .map_err(|_| OperationError::InvalidCommand)?;
         Ok(Self {
             bound,
-            recipient_index,
+            target,
             attempt_id,
             transaction_id,
             claimed_at,
@@ -160,14 +191,22 @@ impl SigningAttempt {
     pub const fn bound_plan(&self) -> &BoundSigningPlan {
         &self.bound
     }
-    /// Borrows the exact retained seal. The private index is validated once
-    /// against the immutable complete plan by the structural constructor.
-    pub fn seal(&self) -> Result<&ChatSeal, OperationError> {
+    /// Exact retained artifact, with no private projection for public events.
+    pub fn artifact(&self) -> Result<SigningArtifact<'_>, OperationError> {
         self.bound
-            .chat_plan()?
-            .seals()
-            .get(self.recipient_index)
-            .ok_or(OperationError::RecoveryRequired)
+            .plan()
+            .artifact(self.target)
+            .map_err(|_| OperationError::RecoveryRequired)
+    }
+    pub const fn target(&self) -> SigningTarget {
+        self.target
+    }
+    /// Borrows a private seal only when this attempt actually selected one.
+    pub fn seal(&self) -> Result<&ChatSeal, OperationError> {
+        match self.artifact()? {
+            SigningArtifact::Seal(seal) => Ok(seal),
+            _ => Err(OperationError::UnsupportedOperation),
+        }
     }
     pub const fn attempt_id(&self) -> SigningAttemptId {
         self.attempt_id
@@ -224,12 +263,12 @@ impl fmt::Debug for ClaimAttemptOutcome {
 /// Independently authenticated exact obtained bytes, bound to reported claim
 /// data but not proof of the backend's actual retained attempt. Concrete capture
 /// must compare its own protected claim and plan before appending this evidence.
-pub struct SealEvidence {
+pub struct ArtifactEvidence {
     workspace_id: WorkspaceId,
     operation_id: OperationId,
     command_digest: CommandDigest,
     plan_digest: [u8; 32],
-    recipient: PublicKey,
+    target: SigningTarget,
     attempt_id: SigningAttemptId,
     intent: IntentBinding,
     event_id: EnvelopeEventId,
@@ -237,7 +276,7 @@ pub struct SealEvidence {
     digest: [u8; 32],
     observed_at: Option<NonZeroU64>,
 }
-impl SealEvidence {
+impl ArtifactEvidence {
     /// Bounds before copying and verifies ID/signature/every signed field.
     /// No clock, grant-expiry or cancellation lookup may discard obtained bytes.
     pub fn verify(
@@ -248,17 +287,31 @@ impl SealEvidence {
         if raw.len() > 65536 {
             return Err(OperationError::InvalidEvidence);
         }
-        let limits = EventWireLimits {
-            max_raw_json_bytes: 65536,
-            max_extra_fields: 0,
-            max_total_extra_json_bytes: 0,
-            ..EventWireLimits::default()
+        let limits = if attempt.target() == SigningTarget::PublicEvent {
+            EventWireLimits {
+                max_raw_json_bytes: 65536,
+                max_content_bytes: 65536,
+                max_tag_count: radroots_protocol::listing::LISTING_TAG_MAX_COUNT,
+                max_total_tag_elements:
+                    radroots_protocol::listing::LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT,
+                max_tag_element_bytes: 65536,
+                max_total_tag_bytes: 65536,
+                max_extra_fields: 0,
+                max_total_extra_json_bytes: 0,
+            }
+        } else {
+            EventWireLimits {
+                max_raw_json_bytes: 65536,
+                max_extra_fields: 0,
+                max_total_extra_json_bytes: 0,
+                ..EventWireLimits::default()
+            }
         };
         let wire = Nip01EventWire::parse_json_exact_with_limits(raw, limits)
             .map_err(|_| OperationError::InvalidEvidence)?;
-        let seal = attempt.seal()?;
-        let fields = seal.fields();
-        let event_id = EnvelopeEventId::from_bytes(seal.event_id());
+        let artifact = attempt.artifact()?;
+        let fields = artifact.fields();
+        let event_id = EnvelopeEventId::from_bytes(artifact.event_id());
         if wire.id != event_id.to_string()
             || wire.pubkey != fields.author.to_hex()
             || wire.kind != fields.kind
@@ -268,10 +321,10 @@ impl SealEvidence {
         {
             return Err(OperationError::InvalidEvidence);
         }
-        let event = SignedEvent::from_wire_verified_id(wire, raw)
-            .map_err(|_| OperationError::InvalidEvidence)?;
-        let id = verify::id(RawEvent::new(event.envelope().clone()))
-            .map_err(|_| OperationError::InvalidEvidence)?;
+        let envelope =
+            checked_envelope(wire, limits).map_err(|_| OperationError::InvalidEvidence)?;
+        let id =
+            verify::id(RawEvent::new(envelope)).map_err(|_| OperationError::InvalidEvidence)?;
         verify::signature(id, &Nip01SignatureVerifier)
             .map_err(|_| OperationError::InvalidEvidence)?;
         let original = attempt.bound_plan().prepared().identity();
@@ -280,7 +333,7 @@ impl SealEvidence {
             operation_id: original.operation_id(),
             command_digest: original.command_digest(),
             plan_digest: *attempt.bound_plan().plan().digest(),
-            recipient: seal.recipient(),
+            target: attempt.target(),
             attempt_id: attempt.attempt_id(),
             intent: attempt.binding(),
             event_id,
@@ -297,7 +350,7 @@ impl SealEvidence {
             operation_id: self.operation_id,
             command_digest: self.command_digest,
             plan_digest: self.plan_digest,
-            recipient: self.recipient,
+            target: self.target,
             attempt_id: self.attempt_id,
             intent: self.intent,
             event_id: self.event_id,
@@ -307,7 +360,7 @@ impl SealEvidence {
         }
     }
     pub fn matches_attempt(&self, attempt: &SigningAttempt) -> bool {
-        let Ok(seal) = attempt.seal() else {
+        let Ok(artifact) = attempt.artifact() else {
             return false;
         };
         self.workspace_id == attempt.bound_plan().prepared().identity().workspace_id()
@@ -316,8 +369,8 @@ impl SealEvidence {
             && self.operation_id == attempt.bound_plan().prepared().identity().operation_id()
             && self.command_digest == attempt.bound_plan().prepared().identity().command_digest()
             && &self.plan_digest == attempt.bound_plan().plan().digest()
-            && self.recipient == seal.recipient()
-            && self.event_id.as_bytes() == &seal.event_id()
+            && self.target == attempt.target()
+            && self.event_id.as_bytes() == &artifact.event_id()
     }
     pub const fn workspace_id(&self) -> WorkspaceId {
         self.workspace_id
@@ -331,8 +384,14 @@ impl SealEvidence {
     pub const fn plan_digest(&self) -> &[u8; 32] {
         &self.plan_digest
     }
-    pub const fn recipient(&self) -> PublicKey {
-        self.recipient
+    pub const fn target(&self) -> SigningTarget {
+        self.target
+    }
+    /// Private-only projection; a public artifact has no recipient.
+    pub fn recipient(&self) -> Result<PublicKey, OperationError> {
+        self.target
+            .recipient()
+            .ok_or(OperationError::UnsupportedOperation)
     }
     pub const fn attempt_id(&self) -> SigningAttemptId {
         self.attempt_id
@@ -353,9 +412,9 @@ impl SealEvidence {
         self.observed_at
     }
 }
-impl fmt::Debug for SealEvidence {
+impl fmt::Debug for ArtifactEvidence {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("SealEvidence(<redacted>)")
+        f.write_str("ArtifactEvidence(<redacted>)")
     }
 }
 
@@ -367,7 +426,7 @@ pub struct EvidenceReceipt {
     operation_id: OperationId,
     command_digest: CommandDigest,
     attempt_id: SigningAttemptId,
-    recipient: PublicKey,
+    target: SigningTarget,
     event_id: EnvelopeEventId,
     digest: [u8; 32],
     transaction_id: TransactionId,
@@ -375,7 +434,7 @@ pub struct EvidenceReceipt {
 }
 impl EvidenceReceipt {
     pub const fn from_committed_store(
-        evidence: &SealEvidence,
+        evidence: &ArtifactEvidence,
         transaction_id: TransactionId,
     ) -> Self {
         Self {
@@ -383,7 +442,7 @@ impl EvidenceReceipt {
             operation_id: evidence.operation_id,
             command_digest: evidence.command_digest,
             attempt_id: evidence.attempt_id,
-            recipient: evidence.recipient,
+            target: evidence.target,
             event_id: evidence.event_id,
             digest: evidence.digest,
             transaction_id,
@@ -402,8 +461,14 @@ impl EvidenceReceipt {
     pub const fn attempt_id(&self) -> SigningAttemptId {
         self.attempt_id
     }
-    pub const fn recipient(&self) -> PublicKey {
-        self.recipient
+    pub const fn target(&self) -> SigningTarget {
+        self.target
+    }
+    /// Private-only projection; a public artifact has no recipient.
+    pub fn recipient(&self) -> Result<PublicKey, OperationError> {
+        self.target
+            .recipient()
+            .ok_or(OperationError::UnsupportedOperation)
     }
     pub const fn event_id(&self) -> EnvelopeEventId {
         self.event_id
@@ -426,15 +491,15 @@ pub enum EvidenceCaptureOutcome {
 }
 /// An original protected obtained record read under current workspace access.
 /// Advanced adapter construction remains a structural report, not qualification.
-pub struct CapturedSeal {
+pub struct CapturedArtifact {
     attempt: SigningAttempt,
-    evidence: SealEvidence,
+    evidence: ArtifactEvidence,
     receipt: EvidenceReceipt,
 }
-impl CapturedSeal {
+impl CapturedArtifact {
     pub fn from_committed_store(
         attempt: SigningAttempt,
-        evidence: SealEvidence,
+        evidence: ArtifactEvidence,
         transaction_id: TransactionId,
     ) -> Result<Self, OperationError> {
         if !evidence.matches_attempt(&attempt) {
@@ -450,15 +515,40 @@ impl CapturedSeal {
     pub const fn attempt(&self) -> &SigningAttempt {
         &self.attempt
     }
-    pub const fn evidence(&self) -> &SealEvidence {
+    pub const fn evidence(&self) -> &ArtifactEvidence {
         &self.evidence
     }
     pub const fn receipt(&self) -> EvidenceReceipt {
         self.receipt
     }
 }
-impl fmt::Debug for CapturedSeal {
+impl fmt::Debug for CapturedArtifact {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("CapturedSeal(<redacted>)")
+        f.write_str("CapturedArtifact(<redacted>)")
     }
+}
+
+fn checked_envelope(
+    wire: Nip01EventWire,
+    limits: EventWireLimits,
+) -> Result<radroots_event::envelope::EventEnvelope, radroots_event::envelope::EventEnvelopeError> {
+    use radroots_event::envelope::{EventEnvelope, EventEnvelopeLimits, EventEnvelopeParts};
+    EventEnvelope::new_with_limits(
+        EventEnvelopeParts {
+            id: wire.id,
+            author: wire.pubkey,
+            created_at: wire.created_at,
+            kind: wire.kind,
+            tags: wire.tags,
+            content: wire.content,
+            sig: wire.sig,
+        },
+        EventEnvelopeLimits {
+            max_content_bytes: limits.max_content_bytes,
+            max_tag_count: limits.max_tag_count,
+            max_total_tag_elements: limits.max_total_tag_elements,
+            max_tag_element_bytes: limits.max_tag_element_bytes,
+            max_total_tag_bytes: limits.max_total_tag_bytes,
+        },
+    )
 }

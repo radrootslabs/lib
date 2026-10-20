@@ -12,28 +12,29 @@ use super::{
     plan::ProtectedPlan,
 };
 use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, PublicKey, UnixSeconds};
+use radroots_storage::command::SigningTarget;
 use radroots_storage::command::{
-    BoundSigningPlan, ClaimSnapshot, DeliveryAttemptSummary, OperationError, OperationSnapshot,
-    RecipientSnapshot, RetainedOperation, SealEvidence, SigningAttempt,
+    ArtifactEvidence, ArtifactSnapshot, BoundSigningPlan, ClaimSnapshot, DeliveryAttemptSummary,
+    OperationError, OperationSnapshot, RetainedOperation, SigningAttempt,
 };
 use sqlx::{Connection, SqliteConnection};
 
-struct SeenRecipient {
-    report: RecipientSnapshot,
+struct SeenArtifact {
+    report: ArtifactSnapshot,
     claim: Option<Vec<u8>>,
     evidence: Option<ProtectedEvidence>,
-    obtained: Option<SealEvidence>,
+    obtained: Option<ArtifactEvidence>,
 }
 pub(super) struct RetainedGraph {
     retained: Option<(RetainedOperation, Vec<u8>)>,
     protected_plan: Option<ProtectedPlan>,
-    recipients: Vec<SeenRecipient>,
+    artifacts: Vec<SeenArtifact>,
 }
 impl RetainedGraph {
-    pub(super) fn obtained(&self, recipient: PublicKey) -> Option<&SealEvidence> {
-        self.recipients
+    pub(super) fn obtained(&self, recipient: PublicKey) -> Option<&ArtifactEvidence> {
+        self.artifacts
             .iter()
-            .find(|seen| seen.report.recipient() == recipient)
+            .find(|seen| seen.report.target().recipient() == Some(recipient))
             .and_then(|seen| seen.obtained.as_ref())
     }
     pub(super) fn bound_plan(&self) -> Option<&BoundSigningPlan> {
@@ -41,8 +42,8 @@ impl RetainedGraph {
             .as_ref()
             .and_then(|(value, _)| value.bound_plan())
     }
-    pub(super) fn reports(&self) -> impl Iterator<Item = RecipientSnapshot> + '_ {
-        self.recipients.iter().map(|value| value.report)
+    pub(super) fn reports(&self) -> impl Iterator<Item = ArtifactSnapshot> + '_ {
+        self.artifacts.iter().map(|value| value.report)
     }
     pub(super) async fn read(
         connection: &mut SqliteConnection,
@@ -53,7 +54,7 @@ impl RetainedGraph {
         crypto: &WorkspaceCrypto,
     ) -> Result<Self, OperationError> {
         let original = operation::read(connection, selected, operation_id, crypto).await?;
-        let mut recipients = Vec::new();
+        let mut artifacts = Vec::new();
         let mut protected_plan = None;
         let retained = if let Some((prepared, protected)) = original {
             operation::check_digest(&prepared, binding.actor(), expected_digest)?;
@@ -63,22 +64,24 @@ impl RetainedGraph {
                 protected_plan = Some(protected);
                 let mut bound =
                     BoundSigningPlan::from_committed_store(prepared, plan, transaction, time)?;
-                let keys: Vec<PublicKey> = bound
-                    .chat_plan()?
-                    .seals()
-                    .iter()
-                    .map(|seal| seal.recipient())
-                    .collect();
+                let keys = match bound.plan().chat() {
+                    Some(plan) => plan
+                        .seals()
+                        .iter()
+                        .map(|seal| SigningTarget::BusinessSeal(seal.recipient()))
+                        .collect::<Vec<_>>(),
+                    None => vec![SigningTarget::PublicEvent],
+                };
                 for recipient in keys {
                     let (returned, claim) =
                         attempt::read(connection, selected, bound, recipient, crypto).await?;
-                    let expected = returned
-                        .chat_plan()?
-                        .seals()
-                        .iter()
-                        .find(|seal| seal.recipient() == recipient)
-                        .map(|seal| EnvelopeEventId::from_bytes(seal.event_id()))
-                        .ok_or(OperationError::RecoveryRequired)?;
+                    let expected = EnvelopeEventId::from_bytes(
+                        returned
+                            .plan()
+                            .artifact(recipient)
+                            .map_err(|_| OperationError::RecoveryRequired)?
+                            .event_id(),
+                    );
                     if let Some((id, transaction, time, protected)) = claim {
                         let attempt = SigningAttempt::from_committed_store(
                             returned,
@@ -95,8 +98,8 @@ impl RetainedGraph {
                             }
                             None => (None, None, None),
                         };
-                        recipients.push(SeenRecipient {
-                            report: RecipientSnapshot::from_store_report(
+                        artifacts.push(SeenArtifact {
+                            report: ArtifactSnapshot::from_store_report(
                                 recipient,
                                 Some(expected),
                                 Some(claim),
@@ -108,8 +111,8 @@ impl RetainedGraph {
                         });
                         bound = attempt.into_bound_plan();
                     } else {
-                        recipients.push(SeenRecipient {
-                            report: RecipientSnapshot::from_store_report(
+                        artifacts.push(SeenArtifact {
+                            report: ArtifactSnapshot::from_store_report(
                                 recipient,
                                 Some(expected),
                                 None,
@@ -124,13 +127,18 @@ impl RetainedGraph {
                 }
                 RetainedOperation::Planned(Box::new(bound))
             } else {
-                let command = prepared.request().chat_command()?;
-                let mut keys = vec![command.context().actor().participant(), command.peer()];
-                keys.sort_unstable();
+                let mut keys = match prepared.request().command().chat() {
+                    Some(command) => vec![
+                        SigningTarget::BusinessSeal(command.context().actor().participant()),
+                        SigningTarget::BusinessSeal(command.peer()),
+                    ],
+                    None => vec![SigningTarget::PublicEvent],
+                };
+                keys.sort_unstable_by_key(|target| target.key());
                 keys.dedup();
                 for recipient in keys {
-                    recipients.push(SeenRecipient {
-                        report: RecipientSnapshot::from_store_report(recipient, None, None, None),
+                    artifacts.push(SeenArtifact {
+                        report: ArtifactSnapshot::from_store_report(recipient, None, None, None),
                         claim: None,
                         evidence: None,
                         obtained: None,
@@ -145,7 +153,7 @@ impl RetainedGraph {
         Ok(Self {
             retained,
             protected_plan,
-            recipients,
+            artifacts,
         })
     }
     pub(super) async fn unchanged(
@@ -157,7 +165,7 @@ impl RetainedGraph {
         if let Some((source, protected)) = &self.retained {
             operation::unchanged(connection, source.prepared(), protected).await?;
             plan::unchanged(connection, source.prepared(), self.protected_plan.as_ref()).await?;
-            for seen in &self.recipients {
+            for seen in &self.artifacts {
                 if let (Some(claim), Some(protected)) = (seen.report.claim(), &seen.claim) {
                     attempt::unchanged_snapshot(connection, claim, protected).await?;
                     let scope = IssuanceScope {
@@ -165,23 +173,22 @@ impl RetainedGraph {
                         operation: claim.operation_id(),
                         plan_digest: *claim.plan_digest(),
                         attempt: claim.attempt_id(),
-                        recipient: claim.recipient(),
+                        target: claim.target(),
                     };
                     evidence::unchanged_scope(connection, scope, seen.evidence.as_ref()).await?;
                 } else {
-                    absent_claim(connection, selected, operation_id, seen.report.recipient())
-                        .await?;
+                    absent_claim(connection, selected, operation_id, seen.report.target()).await?;
                 }
             }
             graph_counts(
                 connection,
                 selected.workspace_id().as_bytes(),
                 operation_id.as_bytes(),
-                &self.recipients,
+                &self.artifacts,
             )
             .await?;
         } else {
-            let count:i64=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM operations WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plans WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plan_parts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_attempts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2)")
+            let count:i64=sqlx::query_scalar(attempt::sql(connection, "SELECT EXISTS(SELECT 1 FROM operations WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plans WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_plan_parts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM signing_attempts WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence WHERE workspace=?1 AND operation_id=?2)+EXISTS(SELECT 1 FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2)").await?)
                     .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation_id.as_bytes().as_slice()).fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
             if count != 0 {
                 return Err(OperationError::RecoveryRequired);
@@ -196,10 +203,7 @@ impl RetainedGraph {
         match self.retained {
             Some((source, _)) => OperationSnapshot::from_store_report(
                 source,
-                self.recipients
-                    .into_iter()
-                    .map(|seen| seen.report)
-                    .collect(),
+                self.artifacts.into_iter().map(|seen| seen.report).collect(),
                 observed,
             )
             .map(Some),
@@ -339,21 +343,18 @@ async fn graph_counts(
     connection: &mut SqliteConnection,
     workspace: &[u8; 32],
     operation: &[u8; 32],
-    recipients: &[SeenRecipient],
+    artifacts: &[SeenArtifact],
 ) -> Result<(), OperationError> {
     // The valid graph has at most two claims, two obtained manifests and eight
     // data parts. One excess sentinel is sufficient to reject arbitrary extras.
-    let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM (SELECT 1 FROM signing_attempts WHERE workspace=?1 AND operation_id=?2 LIMIT 3)),(SELECT count(*) FROM (SELECT 1 FROM seal_evidence WHERE workspace=?1 AND operation_id=?2 LIMIT 3)),(SELECT count(*) FROM (SELECT 1 FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2 LIMIT 9))")
+    let counts:(i64,i64,i64)=sqlx::query_as(attempt::sql(connection, "SELECT (SELECT count(*) FROM (SELECT 1 FROM signing_attempts WHERE workspace=?1 AND operation_id=?2 LIMIT 3)),(SELECT count(*) FROM (SELECT 1 FROM seal_evidence WHERE workspace=?1 AND operation_id=?2 LIMIT 3)),(SELECT count(*) FROM (SELECT 1 FROM seal_evidence_parts WHERE workspace=?1 AND operation_id=?2 LIMIT 9))").await?)
         .bind(workspace.as_slice()).bind(operation.as_slice()).fetch_one(connection).await.map_err(|_|OperationError::RecoveryRequired)?;
-    let claims = recipients
-        .iter()
-        .filter(|seen| seen.claim.is_some())
-        .count() as i64;
-    let evidence = recipients
+    let claims = artifacts.iter().filter(|seen| seen.claim.is_some()).count() as i64;
+    let evidence = artifacts
         .iter()
         .filter(|seen| seen.evidence.is_some())
         .count() as i64;
-    let parts = recipients
+    let parts = artifacts
         .iter()
         .filter_map(|seen| seen.evidence.as_ref())
         .map(|value| value.parts.len() as i64)

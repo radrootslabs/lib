@@ -10,10 +10,10 @@ use radroots_signing::{
     request::CancellationSignal,
 };
 use radroots_storage::command::{
-    DeliveryAttempt, DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryIntent,
-    DeliveryObservation, DeliveryObservationKind, DeliveryObservationOutcome, EnvelopeCandidate,
-    EvidenceCaptureOutcome, InstallationOutcome, InstallationRequest, PublicationWork,
-    SealEvidence,
+    ArtifactEvidence, DeliveryAttempt, DeliveryAttemptOutcome, DeliveryAttemptRequest,
+    DeliveryIntent, DeliveryObservation, DeliveryObservationKind, DeliveryObservationOutcome,
+    EnvelopeCandidate, EvidenceCaptureOutcome, InstallationOutcome, InstallationRequest,
+    PublicationWork,
 };
 use radroots_transport::{
     EventSink, TargetSet,
@@ -128,7 +128,7 @@ impl Ready {
             panic!("synthetic participant seal must be obtained")
         };
         let seal = artifact.with_json(|raw| {
-            SealEvidence::verify(&claim, raw, artifact.observed_at_unix_ms()).unwrap()
+            ArtifactEvidence::verify(&claim, raw, artifact.observed_at_unix_ms()).unwrap()
         });
         assert!(matches!(
             store
@@ -236,7 +236,7 @@ impl Ready {
                 self.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient(),
+                e.recipient().unwrap(),
                 id.clone(),
                 copy(&self.proof),
             )
@@ -255,7 +255,7 @@ impl Ready {
                 self.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient(),
+                e.recipient().unwrap(),
                 id.clone(),
                 copy(&self.proof),
             )
@@ -443,7 +443,7 @@ async fn predecessor_schema_six_preserves_original_installation_and_seal_without
     ready.store.close().await.unwrap();
     let mut database = ready.fixture.database().await;
     sqlx::raw_sql("DROP TABLE chat_delivery_observations; DROP TABLE chat_delivery_parts; DROP TABLE chat_delivery_attempts; PRAGMA user_version=6").execute(&mut database).await.unwrap();
-    let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM sqlite_schema),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM seal_evidence)").fetch_one(&mut database).await.unwrap();
+    let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM sqlite_schema),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM artifact_evidence)").fetch_one(&mut database).await.unwrap();
     assert_eq!(counts, (16, 1, 1));
     database.close().await.unwrap();
     let path = ready.fixture.path.join("execution_v1.sqlite");
@@ -504,7 +504,7 @@ async fn actual_delivery_part_failure_rolls_back_attempt_and_keeps_original_inst
             .await,
         Err(OperationError::StorageFailure)
     ));
-    let counts:(i64,i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM chat_delivery_attempts),(SELECT count(*) FROM chat_delivery_parts),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM seal_evidence)").fetch_one(&mut database).await.unwrap();
+    let counts:(i64,i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM chat_delivery_attempts),(SELECT count(*) FROM chat_delivery_parts),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM artifact_evidence)").fetch_one(&mut database).await.unwrap();
     assert_eq!(counts, (0, 0, 1, 1));
     sqlx::query("DROP TRIGGER refuse_delivery_part")
         .execute(&mut database)
@@ -545,7 +545,7 @@ async fn actual_delivery_commit_uncertainty_latches_and_reopen_preserves_busines
                 ready.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient(),
+                e.recipient().unwrap(),
                 id.clone(),
                 copy(&ready.proof)
             )
@@ -566,7 +566,7 @@ async fn actual_delivery_commit_uncertainty_latches_and_reopen_preserves_busines
                 ready.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient(),
+                e.recipient().unwrap(),
                 id,
                 copy(&ready.proof)
             )

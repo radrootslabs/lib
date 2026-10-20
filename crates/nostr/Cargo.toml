@@ -49,8 +49,9 @@ events = [
   "radroots_event/serde",
   "radroots_event_codec/json",
 ]
-nip17 = ["events", "nostr/nip44", "nostr/nip59", "dep:base64", "dep:radroots_protocol"]
+nip17 = ["events", "nostr/nip44", "nostr/nip59", "dep:base64", "radroots_protocol/chat"]
 signing = [
+  "dep:radroots_protocol",
   "events",
   "dep:radroots_signing",
   "nostr/nip49",
@@ -64,7 +65,7 @@ radroots_event = { workspace = true, default-features = false }
 radroots_event_codec = { workspace = true, default-features = false }
 radroots_identity = { workspace = true, default-features = false }
 radroots_signing = { workspace = true, optional = true, default-features = false }
-radroots_protocol = { workspace = true, optional = true, default-features = false, features = ["chat"] }
+radroots_protocol = { workspace = true, optional = true, default-features = false, features = ["nip01"] }
 nostr = { workspace = true, default-features = false, features = ["alloc"] }
 zeroize = { workspace = true, default-features = false, features = ["alloc"] }
 serde = { workspace = true, default-features = false, features = [

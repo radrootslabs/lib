@@ -10,8 +10,8 @@ use radroots_signing::{
     request::CancellationSignal,
 };
 use radroots_storage::command::{
-    CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome, SealEvidence,
-    SigningAttempt,
+    ArtifactEvidence, CapturedArtifact, ClaimAttemptOutcome, ClaimAttemptRequest,
+    EvidenceCaptureOutcome, SigningAttempt,
 };
 thread_local! {static CALLS:Cell<usize>=const {Cell::new(0)};static MISSING:Cell<bool>=const {Cell::new(false)};}
 fn signer_clock() -> Result<u64, radroots_signing::Error> {
@@ -89,7 +89,7 @@ async fn prepare(
     let _ = fixture;
     (prepared, digest, recipients)
 }
-async fn obtain(attempt: &SigningAttempt, missing: bool) -> SealEvidence {
+async fn obtain(attempt: &SigningAttempt, missing: bool) -> ArtifactEvidence {
     CALLS.with(|calls| calls.set(0));
     MISSING.with(|value| value.set(missing));
     // Published synthetic key in a qualified local provider, isolated from all host custody.
@@ -122,7 +122,7 @@ async fn obtain(attempt: &SigningAttempt, missing: bool) -> SealEvidence {
     };
     assert_eq!(artifact.observed_at_unix_ms().is_none(), missing);
     artifact.with_json(|raw| {
-        SealEvidence::verify(attempt, raw, artifact.observed_at_unix_ms()).unwrap()
+        ArtifactEvidence::verify(attempt, raw, artifact.observed_at_unix_ms()).unwrap()
     })
 }
 fn captured(outcome: EvidenceCaptureOutcome) -> radroots_storage::command::EvidenceReceipt {
@@ -165,7 +165,7 @@ async fn real_exact_peer_and_self_signatures_capture_reopen_and_never_reclaim_or
             .await
             .unwrap();
         assert!(matches!(duplicate, ClaimAttemptOutcome::Retained(_)));
-        let repeated = SealEvidence::verify(&first, &raw, NonZeroU64::new(111_000)).unwrap();
+        let repeated = ArtifactEvidence::verify(&first, &raw, NonZeroU64::new(111_000)).unwrap();
         assert_eq!(
             captured(
                 store
@@ -190,7 +190,7 @@ async fn real_exact_peer_and_self_signatures_capture_reopen_and_never_reclaim_or
             .unwrap()
             .unwrap();
         assert_eq!(original.attempt_id(), id);
-        let recovered: CapturedSeal = reopened
+        let recovered: CapturedArtifact = reopened
             .obtained_evidence(
                 selection(&binding, &prepared, digest, recipient),
                 copy(&proof),
@@ -298,7 +298,7 @@ async fn one_recipient_obtained_does_not_invent_the_other_and_failed_capture_kee
             .unwrap(),
     );
     let mut database = fixture.database().await;
-    sqlx::raw_sql("CREATE TRIGGER refuse_evidence BEFORE INSERT ON seal_evidence_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ABORT,'synthetic capture failure'); END").execute(&mut database).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER refuse_evidence BEFORE INSERT ON artifact_evidence_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ABORT,'synthetic capture failure'); END").execute(&mut database).await.unwrap();
     assert!(matches!(
         store
             .capture_evidence(input.clone(), &proof, &evidence)
@@ -306,7 +306,7 @@ async fn one_recipient_obtained_does_not_invent_the_other_and_failed_capture_kee
         Err(OperationError::StorageFailure)
     ));
     assert_eq!(evidence.raw_json(), raw);
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM seal_evidence")
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM artifact_evidence")
         .fetch_one(&mut database)
         .await
         .unwrap();
@@ -388,13 +388,13 @@ async fn verification_refuses_wrong_field_signature_and_binding_before_capture()
         changed[field] = value;
         assert!(
             matches!(
-                SealEvidence::verify(&first, &changed.to_string(), None),
+                ArtifactEvidence::verify(&first, &changed.to_string(), None),
                 Err(OperationError::InvalidEvidence)
             ),
             "{field}"
         );
     }
-    assert!(SealEvidence::verify(&first, &"x".repeat(65537), None).is_err());
+    assert!(ArtifactEvidence::verify(&first, &"x".repeat(65537), None).is_err());
     store.close().await.unwrap();
 }
 
@@ -578,7 +578,7 @@ async fn uncertain_capture_keeps_original_bytes_until_safe_reopen_and_exact_retr
     let evidence = obtain(&first, true).await;
     let raw = evidence.raw_json().to_owned();
     let mut database = fixture.database().await;
-    sqlx::raw_sql("CREATE TRIGGER capture_unknown BEFORE INSERT ON seal_evidence_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ROLLBACK,'synthetic unknown capture'); END").execute(&mut database).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER capture_unknown BEFORE INSERT ON artifact_evidence_parts WHEN NEW.part=2 BEGIN SELECT RAISE(ROLLBACK,'synthetic unknown capture'); END").execute(&mut database).await.unwrap();
     database.close().await.unwrap();
     let outcome = store
         .capture_evidence(input.clone(), &proof, &evidence)
@@ -820,4 +820,122 @@ async fn known_claim_insert_rollback_leaves_no_invocation_and_allows_one_new_cla
     assert_eq!(retained.attempt_id(), original.attempt_id());
     database.close().await.unwrap();
     store.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn exact_legacy_private_claim_evidence_bytes_recover_and_continue_without_catalog_rewrite() {
+    for version in [7, 8] {
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create().await;
+        let (prepared, digest, recipients) =
+            prepare(&fixture, &store, &binding, &proof, 166, false).await;
+        let first = claim(
+            store
+                .claim_attempt(
+                    selection(&binding, &prepared, digest, recipients[0]),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        let original_claim =
+            radroots_storage::command::protected::issuance::ClaimRecord::capture(&first)
+                .unwrap()
+                .encode()
+                .unwrap();
+        let claim_json: serde_json::Value = serde_json::from_slice(&original_claim).unwrap();
+        assert_eq!(claim_json["version"], 1);
+        assert_eq!(claim_json["recipient"], json!(recipients[0]));
+        assert!(claim_json.get("role").is_none());
+        let evidence = obtain(&first, false).await;
+        let receipt = captured(
+            store
+                .capture_evidence(input.clone(), &proof, &evidence)
+                .await
+                .unwrap(),
+        );
+        let raw = evidence.raw_json().to_owned();
+        store.close().await.unwrap();
+        let mut db = fixture.database().await;
+        super::super::public_admission::retain_legacy_issuance_catalog(&mut db).await;
+        if version == 7 {
+            let ddl: String =
+                sqlx::query_scalar("SELECT sql FROM sqlite_schema WHERE name='operations'")
+                    .fetch_one(&mut db)
+                    .await
+                    .unwrap();
+            let index: String = sqlx::query_scalar(
+                "SELECT sql FROM sqlite_schema WHERE name='operation_transaction_identity'",
+            )
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+            let old = ddl.replace("'inbox.reply','listing.publish'", "'inbox.reply'");
+            // Preserve the exact encrypted T0 and the original dependent rows.
+            sqlx::query("PRAGMA foreign_keys=OFF")
+                .execute(&mut db)
+                .await
+                .unwrap();
+            for statement in [
+                "CREATE TEMP TABLE retained_operations AS SELECT * FROM operations",
+                "DROP TABLE operations",
+                &old,
+                &index,
+                "INSERT INTO operations SELECT * FROM retained_operations",
+                "DROP TABLE retained_operations",
+                "PRAGMA user_version=7",
+            ] {
+                sqlx::query(sqlx::AssertSqlSafe(statement.to_owned()))
+                    .execute(&mut db)
+                    .await
+                    .unwrap();
+            }
+        }
+        db.close().await.unwrap();
+        let reopened = fixture.reopen(input.clone()).await;
+        let recovered = reopened
+            .obtained_evidence(
+                selection(&binding, &prepared, digest, recipients[0]),
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(recovered.receipt(), receipt);
+        assert_eq!(recovered.evidence().raw_json(), raw);
+        assert!(matches!(
+            reopened
+                .claim_attempt(
+                    selection(&binding, &prepared, digest, recipients[0]),
+                    copy(&proof)
+                )
+                .await
+                .unwrap(),
+            ClaimAttemptOutcome::Retained(_)
+        ));
+        let second = claim(
+            reopened
+                .claim_attempt(
+                    selection(&binding, &prepared, digest, recipients[1]),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        let second_evidence = obtain(&second, false).await;
+        captured(
+            reopened
+                .capture_evidence(input, &proof, &second_evidence)
+                .await
+                .unwrap(),
+        );
+        reopened.close().await.unwrap();
+        let mut db = fixture.database().await;
+        let actual: i64 = sqlx::query_scalar("PRAGMA user_version")
+            .fetch_one(&mut db)
+            .await
+            .unwrap();
+        assert_eq!(actual, version);
+        db.close().await.unwrap();
+    }
 }

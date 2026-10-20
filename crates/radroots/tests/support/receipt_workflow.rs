@@ -250,7 +250,7 @@ async fn ordinary_online_inquiry_runs_t0_t1_sign_install_and_exact_peer_self_del
         .unwrap();
     assert!(
         snapshot
-            .recipients()
+            .artifacts()
             .iter()
             .all(|recipient| recipient.obtained().is_some())
     );

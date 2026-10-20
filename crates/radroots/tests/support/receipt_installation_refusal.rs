@@ -237,7 +237,7 @@ async fn installation_checks_original_scope_current_grant_and_transaction_clock_
     assert!(state.installation().is_none());
     assert_eq!(
         state
-            .recipients()
+            .artifacts()
             .iter()
             .filter_map(|value| value.obtained())
             .collect::<Vec<_>>(),
@@ -254,7 +254,7 @@ async fn installation_checks_original_scope_current_grant_and_transaction_clock_
             .is_err()
     );
     let mut database = fixture.database().await;
-    let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM chat_messages),(SELECT count(*) FROM chat_publication_work),(SELECT count(*) FROM seal_evidence)").fetch_one(&mut database).await.unwrap();
+    let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM chat_messages),(SELECT count(*) FROM chat_publication_work),(SELECT count(*) FROM artifact_evidence)").fetch_one(&mut database).await.unwrap();
     assert_eq!(counts, (0, 0, 1));
     database.close().await.unwrap();
     store.close().await.unwrap();

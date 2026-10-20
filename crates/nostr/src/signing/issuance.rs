@@ -16,7 +16,8 @@ impl LocalSigner {
                 return SigningOutcome::not_dispatched(binding, ProviderError::IdentityChanged);
             }
             // Conversion/representation errors occur before cryptography.
-            let unsigned = match intent.with_plan(crate::plan_signing::unsigned_event_from_plan) {
+            let unsigned = match intent.with_event(crate::plan_signing::unsigned_event_from_fields)
+            {
                 Ok(unsigned) => unsigned,
                 Err(_) => {
                     return SigningOutcome::not_dispatched(binding, ProviderError::InvalidInput);
@@ -191,7 +192,18 @@ mod tests {
             SigningIntent::new(
                 intent.binding().operation_id(),
                 [9; 32],
-                intent.with_plan(Clone::clone),
+                intent.with_event(|fields, _| AuthoredEventPlan::from_generic(
+                    GenericEventDraft::new(
+                        "radroots.social.geochat.v1",
+                        fields.kind,
+                        fields.created_at,
+                        fields.tags.to_vec(),
+                        fields.content,
+                        fields.author.to_hex()
+                    )
+                    .unwrap()
+                )
+                .unwrap()),
                 ArtifactRole::PublicEvent,
                 None,
                 ProviderCall::new(

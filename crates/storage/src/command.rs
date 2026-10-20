@@ -9,7 +9,7 @@ use radroots_domain::{
 };
 pub use radroots_protocol::chat::ChatSigningPlan;
 use radroots_protocol::command::{CapturedChatCommand, CapturedCommand};
-pub use radroots_protocol::plan::CapturedSigningPlan;
+pub use radroots_protocol::plan::{CapturedSigningPlan, SigningTarget};
 use radroots_transport::BoxFuture;
 
 #[cfg(feature = "protected_outbox")]
@@ -32,11 +32,11 @@ pub use installation::{
     ChatInstallation, InstallationOutcome, InstallationRequest, PublicationWork,
 };
 pub use issuance::{
-    CapturedSeal, ClaimAttemptOutcome, ClaimAttemptRequest, EvidenceCaptureOutcome,
-    EvidenceReceipt, SealEvidence, SigningAttempt,
+    ArtifactEvidence, CapturedArtifact, ClaimAttemptOutcome, ClaimAttemptRequest,
+    EvidenceCaptureOutcome, EvidenceReceipt, SigningAttempt,
 };
 pub use observation::{DeliveryObservation, DeliveryObservationKind, DeliveryObservationOutcome};
-pub use snapshot::{ClaimSnapshot, OperationSnapshot, RecipientSnapshot, RetainedOperation};
+pub use snapshot::{ArtifactSnapshot, ClaimSnapshot, OperationSnapshot, RetainedOperation};
 
 /// Fixed operation-store failures known before a successful admission commit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -320,7 +320,7 @@ pub trait OperationJournal: WorkspaceStore {
         &'a self,
         _input: crate::workspace::AttachmentInput,
         _proof: &'a AttachmentProof,
-        _evidence: &'a SealEvidence,
+        _evidence: &'a ArtifactEvidence,
     ) -> BoxFuture<'a, Result<EvidenceCaptureOutcome, OperationError>> {
         Box::pin(async { Err(OperationError::RecoveryRequired) })
     }
@@ -401,14 +401,14 @@ pub trait OperationJournal: WorkspaceStore {
         &'a self,
         input: crate::workspace::AttachmentInput,
         proof: &'a AttachmentProof,
-        evidence: &'a SealEvidence,
+        evidence: &'a ArtifactEvidence,
     ) -> BoxFuture<'a, Result<EvidenceCaptureOutcome, OperationError>>;
     /// Reads original exact captured bytes under current workspace access.
     fn obtained_evidence(
         &self,
         request: ClaimAttemptRequest,
         proof: AttachmentProof,
-    ) -> BoxFuture<'_, Result<Option<CapturedSeal>, OperationError>>;
+    ) -> BoxFuture<'_, Result<Option<CapturedArtifact>, OperationError>>;
     /// Atomically retains the complete immutable plan under current access and
     /// the original first-issue window. No signer invocation happens here.
     fn bind_signing_intents(

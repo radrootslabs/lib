@@ -9,7 +9,7 @@ use radroots_domain::{
     ChatMessage, ChatRelation, CommandDigest, EnvelopeEventId, MessageId, OperationId, PublicKey,
     SigningAttemptId, TransactionId, UnixSeconds, WorkspaceId,
 };
-use radroots_protocol::intent::IntentBinding;
+use radroots_protocol::{intent::IntentBinding, plan::SigningTarget};
 use sha2::{Digest, Sha256};
 use std::{
     boxed::Box,
@@ -18,14 +18,14 @@ use std::{
     vec::Vec,
 };
 
-/// Fixed original claim facts, without another copy of its complete private plan.
+/// Fixed original claim facts, without another copy of its complete plan.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ClaimSnapshot {
     workspace: WorkspaceId,
     operation: OperationId,
     command: CommandDigest,
     plan: [u8; 32],
-    recipient: PublicKey,
+    target: SigningTarget,
     attempt: SigningAttemptId,
     transaction: TransactionId,
     claimed_at: UnixSeconds,
@@ -42,11 +42,11 @@ impl ClaimSnapshot {
             operation: identity.operation_id(),
             command: identity.command_digest(),
             plan: *attempt.bound_plan().plan().digest(),
-            recipient: attempt.seal()?.recipient(),
+            target: attempt.target(),
             attempt: attempt.attempt_id(),
             transaction: attempt.transaction_id(),
             claimed_at: attempt.claimed_at(),
-            event: EnvelopeEventId::from_bytes(attempt.seal()?.event_id()),
+            event: EnvelopeEventId::from_bytes(attempt.artifact()?.event_id()),
             intent: attempt.binding(),
         })
     }
@@ -67,8 +67,13 @@ impl ClaimSnapshot {
         &self.plan
     }
     /// Exact intended recipient.
-    pub const fn recipient(self) -> PublicKey {
-        self.recipient
+    pub const fn target(self) -> SigningTarget {
+        self.target
+    }
+    pub fn recipient(self) -> Result<PublicKey, OperationError> {
+        self.target
+            .recipient()
+            .ok_or(OperationError::UnsupportedOperation)
     }
     /// Full-width retained attempt identity.
     pub const fn attempt_id(self) -> SigningAttemptId {
@@ -97,33 +102,38 @@ impl fmt::Debug for ClaimSnapshot {
     }
 }
 
-/// One expected recipient's independent retained facts. Absence of obtained
+/// One exact artifact's independent retained facts. Absence of obtained
 /// evidence for a retained claim never establishes safe reissue.
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub struct RecipientSnapshot {
-    recipient: PublicKey,
+pub struct ArtifactSnapshot {
+    target: SigningTarget,
     expected_event: Option<EnvelopeEventId>,
     claim: Option<ClaimSnapshot>,
     obtained: Option<EvidenceReceipt>,
 }
-impl RecipientSnapshot {
+impl ArtifactSnapshot {
     /// Structural report; the complete snapshot constructor checks its scope.
-    pub const fn from_store_report(
-        recipient: PublicKey,
+    pub fn from_store_report(
+        target: impl Into<SigningTarget>,
         expected_event: Option<EnvelopeEventId>,
         claim: Option<ClaimSnapshot>,
         obtained: Option<EvidenceReceipt>,
     ) -> Self {
         Self {
-            recipient,
+            target: target.into(),
             expected_event,
             claim,
             obtained,
         }
     }
     /// Exact expected recipient.
-    pub const fn recipient(self) -> PublicKey {
-        self.recipient
+    pub const fn target(self) -> SigningTarget {
+        self.target
+    }
+    pub fn recipient(self) -> Result<PublicKey, OperationError> {
+        self.target
+            .recipient()
+            .ok_or(OperationError::UnsupportedOperation)
     }
     /// Expected retained seal ID, when a complete plan exists.
     pub const fn expected_event(self) -> Option<EnvelopeEventId> {
@@ -138,9 +148,9 @@ impl RecipientSnapshot {
         self.obtained
     }
 }
-impl fmt::Debug for RecipientSnapshot {
+impl fmt::Debug for ArtifactSnapshot {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("RecipientSnapshot(<redacted>)")
+        f.write_str("ArtifactSnapshot(<redacted>)")
     }
 }
 
@@ -178,7 +188,7 @@ impl fmt::Debug for RetainedOperation {
 /// only. It grants no authentication, backend qualification or installation fact.
 pub struct OperationSnapshot {
     retained: RetainedOperation,
-    recipients: Box<[RecipientSnapshot]>,
+    artifacts: Box<[ArtifactSnapshot]>,
     observed_at: UnixSeconds,
     installation: Option<ChatInstallation>,
     message: Option<ChatMessage>,
@@ -226,8 +236,8 @@ impl OperationSnapshot {
             }
             None => digest.update([0]),
         }
-        for recipient in self.recipients() {
-            digest.update(recipient.recipient().as_bytes());
+        for recipient in self.artifacts() {
+            digest.update(recipient.target().key());
             match recipient.claim() {
                 Some(claim) => {
                     digest.update([1]);
@@ -265,12 +275,12 @@ impl OperationSnapshot {
             None => digest.update([0]),
         }
         for work in self.publications() {
-            digest.update(work.evidence().recipient().as_bytes());
+            digest.update(work.evidence().target().key());
             digest.update(work.transaction_id().as_bytes());
             digest.update(work.queued_at().get().to_be_bytes());
         }
         for attempt in self.delivery_attempts() {
-            digest.update(attempt.work().evidence().recipient().as_bytes());
+            digest.update(attempt.work().evidence().target().key());
             digest.update(attempt.intent().digest());
             digest.update(attempt.envelope_digest());
             digest.update(attempt.transaction_id().as_bytes());
@@ -278,7 +288,7 @@ impl OperationSnapshot {
             digest.update(attempt.target_ordinals());
         }
         for observation in self.delivery_observations() {
-            digest.update(observation.work().evidence().recipient().as_bytes());
+            digest.update(observation.work().evidence().target().key());
             digest.update(observation.request_id().as_str().as_bytes());
             digest.update(observation.event_id().as_bytes());
             digest.update(observation.envelope_digest());
@@ -328,28 +338,32 @@ impl OperationSnapshot {
         }
         radroots_domain::CheckpointDigest::from_bytes(digest.finalize().into())
     }
-    /// Checks the exact complete recipient set, original claim scope and obtained
+    /// Checks the exact complete artifact set, original claim scope and obtained
     /// references. Concrete adapters must independently authenticate all rows and
     /// compare both retained and absent facts in one coherent transaction.
     pub fn from_store_report(
         retained: RetainedOperation,
-        recipients: Vec<RecipientSnapshot>,
+        artifacts: Vec<ArtifactSnapshot>,
         observed_at: UnixSeconds,
     ) -> Result<Self, OperationError> {
-        retained.prepared().request().chat_command()?;
-        if recipients.is_empty() || recipients.len() > 2 || observed_at.get() == 0 {
+        if artifacts.is_empty() || artifacts.len() > 2 || observed_at.get() == 0 {
             return Err(OperationError::RecoveryRequired);
         }
         let prepared = retained.prepared();
-        let command = prepared.request().chat_command()?;
-        let mut expected = vec![command.context().actor().participant(), command.peer()];
-        expected.sort_unstable();
+        let mut expected = match prepared.request().command().chat() {
+            Some(command) => vec![
+                SigningTarget::BusinessSeal(command.context().actor().participant()),
+                SigningTarget::BusinessSeal(command.peer()),
+            ],
+            None => vec![SigningTarget::PublicEvent],
+        };
+        expected.sort_unstable_by_key(|target| target.key());
         expected.dedup();
-        if recipients.len() != expected.len() {
+        if artifacts.len() != expected.len() {
             return Err(OperationError::RecoveryRequired);
         }
-        for (recipient, expected) in recipients.iter().zip(expected) {
-            if recipient.recipient != expected {
+        for (recipient, expected) in artifacts.iter().zip(expected) {
+            if recipient.target != expected {
                 return Err(OperationError::RecoveryRequired);
             }
             let Some(bound) = retained.bound_plan() else {
@@ -361,13 +375,11 @@ impl OperationSnapshot {
                 }
                 continue;
             };
-            let seal = bound
-                .chat_plan()?
-                .seals()
-                .iter()
-                .find(|seal| seal.recipient() == expected)
-                .ok_or(OperationError::RecoveryRequired)?;
-            let event = EnvelopeEventId::from_bytes(seal.event_id());
+            let artifact = bound
+                .plan()
+                .artifact(expected)
+                .map_err(|_| OperationError::RecoveryRequired)?;
+            let event = EnvelopeEventId::from_bytes(artifact.event_id());
             if recipient.expected_event != Some(event) {
                 return Err(OperationError::RecoveryRequired);
             }
@@ -377,7 +389,7 @@ impl OperationSnapshot {
                     || claim.operation != identity.operation_id()
                     || claim.command != identity.command_digest()
                     || &claim.plan != bound.plan().digest()
-                    || claim.recipient != expected
+                    || claim.target != expected
                     || claim.event != event
                     || claim.intent.operation_id() != identity.operation_id()
                     || claim.intent.command_digest() != identity.command_digest().as_bytes()
@@ -391,7 +403,7 @@ impl OperationSnapshot {
                         || obtained.operation_id() != claim.operation
                         || obtained.command_digest() != claim.command
                         || obtained.attempt_id() != claim.attempt
-                        || obtained.recipient() != expected
+                        || obtained.target() != expected
                         || obtained.event_id() != event)
                 {
                     return Err(OperationError::RecoveryRequired);
@@ -402,7 +414,7 @@ impl OperationSnapshot {
         }
         Ok(Self {
             retained,
-            recipients: recipients.into_boxed_slice(),
+            artifacts: artifacts.into_boxed_slice(),
             observed_at,
             installation: None,
             message: None,
@@ -440,18 +452,18 @@ impl OperationSnapshot {
         )?;
         if checked != installed
             || !self
-                .recipients()
+                .artifacts()
                 .iter()
                 .any(|recipient| recipient.obtained() == Some(installed.basis()))
             || publications.is_empty()
-            || publications.len() > self.recipients().len()
+            || publications.len() > self.artifacts().len()
         {
             return Err(OperationError::RecoveryRequired);
         }
         let mut previous = None;
         let mut basis_linked = false;
         for work in &publications {
-            let recipient = work.evidence().recipient();
+            let recipient = work.recipient();
             if previous.is_some_and(|key| key >= recipient)
                 || PublicationWork::from_committed_store(
                     bound,
@@ -461,7 +473,7 @@ impl OperationSnapshot {
                     work.queued_at(),
                 )? != *work
                 || !self
-                    .recipients()
+                    .artifacts()
                     .iter()
                     .any(|value| value.obtained() == Some(work.evidence()))
             {
@@ -522,11 +534,11 @@ impl OperationSnapshot {
         }
         attempts.sort_by(|a, b| {
             (
-                a.work().evidence().recipient(),
+                a.work().evidence().target().recipient(),
                 a.intent().request_id().as_str(),
             )
                 .cmp(&(
-                    b.work().evidence().recipient(),
+                    b.work().evidence().target().recipient(),
                     b.intent().request_id().as_str(),
                 ))
         });
@@ -536,7 +548,7 @@ impl OperationSnapshot {
         let mut slots = 0usize;
         let mut policies = BTreeMap::new();
         for attempt in &attempts {
-            let recipient = attempt.work().evidence().recipient();
+            let recipient = attempt.work().recipient();
             slots = slots
                 .checked_add(attempt.intent().selection().len())
                 .filter(|n| *n <= 384)
@@ -576,13 +588,13 @@ impl OperationSnapshot {
         }
         observations.sort_by(|a, b| {
             (
-                a.work().evidence().recipient(),
+                a.work().evidence().target().recipient(),
                 a.request_id().as_str(),
                 a.target_receipt().target().fingerprint().as_str(),
                 a.kind().code(),
             )
                 .cmp(&(
-                    b.work().evidence().recipient(),
+                    b.work().evidence().target().recipient(),
                     b.request_id().as_str(),
                     b.target_receipt().target().fingerprint().as_str(),
                     b.kind().code(),
@@ -615,7 +627,7 @@ impl OperationSnapshot {
                     .targets()
                     .contains(observation.target_receipt().target())
                 || !seen.insert((
-                    observation.work().evidence().recipient(),
+                    observation.work().recipient(),
                     observation.request_id().as_str(),
                     observation.target_receipt().target().fingerprint().as_str(),
                     observation.kind().code(),
@@ -681,8 +693,8 @@ impl OperationSnapshot {
             .map(|plan| plan.message_id())
     }
     /// Complete sorted unique recipient set and independent outcomes.
-    pub fn recipients(&self) -> &[RecipientSnapshot] {
-        &self.recipients
+    pub fn artifacts(&self) -> &[ArtifactSnapshot] {
+        &self.artifacts
     }
     /// Actual query clock observation; never an issuance restart or global
     /// freshness guarantee.

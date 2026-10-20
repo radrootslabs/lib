@@ -99,7 +99,7 @@ impl Graph {
             let work = installed
                 .work
                 .iter()
-                .find(|work| work.report.evidence().recipient() == recipient)
+                .find(|work| work.report.recipient() == recipient)
                 .ok_or(OperationError::RecoveryRequired)?
                 .report;
             let value = codec::read(connection, work, key, crypto)

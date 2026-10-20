@@ -17,7 +17,7 @@ default = []
 session = ["dep:futures"]
 signer_session = ["session", "dep:radroots_signing"]
 client_session = ["signer_session"]
-workspace_session = ["client_session", "receipts", "radroots_protocol/commands", "radroots_signing/chat", "dep:radroots_transport"]
+workspace_session = ["client_session", "receipts", "radroots_protocol/commands", "radroots_signing/artifacts", "dep:radroots_transport"]
 receipts = ["dep:radroots_storage", "radroots_storage/command_journal"]
 
 [dependencies]
