@@ -1,5 +1,6 @@
 //! Bounded Nostr live-subscription adapter.
 
+use crate::host_time::unix_time_ms;
 use crate::{NostrTransport, RelayCursor, RelayUrl};
 use futures::StreamExt;
 use nostr_sdk::prelude::{
@@ -18,7 +19,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 const CURSOR_PREFIX: &str = "nostr-live-v1";
@@ -306,7 +307,7 @@ impl RelayEventSubscription {
                     .session
                     .as_mut()
                     .ok_or(radroots_transport::Error::SubscriptionUnavailable)?;
-                tokio::time::timeout(remaining, session.next()).await
+                crate::host_time::timeout(remaining, session.next()).await
             };
             let item = match item {
                 Ok(Ok(item)) => item,
@@ -428,7 +429,7 @@ impl RelayEventSubscription {
             if remaining.is_zero() {
                 reason = SubscriptionEndReason::Deadline;
             } else if let Some(session) = self.session.as_mut() {
-                match tokio::time::timeout(remaining, session.cancel()).await {
+                match crate::host_time::timeout(remaining, session.cancel()).await {
                     Ok(Ok(())) => {}
                     Ok(Err(())) => {
                         return Err(radroots_transport::Error::SubscriptionUnavailable);
@@ -559,21 +560,19 @@ impl EventSubscriber for NostrTransport {
                     .min(Duration::from_millis(self.config().connect_timeout_ms())),
                 timeout: remaining,
             };
-            let session = match tokio::time::timeout(
-                timeout,
-                self.subscription_client.subscribe(query),
-            )
-            .await
-            {
-                Ok(Ok(session)) => session,
-                Ok(Err(())) | Err(_) => {
-                    let observed_at = unix_time_ms().max(1);
-                    for relay in &active_relays {
-                        self.status.record_read(relay, false, true, observed_at);
+            let session =
+                match crate::host_time::timeout(timeout, self.subscription_client.subscribe(query))
+                    .await
+                {
+                    Ok(Ok(session)) => session,
+                    Ok(Err(())) | Err(_) => {
+                        let observed_at = unix_time_ms().max(1);
+                        for relay in &active_relays {
+                            self.status.record_read(relay, false, true, observed_at);
+                        }
+                        return Err(radroots_transport::Error::SubscriptionUnavailable);
                     }
-                    return Err(radroots_transport::Error::SubscriptionUnavailable);
-                }
-            };
+                };
 
             let resume_cursors = cursors.clone();
             Ok(Box::new(RelayEventSubscription {
@@ -751,14 +750,6 @@ fn hex_encode(bytes: &[u8]) -> String {
         encoded.push(HEX[(byte & 0x0f) as usize] as char);
     }
     encoded
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn unix_time_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

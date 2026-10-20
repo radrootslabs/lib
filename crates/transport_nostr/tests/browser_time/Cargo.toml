@@ -1,0 +1,22 @@
+[package]
+name = "radroots_nostr_time_browser_fixture"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.99.0"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+async-utility = { git = "https://github.com/yukibtc/async-utility", rev = "b323ae0c1c1424b78bf8bb8832b95e86771f1dee", version = "=0.3.2" }
+futures = "=0.3.32"
+js-sys = "=0.3.91"
+wasm-bindgen = "=0.2.114"
+wasm-bindgen-futures = "=0.4.64"
+web-time = "=1.1.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage_nightly)"] }

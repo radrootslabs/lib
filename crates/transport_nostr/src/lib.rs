@@ -8,6 +8,7 @@ mod connections;
 mod cursor;
 mod error;
 mod exact_delivery;
+mod host_time;
 mod profile;
 mod relay;
 mod sink;

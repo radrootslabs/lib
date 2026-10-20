@@ -18,6 +18,17 @@ The authoritative package charter is the
 The reviewed Rust surface is recorded in the
 [public API baseline](../../contracts/api_baselines/radroots_transport_nostr.txt).
 
+Shared fetch, delivery and subscription timing uses a private host boundary.
+Native execution retains Tokio's monotonic deadlines and system observation
+clock. The browser implementation uses browser monotonic and wall clocks and
+the pinned upstream sleep with a separate local cancellation owner. The owner
+measures the original deadline when it starts, without renewing its budget.
+Fractional waits round up, long waits use bounded signed-delay chunks, and
+each wake rechecks the deadline before reporting expiry.
+Its isolated
+page/worker fixture lives in `tests/browser_time`; this does not qualify the
+complete transport, which still requires native socket I/O at this checkpoint.
+
 ## Configure without connecting
 
 Configuration is explicit, validated, and inert. Constructing

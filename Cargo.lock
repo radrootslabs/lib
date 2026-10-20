@@ -3767,6 +3767,7 @@ dependencies = [
 name = "radroots_transport_nostr"
 version = "0.1.0-alpha"
 dependencies = [
+ "async-utility",
  "async-wsocket",
  "futures",
  "nostr-sdk",
@@ -3781,6 +3782,8 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "url",
+ "wasm-bindgen-futures",
+ "web-time",
  "webpki-roots 0.26.11",
 ]
 

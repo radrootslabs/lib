@@ -1,6 +1,7 @@
 //! Nostr implementation of the transport event sink.
 
 use crate::exact_delivery::ExactEvent;
+use crate::host_time::unix_time_ms;
 use crate::{NostrTransport, RelayUrl, status};
 use core::{fmt, time::Duration};
 use futures::{StreamExt, stream};
@@ -104,14 +105,14 @@ impl RelayClient for LiveRelayClient {
         operation_timeout: Duration,
     ) -> BoxFuture<'a, Vec<RelayPublishResult>> {
         Box::pin(async move {
-            let deadline = tokio::time::Instant::now() + operation_timeout;
+            let deadline = crate::host_time::Instant::now() + operation_timeout;
             stream::iter(relays.into_iter().map(|relay| {
                 let event = event.clone();
                 async move {
                     let url = relay.as_str().to_owned();
                     let mut attempted = false;
                     let attempt = async {
-                        if tokio::time::Instant::now() >= deadline {
+                        if crate::host_time::Instant::now() >= deadline {
                             return Err("timeout".to_owned());
                         }
                         attempted = true;
@@ -130,7 +131,7 @@ impl RelayClient for LiveRelayClient {
                         .map_err(|error| error.to_string())?;
                         event.publish(&self.client, &self.writers, &url).await
                     };
-                    let outcome = match tokio::time::timeout_at(deadline, attempt).await {
+                    let outcome = match crate::host_time::timeout_at(deadline, attempt).await {
                         Err(_) => status::delivery_failure("timeout"),
                         Ok(Err(error)) => status::delivery_failure(&error),
                         Ok(Ok(outcome)) => outcome,
@@ -364,14 +365,6 @@ impl EventSink for NostrTransport {
             self.execute_prepared_delivery(prepared).await
         })
     }
-}
-
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn unix_time_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

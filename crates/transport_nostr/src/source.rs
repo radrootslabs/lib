@@ -1,5 +1,6 @@
 //! Nostr implementation of the transport event source.
 
+use crate::host_time::unix_time_ms;
 use crate::{NostrTransport, RelayCursor, RelayUrl, status};
 use core::cmp::Ordering;
 use core::time::Duration;
@@ -16,7 +17,6 @@ use radroots_transport::{
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "source_budget.rs"]
 pub(crate) mod budget;
@@ -39,7 +39,7 @@ pub(crate) struct SourceQuery {
     selector: radroots_transport::source::FetchSelector,
     until_unix_seconds: Option<u64>,
     connect_timeout: Duration,
-    deadline: tokio::time::Instant,
+    deadline: crate::host_time::Instant,
     max_connections: usize,
 }
 
@@ -161,7 +161,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
                         if budget.exhausted() {
                             return Ok(RelayFetchResult::ResourceLimit(Vec::new()));
                         }
-                        if tokio::time::Instant::now() >= deadline {
+                        if crate::host_time::Instant::now() >= deadline {
                             return Ok(RelayFetchResult::Timeout(Vec::new()));
                         }
                         let kinds = selector
@@ -194,17 +194,17 @@ impl RelaySourceClient for LiveRelaySourceClient {
                         if let Some(until) = until_unix_seconds {
                             filter = filter.until(Timestamp::from_secs(until));
                         }
-                        let connected = tokio::time::timeout_at(deadline, async {
+                        let connected = crate::host_time::timeout_at(deadline, async {
                             crate::client::connect_tracked(
-                                &self.client,
-                                &self.connections,
-                                url.as_str(),
-                                connect_timeout.min(
-                                    deadline.saturating_duration_since(tokio::time::Instant::now()),
-                                ),
-                            )
-                            .await
-                            .map_err(|error| error.to_string())
+                                    &self.client,
+                                    &self.connections,
+                                    url.as_str(),
+                                    connect_timeout.min(deadline.saturating_duration_since(
+                                        crate::host_time::Instant::now(),
+                                    )),
+                                )
+                                .await
+                                .map_err(|error| error.to_string())
                         })
                         .await;
                         let relay = match connected {
@@ -217,14 +217,14 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             .map(|item| item.map_err(|_| ()));
                         let subscription_id = SubscriptionId::generate();
                         let remaining =
-                            deadline.saturating_duration_since(tokio::time::Instant::now());
+                            deadline.saturating_duration_since(crate::host_time::Instant::now());
                         if remaining.is_zero() {
                             return Ok(RelayFetchResult::Timeout(Vec::new()));
                         }
                         let options = SubscribeAutoCloseOptions::default()
                             .exit_policy(ReqExitPolicy::ExitOnEOSE)
                             .timeout(Some(remaining));
-                        match tokio::time::timeout_at(
+                        match crate::host_time::timeout_at(
                             deadline,
                             relay
                                 .subscribe(filter)
@@ -276,12 +276,12 @@ impl RelaySourceClient for LiveRelaySourceClient {
 async fn admit_fetch_connections(
     client: &nostr_sdk::client::Client,
     relays: &[RelayUrl],
-    deadline: tokio::time::Instant,
+    deadline: crate::host_time::Instant,
 ) -> Result<FetchConnections, RelayFetchResult> {
     let connections = FetchConnections::default();
-    let admitted = tokio::time::timeout_at(deadline, async {
+    let admitted = crate::host_time::timeout_at(deadline, async {
         for relay in relays {
-            if tokio::time::Instant::now() >= deadline {
+            if crate::host_time::Instant::now() >= deadline {
                 return Err(RelayFetchResult::Timeout(Vec::new()));
             }
             // Adding a relay is inert SDK metadata admission, not connection
@@ -305,7 +305,7 @@ async fn admit_fetch_connections(
                 )
                 .map_err(RelayFetchResult::Failed)?;
         }
-        if tokio::time::Instant::now() >= deadline {
+        if crate::host_time::Instant::now() >= deadline {
             Err(RelayFetchResult::Timeout(Vec::new()))
         } else {
             Ok(())
@@ -378,7 +378,7 @@ impl Drop for FetchConnections {
 async fn collect_until_eose(
     notifications: &mut (impl Stream<Item = Result<RelayNotification, ()>> + Unpin),
     subscription_id: &SubscriptionId,
-    deadline: tokio::time::Instant,
+    deadline: crate::host_time::Instant,
     budget: &FetchBudget,
 ) -> RelayFetchResult {
     let mut events = Vec::new();
@@ -386,13 +386,13 @@ async fn collect_until_eose(
         if budget.exhausted() {
             return RelayFetchResult::ResourceLimit(events);
         }
-        if tokio::time::Instant::now() >= deadline {
+        if crate::host_time::Instant::now() >= deadline {
             return RelayFetchResult::Timeout(events);
         }
         let received = tokio::select! {
             biased;
             _ = budget.wait_exhausted() => return RelayFetchResult::ResourceLimit(events),
-            received = tokio::time::timeout_at(deadline, notifications.next()) => received,
+            received = crate::host_time::timeout_at(deadline, notifications.next()) => received,
         };
         let notification = match received {
             Ok(Some(Ok(notification))) => notification,
@@ -427,7 +427,7 @@ async fn collect_until_eose(
                 {
                     return if budget.exhausted() {
                         RelayFetchResult::ResourceLimit(events)
-                    } else if tokio::time::Instant::now() < deadline {
+                    } else if crate::host_time::Instant::now() < deadline {
                         RelayFetchResult::Complete(events)
                     } else {
                         RelayFetchResult::Timeout(events)
@@ -494,7 +494,7 @@ impl EventSource for NostrTransport {
             let now_ms = unix_time_ms();
             let remaining_ms = request.bounds().deadline_unix_ms().saturating_sub(now_ms);
             let timeout_ms = remaining_ms.min(self.config().request_timeout_ms());
-            let deadline = tokio::time::Instant::now() + Duration::from_millis(timeout_ms);
+            let deadline = crate::host_time::Instant::now() + Duration::from_millis(timeout_ms);
 
             let mut targets = BTreeMap::new();
             let mut outcomes = Vec::new();
@@ -828,14 +828,6 @@ fn hex_encode(bytes: &[u8]) -> String {
     encoded
 }
 
-#[cfg_attr(coverage_nightly, coverage(off))]
-fn unix_time_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
-        .unwrap_or_default()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1144,7 +1136,7 @@ mod tests {
             collect_until_eose(
                 &mut test_notifications(&mut receiver),
                 &subscription_id,
-                tokio::time::Instant::now() + Duration::from_secs(1),
+                crate::host_time::Instant::now() + Duration::from_secs(1),
                 &FetchBudget::default(),
             )
             .await,
@@ -1156,7 +1148,7 @@ mod tests {
             collect_until_eose(
                 &mut test_notifications(&mut receiver),
                 &subscription_id,
-                tokio::time::Instant::now(),
+                crate::host_time::Instant::now(),
                 &FetchBudget::default()
             )
             .await,
@@ -1181,7 +1173,7 @@ mod tests {
             collect_until_eose(
                 &mut test_notifications(&mut receiver),
                 &subscription_id,
-                tokio::time::Instant::now() + Duration::from_secs(1),
+                crate::host_time::Instant::now() + Duration::from_secs(1),
                 &budget
             )
             .await,
@@ -1207,7 +1199,7 @@ mod tests {
             collect_until_eose(
                 &mut test_notifications(&mut receiver),
                 &id,
-                tokio::time::Instant::now() + Duration::from_secs(1),
+                crate::host_time::Instant::now() + Duration::from_secs(1),
                 &FetchBudget::default(),
             )
             .await,
@@ -1247,7 +1239,7 @@ mod tests {
                 result: collect_until_eose(
                     &mut test_notifications(&mut receiver),
                     &id,
-                    tokio::time::Instant::now() + Duration::from_secs(1),
+                    crate::host_time::Instant::now() + Duration::from_secs(1),
                     &budget,
                 )
                 .await,
@@ -1349,7 +1341,7 @@ mod tests {
         let connections = admit_fetch_connections(
             &client,
             &relays,
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            crate::host_time::Instant::now() + Duration::from_secs(1),
         )
         .await
         .unwrap();
@@ -1386,7 +1378,7 @@ mod tests {
         let relay = RelayUrl::parse("wss://one.example", RelayUrlPolicy::Public).unwrap();
         for relays in [vec![relay], Vec::new()] {
             assert!(matches!(
-                admit_fetch_connections(&client, &relays, tokio::time::Instant::now()).await,
+                admit_fetch_connections(&client, &relays, crate::host_time::Instant::now()).await,
                 Err(RelayFetchResult::Timeout(_))
             ));
             assert!(client.relays().await.is_empty());
@@ -1404,7 +1396,7 @@ mod tests {
             admit_fetch_connections(
                 &client,
                 &relays,
-                tokio::time::Instant::now() + Duration::from_secs(1)
+                crate::host_time::Instant::now() + Duration::from_secs(1)
             )
             .await,
             Err(RelayFetchResult::Failed(_))
@@ -1540,7 +1532,7 @@ mod tests {
             selector: radroots_transport::source::FetchSelector::all(),
             until_unix_seconds: None,
             connect_timeout: Duration::from_secs(1),
-            deadline: tokio::time::Instant::now()
+            deadline: crate::host_time::Instant::now()
                 + if matches!(mode, QueuedCleanup::Deadline) {
                     Duration::from_millis(500)
                 } else {
@@ -1549,7 +1541,7 @@ mod tests {
             max_connections: 1,
         };
         let mut fetch = source.fetch(query);
-        let started = tokio::time::timeout(Duration::from_secs(10), async {
+        let started = crate::host_time::timeout(Duration::from_secs(10), async {
             tokio::select! {
                 biased;
                 result = observed => result.is_ok(),
@@ -1560,11 +1552,11 @@ mod tests {
         let batches = if matches!(mode, QueuedCleanup::Cancel) {
             None
         } else {
-            Some(tokio::time::timeout(Duration::from_secs(10), &mut fetch).await)
+            Some(crate::host_time::timeout(Duration::from_secs(10), &mut fetch).await)
         };
         drop(fetch);
         let status = queued.status();
-        let closed = tokio::time::timeout(Duration::from_secs(2), closure).await;
+        let closed = crate::host_time::timeout(Duration::from_secs(2), closure).await;
         for server in [first_server, second_server] {
             server.abort();
             let result = server.await;
@@ -1761,7 +1753,7 @@ mod tests {
             selector,
             until_unix_seconds: None,
             connect_timeout: Duration::from_millis(1),
-            deadline: tokio::time::Instant::now() + Duration::from_millis(1),
+            deadline: crate::host_time::Instant::now() + Duration::from_millis(1),
             max_connections: 1,
         }));
         assert_eq!(batches.len(), 1);
@@ -1784,7 +1776,7 @@ mod tests {
             collect_until_eose(
                 &mut test_notifications(&mut receiver),
                 &id,
-                tokio::time::Instant::now() + Duration::from_secs(10),
+                crate::host_time::Instant::now() + Duration::from_secs(10),
                 &FetchBudget::default()
             )
             .await,
@@ -1810,7 +1802,7 @@ mod tests {
         let result = collect_until_eose(
             &mut test_notifications(&mut receiver),
             &id,
-            tokio::time::Instant::now() + Duration::from_secs(10),
+            crate::host_time::Instant::now() + Duration::from_secs(10),
             &FetchBudget::default(),
         )
         .await;
@@ -1887,7 +1879,7 @@ mod tests {
             let result = collect_until_eose(
                 &mut test_notifications(&mut receiver),
                 &id,
-                tokio::time::Instant::now() + Duration::from_secs(10),
+                crate::host_time::Instant::now() + Duration::from_secs(10),
                 &shared,
             )
             .await;
