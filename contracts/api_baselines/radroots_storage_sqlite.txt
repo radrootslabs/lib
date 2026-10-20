@@ -363,6 +363,7 @@ pub mod radroots_storage_sqlite::workspace
 pub use radroots_storage_sqlite::workspace::AttachmentInput
 pub use radroots_storage_sqlite::workspace::AttachmentProof
 pub use radroots_storage_sqlite::workspace::LocalOutboxConfig
+pub use radroots_storage_sqlite::workspace::LocalOutboxScope
 pub use radroots_storage_sqlite::workspace::WorkspaceBinding
 pub use radroots_storage_sqlite::workspace::WorkspaceClock
 pub use radroots_storage_sqlite::workspace::WorkspaceError

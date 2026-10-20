@@ -208,11 +208,32 @@ impl<'de> serde::Deserialize<'de> for AttachmentInput {
     }
 }
 
+/// The bounded authority of a fresh local outbox. Neither scope grants stock,
+/// organization, delegation, restored history or remote executor authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+pub enum LocalOutboxScope {
+    /// New buyer inquiry and request outbox; no existing order history.
+    NewBuyerOutbox,
+    /// New seller public authoring and private communication outbox; no stock.
+    NewSellerOutbox,
+}
+impl LocalOutboxScope {
+    pub(crate) const fn actor_role(self) -> radroots_domain::ActorRole {
+        match self {
+            Self::NewBuyerOutbox => radroots_domain::ActorRole::Buyer,
+            Self::NewSellerOutbox => radroots_domain::ActorRole::Seller,
+        }
+    }
+}
+
 /// A native/remote adapter's authenticated grant observation. It does not
 /// replace transaction-time checks and contains no bearer credential.
 #[derive(Clone, Eq, PartialEq)]
 pub struct WorkspaceBinding {
     input: AttachmentInput,
+    scope: LocalOutboxScope,
     actor: ActorRef,
     principal_id: Box<str>,
     grant_revision: Sequence,
@@ -225,6 +246,7 @@ impl WorkspaceBinding {
     /// constructor does not turn public metadata into an authenticated context.
     pub fn from_authenticated_host(
         input: AttachmentInput,
+        scope: LocalOutboxScope,
         actor: ActorRef,
         principal_id: impl Into<String>,
         grant_revision: Sequence,
@@ -232,7 +254,9 @@ impl WorkspaceBinding {
         observed_at: UnixSeconds,
     ) -> Result<Self, WorkspaceError> {
         let principal_id = principal_id.into();
-        if actor.participant() != input.participant()
+        if actor.role() != scope.actor_role()
+            || actor.organization().is_some()
+            || actor.participant() != input.participant()
             || actor.grant_id() != Some(input.grant_id())
             || principal_id.is_empty()
             || principal_id.len() > 128
@@ -246,6 +270,7 @@ impl WorkspaceBinding {
         }
         Ok(Self {
             input,
+            scope,
             actor,
             principal_id: principal_id.into_boxed_str(),
             grant_revision,
@@ -256,6 +281,10 @@ impl WorkspaceBinding {
     /// Borrows the exact authenticated selection.
     pub const fn input(&self) -> &AttachmentInput {
         &self.input
+    }
+    /// Returns the authenticated outbox authority; signing custody adds none.
+    pub const fn scope(&self) -> LocalOutboxScope {
+        self.scope
     }
     /// Returns actor data from the persisted authenticated grant.
     pub const fn actor(&self) -> ActorRef {

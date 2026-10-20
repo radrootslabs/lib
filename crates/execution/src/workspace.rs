@@ -48,6 +48,7 @@ impl Attached {
             return Err(WorkspaceError::Closed);
         }
         if current.input() != self.binding.input()
+            || current.scope() != self.binding.scope()
             || current.actor() != self.binding.actor()
             || current.principal_id() != self.binding.principal_id()
             || current.grant_revision() != self.binding.grant_revision()

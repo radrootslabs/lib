@@ -615,6 +615,7 @@ async fn unqualified_history_and_approval_descriptors_never_become_admitted_comm
     ));
     let other = WorkspaceBinding::from_authenticated_host(
         binding.input().clone(),
+        binding.scope(),
         binding.actor(),
         "substituted-device",
         binding.grant_revision(),
@@ -652,6 +653,11 @@ async fn unqualified_history_and_approval_descriptors_never_become_admitted_comm
     ] {
         let substituted = WorkspaceBinding::from_authenticated_host(
             binding.input().clone(),
+            if actor.role() == radroots_domain::ActorRole::Seller {
+                radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
+            } else {
+                binding.scope()
+            },
             actor,
             binding.principal_id(),
             revision,

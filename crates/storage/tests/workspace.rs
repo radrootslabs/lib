@@ -83,6 +83,7 @@ fn host_observations_validate_internal_binding_without_authenticating_metadata()
     let binding = |actor, principal: &str, revision, expiry, observed| {
         WorkspaceBinding::from_authenticated_host(
             input(),
+            radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox,
             actor,
             principal,
             Sequence::new(revision).unwrap(),
@@ -92,6 +93,10 @@ fn host_observations_validate_internal_binding_without_authenticating_metadata()
     };
     let observed = binding(actor(), "device", 1, 200, 100).unwrap();
     assert_eq!(observed.input(), &input());
+    assert_eq!(
+        observed.scope(),
+        radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+    );
     assert_eq!(observed.actor(), actor());
     assert_eq!(observed.principal_id(), "device");
     assert_eq!(observed.grant_revision().get(), 1);
@@ -120,6 +125,19 @@ fn host_observations_validate_internal_binding_without_authenticating_metadata()
         PublicKey::from_hex("c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")
             .unwrap();
     for invalid in [
+        ActorRef::new(key(), ActorRole::Seller, None, Some(input().grant_id())),
+        ActorRef::new(
+            key(),
+            ActorRole::Coordinator,
+            None,
+            Some(input().grant_id()),
+        ),
+        ActorRef::new(
+            key(),
+            ActorRole::Buyer,
+            Some(key()),
+            Some(input().grant_id()),
+        ),
         ActorRef::new(other_key, ActorRole::Buyer, None, Some(input().grant_id())),
         ActorRef::new(key(), ActorRole::Buyer, None, None),
         ActorRef::new(

@@ -1,4 +1,4 @@
-//! Explicit protected local buyer-outbox attachment.
+//! Explicit protected local buyer/seller-outbox attachment.
 //!
 //! This host cannot acquire seller stock authority, attach a remote endpoint,
 //! continue an existing order or restore state from a participant key. Its
@@ -25,7 +25,8 @@ mod tests;
 
 pub use crypto::WorkspaceCrypto;
 pub use radroots_storage::workspace::{
-    AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceError,
+    AttachmentInput, AttachmentProof, LocalOutboxScope, WorkspaceBinding, WorkspaceClock,
+    WorkspaceError,
 };
 
 use radroots_domain::{ExecutorId, GrantId, PublicKey, WorkspaceId};

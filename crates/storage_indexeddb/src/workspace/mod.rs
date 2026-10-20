@@ -1,5 +1,5 @@
 //! Authenticated browser local outboxes, independent of participant signing.
-//! Creation establishes a fresh unrelated buyer outbox only. Existing state
+//! Creation establishes a fresh unrelated buyer or explicitly selected seller outbox. Existing state
 //! requires its independently retained selection and protected proof.
 mod address;
 mod crypto;
@@ -348,7 +348,7 @@ pub struct BrowserWorkspace {
     state: Rc<State>,
 }
 impl BrowserWorkspace {
-    /// Enrolls only a new unrelated buyer outbox and returns its independently
+    /// Enrolls only a new unrelated buyer or seller outbox and returns its independently
     /// retained selection/proof after the protected grant actually commits.
     pub async fn initialize_local_outbox(
         config: LocalOutboxConfig,

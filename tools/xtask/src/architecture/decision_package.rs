@@ -23,6 +23,7 @@ struct Policy {
     deferred_application_migrations: Vec<String>,
     retained_capability_families: Vec<String>,
     independence: Independence,
+    local_outbox_authority: LocalOutboxAuthority,
     provenance: Provenance,
     targets: Targets,
     portability: Portability,
@@ -73,6 +74,20 @@ struct Independence {
     rhi_required: bool,
     payment_implementation_in_scope: bool,
     seller_owner_executor_optional_to_single_device: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LocalOutboxAuthority {
+    scopes: Vec<String>,
+    seller_enrollment_explicit: bool,
+    scope_retained_in_authenticated_binding_and_preparation: bool,
+    legacy_preparation_v2_scope: String,
+    scope_separates_route_genesis_and_credential_commitments: bool,
+    coverage: String,
+    stock_authority: bool,
+    organization_or_delegation_authority: bool,
+    existing_order_or_history_recovery: bool,
 }
 
 #[derive(Deserialize)]
@@ -224,6 +239,19 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
         "prospective identity or publication authority drift",
     )?;
     validate_ownership(&p)?;
+    let local = &p.local_outbox_authority;
+    require(
+        exact_set(&local.scopes, &["new_buyer_outbox", "new_seller_outbox"])
+            && local.seller_enrollment_explicit
+            && local.scope_retained_in_authenticated_binding_and_preparation
+            && local.legacy_preparation_v2_scope == "new_buyer_outbox"
+            && local.scope_separates_route_genesis_and_credential_commitments
+            && local.coverage == "partial"
+            && !local.stock_authority
+            && !local.organization_or_delegation_authority
+            && !local.existing_order_or_history_recovery,
+        "local outbox authority drift",
+    )?;
     validate_targets(&p.targets, &p.portability)?;
     validate_packages(&p.packages)?;
     validate_values(&p.values, &p.limits)?;
@@ -694,6 +722,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn local_outboxes_cannot_upgrade_legacy_buyer_or_claim_stock_and_restored_history() {
+        for (field, bad) in [
+            ("scopes", json!(["new_buyer_outbox", "seller_stock"])),
+            (
+                "scopes",
+                json!(["new_buyer_outbox", "new_buyer_outbox", "new_seller_outbox"]),
+            ),
+            ("seller_enrollment_explicit", json!(false)),
+            (
+                "scope_retained_in_authenticated_binding_and_preparation",
+                json!(false),
+            ),
+            ("legacy_preparation_v2_scope", json!("new_seller_outbox")),
+            (
+                "scope_separates_route_genesis_and_credential_commitments",
+                json!(false),
+            ),
+            ("coverage", json!("satisfied")),
+            ("stock_authority", json!(true)),
+            ("organization_or_delegation_authority", json!(true)),
+            ("existing_order_or_history_recovery", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(&format!("/local_outbox_authority/{field}"), bad)).is_err(),
+                "{field}"
+            );
+        }
+        let mut unknown: Value = serde_json::from_str(SOURCE).unwrap();
+        unknown["local_outbox_authority"]["unknown"] = json!(true);
+        assert!(validate_bytes(&serde_json::to_vec(&unknown).unwrap()).is_err());
+    }
     #[test]
     fn signing_unknown_and_receipt_cannot_become_spend_authority() {
         for (field, bad) in [

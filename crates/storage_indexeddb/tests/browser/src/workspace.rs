@@ -213,10 +213,13 @@ impl WorkspaceFixture {
         })
     }
     pub async fn create(n: u8) -> Result<Self, JsValue> {
-        Self::initialize(n, false).await
+        Self::initialize(n, false, false).await
+    }
+    pub async fn create_seller(n: u8) -> Result<Self, JsValue> {
+        Self::initialize(n, false, true).await
     }
     pub async fn create_expiring(n: u8) -> Result<(), JsValue> {
-        let owner = Self::initialize(n, true).await?;
+        let owner = Self::initialize(n, true, false).await?;
         owner.close().await
     }
     pub async fn open(
@@ -262,12 +265,29 @@ impl WorkspaceFixture {
             .authenticate(self.input.clone(), copied(&self.proof))
             .await
             .map_err(fail)?;
-        assert_eq!(bound.actor().role(), ActorRole::Buyer);
+        assert_eq!(
+            bound.actor().role(),
+            match bound.scope() {
+                radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox => ActorRole::Buyer,
+                radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox => ActorRole::Seller,
+            }
+        );
         assert_eq!(bound.actor().organization(), None);
         assert_eq!(bound.input(), &self.input);
         assert_eq!(bound.actor().grant_id(), Some(self.input.grant_id()));
         assert_eq!(bound.input().checkpoint().coverage(), Coverage::Partial);
         Ok(bound.grant_revision().get() as u32)
+    }
+    pub async fn is_seller(&self) -> Result<bool, JsValue> {
+        let bound = self
+            .owner
+            .authenticate(self.input.clone(), copied(&self.proof))
+            .await
+            .map_err(fail)?;
+        Ok(
+            bound.scope() == radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
+                && bound.actor().role() == ActorRole::Seller,
+        )
     }
     pub async fn wrong_proof(&self) -> Result<(), JsValue> {
         self.owner
@@ -438,7 +458,7 @@ impl WorkspaceFixture {
         AdmissionRequest::from_protected_wire(binding, &wire)
             .map_err(|e| JsValue::from_str(e.code()))
     }
-    async fn initialize(n: u8, expire: bool) -> Result<Self, JsValue> {
+    async fn initialize(n: u8, expire: bool, seller: bool) -> Result<Self, JsValue> {
         let provider = Rc::new(
             BrowserProvider::create(key_namespace(n), reference())
                 .await
@@ -448,7 +468,12 @@ impl WorkspaceFixture {
         if expire {
             clock.after.set(Some(2000));
         }
-        let config = LocalOutboxConfig::new(
+        let constructor = if seller {
+            LocalOutboxConfig::seller
+        } else {
+            LocalOutboxConfig::new
+        };
+        let config = constructor(
             participant(),
             participant(),
             "synthetic-browser",

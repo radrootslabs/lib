@@ -57,6 +57,17 @@
     "payment_implementation_in_scope": false,
     "seller_owner_executor_optional_to_single_device": true
   },
+  "local_outbox_authority": {
+    "scopes": ["new_buyer_outbox", "new_seller_outbox"],
+    "seller_enrollment_explicit": true,
+    "scope_retained_in_authenticated_binding_and_preparation": true,
+    "legacy_preparation_v2_scope": "new_buyer_outbox",
+    "scope_separates_route_genesis_and_credential_commitments": true,
+    "coverage": "partial",
+    "stock_authority": false,
+    "organization_or_delegation_authority": false,
+    "existing_order_or_history_recovery": false
+  },
   "provenance": {
     "app_behavior_implementation": "independent_reimplementation",
     "retain_source_provenance": true,

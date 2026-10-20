@@ -81,6 +81,11 @@ fn binding(change: u8, observed: u64) -> WorkspaceBinding {
     let input = input(if change == 1 { 9 } else { 5 });
     WorkspaceBinding::from_authenticated_host(
         input.clone(),
+        if change == 2 {
+            radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
+        } else {
+            radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+        },
         ActorRef::new(
             key(),
             if change == 2 {

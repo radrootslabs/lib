@@ -8,7 +8,7 @@
   "source_inputs": [
     {
       "path": "contracts/architecture/decisions/shared_sdk_refactor.v1.json",
-      "sha256": "7937dc9ee4aca42f015d3bba5b23e2b5e7cffe461589518bd6eef6305892931e"
+      "sha256": "d434039e9199bd35bf51886ee3bb46f88a764b80f1bce9317381bf6fcf91d5f0"
     },
     {
       "path": "contracts/architecture/decisions/services_hardening_source_lock.v4.json",

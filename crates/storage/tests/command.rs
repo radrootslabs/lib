@@ -34,6 +34,7 @@ fn binding() -> WorkspaceBinding {
     .unwrap();
     WorkspaceBinding::from_authenticated_host(
         input,
+        radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox,
         ActorRef::new(key, ActorRole::Buyer, None, Some(grant)),
         "device",
         Sequence::new(1).unwrap(),

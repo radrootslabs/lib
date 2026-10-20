@@ -1,9 +1,9 @@
 //! Shared pure enrollment and protected grant rules for concrete local hosts.
 //! No database, runtime, signer or provider is acquired here.
-use super::{AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceError};
+use super::{AttachmentInput, AttachmentProof, LocalOutboxScope, WorkspaceBinding, WorkspaceError};
 use radroots_domain::{
-    ActorRef, ActorRole, AuthorityRef, CheckpointDigest, CheckpointRef, Coverage, ExecutorId,
-    Generation, GrantId, PublicKey, RouteDigest, Sequence, UnixSeconds, WorkspaceId,
+    ActorRef, AuthorityRef, CheckpointDigest, CheckpointRef, Coverage, ExecutorId, Generation,
+    GrantId, PublicKey, RouteDigest, Sequence, UnixSeconds, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -19,16 +19,18 @@ pub fn grant_envelope_subject(workspace: WorkspaceId, grant: GrantId) -> String 
     format!("{workspace}{grant}")
 }
 /// Explicit local enrollment inputs, supplied by a trusted host interaction.
-/// Creation is limited to an unrelated new buyer outbox, never seller stock.
+/// Creation is limited to an unrelated new outbox, never seller stock.
 pub struct LocalOutboxConfig {
+    scope: LocalOutboxScope,
     participant: PublicKey,
     endpoint_identity: PublicKey,
     principal: String,
     expires_at: UnixSeconds,
 }
 impl LocalOutboxConfig {
-    /// Captures the participant, local application identity, device audit label
-    /// and positive expiry. This performs no authentication or filesystem work.
+    /// Selects a fresh buyer outbox with participant, local application identity,
+    /// device audit label and positive expiry. This performs no authentication
+    /// or filesystem work. Use `seller` for explicit fresh seller enrollment.
     pub fn new(
         participant: PublicKey,
         endpoint_identity: PublicKey,
@@ -44,11 +46,24 @@ impl LocalOutboxConfig {
             return Err(WorkspaceError::InvalidInput);
         }
         Ok(Self {
+            scope: LocalOutboxScope::NewBuyerOutbox,
             participant,
             endpoint_identity,
             principal: principal.to_owned(),
             expires_at,
         })
+    }
+    /// Explicitly selects a fresh seller public-authoring/communication outbox.
+    /// This cannot upgrade a buyer grant or recover stock and old obligations.
+    pub fn seller(
+        participant: PublicKey,
+        endpoint_identity: PublicKey,
+        principal: impl AsRef<str>,
+        expires_at: UnixSeconds,
+    ) -> Result<Self, WorkspaceError> {
+        let mut config = Self::new(participant, endpoint_identity, principal, expires_at)?;
+        config.scope = LocalOutboxScope::NewSellerOutbox;
+        Ok(config)
     }
 }
 impl std::fmt::Debug for LocalOutboxConfig {
@@ -85,14 +100,14 @@ impl LocalOutboxConfig {
         );
         let endpoint = format!("local://workspace/{workspace}");
         let mut route = Sha256::new();
-        route.update(b"radroots.local_buyer_outbox.route.v1\0");
+        route.update(self.scope.route_domain());
         route.update(workspace.as_bytes());
         route.update(executor.as_bytes());
         route.update(self.endpoint_identity.as_bytes());
         route.update(endpoint.as_bytes());
         let route = RouteDigest::from_bytes(route.finalize().into());
         let mut checkpoint = Sha256::new();
-        checkpoint.update(b"radroots.local_buyer_outbox.genesis.v1\0");
+        checkpoint.update(self.scope.genesis_domain());
         checkpoint.update(workspace.as_bytes());
         checkpoint.update(executor.as_bytes());
         checkpoint.update(grant.as_bytes());
@@ -115,9 +130,10 @@ impl LocalOutboxConfig {
             checkpoint,
             route,
         )?;
-        let actor = ActorRef::new(self.participant, ActorRole::Buyer, None, Some(grant));
-        let record = LocalOutboxGrant::new(
+        let actor = ActorRef::new(self.participant, self.scope.actor_role(), None, Some(grant));
+        let record = LocalOutboxGrant::with_scope(
             input.clone(),
+            self.scope,
             actor,
             self.principal,
             self.expires_at,
@@ -136,7 +152,7 @@ pub struct LocalOutboxGrant {
 #[serde(deny_unknown_fields)]
 struct GrantWire {
     version: u8,
-    scope: Scope,
+    scope: LocalOutboxScope,
     input: AttachmentInput,
     actor: ActorRef,
     principal: String,
@@ -144,11 +160,6 @@ struct GrantWire {
     expires_at: UnixSeconds,
     revoked: bool,
     verifier: [u8; 32],
-}
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum Scope {
-    NewBuyerOutbox,
 }
 impl Drop for LocalOutboxGrant {
     fn drop(&mut self) {
@@ -163,11 +174,28 @@ impl LocalOutboxGrant {
         expires_at: UnixSeconds,
         proof: &AttachmentProof,
     ) -> Result<Self, WorkspaceError> {
-        let verifier = verifier(&input, proof);
+        Self::with_scope(
+            input,
+            LocalOutboxScope::NewBuyerOutbox,
+            actor,
+            principal,
+            expires_at,
+            proof,
+        )
+    }
+    fn with_scope(
+        input: AttachmentInput,
+        scope: LocalOutboxScope,
+        actor: ActorRef,
+        principal: String,
+        expires_at: UnixSeconds,
+        proof: &AttachmentProof,
+    ) -> Result<Self, WorkspaceError> {
+        let verifier = verifier(&input, scope, proof);
         let record = Self {
             wire: GrantWire {
                 version: 1,
-                scope: Scope::NewBuyerOutbox,
+                scope,
                 input,
                 actor,
                 principal,
@@ -204,7 +232,7 @@ impl LocalOutboxGrant {
     }
     fn validate(&self) -> Result<(), WorkspaceError> {
         if self.wire.version != 1
-            || self.wire.actor.role() != ActorRole::Buyer
+            || self.wire.actor.role() != self.wire.scope.actor_role()
             || self.wire.actor.organization().is_some()
             || self.wire.actor.participant() != self.wire.input.participant()
             || self.wire.actor.grant_id() != Some(self.wire.input.grant_id())
@@ -237,6 +265,7 @@ impl LocalOutboxGrant {
         self.validate()?;
         WorkspaceBinding::from_authenticated_host(
             self.wire.input.clone(),
+            self.wire.scope,
             self.wire.actor,
             self.wire.principal.clone(),
             self.wire.revision,
@@ -253,7 +282,7 @@ impl LocalOutboxGrant {
         proof: &AttachmentProof,
     ) -> Result<(), WorkspaceError> {
         // Check the complete secret commitment before projecting detailed state.
-        let observed = Zeroizing::new(verifier(&self.wire.input, proof));
+        let observed = Zeroizing::new(verifier(&self.wire.input, self.wire.scope, proof));
         if !bool::from(observed.as_ref().ct_eq(&self.wire.verifier)) {
             return Err(WorkspaceError::Unauthorized);
         }
@@ -284,9 +313,29 @@ impl LocalOutboxGrant {
         Ok(())
     }
 }
-fn verifier(input: &AttachmentInput, proof: &AttachmentProof) -> [u8; 32] {
+impl LocalOutboxScope {
+    fn route_domain(self) -> &'static [u8] {
+        match self {
+            Self::NewBuyerOutbox => b"radroots.local_buyer_outbox.route.v1\0",
+            Self::NewSellerOutbox => b"radroots.local_seller_outbox.route.v1\0",
+        }
+    }
+    fn genesis_domain(self) -> &'static [u8] {
+        match self {
+            Self::NewBuyerOutbox => b"radroots.local_buyer_outbox.genesis.v1\0",
+            Self::NewSellerOutbox => b"radroots.local_seller_outbox.genesis.v1\0",
+        }
+    }
+    fn credential_domain(self) -> &'static [u8] {
+        match self {
+            Self::NewBuyerOutbox => b"radroots.local_buyer_outbox.credential.v1\0",
+            Self::NewSellerOutbox => b"radroots.local_seller_outbox.credential.v1\0",
+        }
+    }
+}
+fn verifier(input: &AttachmentInput, scope: LocalOutboxScope, proof: &AttachmentProof) -> [u8; 32] {
     let mut digest = Sha256::new();
-    digest.update(b"radroots.local_buyer_outbox.credential.v1\0");
+    digest.update(scope.credential_domain());
     digest.update(input.workspace_id().as_bytes());
     digest.update(input.grant_id().as_bytes());
     proof.with_secret(|secret| digest.update(secret));

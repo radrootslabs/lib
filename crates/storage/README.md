@@ -78,8 +78,13 @@ pure value imports do not
 install an executor, spawn hidden
 workers, read a clock, generate identities, or perform implicit retries.
 
-The opt-in `protected_outbox` feature supplies the pure local buyer-outbox
+The opt-in `protected_outbox` feature supplies pure local buyer/seller-outbox
 enrollment and validated protected-grant codec at `workspace::local_outbox`.
+`LocalOutboxConfig::new` selects a fresh buyer outbox; `seller` explicitly
+selects a fresh seller public-authoring/communication outbox. Authenticated
+bindings retain that exact scope. Neither scope grants firm stock, delegation,
+organization access or recovery of old obligations. Scope separates route,
+genesis and credential commitments; changing an actor cannot upgrade a grant.
 Concrete native/browser hosts share these rules and exact envelope context.
 The codec's Serde wire stays private; decoding enforces the 16 KiB limit and
 validates current scope. Enrollment takes qualified host identities and proof
@@ -91,6 +96,9 @@ Prepared codec and pure binding/commitment checks. The complete codec is bounded
 to 64 KiB; a concrete host must split it to meet any smaller private-record
 budget, protect each record and atomically retain the full set. Decoding is a
 historical observation and supplies no current grant, actual commit or issuance.
+New preparations retain scope explicitly in version 3. Historical version 2
+preparations remain readable only with their original buyer-outbox authority;
+no actor descriptor can infer a seller grant during recovery.
 
 `BackupSource::settle_backup_writes` waits for earlier owner writes, including
 work whose caller was cancelled. The host excludes new writes before settling

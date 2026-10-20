@@ -314,6 +314,115 @@ impl WorkspaceClock for FixedClock {
     }
 }
 #[tokio::test]
+async fn seller_scope_survives_protected_close_reopen_without_stock_or_buyer_upgrade() {
+    let fixture = CryptoFixture::new();
+    let path = fixture
+        ._temp
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("seller-outbox");
+    let (owner, input, proof) = NativeWorkspace::initialize_local_outbox(
+        &path,
+        LocalOutboxConfig::seller(
+            participant(),
+            participant(),
+            "seller-device",
+            UnixSeconds::new(200).unwrap(),
+        )
+        .unwrap(),
+        fixture.crypto(),
+        Arc::new(FixedClock(100)),
+    )
+    .await
+    .unwrap();
+    let binding = owner.authenticate(input.clone(), &proof).await.unwrap();
+    assert_eq!(binding.scope(), LocalOutboxScope::NewSellerOutbox);
+    assert_eq!(binding.actor().role(), ActorRole::Seller);
+    assert_eq!(binding.actor().organization(), None);
+    assert_eq!(input.checkpoint().coverage(), Coverage::Partial);
+    owner.close().await.unwrap();
+    let reopened = NativeWorkspace::open_existing(
+        &path,
+        input.clone(),
+        fixture.crypto(),
+        Arc::new(FixedClock(100)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        reopened.authenticate(input.clone(), &proof).await.unwrap(),
+        binding
+    );
+    let wrong = AttachmentProof::from_protected_input(&[0xEF; 32]).unwrap();
+    assert_eq!(
+        reopened
+            .authenticate(input.clone(), &wrong)
+            .await
+            .unwrap_err(),
+        WorkspaceError::Unauthorized
+    );
+    reopened.close().await.unwrap();
+    let expired = NativeWorkspace::open_existing(
+        &path,
+        input.clone(),
+        fixture.crypto(),
+        Arc::new(FixedClock(200)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        expired
+            .authenticate(input.clone(), &proof)
+            .await
+            .unwrap_err(),
+        WorkspaceError::GrantExpired
+    );
+    expired.close().await.unwrap();
+    let reopened = NativeWorkspace::open_existing(
+        &path,
+        input.clone(),
+        fixture.crypto(),
+        Arc::new(FixedClock(100)),
+    )
+    .await
+    .unwrap();
+    reopened.revoke(input.clone(), &proof).await.unwrap();
+    reopened.close().await.unwrap();
+    let revoked = NativeWorkspace::open_existing(
+        &path,
+        input.clone(),
+        fixture.crypto(),
+        Arc::new(FixedClock(100)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        revoked
+            .authenticate(input.clone(), &proof)
+            .await
+            .unwrap_err(),
+        WorkspaceError::GrantRevoked
+    );
+    revoked.close().await.unwrap();
+    assert!(matches!(
+        NativeWorkspace::initialize_local_outbox(
+            &path,
+            LocalOutboxConfig::new(
+                participant(),
+                participant(),
+                "buyer",
+                UnixSeconds::new(200).unwrap()
+            )
+            .unwrap(),
+            fixture.crypto(),
+            Arc::new(FixedClock(100)),
+        )
+        .await,
+        Err(WorkspaceError::NamespaceUnavailable)
+    ));
+}
+#[tokio::test]
 async fn enrollment_requires_bounded_principal_current_time_and_usable_key() {
     for principal in [String::new(), "x".repeat(129), "bad\nlabel".into()] {
         assert!(matches!(

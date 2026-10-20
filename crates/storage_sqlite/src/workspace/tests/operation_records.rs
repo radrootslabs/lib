@@ -71,8 +71,47 @@ async fn protected_operation_read_refuses_each_inconsistent_payload_and_sql_proj
         .await
         .unwrap();
     let value: Value = opened.expose_secret(|bytes| serde_json::from_slice(bytes).unwrap());
+    assert_eq!(value["version"], 3);
+    assert_eq!(value["scope"], "new_buyer_outbox");
+    // Existing buyer preparations predate explicit scope. Reading one must
+    // retain its original identity and bytes, never rewrite it as a new grant.
+    let mut legacy = value.clone();
+    legacy["version"] = json!(2);
+    legacy.as_object_mut().unwrap().remove("scope");
+    let legacy = crypto
+        .seal_operation(
+            selected.workspace_id(),
+            operation_id,
+            &serde_json::to_vec(&legacy).unwrap(),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE operations SET protected=?")
+        .bind(&legacy)
+        .execute(&mut database)
+        .await
+        .unwrap();
+    let (recovered, legacy_retained) =
+        operation::read(&mut database, &selected, operation_id, &crypto)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(recovered.identity(), retained.identity());
+    assert_eq!(
+        recovered.request().binding().scope(),
+        radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+    );
+    assert_eq!(legacy_retained, legacy);
+    assert_eq!(
+        sqlx::query_scalar::<_, Vec<u8>>("SELECT protected FROM operations")
+            .fetch_one(&mut database)
+            .await
+            .unwrap(),
+        legacy
+    );
     for (pointer, replacement) in [
-        ("/version", json!(3)),
+        ("/version", json!(4)),
+        ("/scope", json!("new_seller_outbox")),
         ("/prepared_at", json!("0")),
         ("/prepared_at", json!("99")),
         ("/first_issue_not_after", json!("100")),

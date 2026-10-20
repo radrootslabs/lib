@@ -1,7 +1,7 @@
 //! Bounded protected Prepared representation and pure scope checks shared by
 //! concrete transaction hosts. Decoding supplies no current access or commit.
 use super::{AdmissionRequest, OperationError, PreparedOperation};
-use crate::workspace::{AttachmentInput, WorkspaceBinding};
+use crate::workspace::{AttachmentInput, LocalOutboxScope, WorkspaceBinding};
 use radroots_domain::{
     CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId, UnixSeconds,
 };
@@ -18,6 +18,7 @@ pub const PREPARED_BYTES_MAX: usize = 65_536;
 struct Encoded<'a> {
     version: u8,
     selection: &'a AttachmentInput,
+    scope: LocalOutboxScope,
     principal: &'a str,
     grant_revision: Sequence,
     grant_expires_at: UnixSeconds,
@@ -33,6 +34,8 @@ struct Encoded<'a> {
 struct Decoded<'a> {
     version: u8,
     selection: AttachmentInput,
+    #[serde(default, deserialize_with = "present_scope")]
+    scope: Option<LocalOutboxScope>,
     principal: String,
     grant_revision: Sequence,
     grant_expires_at: UnixSeconds,
@@ -45,6 +48,12 @@ struct Decoded<'a> {
     command: &'a serde_json::value::RawValue,
 }
 
+fn present_scope<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<LocalOutboxScope>, D::Error> {
+    LocalOutboxScope::deserialize(deserializer).map(Some)
+}
+
 /// Encodes the original immutable preparation before encryption. A host must
 /// independently commit it and enforce its smaller private record limit.
 pub fn encode(
@@ -54,8 +63,9 @@ pub fn encode(
 ) -> Result<Zeroizing<Vec<u8>>, OperationError> {
     let binding = request.binding();
     let encoded = Encoded {
-        version: 2,
+        version: 3,
         selection: binding.input(),
+        scope: binding.scope(),
         principal: binding.principal_id(),
         grant_revision: binding.grant_revision(),
         grant_expires_at: binding.expires_at(),
@@ -87,7 +97,14 @@ pub fn decode(
     }
     let decoded: Decoded<'_> =
         serde_json::from_slice(bytes).map_err(|_| OperationError::RecoveryRequired)?;
-    if decoded.version != 2 || decoded.revision.get() != 1 {
+    let scope = match (decoded.version, decoded.scope) {
+        // The historical profile could only enroll buyer outboxes. It must
+        // never infer seller authority from a substituted retained actor.
+        (2, None) => LocalOutboxScope::NewBuyerOutbox,
+        (3, Some(scope)) => scope,
+        _ => return Err(OperationError::RecoveryRequired),
+    };
+    if decoded.revision.get() != 1 {
         return Err(OperationError::RecoveryRequired);
     }
     let command_context: radroots_domain::CommandContextData = {
@@ -101,16 +118,19 @@ pub fn decode(
     };
     let binding = WorkspaceBinding::from_authenticated_host(
         decoded.selection,
+        scope,
         command_context.actor(),
         decoded.principal,
         decoded.grant_revision,
         decoded.grant_expires_at,
         decoded.captured_observed_at,
-    )?;
+    )
+    .map_err(|_| OperationError::RecoveryRequired)?;
     if binding.input() != selected {
         return Err(OperationError::RecoveryRequired);
     }
-    let request = AdmissionRequest::from_protected_wire(binding, decoded.command.get().as_bytes())?;
+    let request = AdmissionRequest::from_protected_wire(binding, decoded.command.get().as_bytes())
+        .map_err(|_| OperationError::RecoveryRequired)?;
     let context = request.command().context();
     if context.workspace_id() != selected.workspace_id() || context.operation_id() != operation_id {
         return Err(OperationError::RecoveryRequired);
@@ -146,6 +166,7 @@ pub fn same_binding(
     current: &WorkspaceBinding,
 ) -> Result<(), OperationError> {
     if captured.input() != current.input()
+        || captured.scope() != current.scope()
         || captured.actor() != current.actor()
         || captured.principal_id() != current.principal_id()
         || captured.grant_revision() != current.grant_revision()
@@ -199,6 +220,60 @@ mod tests {
         let wire = serde_json::to_vec(&json!({"type":"inbox.inquire","context":context,
             "input":{"thread_id":"66".repeat(32),"peer":participant,"source":null,"text":"synthetic retained preparation"}})).unwrap();
         AdmissionRequest::from_protected_wire(binding, &wire).unwrap()
+    }
+    #[test]
+    fn retained_scope_is_explicit_and_legacy_preparation_never_infers_seller_authority() {
+        let request = request();
+        let operation = request.command().context().operation_id();
+        let bytes = encode(
+            &request,
+            TransactionId::from_bytes([7; 32]),
+            IssuanceWindow::capture(
+                UnixSeconds::new(100).unwrap(),
+                UnixSeconds::new(150).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let original: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(original["version"], 3);
+        assert_eq!(original["scope"], "new_buyer_outbox");
+        let read = |wire: &serde_json::Value| {
+            decode(
+                &serde_json::to_vec(wire).unwrap(),
+                request.binding().input(),
+                operation,
+            )
+        };
+        let mut legacy = original.clone();
+        legacy["version"] = json!(2);
+        assert!(read(&legacy).is_err());
+        legacy.as_object_mut().unwrap().remove("scope");
+        assert_eq!(
+            read(&legacy).unwrap().request().binding().scope(),
+            LocalOutboxScope::NewBuyerOutbox
+        );
+        legacy["command"]["context"]["actor"]["role"] = json!("seller");
+        assert!(read(&legacy).is_err());
+        for version in [2, 3] {
+            let mut null = original.clone();
+            null["version"] = json!(version);
+            null["scope"] = serde_json::Value::Null;
+            assert!(read(&null).is_err());
+        }
+        let mut missing = original.clone();
+        missing.as_object_mut().unwrap().remove("scope");
+        assert!(read(&missing).is_err());
+        let mut mismatched = original.clone();
+        mismatched["scope"] = json!("new_seller_outbox");
+        assert!(read(&mismatched).is_err());
+        mismatched["command"]["context"]["actor"]["role"] = json!("seller");
+        let decoded = read(&mismatched).unwrap();
+        assert_eq!(
+            decoded.request().binding().scope(),
+            LocalOutboxScope::NewSellerOutbox
+        );
+        assert!(same_binding(request.binding(), decoded.request().binding()).is_err());
     }
     #[test]
     fn original_preparation_round_trip_and_scope_are_checked_without_current_authority() {
@@ -278,6 +353,7 @@ mod tests {
         let binding = request.binding();
         let other = WorkspaceBinding::from_authenticated_host(
             binding.input().clone(),
+            binding.scope(),
             binding.actor(),
             "foreign-principal",
             binding.grant_revision(),
