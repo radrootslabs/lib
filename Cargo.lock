@@ -3788,6 +3788,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "radroots_transport_nostr_browser"
+version = "0.1.0-alpha"
+dependencies = [
+ "async-utility",
+ "futures",
+ "js-sys",
+ "radroots_transport",
+ "radroots_transport_nostr",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
+]
+
+[[package]]
 name = "radroots_transport_nostr_native"
 version = "0.1.0-alpha"
 dependencies = [

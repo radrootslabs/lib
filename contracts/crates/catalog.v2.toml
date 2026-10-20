@@ -7,7 +7,7 @@ rust_version = "1.99.0"
 edition = "2024"
 resolver = "3"
 public_package_count = 22
-package_count = 55
+package_count = 56
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
 native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
@@ -406,6 +406,24 @@ source_revision = "3f35c869c827b35b27e7a7d789d409e6c3def6a8"
 source_path = "crates/transport_nostr"
 source_tree_sha256 = "1f8b471ee468200dc61e8452184d213906d3ca4b13e64b311aca7ad40fdacac6"
 compatibility = ["rust_api", "network", "features", "package"]
+replaces = []
+
+[[package]]
+name = "radroots_transport_nostr_browser"
+path = "crates/transport_nostr_browser"
+state = "active"
+tier = "adapter"
+visibility = "private_adapter"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["wasm32"]
+groups = ["coverage_required", "wasm"]
+owners = ["transport"]
+permitted_dependency_tiers = ["foundation", "domain", "spi", "adapter"]
+provenance_kind = "native"
+introduction_tree_sha256 = "bc8425c519ca6d3921d8e05c454ee01e4644bd86ae7ff2bf2818ab6ea1dd2685"
+compatibility = ["package_private", "rust_api", "network"]
 replaces = []
 
 [[package]]

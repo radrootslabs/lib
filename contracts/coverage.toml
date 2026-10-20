@@ -75,6 +75,7 @@ crates = [
   "radroots_sync",
   "radroots_transport_nostr",
   "radroots_transport_nostr_native",
+  "radroots_transport_nostr_browser",
   "radroots_transport_reticulum",
   "radroots_replica_store",
   "radroots_replica_store_wasm",

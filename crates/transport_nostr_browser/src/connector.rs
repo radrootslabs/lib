@@ -1,0 +1,123 @@
+use radroots_transport::host::websocket::{Admission, Connector, Error, IoFuture, Socket};
+use std::{net::IpAddr, num::NonZeroUsize, sync::Arc, time::Duration};
+
+/// Inert provider whose DOM socket and callbacks stay on their origin thread.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct BrowserConnector;
+
+impl Connector for BrowserConnector {
+    fn supports_ping(&self) -> bool {
+        false
+    }
+
+    fn connect<'a>(
+        &'a self,
+        endpoint: &'a str,
+        timeout: Duration,
+        max_message_bytes: NonZeroUsize,
+        admission: Arc<dyn Admission>,
+    ) -> IoFuture<'a, Result<Arc<dyn Socket>, Error>> {
+        Box::pin(async move {
+            validate_endpoint(endpoint, admission.as_ref())?;
+            if timeout.is_zero() {
+                return Err(Error::Timeout);
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                crate::browser::connect(endpoint, timeout, max_message_bytes, admission).await
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let _ = max_message_bytes;
+                Err(Error::Unsupported)
+            }
+        })
+    }
+}
+
+fn validate_endpoint(endpoint: &str, admission: &dyn Admission) -> Result<(), Error> {
+    let url = url::Url::parse(endpoint).map_err(|_| Error::Policy)?;
+    if !matches!(url.scheme(), "ws" | "wss")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(Error::Policy);
+    }
+    let host = url
+        .host_str()
+        .ok_or(Error::Policy)?
+        .trim_matches(['[', ']']);
+    if let Ok(address) = host.parse::<IpAddr>()
+        && !admission.permits_address(address)
+    {
+        return Err(Error::Policy);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::tests::AdmissionCounter as Grant;
+    #[test]
+    fn endpoint_validation_is_explicit_and_never_resolves_dns() {
+        for endpoint in [
+            "invalid",
+            "https://example.org",
+            "ws://a:b@example.org",
+            "wss://example.org/#fragment",
+        ] {
+            assert_eq!(
+                validate_endpoint(endpoint, Grant::new(true).as_ref()),
+                Err(Error::Policy)
+            );
+        }
+        for endpoint in ["ws://127.0.0.1", "wss://[::1]"] {
+            assert_eq!(
+                validate_endpoint(endpoint, Grant::new(false).as_ref()),
+                Err(Error::Policy)
+            );
+            assert_eq!(
+                validate_endpoint(endpoint, Grant::new(true).as_ref()),
+                Ok(())
+            );
+        }
+        assert_eq!(
+            validate_endpoint("wss://relay.example/path?q=1", Grant::new(false).as_ref()),
+            Ok(())
+        );
+    }
+    #[test]
+    fn non_browser_connection_refuses_and_zero_deadline_does_not_start_io() {
+        assert!(!BrowserConnector.supports_ping());
+        for (endpoint, duration, error) in [
+            ("ws://127.0.0.1", Duration::from_secs(1), Error::Unsupported),
+            ("wss://example.org", Duration::ZERO, Error::Timeout),
+            ("invalid", Duration::from_secs(1), Error::Policy),
+        ] {
+            let result = futures::executor::block_on(BrowserConnector.connect(
+                endpoint,
+                duration,
+                NonZeroUsize::new(1).unwrap(),
+                Grant::new(true),
+            ));
+            assert!(matches!(result, Err(found) if found == error));
+        }
+    }
+
+    #[test]
+    fn factory_constructs_the_shared_session_without_host_effects() {
+        use radroots_transport_nostr::{
+            Config, RelayAccess, RelayEndpoint, RelayProfile, RelayProfileKind, RelayUrlPolicy,
+        };
+        let endpoint = RelayEndpoint::new(
+            "wss://relay.example",
+            RelayUrlPolicy::Public,
+            RelayAccess::ReadWrite,
+        )
+        .unwrap();
+        let profile = RelayProfile::explicit(RelayProfileKind::Public, [endpoint]).unwrap();
+        let _transport = crate::create_transport(Config::from_profile(profile));
+    }
+}

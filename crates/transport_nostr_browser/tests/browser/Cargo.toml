@@ -1,0 +1,24 @@
+[package]
+name = "radroots_nostr_socket_browser_fixture"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.99.0"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+radroots_transport_nostr_browser = { path = "../.." }
+radroots_transport_nostr = { path = "../../../transport_nostr" }
+radroots_transport = { path = "../../../transport", features = ["std"] }
+radroots_event_codec = { path = "../../../event_codec", default-features = false, features = ["json"] }
+serde_json = "=1.0.149"
+futures = "=0.3.32"
+async-utility = { git = "https://github.com/yukibtc/async-utility", rev = "b323ae0c1c1424b78bf8bb8832b95e86771f1dee", version = "=0.3.2" }
+js-sys = "=0.3.91"
+wasm-bindgen = "=0.2.114"
+wasm-bindgen-futures = "=0.4.64"
+universal-time = "=0.3.1"
