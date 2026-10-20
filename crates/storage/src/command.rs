@@ -21,6 +21,8 @@ mod dm_source;
 mod installation;
 mod issuance;
 mod observation;
+mod publication;
+pub use publication::PublicationArtifact;
 mod snapshot;
 pub use delivery::{
     DeliveryAttempt, DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryIntent,
@@ -344,11 +346,11 @@ pub trait OperationJournal: WorkspaceStore {
         binding: WorkspaceBinding,
         operation: radroots_domain::OperationId,
         digest: radroots_domain::CommandDigest,
-        recipient: radroots_domain::PublicKey,
+        target: SigningTarget,
         request: radroots_transport::sink::DeliveryRequestId,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Vec<DeliveryObservation>, OperationError>>;
-    /// Atomically retains exact outer bytes and every selected target intent
+    /// Atomically retains exact signed payload bytes and every selected target intent
     /// before transport. A fresh actual commit may be dispatched once by its
     /// qualified owner. Restored or unknown claims never permit replay.
     fn prepare_delivery_attempt<'a>(
@@ -364,7 +366,7 @@ pub trait OperationJournal: WorkspaceStore {
         binding: WorkspaceBinding,
         operation: OperationId,
         digest: CommandDigest,
-        recipient: radroots_domain::PublicKey,
+        target: SigningTarget,
         request: radroots_transport::sink::DeliveryRequestId,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Option<DeliveryAttempt>, OperationError>>;
@@ -377,7 +379,7 @@ pub trait OperationJournal: WorkspaceStore {
         request: InstallationRequest,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<InstallationOutcome, OperationError>>;
-    /// Queries one coherent original preparation/plan/per-recipient evidence
+    /// Queries one coherent original preparation/plan/per-artifact evidence
     /// graph under current access. Reported absence grants no safe reissue.
     fn operation_snapshot(
         &self,

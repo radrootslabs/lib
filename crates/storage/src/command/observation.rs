@@ -1,6 +1,6 @@
 //! Bounded observations of an already retained exact transport attempt.
 
-use super::{DeliveryAttempt, OperationError, PublicationWork};
+use super::{DeliveryAttempt, OperationError, PublicationArtifact};
 use core::{fmt, num::NonZeroU64};
 use radroots_domain::EnvelopeEventId;
 use radroots_transport::{
@@ -45,7 +45,7 @@ impl DeliveryObservationKind {
 /// or storage. The native owner independently checks actual protected linkage.
 #[derive(Clone, Eq, PartialEq)]
 pub struct DeliveryObservation {
-    work: PublicationWork,
+    work: PublicationArtifact,
     request: DeliveryRequestId,
     event: EnvelopeEventId,
     envelope_digest: [u8; 32],
@@ -150,7 +150,7 @@ impl DeliveryObservation {
         })
     }
     /// Original publication scope, independently checked by the native owner.
-    pub const fn work(&self) -> PublicationWork {
+    pub const fn work(&self) -> PublicationArtifact {
         self.work
     }
     /// Full original potential invocation identity.

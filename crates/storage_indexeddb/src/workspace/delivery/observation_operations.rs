@@ -4,7 +4,7 @@ use crate::workspace::{
     journal::{self, OperationChange},
     owned,
 };
-use radroots_domain::{CommandDigest, OperationId, PublicKey};
+use radroots_domain::{CommandDigest, OperationId};
 use radroots_storage::{
     command::{DeliveryObservation, DeliveryObservationOutcome, OperationError},
     workspace::{AttachmentProof, WorkspaceBinding},
@@ -28,7 +28,7 @@ impl BrowserWorkspace {
         let result = owned(work, async move {
             let input = binding.input().clone();
             let (grant, protected) = state.capture_retained(&input, &proof).await?;
-            let actual_work = supplied.work();
+            let actual_work = supplied.work().private()?;
             let evidence = actual_work.evidence();
             let operation = evidence.operation_id();
             let view = state.read_view(operation).await?;
@@ -54,7 +54,7 @@ impl BrowserWorkspace {
                 &binding,
             )?;
             let attempt = facts.selected.ok_or(OperationError::InvalidEvidence)?;
-            if attempt.work() != actual_work {
+            if attempt.work().private()? != actual_work {
                 return Err(OperationError::InvalidEvidence);
             }
             let checked = DeliveryObservation::from_store_report(
@@ -66,7 +66,7 @@ impl BrowserWorkspace {
                 return Err(OperationError::InvalidEvidence);
             }
             let existing = snapshot.delivery_observations().iter().find(|value| {
-                value.work() == actual_work
+                value.work().private().ok() == Some(actual_work)
                     && value.request_id() == supplied.request_id()
                     && value.target_receipt().target().fingerprint()
                         == supplied.target_receipt().target().fingerprint()
@@ -127,7 +127,7 @@ impl BrowserWorkspace {
         binding: WorkspaceBinding,
         operation: OperationId,
         digest: CommandDigest,
-        recipient: PublicKey,
+        target: radroots_storage::command::SigningTarget,
         request: DeliveryRequestId,
         proof: AttachmentProof,
     ) -> Result<Vec<DeliveryObservation>, OperationError> {
@@ -138,6 +138,9 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
+            let recipient = target
+                .recipient()
+                .ok_or(OperationError::UnsupportedOperation)?;
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;
             let facts = state
@@ -165,7 +168,8 @@ impl BrowserWorkspace {
                         .delivery_observations()
                         .iter()
                         .filter(|value| {
-                            value.work().recipient() == recipient && value.request_id() == &request
+                            value.work().recipient() == Some(recipient)
+                                && value.request_id() == &request
                         })
                         .cloned()
                         .collect()

@@ -24,7 +24,7 @@ pub(super) const WORK: &str = "CREATE TABLE public_publication_work (workspace B
 pub(super) const TX_INDEX: &str = "CREATE UNIQUE INDEX listing_installation_transaction_identity ON listing_installations(workspace,transaction_id)";
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
-struct PublicEvidenceRef {
+pub(super) struct PublicEvidenceRef {
     workspace: WorkspaceId,
     operation: OperationId,
     command: CommandDigest,
@@ -35,7 +35,7 @@ struct PublicEvidenceRef {
     observed_at: Option<u64>,
 }
 impl PublicEvidenceRef {
-    fn new(e: EvidenceReceipt) -> Self {
+    pub(super) fn new(e: EvidenceReceipt) -> Self {
         Self {
             workspace: e.workspace_id(),
             operation: e.operation_id(),

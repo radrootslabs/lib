@@ -17,7 +17,7 @@ use wasm_bindgen::prelude::*;
 fn summary(value: &DeliveryObservation) -> Value {
     let target = value.target_receipt();
     let outcome = target.outcome();
-    json!({"request":value.request_id().as_str(),"event":value.event_id().to_string(),"digest":hex::encode(value.envelope_digest()),"recipient":value.work().recipient().to_string(),"capture":value.work().evidence().transaction_id().to_string(),"work":value.work().transaction_id().to_string(),"target":target.target().uri().as_str(),"fingerprint":target.target().fingerprint().as_str(),"attempted":target.was_attempted(),"class":value.kind().code(),"ordinal":value.target_ordinal(),"at":value.observed_at_unix_ms().map(|t|t.get()),"code":outcome.code(),"message":outcome.message()})
+    json!({"request":value.request_id().as_str(),"event":value.event_id().to_string(),"digest":hex::encode(value.envelope_digest()),"recipient":value.work().private().unwrap().recipient().to_string(),"capture":value.work().evidence().transaction_id().to_string(),"work":value.work().transaction_id().to_string(),"target":target.target().uri().as_str(),"fingerprint":target.target().fingerprint().as_str(),"attempted":target.was_attempted(),"class":value.kind().code(),"ordinal":value.target_ordinal(),"at":value.observed_at_unix_ms().map(|t|t.get()),"code":outcome.code(),"message":outcome.message()})
 }
 fn result(value: DeliveryObservationOutcome) -> String {
     match value {
@@ -65,7 +65,7 @@ impl WorkspaceFixture {
                 request.binding().clone(),
                 OperationId::from_bytes([n; 32]),
                 request.command().digest(),
-                recipients[index as usize],
+                recipients[index as usize].into(),
                 DeliveryRequestId::parse(hex::encode([id; 32])).unwrap(),
                 copied(&self.proof),
             )
@@ -160,7 +160,7 @@ impl WorkspaceFixture {
                 request.binding().clone(),
                 OperationId::from_bytes([n; 32]),
                 request.command().digest(),
-                recipients[index as usize],
+                recipients[index as usize].into(),
                 DeliveryRequestId::parse(hex::encode([id; 32])).unwrap(),
                 copied(&self.proof),
             )
@@ -179,7 +179,7 @@ impl WorkspaceFixture {
                 original.binding.clone(),
                 evidence.operation_id(),
                 evidence.command_digest(),
-                evidence.recipient().unwrap(),
+                evidence.target(),
                 original.value.request_id().clone(),
                 copied(&self.proof),
             )

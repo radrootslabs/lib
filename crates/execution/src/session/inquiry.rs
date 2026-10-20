@@ -445,10 +445,9 @@ impl InquiryRuntime {
                 continue;
             }
             // Replaying a command never dispatches a previously claimed attempt.
-            let original = snapshot
-                .delivery_attempts()
-                .iter()
-                .find(|attempt| attempt.work() == *work);
+            let original = snapshot.delivery_attempts().iter().find(|attempt| {
+                attempt.work() == radroots_storage::command::PublicationArtifact::Private(*work)
+            });
             if original.is_some() && matches!(mode, RunMode::Command) {
                 continue;
             }
@@ -506,7 +505,8 @@ impl InquiryRuntime {
                 .iter()
                 .filter(|target| {
                     !snapshot.delivery_observations().iter().any(|observation| {
-                        observation.work() == *work
+                        observation.work()
+                            == radroots_storage::command::PublicationArtifact::Private(*work)
                             && observation.target_receipt().target().fingerprint()
                                 == target.fingerprint()
                             && observation.kind()

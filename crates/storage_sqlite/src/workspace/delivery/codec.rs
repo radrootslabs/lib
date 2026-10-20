@@ -4,7 +4,9 @@ use super::super::{
 };
 use super::{MAX_BYTES, MAX_PROTECTED_BYTES};
 use radroots_domain::{EnvelopeEventId, TransactionId, UnixSeconds};
-use radroots_storage::command::{DeliveryAttempt, DeliveryIntent, OperationError, PublicationWork};
+use radroots_storage::command::{
+    DeliveryAttempt, DeliveryIntent, OperationError, PublicationArtifact, PublicationWork,
+};
 use radroots_transport::{TargetSet, policy::SatisfactionPolicy};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -17,14 +19,14 @@ mod tests;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub(super) struct WorkRef {
+pub(super) struct PrivateWorkRef {
     installation: TransactionId,
     plan: [u8; 32],
     evidence: EvidenceRef,
     transaction: TransactionId,
     queued_at: UnixSeconds,
 }
-impl WorkRef {
+impl PrivateWorkRef {
     pub(super) fn new(work: PublicationWork) -> Self {
         Self {
             installation: work.installation_transaction_id(),
@@ -32,6 +34,69 @@ impl WorkRef {
             evidence: EvidenceRef::new(work.evidence(), work.recipient()),
             transaction: work.transaction_id(),
             queued_at: work.queued_at(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PublicWorkRef {
+    role: u8,
+    #[serde(deserialize_with = "required_recipient")]
+    recipient: Option<radroots_domain::PublicKey>,
+    installation: TransactionId,
+    plan: [u8; 32],
+    evidence: super::super::listing_installation::PublicEvidenceRef,
+    transaction: TransactionId,
+    queued_at: UnixSeconds,
+}
+fn required_recipient<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<radroots_domain::PublicKey>, D::Error> {
+    Option::<radroots_domain::PublicKey>::deserialize(d)
+}
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
+#[serde(untagged)]
+pub(super) enum WorkRef {
+    Private(PrivateWorkRef),
+    Public(PublicWorkRef),
+}
+impl WorkRef {
+    pub(super) fn new(work: impl Into<PublicationArtifact>) -> Self {
+        match work.into() {
+            PublicationArtifact::Private(v) => Self::Private(PrivateWorkRef::new(v)),
+            PublicationArtifact::Public(v) => Self::Public(PublicWorkRef {
+                role: 0,
+                recipient: None,
+                installation: v.installation_transaction_id(),
+                plan: *v.plan_digest(),
+                evidence: super::super::listing_installation::PublicEvidenceRef::new(v.evidence()),
+                transaction: v.transaction_id(),
+                queued_at: v.queued_at(),
+            }),
+        }
+    }
+}
+fn version(work: PublicationArtifact) -> u8 {
+    match work {
+        PublicationArtifact::Private(_) => 1,
+        PublicationArtifact::Public(_) => 2,
+    }
+}
+fn intent(
+    work: PublicationArtifact,
+    request: &str,
+    event: EnvelopeEventId,
+    targets: &TargetSet,
+    policy: &SatisfactionPolicy,
+    deadline: core::num::NonZeroU64,
+) -> Result<DeliveryIntent, OperationError> {
+    match work {
+        PublicationArtifact::Private(_) => {
+            DeliveryIntent::new(request, event, targets, policy, deadline)
+        }
+        PublicationArtifact::Public(_) => {
+            DeliveryIntent::public(request, event, targets, policy, deadline)
         }
     }
 }
@@ -59,7 +124,7 @@ struct Header {
 impl Header {
     fn new(value: &DeliveryAttempt) -> Self {
         Self {
-            version: 1,
+            version: version(value.work()),
             work: WorkRef::new(value.work()),
             request: value.intent().request_id().as_str().into(),
             event: value.intent().event_id(),
@@ -75,13 +140,14 @@ impl Header {
     }
     fn into_attempt(
         self,
-        work: PublicationWork,
+        work: PublicationArtifact,
         raw: &str,
     ) -> Result<DeliveryAttempt, OperationError> {
-        if self.version != 1 || self.work != WorkRef::new(work) {
+        if self.version != version(work) || self.work != WorkRef::new(work) {
             return Err(OperationError::RecoveryRequired);
         }
-        let intent = DeliveryIntent::new(
+        let intent = intent(
+            work,
             &self.request,
             self.event,
             &self.targets,
@@ -143,12 +209,12 @@ pub(super) fn request_key(request: &str) -> [u8; 32] {
     hash.update(request.as_bytes());
     hash.finalize().into()
 }
-pub(super) fn scope(work: PublicationWork, key: [u8; 32]) -> DeliveryScope {
+pub(super) fn scope(work: PublicationArtifact, key: [u8; 32]) -> DeliveryScope {
     let e = work.evidence();
     DeliveryScope {
         workspace: e.workspace_id(),
         operation: e.operation_id(),
-        recipient: work.recipient(),
+        target: work.target(),
         request: key,
     }
 }
@@ -239,7 +305,7 @@ pub(super) async fn protect(
         parts.push(protected);
     }
     let manifest = Manifest {
-        version: 1,
+        version: version(report.work()),
         work: WorkRef::new(report.work()),
         request: report.intent().request_id().as_str().into(),
         event: report.intent().event_id(),
@@ -269,13 +335,13 @@ pub(super) async fn protect(
 
 pub(super) async fn read(
     connection: &mut SqliteConnection,
-    work: PublicationWork,
+    work: PublicationArtifact,
     key: [u8; 32],
     crypto: &WorkspaceCrypto,
 ) -> Result<Option<ProtectedAttempt>, OperationError> {
     let s = scope(work, key);
-    let row=sqlx::query("SELECT CASE WHEN length(event_id)=32 THEN event_id END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,part_count,byte_count,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_attempts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=?")
-        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).fetch_optional(&mut *connection).await.map_err(invalid)?;
+    let row=sqlx::query(super::sql(connection,"SELECT CASE WHEN length(event_id)=32 THEN event_id END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,part_count,byte_count,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_attempts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=?").await?)
+        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).fetch_optional(&mut *connection).await.map_err(invalid)?;
     let Some(row) = row else { return Ok(None) };
     let event = bytes(&row, 0)?;
     let transaction = bytes(&row, 1)?;
@@ -288,8 +354,8 @@ pub(super) async fn read(
     {
         return Err(OperationError::RecoveryRequired);
     }
-    let totals:(i64,i64)=sqlx::query_as("SELECT count(*),coalesce(sum(n),0) FROM (SELECT length(protected) AS n FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? LIMIT 25)")
-        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).fetch_one(&mut *connection).await.map_err(invalid)?;
+    let totals:(i64,i64)=sqlx::query_as(super::sql(connection,"SELECT count(*),coalesce(sum(n),0) FROM (SELECT length(protected) AS n FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? LIMIT 25)").await?)
+        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).fetch_one(&mut *connection).await.map_err(invalid)?;
     if totals.0 != count
         || totals.1 <= 0
         || (totals.1 as usize)
@@ -307,7 +373,7 @@ pub(super) async fn read(
         }
         serde_json::from_slice(raw).map_err(invalid)
     })?;
-    if value.version != 1
+    if value.version != version(work)
         || value.work != WorkRef::new(work)
         || request_key(&value.request) != key
         || value.event.as_bytes().as_slice() != event
@@ -317,8 +383,8 @@ pub(super) async fn read(
     {
         return Err(OperationError::RecoveryRequired);
     }
-    let rows=sqlx::query("SELECT part,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? ORDER BY part LIMIT 25")
-        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).fetch_all(&mut *connection).await.map_err(invalid)?;
+    let rows=sqlx::query(super::sql(connection,"SELECT part,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? ORDER BY part LIMIT 25").await?)
+        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).fetch_all(&mut *connection).await.map_err(invalid)?;
     let mut parts = Vec::with_capacity(rows.len());
     let mut plain = Zeroizing::new(Vec::with_capacity(value.bytes));
     for (index, row) in rows.iter().enumerate() {
@@ -383,11 +449,11 @@ pub(super) async fn insert(
         value.report.work(),
         request_key(value.report.intent().request_id().as_str()),
     );
-    sqlx::query("INSERT INTO chat_delivery_attempts(workspace,operation_id,recipient,request_key,event_id,transaction_id,part_count,byte_count,protected) VALUES(?,?,?,?,?,?,?,?,?)")
-        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).bind(value.report.intent().event_id().as_bytes().as_slice()).bind(value.report.transaction_id().as_bytes().as_slice()).bind(value.parts.len() as i64).bind(value.bytes as i64).bind(&value.manifest).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
+    sqlx::query(super::sql(connection,"INSERT INTO chat_delivery_attempts(workspace,operation_id,recipient,request_key,event_id,transaction_id,part_count,byte_count,protected) VALUES(?,?,?,?,?,?,?,?,?)").await?)
+        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).bind(value.report.intent().event_id().as_bytes().as_slice()).bind(value.report.transaction_id().as_bytes().as_slice()).bind(value.parts.len() as i64).bind(value.bytes as i64).bind(&value.manifest).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
     for (index, part) in value.parts.iter().enumerate() {
-        sqlx::query("INSERT INTO chat_delivery_parts(workspace,operation_id,recipient,request_key,part,protected) VALUES(?,?,?,?,?,?)")
-        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).bind(index as i64+1).bind(part).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
+        sqlx::query(super::sql(connection,"INSERT INTO chat_delivery_parts(workspace,operation_id,recipient,request_key,part,protected) VALUES(?,?,?,?,?,?)").await?)
+        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).bind(index as i64+1).bind(part).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
     }
     Ok(())
 }
@@ -398,8 +464,8 @@ impl Fact {
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {
         let s = self.scope;
-        let row=sqlx::query("SELECT CASE WHEN length(event_id)=32 THEN event_id END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,part_count,byte_count,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_attempts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=?")
-            .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).fetch_optional(&mut *connection).await.map_err(invalid)?.ok_or(OperationError::RecoveryRequired)?;
+        let row=sqlx::query(super::sql(connection,"SELECT CASE WHEN length(event_id)=32 THEN event_id END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,part_count,byte_count,CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_attempts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=?").await?)
+            .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).fetch_optional(&mut *connection).await.map_err(invalid)?.ok_or(OperationError::RecoveryRequired)?;
         if bytes(&row, 0)? != self.event.as_bytes()
             || bytes(&row, 1)? != self.transaction.as_bytes()
             || row.try_get::<i64, _>(2).map_err(invalid)? != self.parts.len() as i64
@@ -411,14 +477,14 @@ impl Fact {
         // Compare one bounded ciphertext at a time. No provider, decryption,
         // signing or network operation occurs while holding the write fence.
         for (index, expected) in self.parts.iter().enumerate() {
-            let row=sqlx::query("SELECT CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? AND part=?")
-                .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).bind(index as i64+1).fetch_optional(&mut *connection).await.map_err(invalid)?.ok_or(OperationError::RecoveryRequired)?;
+            let row=sqlx::query(super::sql(connection,"SELECT CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? AND part=?").await?)
+                .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).bind(index as i64+1).fetch_optional(&mut *connection).await.map_err(invalid)?.ok_or(OperationError::RecoveryRequired)?;
             if <[u8; 32]>::from(Sha256::digest(bytes(&row, 0)?)) != *expected {
                 return Err(OperationError::RecoveryRequired);
             }
         }
-        let count:i64=sqlx::query_scalar("SELECT count(*) FROM (SELECT 1 FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? LIMIT 25)")
-            .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).fetch_one(connection).await.map_err(invalid)?;
+        let count:i64=sqlx::query_scalar(super::sql(connection,"SELECT count(*) FROM (SELECT 1 FROM chat_delivery_parts WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? LIMIT 25)").await?)
+            .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).fetch_one(connection).await.map_err(invalid)?;
         if count != self.parts.len() as i64 {
             return Err(OperationError::RecoveryRequired);
         }
@@ -428,12 +494,12 @@ impl Fact {
 
 pub(super) async fn absent(
     connection: &mut SqliteConnection,
-    work: PublicationWork,
+    work: PublicationArtifact,
     key: [u8; 32],
 ) -> Result<(), OperationError> {
     let s = scope(work, key);
-    let count:i64=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_delivery_attempts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3 AND request_key=?4)+EXISTS(SELECT 1 FROM chat_delivery_parts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3 AND request_key=?4)")
-        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).fetch_one(connection).await.map_err(invalid)?;
+    let count:i64=sqlx::query_scalar(super::sql(connection,"SELECT EXISTS(SELECT 1 FROM chat_delivery_attempts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3 AND request_key=?4)+EXISTS(SELECT 1 FROM chat_delivery_parts WHERE workspace=?1 AND operation_id=?2 AND recipient=?3 AND request_key=?4)").await?)
+        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).fetch_one(connection).await.map_err(invalid)?;
     if count != 0 {
         return Err(OperationError::RecoveryRequired);
     }

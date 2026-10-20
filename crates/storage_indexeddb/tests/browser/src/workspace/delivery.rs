@@ -293,7 +293,7 @@ impl WorkspaceFixture {
                 request.binding().clone(),
                 OperationId::from_bytes([n; 32]),
                 request.command().digest(),
-                recipient,
+                recipient.into(),
                 DeliveryRequestId::parse(hex::encode([id; 32])).unwrap(),
                 copied(&self.proof),
             )

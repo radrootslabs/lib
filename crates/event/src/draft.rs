@@ -251,6 +251,45 @@ impl SignedEvent {
         })
     }
 
+    /// Checks exact raw/wire containment and the canonical ID under explicit
+    /// caller-owned bounds. Signature verification remains a separate step.
+    /// The legacy constructor and its default profile remain unchanged.
+    pub fn from_wire_verified_id_with_limits(
+        wire: Nip01EventWire,
+        raw_json: impl Into<String>,
+        limits: crate::wire::EventWireLimits,
+    ) -> Result<Self, SignedEventError> {
+        let raw_json = raw_json.into();
+        let parsed = Nip01EventWire::parse_json_with_limits(&raw_json, limits)
+            .map_err(SignedEventError::RawJson)?;
+        crate::require_invariant(parsed == wire, &|| SignedEventError::RawJsonMismatch)?;
+        wire.verify_id().map_err(SignedEventError::Wire)?;
+        let envelope = EventEnvelope::new_with_limits(
+            crate::envelope::EventEnvelopeParts {
+                id: wire.id.clone(),
+                author: wire.pubkey.clone(),
+                created_at: wire.created_at,
+                kind: wire.kind,
+                tags: wire.tags.clone(),
+                content: wire.content.clone(),
+                sig: wire.sig.clone(),
+            },
+            crate::envelope::EventEnvelopeLimits {
+                max_content_bytes: limits.max_content_bytes,
+                max_tag_count: limits.max_tag_count,
+                max_total_tag_elements: limits.max_total_tag_elements,
+                max_tag_element_bytes: limits.max_tag_element_bytes,
+                max_total_tag_bytes: limits.max_total_tag_bytes,
+            },
+        )
+        .map_err(SignedEventError::Envelope)?;
+        Ok(Self {
+            envelope,
+            wire,
+            raw_json,
+        })
+    }
+
     #[inline]
     pub fn envelope(&self) -> &EventEnvelope {
         &self.envelope
@@ -435,6 +474,55 @@ mod tests {
         assert_eq!(signed.content(), wire.content);
         assert_eq!(signed.sig().to_hex(), signed.signature_hex());
         assert_eq!(signed.sig_str(), wire.sig);
+    }
+
+    #[test]
+    fn explicit_wire_budget_preserves_exact_raw_and_default_limits_remain_unchanged() {
+        let mut wire = verified_wire("public content");
+        wire.tags = vec![vec!["radroots:listing".into(), "x".repeat(4097)]];
+        wire.id = compute_canonical_nip01_event_id(
+            &wire.pubkey,
+            wire.created_at,
+            wire.kind,
+            &wire.tags,
+            &wire.content,
+        )
+        .unwrap()
+        .into_string();
+        let raw = format!(" \n{} \t", raw_json_for_wire(&wire));
+        assert!(SignedEvent::from_wire_verified_id(wire.clone(), raw.clone()).is_err());
+        let limits = crate::wire::EventWireLimits {
+            max_raw_json_bytes: raw.len(),
+            max_tag_element_bytes: 4097,
+            ..Default::default()
+        };
+        let event =
+            SignedEvent::from_wire_verified_id_with_limits(wire.clone(), raw.clone(), limits)
+                .unwrap();
+        assert_eq!(event.raw_json(), raw);
+        assert_eq!(event.wire(), &wire);
+        assert_eq!(event.envelope().tags_as_vec(), wire.tags);
+        for reduced in [
+            crate::wire::EventWireLimits {
+                max_raw_json_bytes: raw.len() - 1,
+                ..limits
+            },
+            crate::wire::EventWireLimits {
+                max_tag_element_bytes: 4096,
+                ..limits
+            },
+        ] {
+            assert!(
+                SignedEvent::from_wire_verified_id_with_limits(wire.clone(), raw.clone(), reduced)
+                    .is_err()
+            );
+        }
+        let other = verified_wire("different exact input");
+        assert_eq!(
+            SignedEvent::from_wire_verified_id_with_limits(wire, raw_json_for_wire(&other), limits)
+                .unwrap_err(),
+            SignedEventError::RawJsonMismatch
+        );
     }
 
     #[test]

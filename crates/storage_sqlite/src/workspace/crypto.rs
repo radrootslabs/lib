@@ -35,7 +35,7 @@ pub(super) enum IssuancePayload {
 pub(super) struct DeliveryScope {
     pub workspace: WorkspaceId,
     pub operation: OperationId,
-    pub recipient: radroots_domain::PublicKey,
+    pub target: radroots_storage::command::SigningTarget,
     pub request: [u8; 32],
 }
 #[derive(Clone, Copy)]
@@ -336,7 +336,7 @@ fn delivery_context(
     part: u8,
 ) -> Result<EnvelopeContext, WorkspaceError> {
     use sha2::{Digest, Sha256};
-    let (tag, purpose, schema) = match payload {
+    let (tag, mut purpose, mut schema) = match payload {
         DeliveryPayload::Attempt => (
             0u8,
             "radroots.workspace.delivery_attempt",
@@ -353,7 +353,24 @@ fn delivery_context(
     hash.update([tag, part]);
     hash.update(scope.workspace.as_bytes());
     hash.update(scope.operation.as_bytes());
-    hash.update(scope.recipient.as_bytes());
+    match scope.target {
+        radroots_storage::command::SigningTarget::BusinessSeal(peer) => {
+            hash.update(peer.as_bytes())
+        }
+        radroots_storage::command::SigningTarget::PublicEvent => {
+            hash.update(b"public_event.no_recipient.v1\0");
+            (purpose, schema) = match payload {
+                DeliveryPayload::Attempt => (
+                    "radroots.workspace.public_delivery_attempt",
+                    "radroots.workspace.public_delivery_attempt.v1",
+                ),
+                DeliveryPayload::Observation => (
+                    "radroots.workspace.public_delivery_observation",
+                    "radroots.workspace.public_delivery_observation.v1",
+                ),
+            };
+        }
+    }
     hash.update(scope.request);
     let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
     Ok(EnvelopeContext::new(

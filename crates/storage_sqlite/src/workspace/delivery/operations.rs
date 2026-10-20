@@ -6,10 +6,10 @@ use super::super::{
 };
 use super::{codec, graph::Graph, observation::Observations};
 use nostr::JsonUtil;
-use radroots_domain::{CommandDigest, OperationId, PublicKey, TransactionId};
+use radroots_domain::{CommandDigest, OperationId, TransactionId};
 use radroots_storage::command::{
     CommitAttempt, DeliveryAttempt, DeliveryAttemptOutcome, DeliveryAttemptRequest,
-    EnvelopeCandidate, OperationError, PublicationWork,
+    EnvelopeCandidate, OperationError, PublicationArtifact, PublicationWork, SigningTarget,
 };
 use radroots_transport::sink::DeliveryRequestId;
 use sha2::{Digest, Sha256};
@@ -69,13 +69,24 @@ fn contains_original(
     }
     Ok(())
 }
-fn work(records: &Records, requested: PublicationWork) -> Result<PublicationWork, OperationError> {
-    let actual = records
-        .work
-        .iter()
-        .find(|value| value.report.recipient() == requested.recipient())
-        .ok_or(OperationError::InvalidEvidence)?
-        .report;
+fn work(
+    records: &Records,
+    public: &super::super::listing_installation::Records,
+    requested: PublicationArtifact,
+) -> Result<PublicationArtifact, OperationError> {
+    let actual = match requested {
+        PublicationArtifact::Private(v) => PublicationArtifact::Private(
+            records
+                .work
+                .iter()
+                .find(|r| r.report.recipient() == v.recipient())
+                .ok_or(OperationError::InvalidEvidence)?
+                .report,
+        ),
+        PublicationArtifact::Public(_) => {
+            PublicationArtifact::Public(public.work().ok_or(OperationError::InvalidEvidence)?)
+        }
+    };
     if actual != requested {
         return Err(OperationError::InvalidEvidence);
     }
@@ -115,18 +126,27 @@ impl Journal<'_> {
             self.crypto,
         )
         .await?;
-        let actual = work(&installed, supplied)?;
+        let public = super::super::listing_installation::Records::read(
+            self.connection,
+            self.selected,
+            evidence.operation_id(),
+            &original,
+            self.crypto,
+        )
+        .await?;
+        let actual = work(&installed, &public, supplied)?;
         let mut deliveries = Graph::read(
             self.connection,
             self.selected,
             evidence.operation_id(),
             &original,
             &installed,
+            &public,
             self.crypto,
         )
         .await?;
         let existing = deliveries.attempts.iter().position(|value| {
-            Some(value.work().recipient()) == evidence.target().recipient()
+            value.work().target() == evidence.target()
                 && value.intent().request_id() == request.intent().request_id()
         });
         let observations = Observations::read(
@@ -142,7 +162,8 @@ impl Journal<'_> {
             if value.work() != actual
                 || value.intent().digest() != request.intent().digest()
                 || candidate.as_ref().is_some_and(|candidate| {
-                    candidate.work() != actual || candidate.raw_json() != value.raw_json()
+                    PublicationArtifact::Private(candidate.work()) != actual
+                        || candidate.raw_json() != value.raw_json()
                 })
             {
                 return Err(OperationError::IdempotencyConflict);
@@ -160,8 +181,9 @@ impl Journal<'_> {
             let bound = original
                 .bound_plan()
                 .ok_or(OperationError::RecoveryRequired)?;
-            deliveries.authorize_routes(bound, evidence.recipient()?)?;
-            let ordinals = deliveries.ordinals(evidence.recipient()?, request.intent())?;
+            super::require_target(self.connection, actual.target()).await?;
+            deliveries.authorize_routes(bound, actual.target())?;
+            let ordinals = deliveries.ordinals(actual.target(), request.intent())?;
             if current.observed_at() < actual.queued_at()
                 || deliveries
                     .attempts
@@ -178,15 +200,27 @@ impl Journal<'_> {
             {
                 return Err(OperationError::DeadlineExceeded);
             }
-            let raw = match &candidate {
-                Some(candidate) => {
+            let raw = match (actual, &candidate) {
+                (PublicationArtifact::Public(_), None) => {
+                    let source = original
+                        .obtained_artifact(SigningTarget::PublicEvent)
+                        .ok_or(OperationError::InvalidEvidence)?;
+                    if request.intent().event_id() != source.event_id() {
+                        return Err(OperationError::InvalidEvidence);
+                    }
+                    Zeroizing::new(String::from(source.raw_json()))
+                }
+                (PublicationArtifact::Public(_), Some(_)) => {
+                    return Err(OperationError::InvalidEvidence);
+                }
+                (PublicationArtifact::Private(private), Some(candidate)) => {
                     if candidate.event_id() != request.intent().event_id() {
                         return Err(OperationError::InvalidEvidence);
                     }
-                    contains_original(candidate, actual, &original)?;
+                    contains_original(candidate, private, &original)?;
                     Zeroizing::new(String::from(candidate.raw_json()))
                 }
-                None => {
+                (PublicationArtifact::Private(_), None) => {
                     let retained = deliveries
                         .attempts
                         .iter()
@@ -253,6 +287,9 @@ impl Journal<'_> {
             installed
                 .unchanged(&mut transaction, self.selected, evidence.operation_id())
                 .await?;
+            public
+                .unchanged(&mut transaction, self.selected, evidence.operation_id())
+                .await?;
             deliveries
                 .unchanged(&mut transaction, self.selected, evidence.operation_id())
                 .await?;
@@ -317,7 +354,7 @@ impl Journal<'_> {
         binding: WorkspaceBinding,
         operation: OperationId,
         digest: CommandDigest,
-        recipient: PublicKey,
+        target: SigningTarget,
         request: DeliveryRequestId,
         proof: AttachmentProof,
     ) -> Result<Option<DeliveryAttempt>, OperationError> {
@@ -347,12 +384,21 @@ impl Journal<'_> {
             self.crypto,
         )
         .await?;
+        let public = super::super::listing_installation::Records::read(
+            self.connection,
+            self.selected,
+            operation,
+            &original,
+            self.crypto,
+        )
+        .await?;
         let mut deliveries = Graph::read(
             self.connection,
             self.selected,
             operation,
             &original,
             &installed,
+            &public,
             self.crypto,
         )
         .await?;
@@ -387,6 +433,9 @@ impl Journal<'_> {
             installed
                 .unchanged(&mut transaction, self.selected, operation)
                 .await?;
+            public
+                .unchanged(&mut transaction, self.selected, operation)
+                .await?;
             deliveries
                 .unchanged(&mut transaction, self.selected, operation)
                 .await?;
@@ -405,7 +454,7 @@ impl Journal<'_> {
             .attempts
             .iter()
             .position(|value| {
-                value.work().recipient() == recipient && value.intent().request_id() == &request
+                value.work().target() == target && value.intent().request_id() == &request
             })
             .map(|index| deliveries.attempts.remove(index)))
     }

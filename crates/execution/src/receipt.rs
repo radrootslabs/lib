@@ -604,10 +604,12 @@ impl OperationReceipt<ChatMessage> {
             } else if delivery_unknown {
                 Delivery::Unknown
             } else if attempts.is_empty()
-                || snapshot
-                    .publications()
-                    .iter()
-                    .any(|work| !attempts.iter().any(|attempt| attempt.work() == *work))
+                || snapshot.publications().iter().any(|work| {
+                    !attempts.iter().any(|attempt| {
+                        attempt.work()
+                            == radroots_storage::command::PublicationArtifact::Private(*work)
+                    })
+                })
             {
                 Delivery::Pending
             } else {

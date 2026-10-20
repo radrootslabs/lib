@@ -15,7 +15,8 @@ use zeroize::Zeroizing;
 #[path = "observation_tests.rs"]
 mod tests;
 
-pub(super) const TABLE: &str = "CREATE TABLE chat_delivery_observations (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, recipient BLOB NOT NULL, request_key BLOB NOT NULL, target_key BLOB NOT NULL CHECK(length(target_key)=32), kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 6), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,recipient,request_key,target_key,kind), FOREIGN KEY(workspace,operation_id,recipient,request_key) REFERENCES chat_delivery_attempts(workspace,operation_id,recipient,request_key)) STRICT, WITHOUT ROWID";
+pub(super) const TABLE_V10: &str = "CREATE TABLE chat_delivery_observations (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, recipient BLOB NOT NULL, request_key BLOB NOT NULL, target_key BLOB NOT NULL CHECK(length(target_key)=32), kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 6), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,recipient,request_key,target_key,kind), FOREIGN KEY(workspace,operation_id,recipient,request_key) REFERENCES chat_delivery_attempts(workspace,operation_id,recipient,request_key)) STRICT, WITHOUT ROWID";
+pub(super) const TABLE: &str = "CREATE TABLE artifact_delivery_observations (workspace BLOB NOT NULL, operation_id BLOB NOT NULL, artifact_key BLOB NOT NULL, request_key BLOB NOT NULL, target_key BLOB NOT NULL CHECK(length(target_key)=32), kind INTEGER NOT NULL CHECK(kind BETWEEN 1 AND 6), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(workspace,operation_id,artifact_key,request_key,target_key,kind), FOREIGN KEY(workspace,operation_id,artifact_key,request_key) REFERENCES artifact_delivery_attempts(workspace,operation_id,artifact_key,request_key)) STRICT, WITHOUT ROWID";
 const MAX_OBSERVATIONS: usize = 2 * 16 * 12 * 6;
 
 #[derive(Serialize, Deserialize)]
@@ -76,7 +77,11 @@ pub(super) async fn protect(
     crypto: &WorkspaceCrypto,
 ) -> Result<Protected, OperationError> {
     let wire = Wire {
-        version: 1,
+        version: if report.work().recipient().is_some() {
+            1
+        } else {
+            2
+        },
         work: WorkRef::new(report.work()),
         request: report.request_id().as_str().into(),
         event: report.event_id(),
@@ -115,8 +120,8 @@ impl Protected {
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {
         let s = self.scope;
-        sqlx::query("INSERT INTO chat_delivery_observations(workspace,operation_id,recipient,request_key,target_key,kind,protected) VALUES(?,?,?,?,?,?,?)")
-            .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).bind(self.target.as_slice()).bind(self.report.kind().code() as i64).bind(&self.protected).execute(connection).await.map_err(|_|OperationError::StorageFailure)?;
+        sqlx::query(super::sql(connection,"INSERT INTO chat_delivery_observations(workspace,operation_id,recipient,request_key,target_key,kind,protected) VALUES(?,?,?,?,?,?,?)").await?)
+            .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).bind(self.target.as_slice()).bind(self.report.kind().code() as i64).bind(&self.protected).execute(connection).await.map_err(|_|OperationError::StorageFailure)?;
         Ok(())
     }
 }
@@ -129,7 +134,7 @@ impl Observations {
         crypto: &WorkspaceCrypto,
     ) -> Result<Self, OperationError> {
         // Bound keys before fetching or opening any protected observation body.
-        let rows=sqlx::query("SELECT CASE WHEN length(recipient)=32 THEN recipient END,CASE WHEN length(request_key)=32 THEN request_key END,CASE WHEN length(target_key)=32 THEN target_key END,kind FROM chat_delivery_observations WHERE workspace=? AND operation_id=? ORDER BY recipient,request_key,target_key,kind LIMIT 2305")
+        let rows=sqlx::query(super::sql(connection,"SELECT CASE WHEN length(recipient)=32 OR (length(recipient)=1 AND hex(recipient)='00') THEN recipient END,CASE WHEN length(request_key)=32 THEN request_key END,CASE WHEN length(target_key)=32 THEN target_key END,kind FROM chat_delivery_observations WHERE workspace=? AND operation_id=? ORDER BY recipient,request_key,target_key,kind LIMIT 2305").await?)
             .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_all(&mut *connection).await.map_err(bad)?;
         if rows.len() > MAX_OBSERVATIONS {
             return Err(OperationError::RecoveryRequired);
@@ -146,7 +151,12 @@ impl Observations {
                     .try_into()
                     .map_err(bad)
             };
-            let recipient = key(0)?;
+            let artifact = row
+                .try_get::<Option<Vec<u8>>, _>(0)
+                .map_err(bad)?
+                .ok_or(OperationError::RecoveryRequired)?;
+            let target_scope =
+                radroots_storage::command::SigningTarget::from_key(&artifact).map_err(bad)?;
             let request = key(1)?;
             let target = key(2)?;
             let kind: i64 = row.try_get(3).map_err(bad)?;
@@ -157,7 +167,7 @@ impl Observations {
                 .attempts
                 .iter()
                 .find(|attempt| {
-                    attempt.work().recipient().as_bytes() == &recipient
+                    attempt.work().target() == target_scope
                         && codec::request_key(attempt.intent().request_id().as_str()) == request
                 })
                 .ok_or(OperationError::RecoveryRequired)?;
@@ -194,7 +204,7 @@ impl Observations {
         selected: &super::super::AttachmentInput,
         operation: radroots_domain::OperationId,
     ) -> Result<(), OperationError> {
-        let count:i64=sqlx::query_scalar("SELECT count(*) FROM (SELECT 1 FROM chat_delivery_observations WHERE workspace=? AND operation_id=? LIMIT 2305)")
+        let count:i64=sqlx::query_scalar(super::sql(connection,"SELECT count(*) FROM (SELECT 1 FROM chat_delivery_observations WHERE workspace=? AND operation_id=? LIMIT 2305)").await?)
             .bind(selected.workspace_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *connection).await.map_err(bad)?;
         if count != self.facts.len() as i64 {
             return Err(OperationError::RecoveryRequired);
@@ -214,7 +224,12 @@ fn decode(
     target: [u8; 32],
     kind: u8,
 ) -> Result<DeliveryObservation, OperationError> {
-    if wire.version != 1
+    if wire.version
+        != if attempt.work().recipient().is_some() {
+            1
+        } else {
+            2
+        }
         || wire.work != WorkRef::new(attempt.work())
         || wire.request != attempt.intent().request_id().as_str()
         || wire.event != attempt.intent().event_id()
@@ -236,6 +251,6 @@ async fn read_body(
     target: [u8; 32],
     kind: u8,
 ) -> Result<Vec<u8>, OperationError> {
-    sqlx::query_scalar::<_,Option<Vec<u8>>>("SELECT CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_observations WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? AND target_key=? AND kind=?")
-        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.recipient.as_bytes().as_slice()).bind(s.request.as_slice()).bind(target.as_slice()).bind(kind as i64).fetch_optional(connection).await.map_err(bad)?.flatten().ok_or(OperationError::RecoveryRequired)
+    sqlx::query_scalar::<_,Option<Vec<u8>>>(super::sql(connection,"SELECT CASE WHEN length(protected)>0 AND length(protected)<=262144 THEN protected END FROM chat_delivery_observations WHERE workspace=? AND operation_id=? AND recipient=? AND request_key=? AND target_key=? AND kind=?").await?)
+        .bind(s.workspace.as_bytes().as_slice()).bind(s.operation.as_bytes().as_slice()).bind(s.target.key().as_slice()).bind(s.request.as_slice()).bind(target.as_slice()).bind(kind as i64).fetch_optional(connection).await.map_err(bad)?.flatten().ok_or(OperationError::RecoveryRequired)
 }

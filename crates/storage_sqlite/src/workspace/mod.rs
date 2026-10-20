@@ -31,7 +31,7 @@ pub use radroots_storage::workspace::{
     WorkspaceError,
 };
 
-use radroots_domain::{ExecutorId, GrantId, PublicKey, WorkspaceId};
+use radroots_domain::{ExecutorId, GrantId, WorkspaceId};
 use radroots_storage::workspace::WorkspaceStore;
 use radroots_transport::BoxFuture;
 use std::{path::Path, sync::Arc};
@@ -174,7 +174,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
         binding: WorkspaceBinding,
         operation: radroots_domain::OperationId,
         digest: radroots_domain::CommandDigest,
-        recipient: PublicKey,
+        target: radroots_storage::command::SigningTarget,
         request: radroots_transport::sink::DeliveryRequestId,
         proof: AttachmentProof,
     ) -> BoxFuture<
@@ -186,7 +186,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
     > {
         Box::pin(
             self.worker
-                .query_delivery_observations(binding, operation, digest, recipient, request, proof),
+                .query_delivery_observations(binding, operation, digest, target, request, proof),
         )
     }
     fn prepare_delivery_attempt<'a>(
@@ -208,7 +208,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
         binding: WorkspaceBinding,
         operation: radroots_domain::OperationId,
         digest: radroots_domain::CommandDigest,
-        recipient: PublicKey,
+        target: radroots_storage::command::SigningTarget,
         request: radroots_transport::sink::DeliveryRequestId,
         proof: AttachmentProof,
     ) -> BoxFuture<
@@ -220,7 +220,7 @@ impl radroots_storage::command::OperationJournal for NativeWorkspace {
     > {
         Box::pin(
             self.worker
-                .query_delivery(binding, operation, digest, recipient, request, proof),
+                .query_delivery(binding, operation, digest, target, request, proof),
         )
     }
     fn install_transition_and_outbox(

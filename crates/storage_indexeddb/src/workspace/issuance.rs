@@ -24,7 +24,7 @@ use zeroize::Zeroizing;
 
 pub(super) enum Claim {
     Absent(BoundSigningPlan, u8),
-    Present(SigningAttempt),
+    Present(Box<SigningAttempt>),
 }
 fn position(bound: &BoundSigningPlan, recipient: PublicKey) -> Result<Option<u8>, OperationError> {
     Ok(bound
@@ -124,7 +124,7 @@ impl State {
         )
         .await?;
         let attempt = clear.expose_secret(|raw| ClaimRecord::decode(raw, bound, recipient))?;
-        Ok(Claim::Present(attempt))
+        Ok(Claim::Present(Box::new(attempt)))
     }
     pub(super) async fn evidence(
         &self,
@@ -276,7 +276,7 @@ impl BrowserWorkspace {
                 .claim(&view, bound, request.recipient()?, index)
                 .await?
             {
-                Claim::Present(attempt) => (attempt, false, Vec::new()),
+                Claim::Present(attempt) => (*attempt, false, Vec::new()),
                 Claim::Absent(bound, index) => {
                     state
                         .check_claim_absence(
@@ -376,7 +376,7 @@ impl BrowserWorkspace {
                         .claim(&view, bound, request.recipient()?, index)
                         .await?
                     {
-                        Claim::Present(attempt) => Some(attempt),
+                        Claim::Present(attempt) => Some(*attempt),
                         Claim::Absent(_, _) => {
                             state
                                 .check_claim_absence(
@@ -555,7 +555,7 @@ impl BrowserWorkspace {
                             obtained
                                 .map(|(evidence, receipt)| {
                                     CapturedArtifact::from_committed_store(
-                                        attempt,
+                                        *attempt,
                                         evidence,
                                         receipt.transaction_id(),
                                     )

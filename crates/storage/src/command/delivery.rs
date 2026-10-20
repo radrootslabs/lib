@@ -1,8 +1,8 @@
-//! Bounded private delivery data. Constructors authenticate carriers only;
+//! Bounded public/private delivery data. Constructors authenticate artifacts only;
 //! actual protected work, containment, authorization and dispatch belong to
 //! qualified store/execution owners, never to a report or enum variant.
 
-use super::{CommitAttempt, OperationError, PublicationWork};
+use super::{CommitAttempt, OperationError, PublicationArtifact, PublicationWork, SigningTarget};
 use crate::workspace::WorkspaceBinding;
 use core::{fmt, num::NonZeroU64};
 use radroots_domain::{EnvelopeEventId, PublicKey, TransactionId, UnixSeconds};
@@ -11,6 +11,7 @@ use radroots_event::{
     wire::{EventWireLimits, Nip01EventWire},
 };
 use radroots_event_codec::verify::{self, Nip01SignatureVerifier, RawEvent};
+use radroots_protocol::intent::ArtifactRole;
 use radroots_transport::{
     TargetSet, TransportId,
     policy::{SatisfactionClass, SatisfactionPolicy},
@@ -49,6 +50,42 @@ fn outer(raw: &str, recipient: PublicKey) -> Result<SignedEvent, OperationError>
     verify::signature(checked, &Nip01SignatureVerifier)
         .map_err(|_| OperationError::InvalidEvidence)?;
     Ok(event)
+}
+
+fn public_event(raw: &str, work: PublicationArtifact) -> Result<SignedEvent, OperationError> {
+    if work.target() != SigningTarget::PublicEvent || raw.len() > SIGNED_MAX_BYTES {
+        return Err(OperationError::InvalidEvidence);
+    }
+    let limits = EventWireLimits {
+        max_raw_json_bytes: SIGNED_MAX_BYTES,
+        max_content_bytes: SIGNED_MAX_BYTES,
+        max_tag_count: radroots_protocol::listing::LISTING_TAG_MAX_COUNT,
+        max_total_tag_elements: radroots_protocol::listing::LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT,
+        max_tag_element_bytes: SIGNED_MAX_BYTES,
+        max_total_tag_bytes: SIGNED_MAX_BYTES,
+        max_extra_fields: 0,
+        max_total_extra_json_bytes: 0,
+    };
+    let wire = Nip01EventWire::parse_json_exact_with_limits(raw, limits)
+        .map_err(|_| OperationError::InvalidEvidence)?;
+    if wire.kind != radroots_protocol::listing::LISTING_KIND
+        || wire.id != work.evidence().event_id().to_string()
+        || <[u8; 32]>::from(Sha256::digest(raw.as_bytes())) != *work.evidence().digest()
+    {
+        return Err(OperationError::InvalidEvidence);
+    }
+    let event = SignedEvent::from_wire_verified_id_with_limits(wire, raw, limits)
+        .map_err(|_| OperationError::InvalidEvidence)?;
+    let id = verify::id(RawEvent::new(event.envelope().clone()))
+        .map_err(|_| OperationError::InvalidEvidence)?;
+    verify::signature(id, &Nip01SignatureVerifier).map_err(|_| OperationError::InvalidEvidence)?;
+    Ok(event)
+}
+fn payload(raw: &str, work: PublicationArtifact) -> Result<SignedEvent, OperationError> {
+    match work {
+        PublicationArtifact::Private(v) => outer(raw, v.recipient()),
+        PublicationArtifact::Public(_) => public_event(raw, work),
+    }
 }
 
 /// One obtained outer awaiting protected native verification and retention.
@@ -136,6 +173,7 @@ impl fmt::Debug for EnvelopeCandidate {
 /// policy nor target construction proves an original route approval or lease.
 #[derive(Clone, Eq, PartialEq)]
 pub struct DeliveryIntent {
+    role: ArtifactRole,
     request: DeliveryRequestId,
     event: EnvelopeEventId,
     targets: TargetSet,
@@ -150,6 +188,41 @@ impl DeliveryIntent {
     /// Nostr targets and explicit relay-acceptance policy. Relay acceptance
     /// cannot prove recipient delivery. Owned copies shed caller spare capacity.
     pub fn new(
+        request_id: &str,
+        event: EnvelopeEventId,
+        targets: &TargetSet,
+        policy: &SatisfactionPolicy,
+        deadline: NonZeroU64,
+    ) -> Result<Self, OperationError> {
+        Self::capture(
+            ArtifactRole::GiftWrap,
+            request_id,
+            event,
+            targets,
+            policy,
+            deadline,
+        )
+    }
+    /// Direct public EVENT intent, without a private carrier or participant.
+    /// Actual original work/targets and dispatch rights remain backend-owned.
+    pub fn public(
+        request_id: &str,
+        event: EnvelopeEventId,
+        targets: &TargetSet,
+        policy: &SatisfactionPolicy,
+        deadline: NonZeroU64,
+    ) -> Result<Self, OperationError> {
+        Self::capture(
+            ArtifactRole::PublicEvent,
+            request_id,
+            event,
+            targets,
+            policy,
+            deadline,
+        )
+    }
+    fn capture(
+        role: ArtifactRole,
         request_id: &str,
         event: EnvelopeEventId,
         targets: &TargetSet,
@@ -185,7 +258,11 @@ impl DeliveryIntent {
         let request =
             DeliveryRequestId::parse(request_id).map_err(|_| OperationError::InvalidCommand)?;
         let mut hash = Sha256::new();
-        hash.update(b"radroots.private.delivery.publication_policy.v1\0");
+        hash.update(if role == ArtifactRole::PublicEvent {
+            b"radroots.public.delivery.publication_policy.v1\0".as_slice()
+        } else {
+            b"radroots.private.delivery.publication_policy.v1\0".as_slice()
+        });
         hash.update((targets.len() as u16).to_be_bytes());
         for target in targets.targets() {
             hash.update(target.fingerprint().as_str().as_bytes());
@@ -208,6 +285,7 @@ impl DeliveryIntent {
             return Err(OperationError::InvalidCommand);
         }
         let mut value = Self {
+            role,
             request,
             event,
             targets: targets.clone(),
@@ -226,7 +304,11 @@ impl DeliveryIntent {
     }
     fn refresh_digest(&mut self) {
         let mut hash = Sha256::new();
-        hash.update(b"radroots.private.delivery.intent.v1\0");
+        hash.update(if self.role == ArtifactRole::PublicEvent {
+            b"radroots.public.delivery.intent.v1\0".as_slice()
+        } else {
+            b"radroots.private.delivery.intent.v1\0".as_slice()
+        });
         hash.update(self.request.as_str().as_bytes());
         hash.update(self.event.as_bytes());
         hash.update(self.publication_policy);
@@ -259,6 +341,10 @@ impl DeliveryIntent {
         self.refresh_digest();
         Ok(self)
     }
+    /// Actual transport artifact family; the private family is a gift wrap.
+    pub const fn role(&self) -> ArtifactRole {
+        self.role
+    }
     /// Complete original publication criterion, excluding attempt ID, envelope
     /// selection and per-attempt deadline. The native owner freezes this
     /// criterion for the original recipient work.
@@ -286,7 +372,7 @@ impl DeliveryIntent {
     pub const fn request_id(&self) -> &DeliveryRequestId {
         &self.request
     }
-    /// Actual selected outer identity.
+    /// Actual selected public EVENT or private outer identity.
     pub const fn event_id(&self) -> EnvelopeEventId {
         self.event
     }
@@ -317,7 +403,7 @@ impl fmt::Debug for DeliveryIntent {
 /// Selects actual retained publication work for one potential transport attempt.
 pub struct DeliveryAttemptRequest {
     binding: WorkspaceBinding,
-    work: PublicationWork,
+    work: PublicationArtifact,
     intent: DeliveryIntent,
 }
 impl DeliveryAttemptRequest {
@@ -325,10 +411,17 @@ impl DeliveryAttemptRequest {
     /// original complete graph, current grant and exact selected routes.
     pub fn new(
         binding: WorkspaceBinding,
-        work: PublicationWork,
+        work: impl Into<PublicationArtifact>,
         intent: DeliveryIntent,
     ) -> Result<Self, OperationError> {
-        if binding.input().workspace_id() != work.evidence().workspace_id() {
+        let work = work.into();
+        if binding.input().workspace_id() != work.evidence().workspace_id()
+            || !matches!(
+                (work, intent.role()),
+                (PublicationArtifact::Private(_), ArtifactRole::GiftWrap)
+                    | (PublicationArtifact::Public(_), ArtifactRole::PublicEvent)
+            )
+        {
             return Err(OperationError::InvalidCommand);
         }
         Ok(Self {
@@ -342,7 +435,7 @@ impl DeliveryAttemptRequest {
         &self.binding
     }
     /// Immutable reported work; native capture compares its actual protected row.
-    pub const fn work(&self) -> PublicationWork {
+    pub const fn work(&self) -> PublicationArtifact {
         self.work
     }
     /// Exact requested transport intent.
@@ -364,7 +457,7 @@ impl fmt::Debug for DeliveryAttemptRequest {
 /// Complete original attempt report and exact bytes. Constructing or querying
 /// this value never permits replay of a potential invocation.
 pub struct DeliveryAttempt {
-    work: PublicationWork,
+    work: PublicationArtifact,
     intent: DeliveryIntent,
     raw: Zeroizing<String>,
     digest: [u8; 32],
@@ -376,14 +469,22 @@ impl DeliveryAttempt {
     /// Checks scoped data and carrier authenticity only. Native backends must
     /// independently verify original protected state and execute retention.
     pub fn from_store_report(
-        work: PublicationWork,
+        work: impl Into<PublicationArtifact>,
         intent: DeliveryIntent,
         raw: &str,
         transaction: TransactionId,
         retained_at: UnixSeconds,
         ordinals: Vec<u8>,
     ) -> Result<Self, OperationError> {
-        let event = outer(raw, work.recipient())?;
+        let work = work.into();
+        if !matches!(
+            (work, intent.role()),
+            (PublicationArtifact::Private(_), ArtifactRole::GiftWrap)
+                | (PublicationArtifact::Public(_), ArtifactRole::PublicEvent)
+        ) {
+            return Err(OperationError::InvalidEvidence);
+        }
+        let event = payload(raw, work)?;
         if event.envelope().id().as_bytes() != intent.event_id().as_bytes()
             || retained_at < work.queued_at()
             || event.envelope().created_at_u64() > retained_at.get()
@@ -407,14 +508,14 @@ impl DeliveryAttempt {
         })
     }
     /// Original protected publication reference.
-    pub const fn work(&self) -> PublicationWork {
+    pub const fn work(&self) -> PublicationArtifact {
         self.work
     }
     /// Original complete transport intent.
     pub const fn intent(&self) -> &DeliveryIntent {
         &self.intent
     }
-    /// Exact originally retained outer representation.
+    /// Exact originally retained signed representation.
     pub fn raw_json(&self) -> &str {
         &self.raw
     }
@@ -439,7 +540,7 @@ impl DeliveryAttempt {
     /// unselected endpoints have no retained invocation. This data conversion
     /// grants no dispatch permission or automatic retry.
     pub fn transport_request(&self) -> Result<DeliveryRequest, OperationError> {
-        let event = outer(self.raw_json(), self.work.recipient())?;
+        let event = payload(self.raw_json(), self.work)?;
         DeliveryRequest::new(
             self.intent.request_id().as_str(),
             DeliveryPayload::new(event),

@@ -867,6 +867,25 @@ pub radroots_storage::command::PlanBindingOutcome::Committed(radroots_storage::c
 pub radroots_storage::command::PlanBindingOutcome::Unknown(radroots_storage::command::CommitAttempt)
 impl core::fmt::Debug for radroots_storage::command::PlanBindingOutcome
 pub fn radroots_storage::command::PlanBindingOutcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_storage::command::PublicationArtifact
+pub radroots_storage::command::PublicationArtifact::Private(radroots_storage::command::PublicationWork)
+pub radroots_storage::command::PublicationArtifact::Public(radroots_storage::command::PublicPublicationWork)
+impl radroots_storage::command::PublicationArtifact
+pub const fn radroots_storage::command::PublicationArtifact::evidence(self) -> radroots_storage::command::EvidenceReceipt
+pub const fn radroots_storage::command::PublicationArtifact::installation_transaction_id(self) -> radroots_domain::identifier::TransactionId
+pub const fn radroots_storage::command::PublicationArtifact::plan_digest(&self) -> &[u8; 32]
+pub fn radroots_storage::command::PublicationArtifact::private(self) -> core::result::Result<radroots_storage::command::PublicationWork, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::PublicationArtifact::public(self) -> core::result::Result<radroots_storage::command::PublicPublicationWork, radroots_storage::command::OperationError>
+pub const fn radroots_storage::command::PublicationArtifact::queued_at(self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_storage::command::PublicationArtifact::recipient(self) -> core::option::Option<radroots_identity::key::PublicKey>
+pub const fn radroots_storage::command::PublicationArtifact::target(self) -> radroots_protocol::plan::SigningTarget
+pub const fn radroots_storage::command::PublicationArtifact::transaction_id(self) -> radroots_domain::identifier::TransactionId
+impl core::convert::From<radroots_storage::command::PublicPublicationWork> for radroots_storage::command::PublicationArtifact
+pub fn radroots_storage::command::PublicationArtifact::from(radroots_storage::command::PublicPublicationWork) -> Self
+impl core::convert::From<radroots_storage::command::PublicationWork> for radroots_storage::command::PublicationArtifact
+pub fn radroots_storage::command::PublicationArtifact::from(radroots_storage::command::PublicationWork) -> Self
+impl core::fmt::Debug for radroots_storage::command::PublicationArtifact
+pub fn radroots_storage::command::PublicationArtifact::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_storage::command::RetainedOperation
 pub radroots_storage::command::RetainedOperation::Planned(alloc::boxed::Box<radroots_storage::command::BoundSigningPlan>)
 pub radroots_storage::command::RetainedOperation::Prepared(radroots_storage::command::PreparedOperation)
@@ -988,14 +1007,14 @@ pub const fn radroots_storage::command::CommitAttempt::workspace_id(self) -> rad
 pub struct radroots_storage::command::DeliveryAttempt
 impl radroots_storage::command::DeliveryAttempt
 pub const fn radroots_storage::command::DeliveryAttempt::envelope_digest(&self) -> &[u8; 32]
-pub fn radroots_storage::command::DeliveryAttempt::from_store_report(radroots_storage::command::PublicationWork, radroots_storage::command::DeliveryIntent, &str, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds, alloc::vec::Vec<u8>) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::DeliveryAttempt::from_store_report(impl core::convert::Into<radroots_storage::command::PublicationArtifact>, radroots_storage::command::DeliveryIntent, &str, radroots_domain::identifier::TransactionId, radroots_domain::context::UnixSeconds, alloc::vec::Vec<u8>) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub const fn radroots_storage::command::DeliveryAttempt::intent(&self) -> &radroots_storage::command::DeliveryIntent
 pub fn radroots_storage::command::DeliveryAttempt::raw_json(&self) -> &str
 pub const fn radroots_storage::command::DeliveryAttempt::retained_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage::command::DeliveryAttempt::target_ordinals(&self) -> &[u8]
 pub const fn radroots_storage::command::DeliveryAttempt::transaction_id(&self) -> radroots_domain::identifier::TransactionId
 pub fn radroots_storage::command::DeliveryAttempt::transport_request(&self) -> core::result::Result<radroots_transport::sink::DeliveryRequest, radroots_storage::command::OperationError>
-pub const fn radroots_storage::command::DeliveryAttempt::work(&self) -> radroots_storage::command::PublicationWork
+pub const fn radroots_storage::command::DeliveryAttempt::work(&self) -> radroots_storage::command::PublicationArtifact
 impl core::fmt::Debug for radroots_storage::command::DeliveryAttempt
 pub fn radroots_storage::command::DeliveryAttempt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::DeliveryAttemptRequest
@@ -1003,8 +1022,8 @@ impl radroots_storage::command::DeliveryAttemptRequest
 pub const fn radroots_storage::command::DeliveryAttemptRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
 pub fn radroots_storage::command::DeliveryAttemptRequest::identity(&self) -> radroots_storage::command::CommitAttempt
 pub const fn radroots_storage::command::DeliveryAttemptRequest::intent(&self) -> &radroots_storage::command::DeliveryIntent
-pub fn radroots_storage::command::DeliveryAttemptRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::command::PublicationWork, radroots_storage::command::DeliveryIntent) -> core::result::Result<Self, radroots_storage::command::OperationError>
-pub const fn radroots_storage::command::DeliveryAttemptRequest::work(&self) -> radroots_storage::command::PublicationWork
+pub fn radroots_storage::command::DeliveryAttemptRequest::new(radroots_storage::workspace::WorkspaceBinding, impl core::convert::Into<radroots_storage::command::PublicationArtifact>, radroots_storage::command::DeliveryIntent) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::command::DeliveryAttemptRequest::work(&self) -> radroots_storage::command::PublicationArtifact
 impl core::fmt::Debug for radroots_storage::command::DeliveryAttemptRequest
 pub fn radroots_storage::command::DeliveryAttemptRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::DeliveryAttemptSummary
@@ -1016,7 +1035,7 @@ pub const fn radroots_storage::command::DeliveryAttemptSummary::intent(&self) ->
 pub const fn radroots_storage::command::DeliveryAttemptSummary::retained_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage::command::DeliveryAttemptSummary::target_ordinals(&self) -> &[u8]
 pub const fn radroots_storage::command::DeliveryAttemptSummary::transaction_id(&self) -> radroots_domain::identifier::TransactionId
-pub const fn radroots_storage::command::DeliveryAttemptSummary::work(&self) -> radroots_storage::command::PublicationWork
+pub const fn radroots_storage::command::DeliveryAttemptSummary::work(&self) -> radroots_storage::command::PublicationArtifact
 impl core::fmt::Debug for radroots_storage::command::DeliveryAttemptSummary
 pub fn radroots_storage::command::DeliveryAttemptSummary::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::DeliveryIntent
@@ -1026,8 +1045,10 @@ pub const fn radroots_storage::command::DeliveryIntent::digest(&self) -> &[u8; 3
 pub const fn radroots_storage::command::DeliveryIntent::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
 pub fn radroots_storage::command::DeliveryIntent::new(&str, radroots_domain::identifier::EnvelopeEventId, &radroots_transport::target::TargetSet, &radroots_transport::policy::SatisfactionPolicy, core::num::nonzero::NonZeroU64) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub const fn radroots_storage::command::DeliveryIntent::policy(&self) -> &radroots_transport::policy::SatisfactionPolicy
+pub fn radroots_storage::command::DeliveryIntent::public(&str, radroots_domain::identifier::EnvelopeEventId, &radroots_transport::target::TargetSet, &radroots_transport::policy::SatisfactionPolicy, core::num::nonzero::NonZeroU64) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub const fn radroots_storage::command::DeliveryIntent::publication_policy_digest(&self) -> &[u8; 32]
 pub const fn radroots_storage::command::DeliveryIntent::request_id(&self) -> &radroots_transport::sink::DeliveryRequestId
+pub const fn radroots_storage::command::DeliveryIntent::role(&self) -> radroots_protocol::intent::ArtifactRole
 pub fn radroots_storage::command::DeliveryIntent::selected_target_set(&self) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::DeliveryIntent::selected_targets(&self) -> impl core::iter::traits::iterator::Iterator<Item = &radroots_transport::target::Target>
 pub fn radroots_storage::command::DeliveryIntent::selection(&self) -> &[radroots_transport::target::TargetFingerprint]
@@ -1047,7 +1068,7 @@ pub const fn radroots_storage::command::DeliveryObservation::observed_at_unix_ms
 pub const fn radroots_storage::command::DeliveryObservation::request_id(&self) -> &radroots_transport::sink::DeliveryRequestId
 pub const fn radroots_storage::command::DeliveryObservation::target_ordinal(&self) -> u8
 pub const fn radroots_storage::command::DeliveryObservation::target_receipt(&self) -> &radroots_transport::sink::DeliveryTargetReceipt
-pub const fn radroots_storage::command::DeliveryObservation::work(&self) -> radroots_storage::command::PublicationWork
+pub const fn radroots_storage::command::DeliveryObservation::work(&self) -> radroots_storage::command::PublicationArtifact
 impl core::fmt::Debug for radroots_storage::command::DeliveryObservation
 pub fn radroots_storage::command::DeliveryObservation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::EnvelopeCandidate
@@ -1118,7 +1139,7 @@ pub fn radroots_storage::command::OperationSnapshot::message_id(&self) -> core::
 pub const fn radroots_storage::command::OperationSnapshot::observed_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage::command::OperationSnapshot::prepared(&self) -> &radroots_storage::command::PreparedOperation
 pub fn radroots_storage::command::OperationSnapshot::public_publications(&self) -> &[radroots_storage::command::PublicPublicationWork]
-pub fn radroots_storage::command::OperationSnapshot::publication_accepted(&self, radroots_storage::command::PublicationWork) -> core::result::Result<bool, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::OperationSnapshot::publication_accepted(&self, impl core::convert::Into<radroots_storage::command::PublicationArtifact>) -> core::result::Result<bool, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::OperationSnapshot::publications(&self) -> &[radroots_storage::command::PublicationWork]
 pub fn radroots_storage::command::OperationSnapshot::with_delivery(self, alloc::vec::Vec<radroots_storage::command::DeliveryAttemptSummary>, alloc::vec::Vec<radroots_storage::command::DeliveryObservation>) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::OperationSnapshot::with_installation(self, core::option::Option<radroots_storage::command::ChatInstallation>, alloc::vec::Vec<radroots_storage::command::PublicationWork>) -> core::result::Result<Self, radroots_storage::command::OperationError>
@@ -1143,6 +1164,8 @@ pub const fn radroots_storage::command::PublicPublicationWork::installation_tran
 pub const fn radroots_storage::command::PublicPublicationWork::plan_digest(&self) -> &[u8; 32]
 pub const fn radroots_storage::command::PublicPublicationWork::queued_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_storage::command::PublicPublicationWork::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+impl core::convert::From<radroots_storage::command::PublicPublicationWork> for radroots_storage::command::PublicationArtifact
+pub fn radroots_storage::command::PublicationArtifact::from(radroots_storage::command::PublicPublicationWork) -> Self
 impl core::fmt::Debug for radroots_storage::command::PublicPublicationWork
 pub fn radroots_storage::command::PublicPublicationWork::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::PublicationWork
@@ -1154,6 +1177,8 @@ pub const fn radroots_storage::command::PublicationWork::plan_digest(&self) -> &
 pub const fn radroots_storage::command::PublicationWork::queued_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_storage::command::PublicationWork::recipient(&self) -> radroots_identity::key::PublicKey
 pub const fn radroots_storage::command::PublicationWork::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+impl core::convert::From<radroots_storage::command::PublicationWork> for radroots_storage::command::PublicationArtifact
+pub fn radroots_storage::command::PublicationArtifact::from(radroots_storage::command::PublicationWork) -> Self
 impl core::fmt::Debug for radroots_storage::command::PublicationWork
 pub fn radroots_storage::command::PublicationWork::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::SignedDmRelaySource
@@ -1188,8 +1213,8 @@ pub fn radroots_storage::command::OperationJournal::admit_command_and_hold(&self
 pub fn radroots_storage::command::OperationJournal::bind_signing_intents(&self, radroots_storage::workspace::WorkspaceBinding, radroots_protocol::plan::CapturedSigningPlan, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::PlanBindingOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::capture_evidence<'a>(&'a self, radroots_storage::workspace::AttachmentInput, &'a radroots_storage::workspace::AttachmentProof, &'a radroots_storage::command::ArtifactEvidence) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::command::EvidenceCaptureOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::claim_attempt(&self, radroots_storage::command::ClaimAttemptRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::ClaimAttemptOutcome, radroots_storage::command::OperationError>>
-pub fn radroots_storage::command::OperationJournal::delivery_attempt(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, radroots_transport::sink::DeliveryRequestId, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::DeliveryAttempt>, radroots_storage::command::OperationError>>
-pub fn radroots_storage::command::OperationJournal::delivery_observations(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, radroots_transport::sink::DeliveryRequestId, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::command::DeliveryObservation>, radroots_storage::command::OperationError>>
+pub fn radroots_storage::command::OperationJournal::delivery_attempt(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_protocol::plan::SigningTarget, radroots_transport::sink::DeliveryRequestId, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::DeliveryAttempt>, radroots_storage::command::OperationError>>
+pub fn radroots_storage::command::OperationJournal::delivery_observations(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_protocol::plan::SigningTarget, radroots_transport::sink::DeliveryRequestId, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<alloc::vec::Vec<radroots_storage::command::DeliveryObservation>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::install_transition_and_outbox(&self, radroots_storage::command::InstallationRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::command::InstallationOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::obtained_evidence(&self, radroots_storage::command::ClaimAttemptRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::CapturedArtifact>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::command::OperationJournal::operation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::command::PreparedOperation>, radroots_storage::command::OperationError>>

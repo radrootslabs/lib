@@ -418,9 +418,9 @@ async fn actual_observation_rollback_and_commit_uncertainty_preserve_retained_ou
         let observation = not_attempted(&attempt);
         let mut database = ready.fixture.database().await;
         if commit {
-            sqlx::raw_sql("CREATE TABLE observation_commit_fault (parent INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER observation_commit_fault_trigger AFTER INSERT ON chat_delivery_observations BEGIN INSERT INTO observation_commit_fault VALUES(2); END").execute(&mut database).await.unwrap();
+            sqlx::raw_sql("CREATE TABLE observation_commit_fault (parent INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER observation_commit_fault_trigger AFTER INSERT ON artifact_delivery_observations BEGIN INSERT INTO observation_commit_fault VALUES(2); END").execute(&mut database).await.unwrap();
         } else {
-            sqlx::raw_sql("CREATE TRIGGER observation_insert_fault BEFORE INSERT ON chat_delivery_observations BEGIN SELECT RAISE(ABORT,'synthetic observation fault'); END").execute(&mut database).await.unwrap();
+            sqlx::raw_sql("CREATE TRIGGER observation_insert_fault BEFORE INSERT ON artifact_delivery_observations BEGIN SELECT RAISE(ABORT,'synthetic observation fault'); END").execute(&mut database).await.unwrap();
         }
         database.close().await.unwrap();
         let result = ready
@@ -446,7 +446,7 @@ async fn actual_observation_rollback_and_commit_uncertainty_preserve_retained_ou
                 .await
                 .unwrap();
         }
-        let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM chat_delivery_attempts),(SELECT count(*) FROM chat_delivery_observations),(SELECT count(*) FROM chat_messages)").fetch_one(&mut database).await.unwrap();
+        let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM artifact_delivery_attempts),(SELECT count(*) FROM artifact_delivery_observations),(SELECT count(*) FROM chat_messages)").fetch_one(&mut database).await.unwrap();
         assert_eq!(counts, (1, 0, 1));
         database.close().await.unwrap();
         let reopened = ready.fixture.reopen(ready.input.clone()).await;
@@ -497,13 +497,13 @@ async fn corrupted_delivery_ciphertext_and_oversized_observation_refuse_the_comp
     );
     let mut database = ready.fixture.database().await;
     let original: Vec<u8> =
-        sqlx::query_scalar("SELECT protected FROM chat_delivery_parts WHERE part=1")
+        sqlx::query_scalar("SELECT protected FROM artifact_delivery_parts WHERE part=1")
             .fetch_one(&mut database)
             .await
             .unwrap();
     let mut wrong = original.clone();
     wrong[0] ^= 1;
-    sqlx::query("UPDATE chat_delivery_parts SET protected=? WHERE part=1")
+    sqlx::query("UPDATE artifact_delivery_parts SET protected=? WHERE part=1")
         .bind(wrong)
         .execute(&mut database)
         .await
@@ -521,20 +521,21 @@ async fn corrupted_delivery_ciphertext_and_oversized_observation_refuse_the_comp
             .await
             .is_err()
     );
-    sqlx::query("UPDATE chat_delivery_parts SET protected=? WHERE part=1")
+    sqlx::query("UPDATE artifact_delivery_parts SET protected=? WHERE part=1")
         .bind(original)
         .execute(&mut database)
         .await
         .unwrap();
-    let original: Vec<u8> = sqlx::query_scalar("SELECT protected FROM chat_delivery_observations")
-        .fetch_one(&mut database)
-        .await
-        .unwrap();
+    let original: Vec<u8> =
+        sqlx::query_scalar("SELECT protected FROM artifact_delivery_observations")
+            .fetch_one(&mut database)
+            .await
+            .unwrap();
     sqlx::query("PRAGMA ignore_check_constraints=ON")
         .execute(&mut database)
         .await
         .unwrap();
-    sqlx::query("UPDATE chat_delivery_observations SET protected=zeroblob(262145)")
+    sqlx::query("UPDATE artifact_delivery_observations SET protected=zeroblob(262145)")
         .execute(&mut database)
         .await
         .unwrap();
@@ -550,7 +551,7 @@ async fn corrupted_delivery_ciphertext_and_oversized_observation_refuse_the_comp
             .await
             .is_err()
     );
-    sqlx::query("UPDATE chat_delivery_observations SET protected=?")
+    sqlx::query("UPDATE artifact_delivery_observations SET protected=?")
         .bind(original)
         .execute(&mut database)
         .await

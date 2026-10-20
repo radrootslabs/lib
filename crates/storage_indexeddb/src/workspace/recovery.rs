@@ -2,7 +2,7 @@
 use super::{Database, OpenMode, State, WorkspaceError, namespace, stored};
 use radroots_domain::OperationId;
 use radroots_storage::command::{
-    ArtifactEvidence, DeliveryObservation, DeliveryObservationKind, PublicationWork,
+    ArtifactEvidence, DeliveryObservation, DeliveryObservationKind, PublicationArtifact,
 };
 use radroots_storage::workspace::{
     AttachmentInput, AttachmentProof, local_outbox::LocalOutboxGrant,
@@ -16,7 +16,7 @@ pub(super) enum CaptureIdentity {
         digest: [u8; 32],
     },
     Observation {
-        work: Box<PublicationWork>,
+        work: Box<PublicationArtifact>,
         request: DeliveryRequestId,
         target: TargetFingerprint,
         kind: DeliveryObservationKind,

@@ -365,7 +365,7 @@ async fn explicit_delivery_retry_after_first_issue_expiry_preserves_original_byt
                 ready.scope.binding().clone(),
                 OperationId::from_bytes([203; 32]),
                 first.command_digest(),
-                attempt.work().recipient(),
+                attempt.work().target(),
                 attempt.intent().request_id().clone(),
                 copy(&ready.proof),
             )
@@ -418,7 +418,9 @@ async fn explicit_delivery_retry_after_first_issue_expiry_preserves_original_byt
         let attempts: Vec<_> = snapshot
             .delivery_attempts()
             .iter()
-            .filter(|attempt| attempt.work() == *work)
+            .filter(|attempt| {
+                attempt.work() == radroots_storage::command::PublicationArtifact::Private(*work)
+            })
             .collect();
         assert_eq!(
             attempts[0].intent().publication_policy_digest(),

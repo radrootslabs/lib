@@ -71,10 +71,11 @@ mod cases {
     #[tokio::test]
     async fn original_route_authentication_refuses_invalid_sources_and_unadvertised_selection() {
         let mut data = delivery_data().await;
-        let recipient = data.report.work().recipient();
+        let artifact = data.report.work().target();
+        let recipient = artifact.recipient();
         let selected = [String::from("wss://route.example/")];
         assert!(
-            allowed_routes(&data.bound().await, recipient)
+            allowed_routes(&data.bound().await, artifact)
                 .unwrap()
                 .contains_key(&recipient)
         );
@@ -105,7 +106,7 @@ mod cases {
         ] {
             let source = EnvelopeEventId::from_bytes(*event.id.as_bytes());
             let bound = route_plan(data.bound().await, &event.as_json(), source, &selected);
-            assert!(allowed_routes(&bound, recipient).is_err());
+            assert!(allowed_routes(&bound, artifact).is_err());
         }
         let event = signed(10050, 99, 1, vec![relay()]);
         let source = EnvelopeEventId::from_bytes(*event.id.as_bytes());
@@ -115,17 +116,17 @@ mod cases {
             EnvelopeEventId::from_bytes([0; 32]),
             &selected,
         );
-        assert!(allowed_routes(&bound, recipient).is_err());
+        assert!(allowed_routes(&bound, artifact).is_err());
         let missing = [String::from("wss://unadvertised.example/")];
         let bound = route_plan(data.bound().await, &event.as_json(), source, &missing);
         assert!(matches!(
-            allowed_routes(&bound, recipient),
+            allowed_routes(&bound, artifact),
             Err(OperationError::UnverifiedApproval)
         ));
         let mut raw: serde_json::Value = serde_json::from_str(&event.as_json()).unwrap();
         raw["sig"] = serde_json::Value::String("0".repeat(128));
         let bound = route_plan(data.bound().await, &raw.to_string(), source, &selected);
-        assert!(allowed_routes(&bound, recipient).is_err());
+        assert!(allowed_routes(&bound, artifact).is_err());
         let metadata = signed(
             10050,
             99,
@@ -139,19 +140,19 @@ mod cases {
         let source = EnvelopeEventId::from_bytes(*metadata.id.as_bytes());
         let bound = route_plan(data.bound().await, &metadata.as_json(), source, &selected);
         assert!(
-            allowed_routes(&bound, recipient)
+            allowed_routes(&bound, artifact)
                 .unwrap()
                 .contains_key(&recipient)
         );
         let bound = route_plan(data.bound().await, &metadata.as_json(), source, &missing);
         assert!(matches!(
-            allowed_routes(&bound, recipient),
+            allowed_routes(&bound, artifact),
             Err(OperationError::UnverifiedApproval)
         ));
         let unrelated =
             PublicKey::from_bytes(signed(10050, 99, 2, vec![relay()]).pubkey.to_bytes()).unwrap();
         assert!(
-            allowed_routes(&data.bound().await, unrelated)
+            allowed_routes(&data.bound().await, unrelated.into())
                 .unwrap()
                 .is_empty()
         );
@@ -160,7 +161,8 @@ mod cases {
     #[tokio::test]
     async fn route_scope_budget_and_complete_fact_count_fences_are_independent() {
         let mut data = delivery_data().await;
-        let recipient = data.report.work().recipient();
+        let artifact = data.report.work().target();
+        let recipient = artifact.recipient();
         let mut graph = Graph {
             attempts: vec![],
             facts: vec![],
@@ -170,22 +172,19 @@ mod cases {
         };
         assert!(
             graph
-                .validate_routes(recipient, data.report.intent())
+                .validate_routes(artifact, data.report.intent())
                 .is_err()
         );
         graph
-            .authorize_routes(&data.bound().await, recipient)
+            .authorize_routes(&data.bound().await, artifact)
             .unwrap();
         let unrelated =
             PublicKey::from_bytes(signed(10050, 99, 2, vec![relay()]).pubkey.to_bytes()).unwrap();
         assert!(matches!(
-            graph.authorize_routes(&data.bound().await, unrelated),
+            graph.authorize_routes(&data.bound().await, unrelated.into()),
             Err(OperationError::UnverifiedApproval)
         ));
-        assert_eq!(
-            graph.ordinals(recipient, data.report.intent()).unwrap(),
-            [1]
-        );
+        assert_eq!(graph.ordinals(artifact, data.report.intent()).unwrap(), [1]);
         let set = TargetSet::new(vec![
             Target::nostr_relay("wss://unadvertised.example/").unwrap(),
         ])
@@ -198,7 +197,7 @@ mod cases {
             data.report.intent().deadline_unix_ms(),
         )
         .unwrap();
-        assert!(graph.validate_routes(recipient, &foreign).is_err());
+        assert!(graph.validate_routes(artifact, &foreign).is_err());
         graph.counters.insert(
             (
                 recipient,
@@ -210,7 +209,7 @@ mod cases {
             (1..=12).collect(),
         );
         assert!(matches!(
-            graph.ordinals(recipient, data.report.intent()),
+            graph.ordinals(artifact, data.report.intent()),
             Err(OperationError::DeliveryAttemptLimit)
         ));
         let selected = data.selection();
@@ -285,13 +284,13 @@ mod cases {
             .await
             .unwrap();
         for statement in [
-            "UPDATE chat_delivery_observations SET recipient=zeroblob(31)",
-            "UPDATE chat_delivery_observations SET recipient=zeroblob(32)",
-            "UPDATE chat_delivery_observations SET request_key=zeroblob(32)",
-            "UPDATE chat_delivery_observations SET target_key=zeroblob(31)",
-            "UPDATE chat_delivery_observations SET kind=7",
-            "UPDATE chat_delivery_observations SET protected=zeroblob(262145)",
-            "UPDATE chat_delivery_observations SET protected=zeroblob(1)",
+            "UPDATE artifact_delivery_observations SET artifact_key=zeroblob(31)",
+            "UPDATE artifact_delivery_observations SET artifact_key=zeroblob(32)",
+            "UPDATE artifact_delivery_observations SET request_key=zeroblob(32)",
+            "UPDATE artifact_delivery_observations SET target_key=zeroblob(31)",
+            "UPDATE artifact_delivery_observations SET kind=7",
+            "UPDATE artifact_delivery_observations SET protected=zeroblob(262145)",
+            "UPDATE artifact_delivery_observations SET protected=zeroblob(1)",
         ] {
             sqlx::query(statement)
                 .execute(&mut data.database)
@@ -314,13 +313,13 @@ mod cases {
                     .await
                     .is_err()
             );
-            sqlx::query("DELETE FROM chat_delivery_observations")
+            sqlx::query("DELETE FROM artifact_delivery_observations")
                 .execute(&mut data.database)
                 .await
                 .unwrap();
             protected.insert(&mut data.database).await.unwrap();
         }
-        sqlx::query("DELETE FROM chat_delivery_observations")
+        sqlx::query("DELETE FROM artifact_delivery_observations")
             .execute(&mut data.database)
             .await
             .unwrap();
@@ -335,14 +334,14 @@ mod cases {
             .execute(&mut data.database)
             .await
             .unwrap();
-        sqlx::query("DELETE FROM chat_delivery_observations")
+        sqlx::query("DELETE FROM artifact_delivery_observations")
             .execute(&mut data.database)
             .await
             .unwrap();
         for index in 0..2305u32 {
             let mut target = [0; 32];
             target[..4].copy_from_slice(&index.to_be_bytes());
-            sqlx::query("INSERT INTO chat_delivery_observations(workspace,operation_id,recipient,request_key,target_key,kind,protected) VALUES(?,?,?,?,?,1,x'01')").bind(e.workspace_id().as_bytes().as_slice()).bind(e.operation_id().as_bytes().as_slice()).bind(e.recipient().unwrap().as_bytes().as_slice()).bind(request.as_slice()).bind(target.as_slice()).execute(&mut data.database).await.unwrap();
+            sqlx::query("INSERT INTO artifact_delivery_observations(workspace,operation_id,artifact_key,request_key,target_key,kind,protected) VALUES(?,?,?,?,?,1,x'01')").bind(e.workspace_id().as_bytes().as_slice()).bind(e.operation_id().as_bytes().as_slice()).bind(e.recipient().unwrap().as_bytes().as_slice()).bind(request.as_slice()).bind(target.as_slice()).execute(&mut data.database).await.unwrap();
         }
         let error = observation::Observations::read(
             &mut data.database,

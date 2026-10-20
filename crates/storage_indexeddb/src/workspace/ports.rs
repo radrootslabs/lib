@@ -1,6 +1,6 @@
 //! Shared journal dispatch uses the actual browser owner, never another engine.
 use super::BrowserWorkspace;
-use radroots_domain::{CommandDigest, OperationId, PublicKey};
+use radroots_domain::{CommandDigest, OperationId};
 use radroots_storage::{
     command::{
         AdmissionOutcome, AdmissionRequest, ArtifactEvidence, BoundSigningPlan, CapturedArtifact,
@@ -8,7 +8,7 @@ use radroots_storage::{
         DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryObservation,
         DeliveryObservationOutcome, EnvelopeCandidate, EvidenceCaptureOutcome, InstallationOutcome,
         InstallationRequest, OperationError, OperationJournal, OperationSnapshot,
-        PlanBindingOutcome, PreparedOperation, SigningAttempt,
+        PlanBindingOutcome, PreparedOperation, SigningAttempt, SigningTarget,
     },
     workspace::{AttachmentInput, AttachmentProof, WorkspaceBinding},
 };
@@ -43,12 +43,12 @@ impl OperationJournal for BrowserWorkspace {
         binding: WorkspaceBinding,
         operation: OperationId,
         digest: CommandDigest,
-        recipient: PublicKey,
+        target: SigningTarget,
         request: DeliveryRequestId,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Vec<DeliveryObservation>, OperationError>> {
         Box::pin(BrowserWorkspace::delivery_observations(
-            self, binding, operation, digest, recipient, request, proof,
+            self, binding, operation, digest, target, request, proof,
         ))
     }
     fn prepare_delivery_attempt<'a>(
@@ -66,12 +66,12 @@ impl OperationJournal for BrowserWorkspace {
         binding: WorkspaceBinding,
         operation: OperationId,
         digest: CommandDigest,
-        recipient: PublicKey,
+        target: SigningTarget,
         request: DeliveryRequestId,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Option<DeliveryAttempt>, OperationError>> {
         Box::pin(BrowserWorkspace::delivery_attempt(
-            self, binding, operation, digest, recipient, request, proof,
+            self, binding, operation, digest, target, request, proof,
         ))
     }
     fn install_transition_and_outbox(

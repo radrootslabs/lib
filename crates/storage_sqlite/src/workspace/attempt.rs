@@ -150,11 +150,16 @@ pub(super) async fn sql(
         .map_err(|_| OperationError::RecoveryRequired)?;
     match version {
         7 | 8 => Ok(sqlx::AssertSqlSafe(legacy.to_owned())),
-        9 | 10 => Ok(sqlx::AssertSqlSafe(
-            legacy
+        9..=11 => {
+            let query = legacy
                 .replace("seal_evidence", "artifact_evidence")
-                .replace("recipient", "artifact_key"),
-        )),
+                .replace("recipient", "artifact_key");
+            Ok(sqlx::AssertSqlSafe(if version == 11 {
+                query.replace("chat_delivery", "artifact_delivery")
+            } else {
+                query
+            }))
+        }
         _ => Err(OperationError::RecoveryRequired),
     }
 }
@@ -167,7 +172,7 @@ pub(super) async fn require_target(
             .fetch_one(connection)
             .await
             .map_err(|_| OperationError::RecoveryRequired)?;
-        if !matches!(version, 9 | 10) {
+        if !matches!(version, 9..=11) {
             return Err(OperationError::UnsupportedOperation);
         }
     }

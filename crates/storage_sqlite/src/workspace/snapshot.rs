@@ -31,6 +31,12 @@ pub(super) struct RetainedGraph {
     artifacts: Vec<SeenArtifact>,
 }
 impl RetainedGraph {
+    pub(super) fn obtained_artifact(&self, target: SigningTarget) -> Option<&ArtifactEvidence> {
+        self.artifacts
+            .iter()
+            .find(|v| v.report.target() == target)
+            .and_then(|v| v.obtained.as_ref())
+    }
     pub(super) fn obtained(&self, recipient: PublicKey) -> Option<&ArtifactEvidence> {
         self.artifacts
             .iter()
@@ -253,8 +259,10 @@ impl RetainedFacts {
             connection, selected, operation, &graph, crypto,
         )
         .await?;
-        let deliveries =
-            DeliveryGraph::read(connection, selected, operation, &graph, &records, crypto).await?;
+        let deliveries = DeliveryGraph::read(
+            connection, selected, operation, &graph, &records, &listing, crypto,
+        )
+        .await?;
         let observations =
             Observations::read(connection, &deliveries, selected, operation, crypto).await?;
         Ok(Self {

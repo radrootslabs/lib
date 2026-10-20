@@ -548,6 +548,7 @@ pub fn radroots_event::draft::SignedEvent::content(&self) -> &str
 pub fn radroots_event::draft::SignedEvent::created_at(&self) -> u64
 pub fn radroots_event::draft::SignedEvent::envelope(&self) -> &radroots_event::envelope::EventEnvelope
 pub fn radroots_event::draft::SignedEvent::from_wire_verified_id(Nip01EventWire, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_event::draft::SignedEventError>
+pub fn radroots_event::draft::SignedEvent::from_wire_verified_id_with_limits(Nip01EventWire, impl core::convert::Into<alloc::string::String>, crate::wire::EventWireLimits) -> core::result::Result<Self, radroots_event::draft::SignedEventError>
 pub fn radroots_event::draft::SignedEvent::id(&self) -> &radroots_event::id::EventId
 pub fn radroots_event::draft::SignedEvent::id_hex(&self) -> alloc::string::String
 pub fn radroots_event::draft::SignedEvent::id_str(&self) -> &str
@@ -3587,6 +3588,7 @@ pub fn radroots_event::draft::SignedEvent::content(&self) -> &str
 pub fn radroots_event::draft::SignedEvent::created_at(&self) -> u64
 pub fn radroots_event::draft::SignedEvent::envelope(&self) -> &radroots_event::envelope::EventEnvelope
 pub fn radroots_event::draft::SignedEvent::from_wire_verified_id(Nip01EventWire, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, radroots_event::draft::SignedEventError>
+pub fn radroots_event::draft::SignedEvent::from_wire_verified_id_with_limits(Nip01EventWire, impl core::convert::Into<alloc::string::String>, crate::wire::EventWireLimits) -> core::result::Result<Self, radroots_event::draft::SignedEventError>
 pub fn radroots_event::draft::SignedEvent::id(&self) -> &radroots_event::id::EventId
 pub fn radroots_event::draft::SignedEvent::id_hex(&self) -> alloc::string::String
 pub fn radroots_event::draft::SignedEvent::id_str(&self) -> &str

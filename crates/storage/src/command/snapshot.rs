@@ -3,7 +3,7 @@
 use super::{
     BoundSigningPlan, ChatInstallation, DeliveryAttemptSummary, DeliveryObservation,
     EvidenceReceipt, ListingInstallation, OperationError, PreparedOperation, PublicPublicationWork,
-    PublicationWork, SigningAttempt,
+    PublicationArtifact, PublicationWork, SigningAttempt,
 };
 use core::fmt;
 use radroots_domain::{
@@ -628,7 +628,7 @@ impl OperationSnapshot {
         });
         let mut keys = BTreeSet::new();
         let mut transactions = BTreeSet::new();
-        let mut counters = BTreeMap::<(PublicKey, &str), BTreeSet<u8>>::new();
+        let mut counters = BTreeMap::<(Option<PublicKey>, &str), BTreeSet<u8>>::new();
         let mut slots = 0usize;
         let mut policies = BTreeMap::new();
         for attempt in &attempts {
@@ -637,7 +637,7 @@ impl OperationSnapshot {
                 .checked_add(attempt.intent().selection().len())
                 .filter(|n| *n <= 384)
                 .ok_or(OperationError::RecoveryRequired)?;
-            if !self.publications.contains(&attempt.work())
+            if !self.contains_publication(attempt.work())
                 || !keys.insert((recipient, attempt.intent().request_id().as_str()))
                 || !transactions.insert(attempt.transaction_id())
                 || attempt.target_ordinals().len() != attempt.intent().selection().len()
@@ -724,6 +724,12 @@ impl OperationSnapshot {
         self.observations = observations.into_boxed_slice();
         Ok(self)
     }
+    fn contains_publication(&self, work: PublicationArtifact) -> bool {
+        match work {
+            PublicationArtifact::Private(v) => self.publications.contains(&v),
+            PublicationArtifact::Public(v) => self.public_publications.contains(&v),
+        }
+    }
     /// Original exact-envelope/target intent references, with no duplicated raw payload.
     pub fn delivery_attempts(&self) -> &[DeliveryAttemptSummary] {
         &self.deliveries
@@ -735,8 +741,12 @@ impl OperationSnapshot {
     /// Evaluates the original full publication criterion across all exact
     /// attempts for this work. Retry selection never narrows the criterion;
     /// an earlier acceptance remains authoritative across later failures.
-    pub fn publication_accepted(&self, work: PublicationWork) -> Result<bool, OperationError> {
-        if !self.publications.contains(&work) {
+    pub fn publication_accepted(
+        &self,
+        work: impl Into<PublicationArtifact>,
+    ) -> Result<bool, OperationError> {
+        let work = work.into();
+        if !self.contains_publication(work) {
             return Err(OperationError::InvalidEvidence);
         }
         let Some(original) = self

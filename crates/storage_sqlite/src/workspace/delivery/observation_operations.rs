@@ -9,8 +9,10 @@ use super::{
     graph::Graph,
     observation::{self, Observations},
 };
-use radroots_domain::{CommandDigest, OperationId, PublicKey};
-use radroots_storage::command::{DeliveryObservation, DeliveryObservationOutcome, OperationError};
+use radroots_domain::{CommandDigest, OperationId};
+use radroots_storage::command::{
+    DeliveryObservation, DeliveryObservationOutcome, OperationError, SigningTarget,
+};
 use radroots_transport::sink::DeliveryRequestId;
 use sqlx::Connection;
 
@@ -41,12 +43,21 @@ impl Journal<'_> {
             self.crypto,
         )
         .await?;
+        let public = super::super::listing_installation::Records::read(
+            self.connection,
+            self.selected,
+            e.operation_id(),
+            &original,
+            self.crypto,
+        )
+        .await?;
         let deliveries = Graph::read(
             self.connection,
             self.selected,
             e.operation_id(),
             &original,
             &installed,
+            &public,
             self.crypto,
         )
         .await?;
@@ -106,6 +117,9 @@ impl Journal<'_> {
             installed
                 .unchanged(&mut transaction, self.selected, e.operation_id())
                 .await?;
+            public
+                .unchanged(&mut transaction, self.selected, e.operation_id())
+                .await?;
             deliveries
                 .unchanged(&mut transaction, self.selected, e.operation_id())
                 .await?;
@@ -142,7 +156,7 @@ impl Journal<'_> {
         binding: WorkspaceBinding,
         operation: OperationId,
         digest: CommandDigest,
-        recipient: PublicKey,
+        target: SigningTarget,
         request: DeliveryRequestId,
         proof: AttachmentProof,
     ) -> Result<Vec<DeliveryObservation>, OperationError> {
@@ -172,12 +186,21 @@ impl Journal<'_> {
             self.crypto,
         )
         .await?;
+        let public = super::super::listing_installation::Records::read(
+            self.connection,
+            self.selected,
+            operation,
+            &original,
+            self.crypto,
+        )
+        .await?;
         let deliveries = Graph::read(
             self.connection,
             self.selected,
             operation,
             &original,
             &installed,
+            &public,
             self.crypto,
         )
         .await?;
@@ -212,6 +235,9 @@ impl Journal<'_> {
             installed
                 .unchanged(&mut transaction, self.selected, operation)
                 .await?;
+            public
+                .unchanged(&mut transaction, self.selected, operation)
+                .await?;
             deliveries
                 .unchanged(&mut transaction, self.selected, operation)
                 .await?;
@@ -229,7 +255,7 @@ impl Journal<'_> {
         Ok(observations
             .reports
             .into_iter()
-            .filter(|value| value.request_id() == &request && value.work().recipient() == recipient)
+            .filter(|value| value.request_id() == &request && value.work().target() == target)
             .collect())
     }
 }

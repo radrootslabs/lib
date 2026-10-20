@@ -104,7 +104,7 @@ impl Graph {
                                 Some(claim),
                                 receipt,
                             ));
-                            bound = attempt.into_bound_plan();
+                            bound = (*attempt).into_bound_plan();
                         }
                     }
                 }

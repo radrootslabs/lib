@@ -4,7 +4,7 @@ use crate::workspace::{
     journal::OperationChange, owned,
 };
 use nostr::JsonUtil;
-use radroots_domain::{CommandDigest, OperationId, PublicKey, TransactionId};
+use radroots_domain::{CommandDigest, OperationId, TransactionId};
 use radroots_storage::{
     command::{
         ArtifactEvidence, BoundSigningPlan, CommitAttempt, DeliveryAttempt, DeliveryAttemptOutcome,
@@ -81,7 +81,7 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         let result = owned(work, async move {
             let access = state.operation_access(request.binding(), proof).await?;
-            let actual = request.work();
+            let actual = request.work().private()?;
             let evidence = actual.evidence();
             let operation = evidence.operation_id();
             let view = state.read_view(operation).await?;
@@ -123,7 +123,7 @@ impl BrowserWorkspace {
                 .as_ref()
                 .filter(|value| value.intent().request_id() == request.intent().request_id());
             if let Some(retained) = retained
-                && (retained.work() != actual
+                && (retained.work().private()? != actual
                     || retained.intent().digest() != request.intent().digest()
                     || candidate.as_ref().is_some_and(|value| {
                         value.work() != actual || value.raw_json() != retained.raw_json()
@@ -135,7 +135,7 @@ impl BrowserWorkspace {
             let (report, extra) = if fresh {
                 routes(bound, evidence.recipient()?, request.intent())?;
                 if snapshot.delivery_attempts().iter().any(|value| {
-                    value.work() == actual
+                    value.work().private().ok() == Some(actual)
                         && value.intent().publication_policy_digest()
                             != request.intent().publication_policy_digest()
                 }) {
@@ -162,7 +162,7 @@ impl BrowserWorkspace {
                     let count = snapshot
                         .delivery_attempts()
                         .iter()
-                        .filter(|value| value.work() == actual)
+                        .filter(|value| value.work().private().ok() == Some(actual))
                         .flat_map(|value| value.intent().selected_targets())
                         .filter(|old| old.uri() == target.uri())
                         .count();
@@ -190,7 +190,7 @@ impl BrowserWorkspace {
                         .selected
                         .as_ref()
                         .filter(|value| {
-                            value.work() == actual
+                            value.work().private().ok() == Some(actual)
                                 && value.intent().event_id() == request.intent().event_id()
                         })
                         .ok_or(OperationError::InvalidEvidence)?;
@@ -288,7 +288,7 @@ impl BrowserWorkspace {
         binding: WorkspaceBinding,
         operation: OperationId,
         digest: CommandDigest,
-        recipient: PublicKey,
+        target: radroots_storage::command::SigningTarget,
         request: DeliveryRequestId,
         proof: AttachmentProof,
     ) -> Result<Option<DeliveryAttempt>, OperationError> {
@@ -299,6 +299,9 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
+            let recipient = target
+                .recipient()
+                .ok_or(OperationError::UnsupportedOperation)?;
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;
             let facts = state

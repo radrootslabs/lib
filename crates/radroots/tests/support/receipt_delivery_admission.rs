@@ -393,7 +393,7 @@ async fn native_delivery_refuses_backward_clock_expired_attempt_and_unbound_obse
                     ready.binding.clone(),
                     e.operation_id(),
                     e.command_digest(),
-                    e.recipient().unwrap(),
+                    e.target(),
                     DeliveryRequestId::parse(id).unwrap(),
                     copy(&ready.proof)
                 )
@@ -409,8 +409,16 @@ async fn native_delivery_refuses_backward_clock_expired_attempt_and_unbound_obse
     // Structural data is deliberately untrusted; these are not remote ACKs.
     for (reported_work, raw, ordinals) in [
         (work, first.raw_json().to_owned(), vec![1]),
-        (first.work(), format!("{} ", first.raw_json()), vec![1]),
-        (first.work(), first.raw_json().to_owned(), vec![2]),
+        (
+            first.work().private().unwrap(),
+            format!("{} ", first.raw_json()),
+            vec![1],
+        ),
+        (
+            first.work().private().unwrap(),
+            first.raw_json().to_owned(),
+            vec![2],
+        ),
     ] {
         let attempt = DeliveryAttempt::from_store_report(
             reported_work,
@@ -488,7 +496,7 @@ async fn native_observation_query_never_crosses_original_request_or_recipient() 
                 ready.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                key(),
+                radroots_protocol::plan::SigningTarget::BusinessSeal(key()),
                 attempt.intent().request_id().clone(),
                 copy(&ready.proof)
             )

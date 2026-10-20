@@ -145,7 +145,7 @@ pub(super) async fn current(connection: &mut SqliteConnection) -> Result<bool, O
         .map_err(|_| OperationError::RecoveryRequired)?;
     match version {
         7..=9 => Ok(false),
-        10 => Ok(true),
+        10 | 11 => Ok(true),
         _ => Err(OperationError::RecoveryRequired),
     }
 }

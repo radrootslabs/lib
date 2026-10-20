@@ -1489,6 +1489,157 @@ mod public_issuance {
         );
         reopened.close().await.unwrap();
     }
+
+    #[tokio::test]
+    async fn exact_generation_ten_retains_public_installation_but_refuses_fresh_public_delivery() {
+        use radroots_storage::command::{DeliveryAttemptRequest, DeliveryIntent};
+        use radroots_transport::{
+            Target, TargetSet,
+            policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy},
+        };
+        let fixture = Fixture::new();
+        let (store, input, proof, binding) = fixture.create_scoped(200, true).await;
+        let (prepared, digest, evidence) =
+            signed(&fixture, &store, &binding, &input, &proof, 187).await;
+        let installation = installed(
+            store
+                .install_transition_and_outbox(
+                    install_request(&binding, &prepared, digest),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        let original = store
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                None,
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let work = original.public_publications()[0];
+        let checkpoint = original.checkpoint_digest();
+        store.close().await.unwrap();
+        let mut db = fixture.database().await;
+        retain_legacy_delivery_catalog(&mut db).await;
+        sqlx::query("PRAGMA user_version=10")
+            .execute(&mut db)
+            .await
+            .unwrap();
+        let catalog: Vec<(String, String)> = sqlx::query_as(
+            "SELECT name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+        )
+        .fetch_all(&mut db)
+        .await
+        .unwrap();
+        db.close().await.unwrap();
+        let reopened = fixture.reopen(input).await;
+        let actual = reopened
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                None,
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(actual.checkpoint_digest(), checkpoint);
+        assert_eq!(actual.listing_installation(), Some(installation));
+        assert_eq!(actual.public_publications(), &[work]);
+        assert_eq!(
+            reopened
+                .obtained_evidence(selection(&binding, &prepared, digest), copy(&proof))
+                .await
+                .unwrap()
+                .unwrap()
+                .evidence()
+                .raw_json(),
+            evidence.raw_json()
+        );
+        let targets = TargetSet::new(vec![
+            Target::nostr_relay("wss://public-signature.fixture.example/a").unwrap(),
+        ])
+        .unwrap();
+        let delivery_request = DeliveryAttemptRequest::new(
+            binding.clone(),
+            work,
+            DeliveryIntent::public(
+                &"18".repeat(32),
+                work.evidence().event_id(),
+                &targets,
+                &SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all()),
+                core::num::NonZeroU64::new(140_000).unwrap(),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            reopened
+                .prepare_delivery_attempt(delivery_request, copy(&proof), None)
+                .await,
+            Err(OperationError::UnsupportedOperation)
+        ));
+        let after = reopened
+            .operation_snapshot(
+                binding.clone(),
+                prepared.identity().operation_id(),
+                None,
+                copy(&proof),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(after.checkpoint_digest(), checkpoint);
+        assert!(after.delivery_attempts().is_empty());
+        assert_eq!(
+            installed(
+                reopened
+                    .install_transition_and_outbox(
+                        install_request(&binding, &prepared, digest),
+                        copy(&proof)
+                    )
+                    .await
+                    .unwrap()
+            ),
+            installation
+        );
+        committed(
+            reopened
+                .admit_command_and_hold(
+                    request(
+                        &binding,
+                        188,
+                        "generation10 private continuation",
+                        "private",
+                    ),
+                    copy(&proof),
+                )
+                .await
+                .unwrap(),
+        );
+        reopened.close().await.unwrap();
+        let mut db = fixture.database().await;
+        let retained: Vec<(String, String)> = sqlx::query_as(
+            "SELECT name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+        )
+        .fetch_all(&mut db)
+        .await
+        .unwrap();
+        assert_eq!(retained, catalog);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+                .fetch_one(&mut db)
+                .await
+                .unwrap(),
+            10
+        );
+        db.close().await.unwrap();
+    }
+
     #[tokio::test]
     async fn exact_generation_nine_preserves_public_s_and_refuses_unfenced_new_effects() {
         let fixture = Fixture::new();
@@ -1497,6 +1648,7 @@ mod public_issuance {
             signed(&fixture, &store, &binding, &input, &proof, 177).await;
         store.close().await.unwrap();
         let mut db = fixture.database().await;
+        retain_legacy_delivery_catalog(&mut db).await;
         sqlx::raw_sql("DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations; PRAGMA user_version=9").execute(&mut db).await.unwrap();
         db.close().await.unwrap();
         let reopened = fixture.reopen(input).await;
@@ -1698,7 +1850,12 @@ mod public_issuance {
     }
 }
 
+#[path = "legacy_delivery_catalog.rs"]
+mod legacy_delivery_catalog;
+use legacy_delivery_catalog::retain_legacy_delivery_catalog;
+
 pub(super) async fn retain_legacy_issuance_catalog(db: &mut SqliteConnection) {
+    retain_legacy_delivery_catalog(db).await;
     sqlx::raw_sql("DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations").execute(&mut *db).await.unwrap();
     use sqlx::Row;
     let rows=sqlx::query("SELECT name,sql FROM sqlite_schema WHERE name IN ('signing_attempts','signing_attempt_identity','signing_attempt_transaction_identity','artifact_evidence','artifact_evidence_transaction_identity','artifact_evidence_parts','chat_publication_work')").fetch_all(&mut *db).await.unwrap();

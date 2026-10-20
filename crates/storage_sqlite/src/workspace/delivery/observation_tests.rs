@@ -67,7 +67,7 @@ mod cases {
         .unwrap();
         let wire: Wire = serde_json::from_slice(&serde_json::to_vec(&changed).unwrap()).unwrap();
         assert!(decode(wire, &data.report, target, kind).is_err());
-        sqlx::query("UPDATE chat_delivery_observations SET protected=zeroblob(262145)")
+        sqlx::query("UPDATE artifact_delivery_observations SET protected=zeroblob(262145)")
             .execute(&mut data.database)
             .await
             .unwrap();
@@ -76,7 +76,7 @@ mod cases {
                 .await
                 .is_err()
         );
-        sqlx::query("DELETE FROM chat_delivery_observations")
+        sqlx::query("DELETE FROM artifact_delivery_observations")
             .execute(&mut data.database)
             .await
             .unwrap();

@@ -1,5 +1,5 @@
 use super::{
-    DeliveryAttempt, DeliveryIntent, DeliveryObservation, OperationError, PublicationWork,
+    DeliveryAttempt, DeliveryIntent, DeliveryObservation, OperationError, PublicationArtifact,
 };
 use core::fmt;
 use radroots_domain::{TransactionId, UnixSeconds};
@@ -8,7 +8,7 @@ use radroots_domain::{TransactionId, UnixSeconds};
 /// bytes. This data projection grants no dispatch permission or storage proof.
 #[derive(Clone, Eq, PartialEq)]
 pub struct DeliveryAttemptSummary {
-    work: PublicationWork,
+    work: PublicationArtifact,
     intent: DeliveryIntent,
     digest: [u8; 32],
     transaction: TransactionId,
@@ -28,7 +28,7 @@ impl DeliveryAttemptSummary {
         }
     }
     /// Original protected publication linkage.
-    pub const fn work(&self) -> PublicationWork {
+    pub const fn work(&self) -> PublicationArtifact {
         self.work
     }
     /// Complete immutable original transport intent.

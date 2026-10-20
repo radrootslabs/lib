@@ -126,6 +126,157 @@ pub(in crate::workspace) async fn delivery_data() -> DeliveryData {
         report,
     }
 }
+
+/// Codec-only structural public reports. This fixture does not claim that the
+/// database authorized public T0/S/T2/D; actual facade tests cover that path.
+#[cfg(test)]
+pub(in crate::workspace) async fn public_delivery_data() -> DeliveryData {
+    use radroots_domain::{ActorRef, ActorRole, IssuanceWindow, Sequence};
+    use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
+    use radroots_storage::{
+        command::{
+            DeliveryAttempt, DeliveryIntent, EvidenceReceipt, ListingInstallation,
+            PreparedOperation, PublicPublicationWork, SigningTarget,
+        },
+        workspace::{LocalOutboxScope, WorkspaceBinding},
+    };
+    let mut data = delivery_data().await;
+    let selected = data.selection();
+    let time = UnixSeconds::new(100).unwrap();
+    let binding = WorkspaceBinding::from_authenticated_host(
+        selected.clone(),
+        LocalOutboxScope::NewSellerOutbox,
+        ActorRef::new(
+            participant(),
+            ActorRole::Seller,
+            None,
+            Some(selected.grant_id()),
+        ),
+        "codec-only",
+        Sequence::new(1).unwrap(),
+        UnixSeconds::new(200).unwrap(),
+        time,
+    )
+    .unwrap();
+    let context = CommandContextData::new(
+        OperationId::from_bytes([62; 32]),
+        binding.actor(),
+        selected.workspace_id(),
+        selected.authority(),
+        selected.route_digest(),
+        None,
+        None,
+        UnixSeconds::new(150).unwrap(),
+        None,
+    )
+    .unwrap();
+    let wire = json!({"type":"listing.publish","context":context,"input":{
+        "id":"01".repeat(16),"title":"Codec public listing","summary":"Quote required",
+        "description_markdown":"Public terms","published_at":"100",
+        "profile":{"profile":"radroots.listing","version":1,"state":"active",
+        "product":{"name":"Carrots","description":"Public description","producer":null,"origin_summary":null},
+        "default_option":"02".repeat(32),"options":[{"id":"02".repeat(32),"label":"Bunch",
+        "unit":{"type":"package","label":"bunch","contents":{"type":"unspecified"}},
+        "increment":"1","minimum":"1","price":{"type":"quote_required"},
+        "supply":{"type":"available","amount":"10"},"lead_seconds":"0"}],
+        "fulfillment":{"modes":["pickup"],"area":"Example","lead_seconds":"0"},"authority":null,"media":[]}}});
+    let request =
+        AdmissionRequest::from_protected_wire(binding, &serde_json::to_vec(&wire).unwrap())
+            .unwrap();
+    let plan = PublicSigningPlan::capture(
+        request.command().listing().unwrap(),
+        time,
+        &["wss://route.example/".into()],
+        SigningReplay::NonReplayable,
+    )
+    .unwrap();
+    let prepared = PreparedOperation::from_committed_store(
+        request,
+        TransactionId::from_bytes([80; 32]),
+        Sequence::new(1).unwrap(),
+        IssuanceWindow::new(time, UnixSeconds::new(150).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let bound = BoundSigningPlan::from_committed_store(
+        prepared,
+        plan,
+        TransactionId::from_bytes([81; 32]),
+        time,
+    )
+    .unwrap();
+    let attempt = SigningAttempt::from_committed_store(
+        bound,
+        SigningTarget::PublicEvent,
+        SigningAttemptId::from_bytes([82; 32]),
+        TransactionId::from_bytes([83; 32]),
+        time,
+    )
+    .unwrap();
+    let fields = attempt
+        .bound_plan()
+        .plan()
+        .listing()
+        .unwrap()
+        .event()
+        .fields();
+    let mut scalar = [0; 32];
+    scalar[31] = 1;
+    let keys = nostr::Keys::new(nostr::SecretKey::from_slice(&scalar).unwrap());
+    let raw = nostr::UnsignedEvent {
+        id: None,
+        pubkey: keys.public_key(),
+        created_at: nostr::Timestamp::from_secs(fields.created_at),
+        kind: nostr::Kind::Custom(fields.kind.try_into().unwrap()),
+        tags: nostr::Tags::from_list(
+            fields
+                .tags
+                .iter()
+                .map(|v| nostr::Tag::parse(v).unwrap())
+                .collect(),
+        ),
+        content: fields.content.into(),
+    }
+    .sign_with_keys(&keys)
+    .unwrap()
+    .as_json();
+    let evidence = ArtifactEvidence::verify(&attempt, &raw, None).unwrap();
+    let receipt =
+        EvidenceReceipt::from_committed_store(&evidence, TransactionId::from_bytes([84; 32]));
+    let installed = ListingInstallation::from_committed_store(
+        attempt.bound_plan(),
+        receipt,
+        TransactionId::from_bytes([85; 32]),
+        time,
+    )
+    .unwrap();
+    let work = PublicPublicationWork::from_committed_store(
+        attempt.bound_plan(),
+        installed,
+        receipt,
+        TransactionId::from_bytes([86; 32]),
+        time,
+    )
+    .unwrap();
+    let intent = DeliveryIntent::public(
+        &"03".repeat(32),
+        receipt.event_id(),
+        data.report.intent().targets(),
+        data.report.intent().policy(),
+        data.report.intent().deadline_unix_ms(),
+    )
+    .unwrap();
+    data.report = DeliveryAttempt::from_store_report(
+        work,
+        intent,
+        &raw,
+        TransactionId::from_bytes([87; 32]),
+        time,
+        vec![1],
+    )
+    .unwrap();
+    data
+}
+
 impl Issued {
     async fn new() -> Self {
         let fixture = CryptoFixture::new();

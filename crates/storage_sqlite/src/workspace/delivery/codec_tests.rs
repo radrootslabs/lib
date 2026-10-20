@@ -5,6 +5,7 @@ mod cases {
     use crate::workspace::tests::issuance_records::{DeliveryData, delivery_data};
     use nostr::JsonUtil;
     use serde_json::{Value, json};
+    use sqlx::Connection;
 
     fn copy(report: &DeliveryAttempt) -> DeliveryAttempt {
         DeliveryAttempt::from_store_report(
@@ -18,11 +19,11 @@ mod cases {
         .unwrap()
     }
     async fn restore(data: &mut DeliveryData, original: &ProtectedAttempt) {
-        sqlx::query("DELETE FROM chat_delivery_parts")
+        sqlx::query("DELETE FROM artifact_delivery_parts")
             .execute(&mut data.database)
             .await
             .unwrap();
-        sqlx::query("DELETE FROM chat_delivery_attempts")
+        sqlx::query("DELETE FROM artifact_delivery_attempts")
             .execute(&mut data.database)
             .await
             .unwrap();
@@ -51,7 +52,7 @@ mod cases {
             )
             .await
             .unwrap();
-        sqlx::query("UPDATE chat_delivery_attempts SET protected=?")
+        sqlx::query("UPDATE artifact_delivery_attempts SET protected=?")
             .bind(protected)
             .execute(&mut data.database)
             .await
@@ -64,7 +65,7 @@ mod cases {
             request_key(data.report.intent().request_id().as_str()),
         );
         let pieces = raw.len().div_ceil(PRIVATE_PAYLOAD_MAX_BYTES);
-        let value = json!({"version":1,"work":WorkRef::new(data.report.work()),"request":data.report.intent().request_id().as_str(),"event":data.report.intent().event_id(),"transaction":data.report.transaction_id(),"parts":pieces,"bytes":raw.len(),"digest":<[u8;32]>::from(Sha256::digest(raw))});
+        let value = json!({"version":version(data.report.work()),"work":WorkRef::new(data.report.work()),"request":data.report.intent().request_id().as_str(),"event":data.report.intent().event_id(),"transaction":data.report.transaction_id(),"parts":pieces,"bytes":raw.len(),"digest":<[u8;32]>::from(Sha256::digest(raw))});
         let protected = data
             .crypto
             .seal_delivery(
@@ -75,7 +76,7 @@ mod cases {
             )
             .await
             .unwrap();
-        sqlx::query("DELETE FROM chat_delivery_parts")
+        sqlx::query("DELETE FROM artifact_delivery_parts")
             .execute(&mut data.database)
             .await
             .unwrap();
@@ -85,9 +86,9 @@ mod cases {
                 .seal_delivery(selected, DeliveryPayload::Attempt, (index + 1) as u8, piece)
                 .await
                 .unwrap();
-            sqlx::query("INSERT INTO chat_delivery_parts(workspace,operation_id,recipient,request_key,part,protected) VALUES(?,?,?,?,?,?)").bind(selected.workspace.as_bytes().as_slice()).bind(selected.operation.as_bytes().as_slice()).bind(selected.recipient.as_bytes().as_slice()).bind(selected.request.as_slice()).bind(index as i64+1).bind(protected).execute(&mut data.database).await.unwrap();
+            sqlx::query("INSERT INTO artifact_delivery_parts(workspace,operation_id,artifact_key,request_key,part,protected) VALUES(?,?,?,?,?,?)").bind(selected.workspace.as_bytes().as_slice()).bind(selected.operation.as_bytes().as_slice()).bind(selected.target.key().as_slice()).bind(selected.request.as_slice()).bind(index as i64+1).bind(protected).execute(&mut data.database).await.unwrap();
         }
-        sqlx::query("UPDATE chat_delivery_attempts SET part_count=?,byte_count=?,protected=?")
+        sqlx::query("UPDATE artifact_delivery_attempts SET part_count=?,byte_count=?,protected=?")
             .bind(pieces as i64)
             .bind(raw.len() as i64)
             .bind(protected)
@@ -158,21 +159,21 @@ mod cases {
         manifest(&mut data, &original, &nested).await;
         refused(&mut data).await;
         for statement in [
-            "UPDATE chat_delivery_attempts SET event_id=zeroblob(31)",
-            "UPDATE chat_delivery_attempts SET transaction_id=zeroblob(31)",
-            "UPDATE chat_delivery_attempts SET event_id=zeroblob(32)",
-            "UPDATE chat_delivery_attempts SET transaction_id=zeroblob(32)",
-            "UPDATE chat_delivery_attempts SET part_count=0",
-            "UPDATE chat_delivery_attempts SET part_count=25",
-            "UPDATE chat_delivery_attempts SET byte_count=0",
-            "UPDATE chat_delivery_attempts SET byte_count=393217",
-            "UPDATE chat_delivery_attempts SET byte_count=1",
-            "UPDATE chat_delivery_attempts SET protected=zeroblob(262145)",
-            "DELETE FROM chat_delivery_parts WHERE part=1",
-            "UPDATE chat_delivery_parts SET part=0 WHERE part=1",
-            "UPDATE chat_delivery_parts SET protected=zeroblob(262145) WHERE part=1",
-            "UPDATE chat_delivery_parts SET protected=zeroblob(1) WHERE part=1",
-            "UPDATE chat_delivery_parts SET protected=zeroblob(0)",
+            "UPDATE artifact_delivery_attempts SET event_id=zeroblob(31)",
+            "UPDATE artifact_delivery_attempts SET transaction_id=zeroblob(31)",
+            "UPDATE artifact_delivery_attempts SET event_id=zeroblob(32)",
+            "UPDATE artifact_delivery_attempts SET transaction_id=zeroblob(32)",
+            "UPDATE artifact_delivery_attempts SET part_count=0",
+            "UPDATE artifact_delivery_attempts SET part_count=25",
+            "UPDATE artifact_delivery_attempts SET byte_count=0",
+            "UPDATE artifact_delivery_attempts SET byte_count=393217",
+            "UPDATE artifact_delivery_attempts SET byte_count=1",
+            "UPDATE artifact_delivery_attempts SET protected=zeroblob(262145)",
+            "DELETE FROM artifact_delivery_parts WHERE part=1",
+            "UPDATE artifact_delivery_parts SET part=0 WHERE part=1",
+            "UPDATE artifact_delivery_parts SET protected=zeroblob(262145) WHERE part=1",
+            "UPDATE artifact_delivery_parts SET protected=zeroblob(1) WHERE part=1",
+            "UPDATE artifact_delivery_parts SET protected=zeroblob(0)",
         ] {
             restore(&mut data, &original).await;
             sqlx::query(statement)
@@ -187,7 +188,7 @@ mod cases {
         }
         restore(&mut data, &original).await;
         let part = original.parts.len() + 1;
-        sqlx::query("INSERT INTO chat_delivery_parts SELECT workspace,operation_id,recipient,request_key,?,protected FROM chat_delivery_parts WHERE part=1").bind(part as i64).execute(&mut data.database).await.unwrap();
+        sqlx::query("INSERT INTO artifact_delivery_parts SELECT workspace,operation_id,artifact_key,request_key,?,protected FROM artifact_delivery_parts WHERE part=1").bind(part as i64).execute(&mut data.database).await.unwrap();
         assert!(fact.unchanged(&mut data.database).await.is_err());
         refused(&mut data).await;
         restore(&mut data, &original).await;
@@ -214,7 +215,7 @@ mod cases {
                 .seal_delivery(selected, DeliveryPayload::Attempt, index as u8, &plain)
                 .await
                 .unwrap();
-            sqlx::query("UPDATE chat_delivery_parts SET protected=? WHERE part=?")
+            sqlx::query("UPDATE artifact_delivery_parts SET protected=? WHERE part=?")
                 .bind(changed)
                 .bind(index as i64)
                 .execute(&mut data.database)
@@ -223,14 +224,14 @@ mod cases {
             refused(&mut data).await;
             restore(&mut data, &original).await;
         }
-        sqlx::query("DELETE FROM chat_delivery_parts")
+        sqlx::query("DELETE FROM artifact_delivery_parts")
             .execute(&mut data.database)
             .await
             .unwrap();
         for index in 1..=24i64 {
-            sqlx::query("INSERT INTO chat_delivery_parts(workspace,operation_id,recipient,request_key,part,protected) VALUES(?,?,?,?,?,zeroblob(262144))").bind(selected.workspace.as_bytes().as_slice()).bind(selected.operation.as_bytes().as_slice()).bind(selected.recipient.as_bytes().as_slice()).bind(selected.request.as_slice()).bind(index).execute(&mut data.database).await.unwrap();
+            sqlx::query("INSERT INTO artifact_delivery_parts(workspace,operation_id,artifact_key,request_key,part,protected) VALUES(?,?,?,?,?,zeroblob(262144))").bind(selected.workspace.as_bytes().as_slice()).bind(selected.operation.as_bytes().as_slice()).bind(selected.target.key().as_slice()).bind(selected.request.as_slice()).bind(index).execute(&mut data.database).await.unwrap();
         }
-        sqlx::query("UPDATE chat_delivery_attempts SET part_count=24,byte_count=393216")
+        sqlx::query("UPDATE artifact_delivery_attempts SET part_count=24,byte_count=393216")
             .execute(&mut data.database)
             .await
             .unwrap();
@@ -354,5 +355,106 @@ mod cases {
             .raw_json(),
             data.report.raw_json()
         );
+    }
+    #[tokio::test]
+    async fn public_delivery_metadata_requires_role_and_explicit_absent_recipient_in_each_frame() {
+        use crate::workspace::tests::issuance_records::public_delivery_data;
+        use radroots_storage::command::SigningTarget;
+        let mut data = public_delivery_data().await;
+        let original = protect(copy(&data.report), &data.crypto).await.unwrap();
+        insert(&mut data.database, &original).await.unwrap();
+        let key = request_key(data.report.intent().request_id().as_str());
+        let selected = scope(data.report.work(), key);
+        let plain = data
+            .crypto
+            .open_delivery(selected, DeliveryPayload::Attempt, 0, &original.manifest)
+            .await
+            .unwrap();
+        let base: Value = plain.expose_secret(|v| serde_json::from_slice(v).unwrap());
+        let header = serde_json::to_value(Header::new(&data.report)).unwrap();
+        assert_eq!(base["version"], json!(2));
+        assert_eq!(base["work"]["role"], json!(0));
+        assert!(base["work"].as_object().unwrap().contains_key("recipient"));
+        assert!(base["work"]["recipient"].is_null());
+        let mut mutants = Vec::new();
+        for (field, value) in [
+            ("role", json!(1)),
+            ("role", Value::Null),
+            (
+                "recipient",
+                json!("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"),
+            ),
+            ("unknown", json!(true)),
+        ] {
+            let mut value_work = base["work"].clone();
+            value_work[field] = value;
+            mutants.push(value_work);
+        }
+        for field in ["role", "recipient"] {
+            let mut value_work = base["work"].clone();
+            value_work.as_object_mut().unwrap().remove(field);
+            mutants.push(value_work);
+        }
+        // Include a real private work reference rather than a fabricated peer.
+        let private = delivery_data().await;
+        mutants.push(serde_json::to_value(WorkRef::new(private.report.work())).unwrap());
+        for work in mutants {
+            restore(&mut data, &original).await;
+            let mut changed = base.clone();
+            changed["work"] = work.clone();
+            manifest(&mut data, &original, &changed).await;
+            refused(&mut data).await;
+            restore(&mut data, &original).await;
+            let mut changed = header.clone();
+            changed["work"] = work;
+            let raw = data.report.raw_json().to_owned();
+            frame(&mut data, &encoded(&changed, raw.as_bytes())).await;
+            refused(&mut data).await;
+        }
+        for is_header in [false, true] {
+            restore(&mut data, &original).await;
+            let mut changed = if is_header {
+                header.clone()
+            } else {
+                base.clone()
+            };
+            changed["version"] = json!(1);
+            if is_header {
+                let raw = data.report.raw_json().to_owned();
+                frame(&mut data, &encoded(&changed, raw.as_bytes())).await;
+            } else {
+                manifest(&mut data, &original, &changed).await;
+            }
+            refused(&mut data).await;
+        }
+        // Public/private and attempt/observation contexts cannot open each other's bytes.
+        let mut foreign = selected;
+        foreign.target =
+            SigningTarget::BusinessSeal(private.report.work().private().unwrap().recipient());
+        assert!(
+            data.crypto
+                .open_delivery(foreign, DeliveryPayload::Attempt, 0, &original.manifest)
+                .await
+                .is_err()
+        );
+        assert!(
+            data.crypto
+                .open_delivery(
+                    selected,
+                    DeliveryPayload::Observation,
+                    0,
+                    &original.manifest
+                )
+                .await
+                .is_err()
+        );
+        restore(&mut data, &original).await;
+        let actual = read(&mut data.database, data.report.work(), key, &data.crypto)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(actual.report.raw_json(), data.report.raw_json());
+        assert_eq!(actual.report.work(), data.report.work());
+        private.database.close().await.unwrap();
     }
 }

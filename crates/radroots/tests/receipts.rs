@@ -9,6 +9,9 @@ mod ordinary;
 #[path = "support/receipt_workflow.rs"]
 mod workflow;
 
+#[path = "support/receipt_public_delivery.rs"]
+mod public_delivery;
+
 use radroots_domain::{
     CommandContextData, CommandDigest, CorrelationId, OperationId, PublicKey, UnixSeconds,
 };

@@ -236,7 +236,7 @@ impl Ready {
                 self.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient().unwrap(),
+                e.target(),
                 id.clone(),
                 copy(&self.proof),
             )
@@ -255,7 +255,7 @@ impl Ready {
                 self.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient().unwrap(),
+                e.target(),
                 id.clone(),
                 copy(&self.proof),
             )
@@ -442,7 +442,7 @@ async fn predecessor_schema_six_preserves_original_installation_and_seal_without
     let ready = Ready::new(&[String::from("ws://127.0.0.1:9")], 236).await;
     ready.store.close().await.unwrap();
     let mut database = ready.fixture.database().await;
-    sqlx::raw_sql("DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations; DROP TABLE chat_delivery_observations; DROP TABLE chat_delivery_parts; DROP TABLE chat_delivery_attempts; PRAGMA user_version=6").execute(&mut database).await.unwrap();
+    sqlx::raw_sql("DROP TABLE public_publication_work; DROP TABLE listing_installations; DROP TABLE listing_creations; DROP TABLE artifact_delivery_observations; DROP TABLE artifact_delivery_parts; DROP TABLE artifact_delivery_attempts; PRAGMA user_version=6").execute(&mut database).await.unwrap();
     let counts:(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM sqlite_schema),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM artifact_evidence)").fetch_one(&mut database).await.unwrap();
     assert_eq!(counts, (16, 1, 1));
     database.close().await.unwrap();
@@ -496,7 +496,7 @@ async fn native_retry_reuses_exact_bytes_and_enforces_twelve_potential_attempts_
 async fn actual_delivery_part_failure_rolls_back_attempt_and_keeps_original_installation() {
     let ready = Ready::new(&[String::from("ws://127.0.0.1:9")], 232).await;
     let mut database = ready.fixture.database().await;
-    sqlx::raw_sql("CREATE TRIGGER refuse_delivery_part BEFORE INSERT ON chat_delivery_parts BEGIN SELECT RAISE(ABORT,'synthetic part failure'); END").execute(&mut database).await.unwrap();
+    sqlx::raw_sql("CREATE TRIGGER refuse_delivery_part BEFORE INSERT ON artifact_delivery_parts BEGIN SELECT RAISE(ABORT,'synthetic part failure'); END").execute(&mut database).await.unwrap();
     assert!(matches!(
         ready
             .store
@@ -504,7 +504,7 @@ async fn actual_delivery_part_failure_rolls_back_attempt_and_keeps_original_inst
             .await,
         Err(OperationError::StorageFailure)
     ));
-    let counts:(i64,i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM chat_delivery_attempts),(SELECT count(*) FROM chat_delivery_parts),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM artifact_evidence)").fetch_one(&mut database).await.unwrap();
+    let counts:(i64,i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM artifact_delivery_attempts),(SELECT count(*) FROM artifact_delivery_parts),(SELECT count(*) FROM chat_messages),(SELECT count(*) FROM artifact_evidence)").fetch_one(&mut database).await.unwrap();
     assert_eq!(counts, (0, 0, 1, 1));
     sqlx::query("DROP TRIGGER refuse_delivery_part")
         .execute(&mut database)
@@ -521,7 +521,7 @@ async fn actual_delivery_commit_uncertainty_latches_and_reopen_preserves_busines
     let request = ready.request(1);
     let id = request.intent().request_id().clone();
     let mut database = ready.fixture.database().await;
-    sqlx::raw_sql("CREATE TABLE delivery_commit_fault (parent INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER delivery_commit_fault_trigger AFTER INSERT ON chat_delivery_attempts BEGIN INSERT INTO delivery_commit_fault VALUES(2); END").execute(&mut database).await.unwrap();
+    sqlx::raw_sql("CREATE TABLE delivery_commit_fault (parent INTEGER REFERENCES workspace_grant(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER delivery_commit_fault_trigger AFTER INSERT ON artifact_delivery_attempts BEGIN INSERT INTO delivery_commit_fault VALUES(2); END").execute(&mut database).await.unwrap();
     database.close().await.unwrap();
     let DeliveryAttemptOutcome::Unknown { operation, attempt } = ready
         .store
@@ -545,7 +545,7 @@ async fn actual_delivery_commit_uncertainty_latches_and_reopen_preserves_busines
                 ready.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient().unwrap(),
+                e.target(),
                 id.clone(),
                 copy(&ready.proof)
             )
@@ -566,7 +566,7 @@ async fn actual_delivery_commit_uncertainty_latches_and_reopen_preserves_busines
                 ready.binding.clone(),
                 e.operation_id(),
                 e.command_digest(),
-                e.recipient().unwrap(),
+                e.target(),
                 id,
                 copy(&ready.proof)
             )
@@ -663,4 +663,120 @@ async fn late_observation_append_requires_original_credential_but_no_fresh_clock
             .is_err()
     );
     reopened.close().await.unwrap();
+}
+
+#[path = "legacy_delivery_catalog.rs"]
+mod legacy_delivery_catalog;
+
+#[tokio::test]
+async fn exact_generation_ten_reopens_private_delivery_bytes_and_continues_without_reencoding() {
+    let ready = Ready::new(&["ws://127.0.0.1:9".into()], 236).await;
+    let first = ready.retain(1).await;
+    let evidence = ready.work.evidence();
+    let checkpoint = ready
+        .store
+        .operation_snapshot(
+            ready.binding.clone(),
+            evidence.operation_id(),
+            None,
+            copy(&ready.proof),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .checkpoint_digest();
+    ready.store.close().await.unwrap();
+    let mut db = ready.fixture.database().await;
+    legacy_delivery_catalog::retain_legacy_delivery_catalog(&mut db).await;
+    sqlx::query("PRAGMA user_version=10")
+        .execute(&mut db)
+        .await
+        .unwrap();
+    let catalog: Vec<(String, String)> = sqlx::query_as(
+        "SELECT name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .fetch_all(&mut db)
+    .await
+    .unwrap();
+    let protected:Vec<Vec<u8>>=sqlx::query_scalar("SELECT protected FROM chat_delivery_attempts UNION ALL SELECT protected FROM chat_delivery_parts").fetch_all(&mut db).await.unwrap();
+    db.close().await.unwrap();
+    let reopened = ready.fixture.reopen(ready.input.clone()).await;
+    let retained = reopened
+        .delivery_attempt(
+            ready.binding.clone(),
+            evidence.operation_id(),
+            evidence.command_digest(),
+            evidence.target(),
+            first.intent().request_id().clone(),
+            copy(&ready.proof),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retained.raw_json(), first.raw_json());
+    assert_eq!(retained.transaction_id(), first.transaction_id());
+    assert_eq!(retained.intent().digest(), first.intent().digest());
+    let snapshot = reopened
+        .operation_snapshot(
+            ready.binding.clone(),
+            evidence.operation_id(),
+            None,
+            copy(&ready.proof),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.checkpoint_digest(), checkpoint);
+    assert!(matches!(
+        reopened
+            .prepare_delivery_attempt(ready.request(1), copy(&ready.proof), None)
+            .await
+            .unwrap(),
+        DeliveryAttemptOutcome::Retained(_)
+    ));
+    let second = match reopened
+        .prepare_delivery_attempt(ready.request(2), copy(&ready.proof), None)
+        .await
+        .unwrap()
+    {
+        DeliveryAttemptOutcome::Claimed(v) => v,
+        _ => panic!("fresh explicit private retry"),
+    };
+    assert_eq!(second.raw_json(), first.raw_json());
+    assert_eq!(second.target_ordinals(), &[2]);
+    let request = second.transport_request().unwrap();
+    let failure = radroots_transport::SinkFailure::transport_closed(&request);
+    let observation = DeliveryObservation::from_failure(
+        &second,
+        &failure,
+        request.target_set().targets()[0].fingerprint(),
+        None,
+    )
+    .unwrap();
+    assert!(matches!(
+        reopened
+            .record_delivery_observation(ready.binding.clone(), copy(&ready.proof), observation)
+            .await
+            .unwrap(),
+        DeliveryObservationOutcome::Committed(_)
+    ));
+    reopened.close().await.unwrap();
+    let mut db = ready.fixture.database().await;
+    let actual: Vec<(String, String)> = sqlx::query_as(
+        "SELECT name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .fetch_all(&mut db)
+    .await
+    .unwrap();
+    assert_eq!(actual, catalog);
+    let current:Vec<Vec<u8>>=sqlx::query_scalar("SELECT protected FROM chat_delivery_attempts UNION ALL SELECT protected FROM chat_delivery_parts").fetch_all(&mut db).await.unwrap();
+    assert!(protected.iter().all(|v| current.contains(v)));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+            .fetch_one(&mut db)
+            .await
+            .unwrap(),
+        10
+    );
+    db.close().await.unwrap();
 }

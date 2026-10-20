@@ -1,7 +1,7 @@
 use super::*;
 use radroots_domain::{
-    ActorRole, AuthorityRef, CheckpointDigest, CheckpointRef, Coverage, Generation, RouteDigest,
-    Sequence, UnixSeconds,
+    ActorRole, AuthorityRef, CheckpointDigest, CheckpointRef, Coverage, Generation, PublicKey,
+    RouteDigest, Sequence, UnixSeconds,
 };
 pub(super) mod issuance_records;
 mod operation_records;
@@ -686,7 +686,7 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             WorkspaceError::RecoveryRequired
         };
         let statement = match fault {
-            0 => "PRAGMA user_version=11",
+            0 => "PRAGMA user_version=12",
             1 => "DELETE FROM workspace_grant",
             2 => "UPDATE workspace_grant SET grant_id=zeroblob(31)",
             3 => "UPDATE workspace_grant SET protected=zeroblob(0)",
@@ -732,7 +732,7 @@ async fn existing_database_rejects_corrupt_version_missing_grant_and_oversized_r
             .fetch_one(&mut connection)
             .await
             .unwrap();
-        assert_eq!(version, if fault == 0 { 11 } else { 10 });
+        assert_eq!(version, if fault == 0 { 12 } else { 11 });
         assert_eq!(rows, if fault == 1 { 0 } else { 1 });
         if let Some(expected) = retained_protected {
             let actual: Vec<u8> = sqlx::query_scalar("SELECT protected FROM workspace_grant")

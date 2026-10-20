@@ -93,7 +93,7 @@ impl OperationJournal for Journal {
         _binding: WorkspaceBinding,
         _operation: radroots_domain::OperationId,
         _digest: radroots_domain::CommandDigest,
-        _recipient: radroots_domain::PublicKey,
+        _target: radroots_storage::command::SigningTarget,
         _request: radroots_transport::sink::DeliveryRequestId,
         _proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Vec<DeliveryObservation>, OperationError>> {
@@ -112,7 +112,7 @@ impl OperationJournal for Journal {
         _binding: WorkspaceBinding,
         _operation: OperationId,
         _digest: CommandDigest,
-        _recipient: radroots_domain::PublicKey,
+        _target: radroots_storage::command::SigningTarget,
         _request: radroots_transport::sink::DeliveryRequestId,
         _proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Option<DeliveryAttempt>, OperationError>> {
