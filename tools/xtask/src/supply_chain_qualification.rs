@@ -883,7 +883,8 @@ mod tests {
     fn current_contract_is_exact_and_exception_bound() {
         let root = root();
         let contract = load(&root).expect("contract");
-        validate(&root, &contract, 21).expect("valid contract");
+        let packages = crate::catalog::public_packages(&root).expect("catalog");
+        validate(&root, &contract, packages.len()).expect("valid contract");
         qualify_git_sources(&root, &contract).expect("exact direct and transitive Git sources");
     }
 

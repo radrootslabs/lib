@@ -295,3 +295,7 @@ walkdir = { version = "2" }
 x509-parser = { version = "0.17", default-features = false }
 zstd = { version = "0.13", default-features = false }
 zeroize = { version = "1", default-features = false }
+
+[patch.crates-io]
+# Official Askama repair removes archived basic-toml (RUSTSEC-2026-0374).
+askama_derive = { git = "https://github.com/askama-rs/askama", rev = "d47daf8767805c0c4dfb456145fc857bfd9c1d2c", version = "=0.16.1" }

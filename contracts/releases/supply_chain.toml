@@ -53,6 +53,12 @@ revision = "b323ae0c1c1424b78bf8bb8832b95e86771f1dee"
 packages = ["async-utility"]
 removal_when = "The selected upstream SDK uses a registry async-utility with the same required behavior."
 
+[[git_source]]
+url = "https://github.com/askama-rs/askama"
+revision = "d47daf8767805c0c4dfb456145fc857bfd9c1d2c"
+packages = ["askama_derive", "askama_parser"]
+removal_when = "A published Askama release removes basic-toml and passes the native binding generator and exact source-policy checks."
+
 [[package]]
 name = "radroots_core"
 manifest_path = "crates/core/Cargo.toml"
