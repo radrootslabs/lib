@@ -13,7 +13,7 @@ mod clock;
 mod commands;
 
 #[cfg(target_arch = "wasm32")]
-pub use client::{BrowserConfig, Client, CloseReceipt, Inbox, Operations};
+pub use client::{BrowserConfig, Client, CloseReceipt, Inbox, Listings, Operations};
 #[cfg(target_arch = "wasm32")]
 pub use commands::BrowserNonceSource;
 pub use radroots_domain::{CommandDigest, OperationId};

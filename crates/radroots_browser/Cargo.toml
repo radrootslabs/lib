@@ -31,7 +31,7 @@ radroots_storage_indexeddb = { workspace = true, features = ["workspace"] }
 radroots_transport_nostr_browser = { workspace = true }
 radroots_transport_nostr = { workspace = true }
 radroots_nostr = { workspace = true, features = ["signing", "nip17"] }
-radroots_protocol = { workspace = true, features = ["chat"] }
+radroots_protocol = { workspace = true, features = ["chat", "listing"] }
 radroots_secrets = { workspace = true, features = ["browser"] }
 js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }

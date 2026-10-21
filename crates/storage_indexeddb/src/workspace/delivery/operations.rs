@@ -1,6 +1,6 @@
 use super::{Selection, codec, graph, routes};
 use crate::workspace::{
-    BrowserWorkspace, WorkspaceError, crypto, installation::work_commitment,
+    BrowserWorkspace, WorkspaceError, crypto, installation::publication_commitment,
     journal::OperationChange, owned,
 };
 use nostr::JsonUtil;
@@ -9,7 +9,7 @@ use radroots_storage::{
     command::{
         ArtifactEvidence, BoundSigningPlan, CommitAttempt, DeliveryAttempt, DeliveryAttemptOutcome,
         DeliveryAttemptRequest, DeliveryAttemptSummary, EnvelopeCandidate, OperationError,
-        PublicationWork,
+        PublicationArtifact, PublicationWork, SigningTarget,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
@@ -81,7 +81,7 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         let result = owned(work, async move {
             let access = state.operation_access(request.binding(), proof).await?;
-            let actual = request.work().private()?;
+            let actual = request.work();
             let evidence = actual.evidence();
             let operation = evidence.operation_id();
             let view = state.read_view(operation).await?;
@@ -94,7 +94,7 @@ impl BrowserWorkspace {
                     &t0,
                     access.binding.observed_at(),
                     Some(Selection {
-                        recipient: evidence.recipient()?,
+                        recipient: evidence.target(),
                         request: request.intent().request_id(),
                         event: Some(request.intent().event_id()),
                         retain_seal: true,
@@ -106,36 +106,36 @@ impl BrowserWorkspace {
                 snapshot.prepared().request().binding(),
                 request.binding(),
             )?;
-            if !snapshot.publications().contains(&actual) {
+            if !match actual {
+                PublicationArtifact::Private(work) => snapshot.publications().contains(&work),
+                PublicationArtifact::Public(work) => snapshot.public_publications().contains(&work),
+            } {
                 return Err(OperationError::InvalidEvidence);
             }
             let bound = snapshot
                 .bound_plan()
                 .ok_or(OperationError::RecoveryRequired)?;
-            let recipient = bound
-                .chat_plan()?
-                .seals()
-                .iter()
-                .position(|seal| Some(seal.recipient()) == evidence.target().recipient())
-                .ok_or(OperationError::InvalidEvidence)? as u8;
+            let recipient = super::super::issuance::position(bound, evidence.target())?
+                .ok_or(OperationError::InvalidEvidence)?;
             let retained = facts
                 .selected
                 .as_ref()
                 .filter(|value| value.intent().request_id() == request.intent().request_id());
             if let Some(retained) = retained
-                && (retained.work().private()? != actual
+                && (retained.work() != actual
                     || retained.intent().digest() != request.intent().digest()
                     || candidate.as_ref().is_some_and(|value| {
-                        value.work() != actual || value.raw_json() != retained.raw_json()
+                        PublicationArtifact::Private(value.work()) != actual
+                            || value.raw_json() != retained.raw_json()
                     }))
             {
                 return Err(OperationError::IdempotencyConflict);
             }
             let fresh = retained.is_none();
             let (report, extra) = if fresh {
-                routes(bound, evidence.recipient()?, request.intent())?;
+                routes(bound, evidence.target(), request.intent())?;
                 if snapshot.delivery_attempts().iter().any(|value| {
-                    value.work().private().ok() == Some(actual)
+                    value.work() == actual
                         && value.intent().publication_policy_digest()
                             != request.intent().publication_policy_digest()
                 }) {
@@ -162,7 +162,7 @@ impl BrowserWorkspace {
                     let count = snapshot
                         .delivery_attempts()
                         .iter()
-                        .filter(|value| value.work().private().ok() == Some(actual))
+                        .filter(|value| value.work() == actual)
                         .flat_map(|value| value.intent().selected_targets())
                         .filter(|old| old.uri() == target.uri())
                         .count();
@@ -171,13 +171,28 @@ impl BrowserWorkspace {
                     }
                     ordinals.push(count as u8 + 1);
                 }
-                let raw = if let Some(candidate) = &candidate {
+                let raw = if matches!(actual, PublicationArtifact::Public(_)) {
+                    if candidate.is_some() {
+                        return Err(OperationError::InvalidEvidence);
+                    }
+                    let source = facts
+                        .original
+                        .as_ref()
+                        .ok_or(OperationError::RecoveryRequired)?;
+                    if source.target() != SigningTarget::PublicEvent
+                        || source.digest() != actual.evidence().digest()
+                        || source.event_id() != request.intent().event_id()
+                    {
+                        return Err(OperationError::InvalidEvidence);
+                    }
+                    Zeroizing::new(source.raw_json().to_owned())
+                } else if let Some(candidate) = &candidate {
                     if candidate.event_id() != request.intent().event_id() {
                         return Err(OperationError::InvalidEvidence);
                     }
                     contains_original(
                         candidate,
-                        actual,
+                        actual.private()?,
                         bound,
                         facts
                             .original
@@ -190,7 +205,7 @@ impl BrowserWorkspace {
                         .selected
                         .as_ref()
                         .filter(|value| {
-                            value.work().private().ok() == Some(actual)
+                            value.work() == actual
                                 && value.intent().event_id() == request.intent().event_id()
                         })
                         .ok_or(OperationError::InvalidEvidence)?;
@@ -213,12 +228,7 @@ impl BrowserWorkspace {
                     now,
                     ordinals,
                 )?;
-                let commitment = work_commitment(
-                    snapshot
-                        .installation()
-                        .ok_or(OperationError::RecoveryRequired)?,
-                    actual,
-                );
+                let commitment = publication_commitment(&snapshot, actual)?;
                 let mut summaries = snapshot.delivery_attempts().to_vec();
                 summaries.push(DeliveryAttemptSummary::from_attempt(&report));
                 snapshot.with_delivery(summaries, Vec::new())?;
@@ -299,9 +309,7 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
-            let recipient = target
-                .recipient()
-                .ok_or(OperationError::UnsupportedOperation)?;
+            let recipient = target;
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;
             let facts = state

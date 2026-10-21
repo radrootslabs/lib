@@ -182,7 +182,9 @@ impl State {
         if Sha256::digest(plaintext.as_slice()).as_slice() != digest {
             return Err(OperationError::RecoveryRequired);
         }
-        protected::decode(&plaintext, &self.selected, operation).map(Some)
+        let prepared = protected::decode(&plaintext, &self.selected, operation)?;
+        self.coordinate_guard(&prepared).await?;
+        Ok(Some(prepared))
     }
     async fn protect_preparation(
         &self,
@@ -264,8 +266,16 @@ impl State {
             after,
             window,
             delivery_deadline,
-            extra,
+            mut extra,
         } = change;
+        // The current authenticated buyer grant cannot admit public work, and
+        // preparation decoding refuses any such stored command. Preserve the
+        // original private path without another decryption of every T0 part.
+        if access.binding.scope() != radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+            && let Some(prepared) = self.preparation(operation, &before).await?
+        {
+            extra.extend(self.coordinate_guard(&prepared).await?);
+        }
         let batch = mutations(access.protected, operation, before, after, extra)?;
         let active = self.active()?;
         let clock = self.clock.clone();
@@ -348,16 +358,11 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         let result = owned(work, async move {
             let access = state.operation_access(request.binding(), proof).await?;
-            // The current browser writer has no public signing/installation
-            // continuation. Refuse before admitting unsupported public work.
-            if request.command().listing().is_some() {
-                return Err(OperationError::UnsupportedOperation);
-            }
             let context = request.command().context();
             let operation = context.operation_id();
             let view = state.read_view(operation).await?;
             let before = state.operation_records(&view, operation).await?;
-            let extra = if before.iter().all(Option::is_none) {
+            let mut extra = if before.iter().all(Option::is_none) {
                 state.absent_plans(&view, operation).await?
             } else {
                 Vec::new()
@@ -392,6 +397,7 @@ impl BrowserWorkspace {
                         Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?,
                         window,
                     )?;
+                    extra.extend(state.coordinate_creation(&prepared).await?);
                     (prepared, Some(records), true)
                 };
             let attempt = prepared.identity();

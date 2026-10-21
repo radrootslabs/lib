@@ -123,6 +123,9 @@ struct Existing {
 }
 impl Existing {
     async fn create(label: &str) -> Result<Self, JsValue> {
+        Self::create_scope(label, false).await
+    }
+    async fn create_scope(label: &str, seller: bool) -> Result<Self, JsValue> {
         let namespace = SecretId::parse(label).unwrap();
         let reference = SecretRef::new(
             SecretId::parse("ordinary_browser_workspace").unwrap(),
@@ -135,8 +138,13 @@ impl Existing {
                 .map_err(fail)?,
         );
         let fingerprint = provider.fingerprint();
+        let constructor = if seller {
+            LocalOutboxConfig::seller
+        } else {
+            LocalOutboxConfig::new
+        };
         let (workspace, input, proof) = BrowserWorkspace::initialize_local_outbox(
-            LocalOutboxConfig::new(
+            constructor(
                 participant(1),
                 participant(3),
                 "isolated-browser-fixture",
@@ -422,4 +430,194 @@ pub async fn verify_publications(raw_events: String, expected: String) -> Result
         seen.len() == 4,
         "each original rumor has independent self and peer delivery",
     )
+}
+
+fn listing() -> radroots_protocol::listing::PublishInput {
+    let value = serde_json::json!({
+        "id":"01".repeat(16),"title":"  Browser carrots 🥕  ","summary":"Quote required",
+        "description_markdown":"Exact public terms","published_at":now().to_string(),
+        "profile":{"profile":"radroots.listing","version":1,"state":"active",
+        "product":{"name":"Carrots","description":"Fresh carrots","producer":null,"origin_summary":null},
+        "default_option":"02".repeat(32),
+        "options":[{"id":"02".repeat(32),"label":"Bunch","unit":{"type":"package","label":"bunch","contents":{"type":"unspecified"}},
+        "increment":"1","minimum":"1","price":{"type":"quote_required"},"supply":{"type":"available","amount":"10"},"lead_seconds":"0"}],
+        "fulfillment":{"modes":["pickup"],"area":"Example","lead_seconds":"0"},"authority":null,"media":[]}});
+    radroots_protocol::listing::PublishInput::parse(&serde_json::to_vec(&value).unwrap()).unwrap()
+}
+
+#[wasm_bindgen]
+pub async fn verify_listing(base: String, label: String) -> Result<String, JsValue> {
+    use radroots_execution::{BusinessInstallation, Issuance, OperationKind, TargetObservation};
+    let mut passed = Vec::new();
+    let existing = Existing::create_scope(&label, true).await?;
+    let (client, scope) = existing.open(&base).await?;
+    let callbacks = signer(&client).await?;
+    client.start(StartMode::Online).await.map_err(fail)?;
+    let sockets = socket_count();
+    let operation = id();
+    let input = listing();
+    let deadline = now() + 120;
+    let original = client
+        .listings()
+        .publish(context(&scope, operation, deadline), input.clone())
+        .await
+        .map_err(fail)?;
+    require(
+        original.kind() == OperationKind::Listing
+            && original.durable()
+            && original.business_installation() == BusinessInstallation::Installed
+            && original.issuance() == Issuance::Obtained,
+        "actual installed public receipt",
+    )?;
+    let value = original
+        .business_result()
+        .ok_or_else(|| JsValue::from_str("missing public result"))?;
+    require(
+        value.text().title() == "  Browser carrots 🥕  "
+            && original.message_id().is_none()
+            && original.artifacts().iter().all(|v| v.recipient().is_none()),
+        "typed public result without private placeholders",
+    )?;
+    require(
+        original.delivery_observations().len() == 1
+            && original.delivery_observations()[0].outcome() == TargetObservation::Rejected,
+        "actual original relay rejection",
+    )?;
+    let revision = value.revision().to_string();
+    let digest = original.command_digest();
+    let checkpoint = original.operation_checkpoint();
+    let replay = client
+        .listings()
+        .publish(context(&scope, operation, deadline), input.clone())
+        .await
+        .map_err(fail)?;
+    require(
+        replay.operation_checkpoint() == checkpoint,
+        "replay retains original receipt",
+    )?;
+    require(
+        socket_count() == sockets + 1,
+        "public listing uses only configured publication socket",
+    )?;
+    passed.push("public shared T0 T1 S T2 and actual rejected D, typed Listing and exact replay");
+    client.close().await.map_err(fail)?;
+    require(
+        callbacks.closed.get() == 1,
+        "original public signer callbacks close once",
+    )?;
+    let (reopened, scope) = existing.open(&base).await?;
+    let callbacks = signer(&reopened).await?;
+    reopened.start(StartMode::Online).await.map_err(fail)?;
+    let sockets = socket_count();
+    let queried = reopened
+        .operations(&scope)
+        .get_matching(operation, Some(digest))
+        .await
+        .map_err(fail)?
+        .ok_or_else(|| JsValue::from_str("missing original public operation"))?;
+    require(
+        queried.operation_checkpoint() == checkpoint && socket_count() == sockets,
+        "public open/start/query cannot redispatch",
+    )?;
+    require(
+        queried
+            .business_result()
+            .and_then(|v| v.as_listing())
+            .is_some(),
+        "public query family",
+    )?;
+    passed.push(
+        "actual protected close/reopen retains original public checkpoint without network work",
+    );
+    let resumed = reopened
+        .operations(&scope)
+        .resume(operation, Some(digest))
+        .await
+        .map_err(fail)?;
+    require(
+        resumed
+            .delivery_observations()
+            .iter()
+            .any(|v| v.outcome() == TargetObservation::Accepted)
+            && resumed.issuance_window() == original.issuance_window()
+            && resumed.installation_transaction_id() == original.installation_transaction_id(),
+        "explicit retry retains original issuance and installation",
+    )?;
+    let attempts = resumed.delivery_attempts();
+    require(
+        attempts.len() == 2
+            && attempts[0].envelope_digest() == attempts[1].envelope_digest()
+            && attempts[0].intent().publication_policy_digest()
+                == attempts[1].intent().publication_policy_digest(),
+        "retry retains original exact event and policy",
+    )?;
+    let mut ordinals: Vec<_> = attempts
+        .iter()
+        .flat_map(|v| v.target_ordinals().iter().copied())
+        .collect();
+    ordinals.sort();
+    require(
+        ordinals == [1, 2],
+        "stable-identity sorted attempts retain both actual ordinals",
+    )?;
+    passed.push(
+        "explicit public delivery retry retains original bytes, policy and per-target attempts",
+    );
+    let buyer = Existing::create(&(label.clone() + "_buyer")).await?;
+    let (other, buyer_scope) = buyer.open(&base).await?;
+    let other_callbacks = signer(&other).await?;
+    other.start(StartMode::Online).await.map_err(fail)?;
+    require(
+        other
+            .listings()
+            .publish(context(&buyer_scope, id(), deadline), input.clone())
+            .await
+            .is_err(),
+        "buyer cannot publish public seller listing",
+    )?;
+    require(
+        reopened
+            .listings()
+            .publish(context(&buyer_scope, id(), deadline), input)
+            .await
+            .is_err(),
+        "foreign authenticated attachment cannot authorize this client",
+    )?;
+    other.close().await.map_err(fail)?;
+    require(
+        other_callbacks.closed.get() == 1,
+        "buyer signer callbacks close once",
+    )?;
+    reopened.close().await.map_err(fail)?;
+    require(
+        callbacks.closed.get() == 1,
+        "reopened public signer callbacks close once",
+    )?;
+    storage_callbacks_closed()?;
+    passed.push("buyer/foreign scope refusals and ordered actual resource close");
+    Ok(serde_json::json!({"passed":passed,"revision":revision}).to_string())
+}
+
+#[wasm_bindgen]
+pub fn verify_listing_publications(raw_events: String, expected: String) -> Result<(), JsValue> {
+    let events: Vec<String> = serde_json::from_str(&raw_events).map_err(fail)?;
+    require(
+        events.len() == 2 && events[0] == events[1],
+        "only original exact public bytes are retried",
+    )?;
+    for raw in events {
+        let event = nostr::Event::from_json(&raw).map_err(fail)?;
+        event.verify().map_err(fail)?;
+        require(
+            event.kind.as_u16() == 30402
+                && event.id.to_hex() == expected
+                && event.pubkey == key(1).public_key(),
+            "independently verified public author, revision and kind",
+        )?;
+        require(
+            event.tags.iter().all(|tag| tag.as_slice()[0] != "p"),
+            "public event has no private envelope recipient",
+        )?;
+    }
+    Ok(())
 }

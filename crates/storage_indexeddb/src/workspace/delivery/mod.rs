@@ -7,14 +7,13 @@ mod observation_operations;
 mod operations;
 
 use super::State;
-use radroots_domain::PublicKey;
 use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, UnixSeconds};
 use radroots_secrets::context::{
     EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
 };
 use radroots_storage::command::{
     ArtifactEvidence, BoundSigningPlan, DeliveryAttempt, DeliveryIntent, OperationError,
-    OperationSnapshot, SignedDmRelaySource,
+    OperationSnapshot, SignedDmRelaySource, SigningTarget,
 };
 use sha2::{Digest, Sha256};
 
@@ -58,9 +57,25 @@ fn context(
 }
 fn routes(
     bound: &BoundSigningPlan,
-    recipient: PublicKey,
+    recipient: SigningTarget,
     intent: &DeliveryIntent,
 ) -> Result<(), OperationError> {
+    if recipient == SigningTarget::PublicEvent {
+        if bound.plan().listing().is_none()
+            || bound
+                .plan()
+                .artifact(recipient)
+                .map_err(|_| OperationError::RecoveryRequired)?
+                .event_id()
+                != *intent.event_id().as_bytes()
+        {
+            return Err(OperationError::InvalidEvidence);
+        }
+        return Ok(());
+    }
+    let recipient = recipient
+        .recipient()
+        .ok_or(OperationError::InvalidEvidence)?;
     let mut selected = None;
     for route in bound
         .chat_plan()?
@@ -89,7 +104,7 @@ pub(super) use graph::Graph;
 
 #[derive(Clone, Copy)]
 pub(super) struct Selection<'a> {
-    pub recipient: PublicKey,
+    pub recipient: SigningTarget,
     pub request: &'a radroots_transport::sink::DeliveryRequestId,
     pub event: Option<EnvelopeEventId>,
     pub retain_seal: bool,
@@ -99,7 +114,7 @@ pub(super) struct Facts {
     pub selected: Option<DeliveryAttempt>,
     selected_slot: Option<Slot>,
     pub original: Option<ArtifactEvidence>,
-    pub slots: [u16; 2],
+    pub slots: [u16; 3],
 }
 impl State {
     pub(super) async fn delivery_facts(
@@ -130,6 +145,10 @@ impl State {
             .map(|snapshot| {
                 snapshot
                     .with_installation(installed.message, installed.work)?
+                    .with_public_installation(
+                        installed.listing,
+                        installed.public.into_iter().collect(),
+                    )?
                     .with_delivery(deliveries.summaries, deliveries.observations)
             })
             .transpose()?;

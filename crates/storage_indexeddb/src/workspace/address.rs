@@ -14,6 +14,8 @@ pub(super) const PUBLICATION: u8 = 6;
 pub(super) const DELIVERY: u8 = 7;
 pub(super) const OBSERVATION: u8 = 8;
 pub(super) const REQUEST_INDEX: u8 = 9;
+pub(super) const LISTING_INSTALLATION: u8 = 10;
+pub(super) const PUBLIC_WORK: u8 = 11;
 
 fn prefix_bytes(operation: OperationId) -> [u8; 16] {
     let digest = Sha256::new()
@@ -53,13 +55,14 @@ pub(super) fn fields(key: RecordKey) -> Result<(u8, u8, u8), OperationError> {
     } || match kind {
         PREPARED => recipient != 0 || part > 4,
         PLAN => recipient != 0 || part > 24,
-        CLAIM => recipient > 1 || part != 0,
-        EVIDENCE => recipient > 1 || part > 4,
+        CLAIM => recipient > 2 || part != 0,
+        EVIDENCE => recipient > 2 || part > 4,
         INSTALLATION => recipient != 0 || part != 0,
         PUBLICATION => recipient > 1 || part != 0,
-        DELIVERY => recipient > 1 || part > 24,
-        OBSERVATION => recipient > 1 || part != 0,
-        REQUEST_INDEX => recipient > 1 || part != 0,
+        LISTING_INSTALLATION | PUBLIC_WORK => recipient != 0 || part != 0,
+        DELIVERY => recipient > 2 || part > 24,
+        OBSERVATION => recipient > 2 || part != 0,
+        REQUEST_INDEX => recipient > 2 || part != 0,
         // Later reserved families remain unsupported until their actual
         // implementations and proving cohort land. Never ignore them.
         _ => true,

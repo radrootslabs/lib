@@ -9,7 +9,7 @@
   "native_policy_consumer": "radroots_storage_sqlite::workspace",
   "shared_grant_wire_private": true,
   "default_import_side_effects": false,
-  "scope": "fresh_unrelated_buyer_outbox",
+  "scope": "fresh_unrelated_buyer_or_seller_outbox",
   "stock_authority": false,
   "participant_key_is_workspace_proof": false,
   "storage": {
@@ -148,7 +148,9 @@
       "publication_work",
       "delivery_frame",
       "delivery_observation",
-      "delivery_request_index"
+      "delivery_request_index",
+      "listing_installation",
+      "public_publication_work"
     ],
     "reserved_not_yet_implemented_families": []
   },
@@ -271,5 +273,37 @@
     "failed_recovery_keeps_uncertainty_and_writer": true,
     "accepted_recovery_survives_lost_observer": true,
     "final_close_drains_recovery_before_writer_release": true
+  },
+  "public_listing": {
+    "state": "implemented_under_current_component_qualification",
+    "stock_authority": false,
+    "shared_checked_models": [
+      "CapturedListingCommand",
+      "PublicSigningPlan",
+      "SigningTarget::PublicEvent",
+      "ListingInstallation",
+      "PublicPublicationWork",
+      "OperationSnapshot"
+    ],
+    "initial_coordinate": "atomic_T0_protected_author_listing_index_outside_operation_prefix",
+    "coordinate_existing_decision_and_original_preparation_verified": true,
+    "coordinate_compared_with_every_later_write": true,
+    "coordinate_replacement_or_expiry_reclamation": false,
+    "private_contexts_and_record_bytes_unchanged": true,
+    "public_issuance_target_position": 2,
+    "public_issuance_context_domain": "radroots.browser.local_outbox.public_issuance.context.v1",
+    "public_installation_and_work_families": [
+      10,
+      11
+    ],
+    "installation_metadata_clear_bytes": 76,
+    "work_metadata_clear_bytes": 76,
+    "public_delivery_frame_version": 3,
+    "private_delivery_frame_version": 2,
+    "public_delivery_uses_original_signed_bytes_without_wrapping": true,
+    "public_recipient": null,
+    "actual_page_worker_and_three_browser_execution_required": true,
+    "protected_corruption_reopen_and_private_regressions_required": true,
+    "full_browser_distribution_or_RCLD_qualification_claim": false
   }
 }

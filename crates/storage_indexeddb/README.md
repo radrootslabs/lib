@@ -12,13 +12,23 @@ alone never acknowledges a commit. Accepted work remains owned after its
 observer is dropped. Closing stops admission and waits for accepted work.
 
 The default private host stores opaque bytes. The opt-in `workspace` feature
-adds `workspace::BrowserWorkspace`: an authenticated protected local buyer
-outbox using the shared storage enrollment/grant rules and an explicitly
+adds `workspace::BrowserWorkspace`: authenticated protected local buyer and seller
+outboxes using the shared storage enrollment/grant rules and an explicitly
 selected nonvolatile provider. It creates only a fresh unrelated outbox;
 opening existing data requires its retained selection and protected proof.
-It implements the shared `OperationJournal` for this protected local buyer
-outbox. Participant custody, general storage SPI and stock authority remain
+It implements the shared `OperationJournal` for these protected local outboxes.
+Participant custody, general storage SPI and stock authority remain
 separate.
+
+Initial public listings use the same shared command, plan, claim, obtained
+evidence, installation and delivery models. T0 atomically reserves the initial
+author/listing coordinate in an independently protected index. Reads verify its
+exact original decision, and later writes compare it inside the real transaction.
+A second initial publication cannot replace that decision. Private record bytes
+and positions stay unchanged; public issuance uses its own protection domain and
+target position, and public installation/work use distinct fixed 76-byte metadata.
+Direct public delivery retains the original signed event, policy, target ordinals
+and observations without a private recipient or temporary wrapping key.
 
 The workspace also executes immutable buyer operation admission and lookup.
 It retains the original command, transaction identity and first-issue window;
@@ -36,8 +46,9 @@ provide T0; they do not issue signatures, install messages or deliver them.
 The owner also binds and queries the original complete T1 signing plan, using
 the shared native v1 manifest codec. The 384 KiB plan uses at most twenty-four
 16 KiB clear parts. Every part binds the workspace, operation, position and
-plan digest. One real 31-record transaction compares the grant, all five T0
-slots and all twenty-five T1 slots. Fresh binding rechecks the original issue
+plan digest. One real 31-record private transaction compares the grant, all five
+T0 slots and all twenty-five T1 slots. Public binding also compares the original
+coordinate, using the unchanged 32-record maximum. Fresh binding rechecks the original issue
 window after asynchronous protection; exact retained replay keeps the original
 transaction and observation without fresh entropy. Missing, orphaned, foreign
 or damaged state refuses, including T0 absence with retained plan records.

@@ -213,9 +213,6 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         let result = owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
-            if supplied.listing().is_some() {
-                return Err(OperationError::UnsupportedOperation);
-            }
             let operation = supplied.operation_id();
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;

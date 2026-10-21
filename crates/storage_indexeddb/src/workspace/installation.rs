@@ -57,6 +57,8 @@ fn context(
 pub(super) struct Records {
     pub message: Option<ChatInstallation>,
     pub work: Vec<PublicationWork>,
+    pub listing: Option<radroots_storage::command::ListingInstallation>,
+    pub public: Option<radroots_storage::command::PublicPublicationWork>,
 }
 impl Records {
     pub(super) async fn read(
@@ -65,6 +67,17 @@ impl Records {
         graph: &Graph,
         operation: OperationId,
     ) -> Result<Self, OperationError> {
+        if graph.bound().is_some_and(|v| v.plan().listing().is_some()) {
+            let (listing, public) = state
+                .read_public_installation(view, graph, operation)
+                .await?;
+            return Ok(Self {
+                message: None,
+                work: Vec::new(),
+                listing,
+                public,
+            });
+        }
         let message = if let Some(raw) = state
             .read_view_key(view, address::key(operation, address::INSTALLATION, 0, 0))
             .await?
@@ -110,11 +123,73 @@ impl Records {
         {
             return Err(OperationError::RecoveryRequired);
         }
-        Ok(Self { message, work })
+        Ok(Self {
+            message,
+            work,
+            listing: None,
+            public: None,
+        })
     }
 }
 pub(super) fn work_commitment(message: ChatInstallation, work: PublicationWork) -> [u8; 32] {
     Sha256::digest(codec::work(message, work)).into()
+}
+impl Records {
+    pub(super) fn artifact(
+        &self,
+        target: radroots_storage::command::SigningTarget,
+    ) -> Result<radroots_storage::command::PublicationArtifact, OperationError> {
+        if target == radroots_storage::command::SigningTarget::PublicEvent {
+            return self
+                .public
+                .map(Into::into)
+                .ok_or(OperationError::RecoveryRequired);
+        }
+        self.work
+            .iter()
+            .find(|v| Some(v.recipient()) == target.recipient())
+            .copied()
+            .map(Into::into)
+            .ok_or(OperationError::RecoveryRequired)
+    }
+    pub(super) fn commitment(
+        &self,
+        work: radroots_storage::command::PublicationArtifact,
+    ) -> Result<[u8; 32], OperationError> {
+        match work {
+            radroots_storage::command::PublicationArtifact::Private(value) => Ok(work_commitment(
+                self.message.ok_or(OperationError::RecoveryRequired)?,
+                value,
+            )),
+            radroots_storage::command::PublicationArtifact::Public(value) => {
+                Ok(super::listing_installation::commitment(
+                    self.listing.ok_or(OperationError::RecoveryRequired)?,
+                    value,
+                ))
+            }
+        }
+    }
+}
+pub(super) fn publication_commitment(
+    snapshot: &OperationSnapshot,
+    work: radroots_storage::command::PublicationArtifact,
+) -> Result<[u8; 32], OperationError> {
+    match work {
+        radroots_storage::command::PublicationArtifact::Private(value) => Ok(work_commitment(
+            snapshot
+                .installation()
+                .ok_or(OperationError::RecoveryRequired)?,
+            value,
+        )),
+        radroots_storage::command::PublicationArtifact::Public(value) => {
+            Ok(super::listing_installation::commitment(
+                snapshot
+                    .listing_installation()
+                    .ok_or(OperationError::RecoveryRequired)?,
+                value,
+            ))
+        }
+    }
 }
 impl State {
     /// A missing claim must not conceal installation/publication descendants.
@@ -169,6 +244,11 @@ impl BrowserWorkspace {
             )?;
             if bound.plan().digest() != request.plan_digest() {
                 return Err(OperationError::IdempotencyConflict);
+            }
+            if bound.plan().listing().is_some() {
+                return state
+                    .install_listing(request, access, view, t0, snapshot)
+                    .await;
             }
             let original = snapshot.installation();
             let missing = snapshot

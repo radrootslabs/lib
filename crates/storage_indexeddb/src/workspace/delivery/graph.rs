@@ -3,11 +3,7 @@ use super::{
     codec::{self, Manifest},
     context, routes,
 };
-use crate::workspace::{
-    State, address, crypto,
-    installation::{Records, work_commitment},
-    retained,
-};
+use crate::workspace::{State, address, crypto, installation::Records, retained};
 use crate::{Mutation, ReadSnapshot, RecordKey};
 use radroots_domain::OperationId;
 use radroots_storage::command::{
@@ -22,7 +18,7 @@ pub(in crate::workspace) struct Graph {
     pub selected: Option<DeliveryAttempt>,
     pub(super) selected_slot: Option<Slot>,
     pub observations: Vec<DeliveryObservation>,
-    pub slots: [u16; 2],
+    pub slots: [u16; 3],
 }
 impl Graph {
     pub(in crate::workspace) async fn read(
@@ -67,7 +63,7 @@ impl Graph {
             selected: None,
             selected_slot: None,
             observations: Vec::with_capacity(observation_count),
-            slots: [0; 2],
+            slots: [0; 3],
         };
         let mut representations = BTreeMap::new();
         for ((recipient, ordinal), positions) in positions {
@@ -76,22 +72,9 @@ impl Graph {
             }
             result.slots[recipient as usize] = ordinal;
             let bound = original.bound().ok_or(OperationError::RecoveryRequired)?;
-            let participant = bound
-                .chat_plan()?
-                .seals()
-                .get(recipient as usize)
-                .ok_or(OperationError::RecoveryRequired)?
-                .recipient();
-            let work = installed
-                .work
-                .iter()
-                .find(|work| work.recipient() == participant)
-                .copied()
-                .ok_or(OperationError::RecoveryRequired)?;
-            let commitment = work_commitment(
-                installed.message.ok_or(OperationError::RecoveryRequired)?,
-                work,
-            );
+            let participant = super::super::issuance::target(bound, recipient)?;
+            let work = installed.artifact(participant)?;
+            let commitment = installed.commitment(work)?;
             let slot = Slot {
                 operation,
                 recipient,

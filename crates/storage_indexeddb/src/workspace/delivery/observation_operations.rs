@@ -28,7 +28,7 @@ impl BrowserWorkspace {
         let result = owned(work, async move {
             let input = binding.input().clone();
             let (grant, protected) = state.capture_retained(&input, &proof).await?;
-            let actual_work = supplied.work().private()?;
+            let actual_work = supplied.work();
             let evidence = actual_work.evidence();
             let operation = evidence.operation_id();
             let view = state.read_view(operation).await?;
@@ -41,7 +41,7 @@ impl BrowserWorkspace {
                     &t0,
                     binding.observed_at(),
                     Some(Selection {
-                        recipient: evidence.recipient()?,
+                        recipient: evidence.target(),
                         request: supplied.request_id(),
                         event: None,
                         retain_seal: false,
@@ -54,7 +54,7 @@ impl BrowserWorkspace {
                 &binding,
             )?;
             let attempt = facts.selected.ok_or(OperationError::InvalidEvidence)?;
-            if attempt.work().private()? != actual_work {
+            if attempt.work() != actual_work {
                 return Err(OperationError::InvalidEvidence);
             }
             let checked = DeliveryObservation::from_store_report(
@@ -66,14 +66,14 @@ impl BrowserWorkspace {
                 return Err(OperationError::InvalidEvidence);
             }
             let existing = snapshot.delivery_observations().iter().find(|value| {
-                value.work().private().ok() == Some(actual_work)
+                value.work() == actual_work
                     && value.request_id() == supplied.request_id()
                     && value.target_receipt().target().fingerprint()
                         == supplied.target_receipt().target().fingerprint()
                     && value.kind() == supplied.kind()
             });
             let retained = existing.cloned().unwrap_or(supplied);
-            let extra = if existing.is_some() {
+            let mut extra = if existing.is_some() {
                 Vec::new()
             } else {
                 vec![
@@ -88,6 +88,7 @@ impl BrowserWorkspace {
                     .await?,
                 ]
             };
+            extra.extend(state.coordinate_guard(snapshot.prepared()).await?);
             let batch = journal::mutations(protected, operation, t0, None, extra)?;
             let active = state.active()?;
             match state
@@ -138,9 +139,7 @@ impl BrowserWorkspace {
         let state = self.state.clone();
         owned(work, async move {
             let access = state.operation_access(&binding, proof).await?;
-            let recipient = target
-                .recipient()
-                .ok_or(OperationError::UnsupportedOperation)?;
+            let recipient = target;
             let view = state.read_view(operation).await?;
             let t0 = state.operation_records(&view, operation).await?;
             let facts = state
@@ -168,8 +167,7 @@ impl BrowserWorkspace {
                         .delivery_observations()
                         .iter()
                         .filter(|value| {
-                            value.work().recipient() == Some(recipient)
-                                && value.request_id() == &request
+                            value.work().target() == recipient && value.request_id() == &request
                         })
                         .cloned()
                         .collect()

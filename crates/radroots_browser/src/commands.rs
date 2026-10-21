@@ -98,6 +98,12 @@ impl CommandIo for BrowserCommands {
     fn now(&self) -> Result<UnixSeconds, OperationError> {
         unix_seconds()
     }
+    fn public_targets(&self) -> Result<TargetSet, OperationError> {
+        if !self.enabled() {
+            return Err(OperationError::Unauthorized);
+        }
+        Ok(self.write.clone())
+    }
     fn seal_time(&self, now: UnixSeconds) -> Result<UnixSeconds, OperationError> {
         let time = randomized_past_time(
             NonZeroU64::new(now.get()).ok_or(OperationError::RecoveryRequired)?,

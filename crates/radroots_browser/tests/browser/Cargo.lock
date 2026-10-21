@@ -1371,6 +1371,7 @@ dependencies = [
  "radroots_domain",
  "radroots_execution",
  "radroots_nostr",
+ "radroots_protocol",
  "radroots_secrets",
  "radroots_signing",
  "radroots_storage",

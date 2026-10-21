@@ -34,13 +34,18 @@ async function verifyCleanup(){
   return {sockets:observedSockets.length,databases:databases.length};
 }`;
 const execute=`
-const {default:init,advertisements,verify_client,verify_publications}=await import('./fixture.js');await init();
+const {default:init,advertisements,verify_client,verify_publications,verify_listing,verify_listing_publications}=await import('./fixture.js');await init();
 const route='/'+context,endpoint=base.replace('http:','ws:')+route;
 const response=await fetch(base+'/advertisements'+route,{method:'POST',body:advertisements(endpoint)});
 if(!response.ok)throw Error('fixture advertisement setup');
 const result=JSON.parse(await verify_client(endpoint,'ordinary_browser_'+context));
 const events=await fetch(base+'/events'+route).then(response=>response.text());
 await verify_publications(events,JSON.stringify(result.messages));
+const publicRoute='/listing/'+context;
+const listing=JSON.parse(await verify_listing(base.replace('http:','ws:')+publicRoute,'ordinary_public_'+context));
+const publicEvents=await fetch(base+'/events'+publicRoute).then(response=>response.text());
+verify_listing_publications(publicEvents,listing.revision);
+result.listing=listing;
 result.disposed=await verifyCleanup();return result;`;
 const worker=`${observer}
 self.onmessage=async event=>{try{const base=event.data,context='worker';self.postMessage(await(async()=>{${execute}})());}
@@ -55,7 +60,7 @@ const server=createServer(async(req,res)=>{
       for(const value of values)assert.equal(value.kind,10050);
       sources.set(req.url.replace('/advertisements',''),values);res.end('ok');return;
     }
-    if(req.url==='/events/main'||req.url==='/events/worker'){
+    if(['/events/main','/events/worker','/events/listing/main','/events/listing/worker'].includes(req.url)){
       const route=req.url.replace('/events','');res.setHeader('content-type','application/json');
       res.end(JSON.stringify(observed.filter(item=>item.route===route&&item.message[0]==='EVENT').map(item=>item.rawEvent)));return;
     }
@@ -66,18 +71,22 @@ const server=createServer(async(req,res)=>{
 });
 server.on('connection',socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));});
 server.on('upgrade',(req,socket,head)=>{
-  assert(sources.has(req.url));upgrades.push(req.url);
+  const publicRoute=['/listing/main','/listing/worker'].includes(req.url);
+  assert(publicRoute||sources.has(req.url));upgrades.push(req.url);
   wss.handleUpgrade(req,socket,head,ws=>{
     ws.on('error',()=>{});
     ws.on('message',(data,binary)=>{
       assert(!binary);const raw=data.toString(),message=JSON.parse(raw);
       observed.push({route:req.url,message,rawEvent:message[0]==='EVENT'?raw.slice('["EVENT",'.length,-1):undefined});
       if(message[0]==='REQ'){
+        assert(!publicRoute,'public listing must not query a private route');
         assert.equal(message[2].kinds[0],10050);assert.equal(message[2].authors.length,1);
         for(const value of sources.get(req.url))if(value.pubkey===message[2].authors[0])ws.send(JSON.stringify(['EVENT',message[1],value]));
         ws.send(JSON.stringify(['EOSE',message[1]]));
       }else if(message[0]==='EVENT'){
-        assert.equal(message[1].kind,1059);ws.send(JSON.stringify(['OK',message[1].id,true,'']));
+        assert.equal(message[1].kind,publicRoute?30402:1059);
+        const firstPublic=publicRoute&&observed.filter(item=>item.route===req.url&&item.message[0]==='EVENT').length===1;
+        ws.send(JSON.stringify(['OK',message[1].id,!firstPublic,firstPublic?'blocked: measured loopback rejection':'']));
       }else assert.equal(message[0],'CLOSE');
     });
   });
@@ -99,10 +108,14 @@ try{
     worker.onmessage=event=>{worker.terminate();event.data.error?reject(Error(event.data.error)):resolve(event.data);};worker.postMessage(base);
   }),base);
   assert.equal(main.passed.length,7);assert.deepEqual(main.passed,dedicated.passed);assert.deepEqual(errors,[]);
+  assert.equal(main.listing.passed.length,4);assert.deepEqual(main.listing.passed,dedicated.listing.passed);
   for(const context of ['main','worker']){
     const publications=observed.filter(item=>item.route==='/'+context&&item.message[0]==='EVENT');
     assert.equal(publications.length,4);assert.equal(new Set(publications.map(item=>item.message[1].id)).size,4);
     assert.equal(upgrades.filter(route=>route==='/'+context).length,2);
+    const publicEvents=observed.filter(item=>item.route==='/listing/'+context&&item.message[0]==='EVENT');
+    assert.equal(publicEvents.length,2);assert.equal(publicEvents[0].rawEvent,publicEvents[1].rawEvent);
+    assert.equal(upgrades.filter(route=>route==='/listing/'+context).length,2);
   }
   console.log(JSON.stringify({engine,automation,version:browser.version(),main,dedicated,pageErrors:errors,upgrades,observed}));
 }finally{

@@ -6,6 +6,12 @@ signing and workspace attachment remain explicit. Opening existing state never
 creates missing keys, grants or records. Startup performs no automatic query,
 publication or outbox replay. Preview memory does not qualify protected work.
 
+`listings().publish` delegates initial public listings to the same retained
+command owner as private inquiry. It requires an authenticated seller outbox
+and uses configured public write targets. Public results remain typed Listings;
+they acquire no private recipient, wrapping or stock authority. Scoped operation
+reads and explicit retry retain original signing and publication evidence.
+
 Accepted commands belong to a bounded local Rust task owner independently of
 their observation futures. Close permanently stops admission, drains original
 obtained evidence, disconnects the shared session, disposes original socket and

@@ -2,7 +2,7 @@
 use super::journal::{OperationChange, Records, mutations, storage_error};
 use super::{BrowserWorkspace, Mutation, State, WorkspaceError, address, crypto, owned};
 use crate::ReadSnapshot;
-use radroots_domain::{CommandDigest, OperationId, PublicKey, SigningAttemptId, TransactionId};
+use radroots_domain::{CommandDigest, OperationId, SigningAttemptId, TransactionId};
 use radroots_secrets::context::{
     EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId,
 };
@@ -10,7 +10,7 @@ use radroots_storage::{
     command::{
         ArtifactEvidence, BoundSigningPlan, CapturedArtifact, ClaimAttemptOutcome,
         ClaimAttemptRequest, CommitAttempt, EvidenceCaptureOutcome, EvidenceReceipt,
-        OperationError, SigningAttempt,
+        OperationError, SigningAttempt, SigningTarget,
         protected::{
             self,
             issuance::{ClaimRecord, EvidenceManifest},
@@ -26,28 +26,54 @@ pub(super) enum Claim {
     Absent(BoundSigningPlan, u8),
     Present(Box<SigningAttempt>),
 }
-fn position(bound: &BoundSigningPlan, recipient: PublicKey) -> Result<Option<u8>, OperationError> {
-    Ok(bound
-        .chat_plan()?
+pub(super) fn position(
+    bound: &BoundSigningPlan,
+    target: SigningTarget,
+) -> Result<Option<u8>, OperationError> {
+    if target == SigningTarget::PublicEvent {
+        return Ok(bound.plan().listing().map(|_| 2));
+    }
+    let Some(chat) = bound.plan().chat() else {
+        return Ok(None);
+    };
+    Ok(chat
         .seals()
         .iter()
-        .position(|seal| seal.recipient() == recipient)
+        .position(|seal| Some(seal.recipient()) == target.recipient())
         .and_then(|i| u8::try_from(i).ok()))
+}
+pub(super) fn target(bound: &BoundSigningPlan, index: u8) -> Result<SigningTarget, OperationError> {
+    if index == 2 && bound.plan().listing().is_some() {
+        return Ok(SigningTarget::PublicEvent);
+    }
+    let chat = bound.chat_plan()?;
+    chat.seals()
+        .get(index as usize)
+        .map(|seal| SigningTarget::BusinessSeal(seal.recipient()))
+        .ok_or(OperationError::RecoveryRequired)
 }
 fn base(state: &State, bound: &BoundSigningPlan, index: u8) -> Result<Sha256, OperationError> {
     let identity = bound.prepared().identity();
-    let recipient = bound
-        .chat_plan()?
-        .seals()
-        .get(index as usize)
-        .ok_or(OperationError::InvalidCommand)?
-        .recipient();
+    let target = target(bound, index)?;
+    if target == SigningTarget::PublicEvent {
+        return Ok(Sha256::new()
+            .chain_update(b"radroots.browser.local_outbox.public_issuance.context.v1\0")
+            .chain_update(state.selected.workspace_id().as_bytes())
+            .chain_update(identity.operation_id().as_bytes())
+            .chain_update(bound.plan().digest())
+            .chain_update([index]));
+    }
     Ok(Sha256::new()
         .chain_update(b"radroots.browser.local_outbox.issuance.context.v2\0")
         .chain_update(state.selected.workspace_id().as_bytes())
         .chain_update(identity.operation_id().as_bytes())
         .chain_update(bound.plan().digest())
-        .chain_update(recipient.as_bytes())
+        .chain_update(
+            target
+                .recipient()
+                .ok_or(OperationError::RecoveryRequired)?
+                .as_bytes(),
+        )
         .chain_update([index]))
 }
 fn finish(hash: Sha256, schema: &str) -> Result<EnvelopeContext, OperationError> {
@@ -107,7 +133,7 @@ impl State {
         &self,
         view: &ReadSnapshot,
         bound: BoundSigningPlan,
-        recipient: PublicKey,
+        recipient: SigningTarget,
         index: u8,
     ) -> Result<Claim, OperationError> {
         let operation = bound.prepared().identity().operation_id();
@@ -271,55 +297,53 @@ impl BrowserWorkspace {
                 return Err(OperationError::IdempotencyConflict);
             }
             let index =
-                position(&bound, request.recipient()?)?.ok_or(OperationError::InvalidCommand)?;
-            let (attempt, fresh, extra) = match state
-                .claim(&view, bound, request.recipient()?, index)
-                .await?
-            {
-                Claim::Present(attempt) => (*attempt, false, Vec::new()),
-                Claim::Absent(bound, index) => {
-                    state
-                        .check_claim_absence(
-                            &view,
-                            operation,
-                            request.command_digest(),
-                            &t0,
-                            access.binding.observed_at(),
+                position(&bound, request.target())?.ok_or(OperationError::InvalidCommand)?;
+            let (attempt, fresh, extra) =
+                match state.claim(&view, bound, request.target(), index).await? {
+                    Claim::Present(attempt) => (*attempt, false, Vec::new()),
+                    Claim::Absent(bound, index) => {
+                        state
+                            .check_claim_absence(
+                                &view,
+                                operation,
+                                request.command_digest(),
+                                &t0,
+                                access.binding.observed_at(),
+                            )
+                            .await?;
+                        let now = access.binding.observed_at();
+                        if now < bound.bound_at() {
+                            return Err(WorkspaceError::Unavailable.into());
+                        }
+                        if now >= bound.prepared().issuance_window().first_issue_not_after() {
+                            return Err(OperationError::DeadlineExceeded);
+                        }
+                        let attempt = SigningAttempt::from_committed_store(
+                            bound,
+                            request.target(),
+                            SigningAttemptId::from_bytes(*crypto::random::<32>()?),
+                            TransactionId::from_bytes(*crypto::random::<32>()?),
+                            now,
+                        )?;
+                        let encoded = ClaimRecord::capture(&attempt)?.encode()?;
+                        let protected = crypto::seal_bound(
+                            state.provider.as_ref(),
+                            &state.reference,
+                            claim_context(&state, attempt.bound_plan(), index)?,
+                            &encoded,
                         )
                         .await?;
-                    let now = access.binding.observed_at();
-                    if now < bound.bound_at() {
-                        return Err(WorkspaceError::Unavailable.into());
+                        let extra = vec![
+                            Mutation::new(
+                                address::key(operation, address::CLAIM, index, 0),
+                                None,
+                                Some(protected),
+                            )
+                            .map_err(storage_error)?,
+                        ];
+                        (attempt, true, extra)
                     }
-                    if now >= bound.prepared().issuance_window().first_issue_not_after() {
-                        return Err(OperationError::DeadlineExceeded);
-                    }
-                    let attempt = SigningAttempt::from_committed_store(
-                        bound,
-                        request.recipient()?,
-                        SigningAttemptId::from_bytes(*crypto::random::<32>()?),
-                        TransactionId::from_bytes(*crypto::random::<32>()?),
-                        now,
-                    )?;
-                    let encoded = ClaimRecord::capture(&attempt)?.encode()?;
-                    let protected = crypto::seal_bound(
-                        state.provider.as_ref(),
-                        &state.reference,
-                        claim_context(&state, attempt.bound_plan(), index)?,
-                        &encoded,
-                    )
-                    .await?;
-                    let extra = vec![
-                        Mutation::new(
-                            address::key(operation, address::CLAIM, index, 0),
-                            None,
-                            Some(protected),
-                        )
-                        .map_err(storage_error)?,
-                    ];
-                    (attempt, true, extra)
-                }
-            };
+                };
             let anchor = attempt.identity();
             let change = OperationChange {
                 before: t0,
@@ -371,11 +395,8 @@ impl BrowserWorkspace {
                 if bound.plan().digest() != request.plan_digest() {
                     return Err(OperationError::IdempotencyConflict);
                 }
-                if let Some(index) = position(&bound, request.recipient()?)? {
-                    match state
-                        .claim(&view, bound, request.recipient()?, index)
-                        .await?
-                    {
+                if let Some(index) = position(&bound, request.target())? {
+                    match state.claim(&view, bound, request.target(), index).await? {
                         Claim::Present(attempt) => Some(*attempt),
                         Claim::Absent(_, _) => {
                             state
@@ -438,11 +459,8 @@ impl BrowserWorkspace {
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?;
             let index =
-                position(&bound, supplied.recipient()?)?.ok_or(OperationError::InvalidEvidence)?;
-            let attempt = match state
-                .claim(&view, bound, supplied.recipient()?, index)
-                .await?
-            {
+                position(&bound, supplied.target())?.ok_or(OperationError::InvalidEvidence)?;
+            let attempt = match state.claim(&view, bound, supplied.target(), index).await? {
                 Claim::Present(attempt) => attempt,
                 Claim::Absent(_, _) => return Err(OperationError::RecoveryRequired),
             };
@@ -455,7 +473,10 @@ impl BrowserWorkspace {
                 supplied.observed_at_unix_ms(),
             )?;
             drop(supplied);
-            let (receipt, extra) = match state.evidence(&view, &attempt, index).await? {
+            let coordinate = state
+                .coordinate_guard(attempt.bound_plan().prepared())
+                .await?;
+            let (receipt, mut extra) = match state.evidence(&view, &attempt, index).await? {
                 Some((original, receipt)) => {
                     if original.raw_json() != checked.raw_json()
                         || original.digest() != checked.digest()
@@ -481,6 +502,7 @@ impl BrowserWorkspace {
                 receipt.command_digest(),
                 Some(receipt.transaction_id()),
             );
+            extra.extend(coordinate);
             let batch = mutations(protected, operation, t0, None, extra)?;
             let active = state.active()?;
             match state
@@ -534,11 +556,8 @@ impl BrowserWorkspace {
                 if bound.plan().digest() != request.plan_digest() {
                     return Err(OperationError::IdempotencyConflict);
                 }
-                if let Some(index) = position(&bound, request.recipient()?)? {
-                    match state
-                        .claim(&view, bound, request.recipient()?, index)
-                        .await?
-                    {
+                if let Some(index) = position(&bound, request.target())? {
+                    match state.claim(&view, bound, request.target(), index).await? {
                         Claim::Present(attempt) => {
                             let obtained = state.evidence(&view, &attempt, index).await?;
                             if obtained.is_none() {

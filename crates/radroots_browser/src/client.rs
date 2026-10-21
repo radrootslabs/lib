@@ -257,6 +257,10 @@ impl Client {
     pub const fn inbox(&self) -> Inbox<'_> {
         Inbox { client: self }
     }
+    /// Borrows initial public listing execution through the same shared owner.
+    pub const fn listings(&self) -> Listings<'_> {
+        Listings { client: self }
+    }
     /// Selects an explicitly authenticated scope for retained operation reads.
     pub fn operations(&self, scope: &WorkspaceSession) -> Operations<'_> {
         Operations {
@@ -291,6 +295,25 @@ impl Inbox<'_> {
         self.client
             .session
             .inquire(self.client.workspace.clone(), context, input)
+            .await
+    }
+}
+/// Public listing access through the actual protected browser journal.
+pub struct Listings<'a> {
+    client: &'a Client,
+}
+impl Listings<'_> {
+    /// Captures initial publication under an authenticated seller attachment.
+    /// Shared execution owns signing, installation, delivery and retained work;
+    /// losing this observer never grants rollback or automatic redispatch.
+    pub async fn publish(
+        &self,
+        context: CommandContext,
+        input: radroots_protocol::listing::PublishInput,
+    ) -> Result<OperationReceipt<radroots_domain::listing::Listing>> {
+        self.client
+            .session
+            .publish_listing(self.client.workspace.clone(), context, input)
             .await
     }
 }

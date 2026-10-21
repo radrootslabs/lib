@@ -4,7 +4,7 @@ use crate::ReadSnapshot;
 use radroots_domain::{CommandDigest, EnvelopeEventId, OperationId, PublicKey, UnixSeconds};
 use radroots_storage::command::{
     ArtifactEvidence, ArtifactSnapshot, BoundSigningPlan, ClaimSnapshot, EvidenceReceipt,
-    OperationError, OperationSnapshot, RetainedOperation, protected,
+    OperationError, OperationSnapshot, RetainedOperation, SigningTarget, protected,
 };
 
 pub(super) async fn header(
@@ -38,9 +38,39 @@ pub(super) async fn header(
     };
     for key in view.keys() {
         let (kind, recipient, _) = address::fields(key)?;
-        if kind >= address::CLAIM {
-            let chat = plan.chat().ok_or(OperationError::UnsupportedOperation)?;
-            if recipient as usize >= chat.seals().len() {
+        if matches!(kind, address::PREPARED | address::PLAN) {
+            continue;
+        }
+        if matches!(kind, address::LISTING_INSTALLATION | address::PUBLIC_WORK) {
+            if plan.listing().is_none() {
+                return Err(OperationError::RecoveryRequired);
+            }
+        } else if matches!(kind, address::INSTALLATION | address::PUBLICATION) {
+            if plan.chat().is_none() {
+                return Err(OperationError::RecoveryRequired);
+            }
+            if kind == address::PUBLICATION
+                && recipient as usize
+                    >= plan
+                        .chat()
+                        .ok_or(OperationError::RecoveryRequired)?
+                        .seals()
+                        .len()
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+        } else {
+            let valid = if plan.listing().is_some() {
+                recipient == 2
+            } else {
+                (recipient as usize)
+                    < plan
+                        .chat()
+                        .ok_or(OperationError::RecoveryRequired)?
+                        .seals()
+                        .len()
+            };
+            if !valid {
                 return Err(OperationError::RecoveryRequired);
             }
         }
@@ -62,7 +92,7 @@ impl Graph {
         operation: OperationId,
         digest: Option<CommandDigest>,
         t0: &Records,
-        selected: Option<PublicKey>,
+        selected: Option<SigningTarget>,
     ) -> Result<Self, OperationError> {
         let retained = header(state, view, operation, digest, t0).await?;
         let mut recipients = Vec::with_capacity(2);
@@ -70,16 +100,25 @@ impl Graph {
         let retained = match retained {
             Some(RetainedOperation::Planned(bound)) => {
                 let mut bound = *bound;
-                let keys = bound
-                    .chat_plan()?
-                    .seals()
-                    .iter()
-                    .map(|seal| seal.recipient())
-                    .collect::<Vec<_>>();
-                for (index, recipient) in keys.into_iter().enumerate() {
-                    let expected =
-                        EnvelopeEventId::from_bytes(bound.chat_plan()?.seals()[index].event_id());
-                    match state.claim(view, bound, recipient, index as u8).await? {
+                let keys = match bound.plan().chat() {
+                    Some(chat) => chat
+                        .seals()
+                        .iter()
+                        .map(|seal| SigningTarget::BusinessSeal(seal.recipient()))
+                        .collect::<Vec<_>>(),
+                    None => vec![SigningTarget::PublicEvent],
+                };
+                for recipient in keys {
+                    let expected = EnvelopeEventId::from_bytes(
+                        bound
+                            .plan()
+                            .artifact(recipient)
+                            .map_err(|_| OperationError::RecoveryRequired)?
+                            .event_id(),
+                    );
+                    let index = super::issuance::position(&bound, recipient)?
+                        .ok_or(OperationError::RecoveryRequired)?;
+                    match state.claim(view, bound, recipient, index).await? {
                         Claim::Absent(returned, _) => {
                             recipients.push(ArtifactSnapshot::from_store_report(
                                 recipient,
@@ -93,7 +132,7 @@ impl Graph {
                             let claim = ClaimSnapshot::from_store_report(&attempt)?;
                             // Verify one bounded exact seal at a time; retaining a
                             // receipt does not duplicate private plan/raw bodies.
-                            let obtained = state.evidence(view, &attempt, index as u8).await?;
+                            let obtained = state.evidence(view, &attempt, index).await?;
                             let receipt = obtained.as_ref().map(|(_, receipt)| *receipt);
                             if Some(recipient) == selected {
                                 output = obtained.map(|(value, _)| value);
@@ -111,9 +150,14 @@ impl Graph {
                 Some(RetainedOperation::Planned(Box::new(bound)))
             }
             Some(RetainedOperation::Prepared(prepared)) => {
-                let command = prepared.request().chat_command()?;
-                let mut keys = vec![command.context().actor().participant(), command.peer()];
-                keys.sort_unstable();
+                let mut keys = match prepared.request().command().chat() {
+                    Some(command) => vec![
+                        SigningTarget::BusinessSeal(command.context().actor().participant()),
+                        SigningTarget::BusinessSeal(command.peer()),
+                    ],
+                    None => vec![SigningTarget::PublicEvent],
+                };
+                keys.sort_unstable_by_key(|target| target.key());
                 keys.dedup();
                 for recipient in keys {
                     recipients.push(ArtifactSnapshot::from_store_report(
@@ -139,9 +183,15 @@ impl Graph {
             .and_then(RetainedOperation::bound_plan)
     }
     pub(super) fn receipt(&self, recipient: PublicKey) -> Result<EvidenceReceipt, OperationError> {
+        self.receipt_target(SigningTarget::BusinessSeal(recipient))
+    }
+    pub(super) fn receipt_target(
+        &self,
+        target: SigningTarget,
+    ) -> Result<EvidenceReceipt, OperationError> {
         self.recipients
             .iter()
-            .find(|value| value.target().recipient() == Some(recipient))
+            .find(|value| value.target() == target)
             .and_then(|value| value.obtained())
             .ok_or(OperationError::RecoveryRequired)
     }

@@ -15,7 +15,7 @@ fn summary(attempt: &SigningAttempt) -> Vec<u8> {
     raw.extend_from_slice(attempt.binding().digest());
     raw.extend_from_slice(&attempt.claimed_at().get().to_be_bytes());
     raw.extend_from_slice(&attempt.deadline_unix_ms().get().to_be_bytes());
-    raw.extend_from_slice(&attempt.seal().unwrap().event_id());
+    raw.extend_from_slice(&attempt.artifact().unwrap().event_id());
     raw
 }
 fn receipt(value: EvidenceReceipt) -> Vec<u8> {
@@ -35,7 +35,8 @@ fn signed_output(
     attempt: &SigningAttempt,
     observed: Option<NonZeroU64>,
 ) -> Result<ArtifactEvidence, JsValue> {
-    let fields = attempt.seal().unwrap().fields();
+    let artifact = attempt.artifact().unwrap();
+    let fields = artifact.fields();
     let context = nostr::secp256k1::Secp256k1::new();
     let mut scalar = [0; 32];
     scalar[31] = 1;
@@ -46,7 +47,13 @@ fn signed_output(
         pubkey: keys.public_key(),
         created_at: nostr::Timestamp::from_secs(fields.created_at),
         kind: nostr::Kind::Custom(u16::try_from(fields.kind).unwrap()),
-        tags: nostr::Tags::from_list(vec![]),
+        tags: nostr::Tags::from_list(
+            fields
+                .tags
+                .iter()
+                .map(|tag| nostr::Tag::parse(tag).unwrap())
+                .collect(),
+        ),
         content: fields.content.to_owned(),
     }
     .sign_with_ctx(&context, &mut BrowserRng, &keys)
@@ -93,7 +100,11 @@ impl ObtainedSeal {
 }
 impl WorkspaceFixture {
     async fn claim_request(&self, n: u8, index: u8) -> Result<ClaimAttemptRequest, JsValue> {
-        let request = self.request(n, false).await?;
+        let request = if index == 2 {
+            self.public_request(n).await?
+        } else {
+            self.request(n, false).await?
+        };
         let bound = self
             .journal()
             .signing_plan(
@@ -105,14 +116,19 @@ impl WorkspaceFixture {
             .await
             .map_err(|e| JsValue::from_str(e.code()))?
             .ok_or(JsValue::from_str("missing_plan"))?;
-        let recipient = bound
-            .chat_plan()
-            .unwrap()
-            .seals()
-            .get(index as usize)
-            .ok_or(JsValue::from_str("invalid_recipient"))?
-            .recipient();
-        Ok(ClaimAttemptRequest::new(
+        let recipient = if index == 2 {
+            radroots_storage::command::SigningTarget::PublicEvent
+        } else {
+            bound
+                .chat_plan()
+                .unwrap()
+                .seals()
+                .get(index as usize)
+                .ok_or(JsValue::from_str("invalid_recipient"))?
+                .recipient()
+                .into()
+        };
+        Ok(ClaimAttemptRequest::for_artifact(
             request.binding().clone(),
             request.command().context().operation_id(),
             request.command().digest(),

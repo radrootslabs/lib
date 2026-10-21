@@ -15,6 +15,7 @@ radroots_browser = { path = "../..", features = ["artifact_clock"] }
 radroots_domain = { path = "../../../domain", default-features = false, features = ["std"] }
 radroots_execution = { path = "../../../execution", default-features = false, features = ["workspace_session"] }
 radroots_nostr = { path = "../../../nostr", default-features = false, features = ["signing", "nip17"] }
+radroots_protocol = { path = "../../../protocol", default-features = false, features = ["listing"] }
 radroots_secrets = { path = "../../../secrets", default-features = false, features = ["browser"] }
 radroots_signing = { path = "../../../signing", default-features = false, features = ["chat", "std"] }
 radroots_storage = { path = "../../../storage", default-features = false, features = ["protected_outbox"] }

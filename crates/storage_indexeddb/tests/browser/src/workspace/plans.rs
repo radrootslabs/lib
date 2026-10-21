@@ -58,7 +58,7 @@ pub(super) fn delivery_relays(large: bool) -> Vec<String> {
         ]
     }
 }
-fn summary(bound: BoundSigningPlan) -> Vec<u8> {
+pub(super) fn summary(bound: BoundSigningPlan) -> Vec<u8> {
     let mut bytes = bound.transaction_id().as_bytes().to_vec();
     bytes.extend_from_slice(bound.plan().digest());
     bytes.extend_from_slice(&bound.bound_at().get().to_be_bytes());

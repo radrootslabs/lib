@@ -1,7 +1,9 @@
 //! Closed private v2 frame, manifest and independent request-index metadata.
 use core::num::NonZeroU64;
 use radroots_domain::{EnvelopeEventId, TransactionId, UnixSeconds};
-use radroots_storage::command::{DeliveryAttempt, DeliveryIntent, OperationError, PublicationWork};
+use radroots_storage::command::{
+    DeliveryAttempt, DeliveryIntent, OperationError, PublicationArtifact,
+};
 use radroots_transport::{TargetSet, policy::SatisfactionPolicy, target::TargetFingerprint};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -51,7 +53,11 @@ pub(super) fn encode(
         }
     }
     let header = Header {
-        version: 2,
+        version: if matches!(value.work(), PublicationArtifact::Public(_)) {
+            3
+        } else {
+            2
+        },
         work,
         request: value.intent().request_id().as_str(),
         event: value.intent().event_id(),
@@ -78,7 +84,7 @@ pub(super) fn encode(
 }
 pub(super) fn decode(
     raw: &[u8],
-    work: PublicationWork,
+    work: PublicationArtifact,
     commitment: [u8; 32],
 ) -> Result<DeliveryAttempt, OperationError> {
     if raw.len() < 5 || raw.len() > MAX_BYTES {
@@ -92,10 +98,21 @@ pub(super) fn decode(
         return Err(OperationError::RecoveryRequired);
     }
     let header: Header<'_> = serde_json::from_slice(&raw[4..boundary]).map_err(bad)?;
-    if header.version != 2 || header.work != commitment {
+    if header.version
+        != if matches!(work, PublicationArtifact::Public(_)) {
+            3
+        } else {
+            2
+        }
+        || header.work != commitment
+    {
         return Err(OperationError::RecoveryRequired);
     }
-    let intent = DeliveryIntent::new(
+    let constructor = match work {
+        PublicationArtifact::Private(_) => DeliveryIntent::new,
+        PublicationArtifact::Public(_) => DeliveryIntent::public,
+    };
+    let intent = constructor(
         header.request,
         header.event,
         &header.targets,

@@ -147,15 +147,19 @@ impl WorkspaceFixture {
             AdmissionOutcome::Unknown(_) => Err(JsValue::from_str("commit_unknown")),
         }
     }
-    pub async fn admit_public(&self, n: u8) -> Result<(), JsValue> {
+    pub async fn admit_public(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let public = self.public_request(n).await?;
-        self.journal()
+        match self
+            .journal()
             .admit_command_and_hold(public, copied(&self.proof))
             .await
-            .map_err(|e| JsValue::from_str(e.code()))?;
-        Err(JsValue::from_str("unexpected_public_commit"))
+            .map_err(|e| JsValue::from_str(e.code()))?
+        {
+            AdmissionOutcome::Committed(prepared) => Ok(summary(prepared)),
+            AdmissionOutcome::Unknown(_) => Err(JsValue::from_str("commit_unknown")),
+        }
     }
-    pub async fn bind_public(&self, n: u8) -> Result<(), JsValue> {
+    pub async fn bind_public(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let public = self.public_request(n).await?;
         let plan = radroots_protocol::listing::PublicSigningPlan::capture(
             public.command().listing().unwrap(),
@@ -164,11 +168,86 @@ impl WorkspaceFixture {
             radroots_protocol::plan::SigningReplay::NonReplayable,
         )
         .unwrap();
-        self.journal()
+        match self
+            .journal()
             .bind_signing_intents(public.binding().clone(), plan.into(), copied(&self.proof))
             .await
-            .map_err(|e| JsValue::from_str(e.code()))?;
-        Err(JsValue::from_str("unexpected_public_plan"))
+            .map_err(|e| JsValue::from_str(e.code()))?
+        {
+            radroots_storage::command::PlanBindingOutcome::Committed(bound) => {
+                Ok(plans::summary(bound))
+            }
+            radroots_storage::command::PlanBindingOutcome::Unknown(_) => {
+                Err(JsValue::from_str("commit_unknown"))
+            }
+        }
+    }
+    pub async fn public_plan_query(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+        let request = self.public_request(n).await?;
+        self.journal()
+            .signing_plan(
+                request.binding().clone(),
+                request.command().context().operation_id(),
+                request.command().digest(),
+                copied(&self.proof),
+            )
+            .await
+            .map(|v| v.map(plans::summary).unwrap_or_default())
+            .map_err(|e| JsValue::from_str(e.code()))
+    }
+    pub async fn install_public(&self, n: u8) -> Result<String, JsValue> {
+        let request = self.public_request(n).await?;
+        let bound = self
+            .journal()
+            .signing_plan(
+                request.binding().clone(),
+                request.command().context().operation_id(),
+                request.command().digest(),
+                copied(&self.proof),
+            )
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?
+            .ok_or_else(|| JsValue::from_str("missing_plan"))?;
+        let input = radroots_storage::command::InstallationRequest::new(
+            request.binding().clone(),
+            request.command().context().operation_id(),
+            request.command().digest(),
+            *bound.plan().digest(),
+        );
+        match self.journal().install_transition_and_outbox(input,copied(&self.proof)).await.map_err(|e|JsValue::from_str(e.code()))?{
+            radroots_storage::command::InstallationOutcome::ListingCommitted(value)=>Ok(serde_json::json!({"transaction":value.transaction_id().to_string(),"revision":value.revision().to_string(),"capture":value.basis().transaction_id().to_string(),"observed":value.basis().observed_at_unix_ms().map(|v|v.get()),"installed_at":value.installed_at().to_string()}).to_string()),
+            radroots_storage::command::InstallationOutcome::Unknown(_)=>Err(JsValue::from_str("commit_unknown")),
+            _=>Err(JsValue::from_str("unexpected_private_installation")),
+        }
+    }
+    pub async fn public_snapshot(&self, n: u8) -> Result<String, JsValue> {
+        let request = self.public_request(n).await?;
+        let snapshot = self
+            .journal()
+            .operation_snapshot(
+                request.binding().clone(),
+                request.command().context().operation_id(),
+                Some(request.command().digest()),
+                copied(&self.proof),
+            )
+            .await
+            .map_err(|e| JsValue::from_str(e.code()))?
+            .ok_or_else(|| JsValue::from_str("missing_operation"))?;
+        Ok(serde_json::json!({"checkpoint":snapshot.checkpoint_digest().to_string(),"installation":snapshot.listing_installation().map(|v|v.transaction_id().to_string()),"publications":snapshot.public_publications().len()}).to_string())
+    }
+    pub async fn public_coordinate_key(&self, n: u8) -> Result<Vec<u8>, JsValue> {
+        let request = self.public_request(n).await?;
+        let command = request.command();
+        let listing = command
+            .listing()
+            .ok_or_else(|| JsValue::from_str("missing_listing"))?;
+        Ok(Sha256::new()
+            .chain_update(b"radroots.browser.local_outbox.listing_coordinate.v1\0")
+            .chain_update(self.input.workspace_id().as_bytes())
+            .chain_update(self.input.participant().as_bytes())
+            .chain_update(listing.input().id().as_bytes())
+            .finalize()
+            .to_vec())
     }
     pub async fn query(&self, n: u8) -> Result<Vec<u8>, JsValue> {
         let binding = self
