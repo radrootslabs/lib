@@ -138,28 +138,32 @@ version = "0.13.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.askama]]
-version = "0.16.0"
+version = "0.16.1"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.askama_derive]]
 version = "0.13.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.askama_derive]]
-version = "0.16.0"
+version = "0.16.1"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.askama_macros]]
-version = "0.16.0"
+version = "0.16.1"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.askama_parser]]
 version = "0.13.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.askama_parser]]
-version = "0.16.0"
+version = "0.16.1"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.asn1-rs]]
 version = "0.7.1"
@@ -796,8 +800,9 @@ version = "2.11.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.fs-err]]
-version = "3.3.1"
+version = "3.3.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.fs2]]
 version = "0.4.3"
@@ -1715,9 +1720,9 @@ version = "1.14.0"
 criteria = "network-parser-reviewed"
 
 [[exemptions.rustls-webpki]]
-version = "0.103.15"
+version = "0.103.16"
 criteria = "network-parser-reviewed"
-notes = "Version-specific TLS dependency policy exemption. Full independent crate review remains outstanding; this exemption does not claim one."
+notes = "Version-specific existing review-debt exemption after RUSTSEC-2026-0382. Independent full-crate review remains outstanding; the dependency update and patch review do not claim one."
 
 [[exemptions.rustversion]]
 version = "1.0.22"
@@ -1844,8 +1849,9 @@ version = "0.6.9"
 criteria = "safe-to-deploy"
 
 [[exemptions.serde_spanned]]
-version = "1.1.1"
+version = "1.1.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.serde_urlencoded]]
 version = "0.7.1"
@@ -1908,8 +1914,9 @@ version = "0.3.11"
 criteria = "safe-to-deploy"
 
 [[exemptions.siphasher]]
-version = "1.0.3"
+version = "1.0.4"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.slab]]
 version = "0.4.12"
@@ -2109,16 +2116,18 @@ version = "0.8.23"
 criteria = "safe-to-deploy"
 
 [[exemptions.toml]]
-version = "1.1.4+spec-1.1.0"
+version = "1.1.8+spec-1.1.0"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.toml_datetime]]
 version = "0.6.11"
 criteria = "safe-to-deploy"
 
 [[exemptions.toml_datetime]]
-version = "1.1.1+spec-1.1.0"
+version = "1.1.2+spec-1.1.0"
 criteria = "secret-handling-reviewed"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.toml_edit]]
 version = "0.22.27"
@@ -2129,16 +2138,18 @@ version = "0.25.13+spec-1.1.0"
 criteria = "secret-handling-reviewed"
 
 [[exemptions.toml_parser]]
-version = "1.1.3+spec-1.1.0"
+version = "1.1.5+spec-1.1.0"
 criteria = "secret-handling-reviewed"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.toml_write]]
 version = "0.1.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.toml_writer]]
-version = "1.1.2+spec-1.1.0"
+version = "1.1.3+spec-1.1.0"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.tower]]
 version = "0.5.3"
@@ -2238,64 +2249,72 @@ version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.uniffi_bindgen]]
 version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi_bindgen]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.uniffi_core]]
 version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi_core]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.uniffi_internal_macros]]
 version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi_internal_macros]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.uniffi_macros]]
 version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi_macros]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.uniffi_meta]]
 version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi_meta]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.uniffi_pipeline]]
 version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi_pipeline]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.uniffi_udl]]
 version = "0.29.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.uniffi_udl]]
-version = "0.32.0"
+version = "0.32.2"
 criteria = "safe-to-deploy"
+notes = "Existing version-specific generator/tool review debt reconciled with the already selected graph. Independent full-crate review remains outstanding; generation, compilation and patch-level compatibility do not constitute that audit."
 
 [[exemptions.universal-hash]]
 version = "0.5.1"
@@ -2478,8 +2497,9 @@ version = "0.26.11"
 criteria = "network-parser-reviewed"
 
 [[exemptions.webpki-roots]]
-version = "1.0.6"
+version = "1.0.10"
 criteria = "network-parser-reviewed"
+notes = "Version-specific existing review-debt exemption after RUSTSEC-2026-0381. Independent full-crate review remains outstanding; the dependency update and patch review do not claim one."
 
 [[exemptions.weedle2]]
 version = "5.0.0"
