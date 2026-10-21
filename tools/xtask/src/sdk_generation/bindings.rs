@@ -12,7 +12,8 @@ use crate::{build_control::Mode, sdk_generation::fs::write_or_check};
 
 const FFI_PACKAGE: &str = "radroots_sdk_ffi";
 const FFI_VERSION: &str = "0.1.0-alpha";
-const BINDGEN_VERSION: &str = "0.32.2";
+const BINDGEN_VERSION: &str = "0.32.2+radroots-native-v2";
+const BINDGEN: &str = "radroots_ffi_bindgen";
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct SourceLock {
@@ -49,7 +50,7 @@ pub fn generate(
     }
     let bindgen = target_dir
         .join("debug")
-        .join(format!("radroots-sdk-bindgen{}", env::consts::EXE_SUFFIX));
+        .join(format!("{BINDGEN}{}", env::consts::EXE_SUFFIX));
     if !bindgen.is_file() {
         return Err(format!(
             "missing FFI bindgen executable: {}",
@@ -58,18 +59,12 @@ pub fn generate(
     }
     let temporary = tempfile::tempdir()
         .map_err(|error| format!("failed to create binding output directory: {error}"))?;
+    let generated = temporary.path().join("bindings");
     let status = Command::new(&bindgen)
         .args(["generate", "--library"])
         .arg(&library)
-        .args([
-            "--crate",
-            FFI_PACKAGE,
-            "--language",
-            language,
-            "--no-format",
-            "--out-dir",
-        ])
-        .arg(temporary.path())
+        .args(["--language", language, "--no-format", "--out-dir"])
+        .arg(&generated)
         .current_dir(source_root)
         .status()
         .map_err(|error| format!("failed to start {}: {error}", bindgen.display()))?;
@@ -78,30 +73,27 @@ pub fn generate(
             "{language} binding generation failed with {status}"
         ));
     }
-    install_outputs(source_root, consumer_root, language, temporary.path(), mode)?;
+    install_outputs(source_root, consumer_root, language, &generated, mode)?;
     println!("generated {language} bindings for {FFI_PACKAGE}");
     Ok(())
 }
 
 fn build_bindgen(root: &Path) -> Result<(), String> {
     let cargo = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let status = Command::new(cargo)
-        .args([
-            "build",
-            "--locked",
-            "-p",
-            FFI_PACKAGE,
-            "--lib",
-            "--bin",
-            "radroots-sdk-bindgen",
-        ])
-        .current_dir(root)
-        .status()
-        .map_err(|error| format!("failed to start Cargo for FFI generation: {error}"))?;
-    if !status.success() {
-        return Err(format!(
-            "FFI library and bindgen build failed with {status}"
-        ));
+    for args in [
+        vec!["build", "--locked", "-p", FFI_PACKAGE, "--lib"],
+        vec!["build", "--locked", "-p", "xtask", "--bin", BINDGEN],
+    ] {
+        let status = Command::new(&cargo)
+            .args(args)
+            .current_dir(root)
+            .status()
+            .map_err(|error| format!("failed to start Cargo for FFI generation: {error}"))?;
+        if !status.success() {
+            return Err(format!(
+                "FFI library and bindgen build failed with {status}"
+            ));
+        }
     }
     Ok(())
 }
@@ -145,7 +137,7 @@ fn install_outputs(
         source_package: FFI_PACKAGE.to_owned(),
         source_version: FFI_VERSION.to_owned(),
         source_sha256: ffi_source_sha256(source_root)?,
-        generator: "uniffi".to_owned(),
+        generator: BINDGEN.to_owned(),
         generator_version: BINDGEN_VERSION.to_owned(),
         language: language.to_owned(),
         outputs,
@@ -274,7 +266,7 @@ fn check_language(
         source_package: FFI_PACKAGE.to_owned(),
         source_version: FFI_VERSION.to_owned(),
         source_sha256: ffi_source_sha256(source_root)?,
-        generator: "uniffi".to_owned(),
+        generator: BINDGEN.to_owned(),
         generator_version: BINDGEN_VERSION.to_owned(),
         language: language.to_owned(),
         outputs,
@@ -292,6 +284,11 @@ fn ffi_source_sha256(root: &Path) -> Result<String, String> {
     let crate_dir = root.join("crates/sdk_ffi");
     let mut paths = vec![crate_dir.join("Cargo.toml"), crate_dir.join("README.md")];
     collect_files(&crate_dir.join("src"), &mut paths)?;
+    paths.push(root.join("tools/xtask/src/sdk_generation/bindings.rs"));
+    collect_files(
+        &root.join("tools/xtask/src/bin/radroots_ffi_bindgen"),
+        &mut paths,
+    )?;
     paths.sort();
     let mut hasher = Sha256::new();
     for path in paths {
@@ -335,7 +332,7 @@ mod tests {
     use crate::build_control::Mode;
 
     use super::{
-        BINDGEN_VERSION, FFI_PACKAGE, FFI_VERSION, SourceLock, check_generated_language,
+        BINDGEN, BINDGEN_VERSION, FFI_PACKAGE, FFI_VERSION, SourceLock, check_generated_language,
         ffi_source_sha256, generate,
     };
 
@@ -358,7 +355,7 @@ mod tests {
             source_package: FFI_PACKAGE.to_owned(),
             source_version: FFI_VERSION.to_owned(),
             source_sha256: ffi_source_sha256(&source).expect("FFI source digest"),
-            generator: "uniffi".to_owned(),
+            generator: BINDGEN.to_owned(),
             generator_version: BINDGEN_VERSION.to_owned(),
             language: "swift".to_owned(),
             outputs: outputs
@@ -390,11 +387,11 @@ mod tests {
         let expected = BTreeMap::from([
             (
                 "generated/swift/radroots_sdk.swift",
-                "38ff1a652ff49b45c48601d2b1c0064103c1e815df9e80604f3369af2e53f4ac",
+                "232932067903afb88fdb6f30714a35ef688b691da23b12ff98c07afdba3a3109",
             ),
             (
                 "generated/swift/radroots_sdkFFI.h",
-                "2efe02ecda4a68a495bacc61acf8ff41dc84bc01d9132a00b38353a57c51466a",
+                "03601cc25edbd4d3098460c828a55009b788cbf787864983f974db22db1e47e0",
             ),
             (
                 "generated/swift/radroots_sdkFFI.modulemap",
@@ -402,7 +399,7 @@ mod tests {
             ),
             (
                 "generated/kotlin/uniffi/radroots_sdk/radroots_sdk.kt",
-                "cc57260fade24a3b6d8366f06f17fb2d3132a0293cb61dd2a12d30d95f4a4e66",
+                "7d7a4955138d226ed0a73bb9070e34c585be4c2d11cc8e9b4f430ccbbebbfc55",
             ),
         ]);
         for (relative, expected_sha256) in expected {

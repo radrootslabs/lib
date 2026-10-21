@@ -4,12 +4,13 @@ use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand, ValueEnum};
 use std::fs;
 use uniffi_bindgen::bindings::{GenerateOptions, TargetLanguage};
+use uniffi_bindgen::interface::AsType;
 
 mod kotlin;
 mod swift;
 
 #[derive(Parser)]
-#[command(version = "0.32.2+radroots-native-v1")]
+#[command(version = "0.32.2+radroots-native-v2")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -86,7 +87,23 @@ fn main() -> Result<()> {
                         .map(|method| (object.name().to_owned(), method.is_async()))
                 })
                 .collect();
-            if methods.is_empty() {
+            let mut messages = Vec::new();
+            for error in ci
+                .enum_definitions()
+                .iter()
+                .filter(|e| ci.is_name_used_as_error(e.name()))
+            {
+                for variant in error.variants() {
+                    if let Some(field) = variant.fields().iter().find(|v| v.name() == "message") {
+                        ensure!(
+                            field.as_type() == uniffi_bindgen::interface::Type::String,
+                            "unsupported native error message type"
+                        );
+                        messages.push((error.name().to_owned(), variant.name().to_owned()));
+                    }
+                }
+            }
+            if methods.is_empty() && messages.is_empty() {
                 continue;
             }
             // This producer has no foreign renaming/package configuration. Fail
@@ -94,6 +111,7 @@ fn main() -> Result<()> {
             let path = stage.join(format!("uniffi/{0}/{0}.kt", ci.namespace()));
             let original = fs::read_to_string(&path).context("read Kotlin component")?;
             let generated = kotlin::preserve_close(&original, &methods)?;
+            let generated = kotlin::preserve_error_messages(&generated, &messages)?;
             fs::write(path, generated)?;
         }
     }
