@@ -7,7 +7,7 @@ rust_version = "1.99.0"
 edition = "2024"
 resolver = "3"
 public_package_count = 22
-package_count = 57
+package_count = 58
 digest_algorithm = "sha256-raw-bytes-v1"
 source_tree_digest_algorithm = "sha256-git-ls-tree-r-v1"
 native_introduction_tree_digest_algorithm = "sha256-git-tree-records-z-v1"
@@ -1423,6 +1423,24 @@ source_revision = "170ecf2b620107fadca85fcb11fbf3798b4ca1ef"
 source_path = "crates/replica_sync_wasm"
 source_tree_sha256 = "95f2a291066bab18c744f50a910feecc913dd50a4a3b6c9a464247695d8faffc"
 compatibility = ["wasm", "generated", "package_private"]
+replaces = []
+
+[[package]]
+name = "radroots_ffi"
+path = "crates/radroots_ffi"
+state = "active"
+tier = "boundary"
+visibility = "private_boundary"
+publish = false
+version = "0.1.0-alpha"
+license = "MIT OR Apache-2.0"
+platforms = ["native"]
+groups = ["coverage_required", "sdk", "boundaries"]
+owners = ["sdk"]
+permitted_dependency_tiers = ["facade"]
+provenance_kind = "native"
+introduction_tree_sha256 = "06ea28181dbf5bcf2033b7d8a9b30f5a0f8ceb60e4953664c5fcf127d37f3aca"
+compatibility = ["ffi", "generated", "package_private", "behavior"]
 replaces = []
 
 [[package]]

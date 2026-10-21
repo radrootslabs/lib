@@ -51,6 +51,7 @@ targets = [
   "x86_64-unknown-linux-gnu",
 ]
 packages = [
+  "radroots_ffi",
   "radroots_sdk_ffi",
   "radroots_storage_sqlite",
   "radroots_runtime_manager",

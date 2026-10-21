@@ -1,0 +1,38 @@
+[package]
+name = "radroots_native_binding_fixture"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.99.0"
+license = "MIT OR Apache-2.0"
+
+[workspace]
+
+# The producer is also a cdylib/staticlib and emits a fixed-name rlib. Keep
+# this standalone consumer's artifact closure separate from main-workspace
+# generator builds while leaving target-directory ownership with extbuild.
+[profile.native_binding_fixture]
+inherits = "dev"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+radroots_ffi = { path = "../.." }
+radroots = { path = "../../../radroots", default-features = false, features = ["native"] }
+radroots_domain = { path = "../../../domain", default-features = false, features = ["std"] }
+radroots_nostr = { path = "../../../nostr", default-features = false, features = ["signing", "nip17"] }
+radroots_secrets = { path = "../../../secrets", default-features = false, features = ["file"] }
+radroots_signing = { path = "../../../signing", default-features = false, features = ["chat", "std"] }
+radroots_storage = { path = "../../../storage", default-features = false, features = ["protected_outbox"] }
+radroots_storage_sqlite = { path = "../../../storage_sqlite" }
+radroots_transport = { path = "../../../transport", default-features = false, features = ["std"] }
+radroots_transport_nostr = { path = "../../../transport_nostr", default-features = false }
+futures = "=0.3.32"
+nostr = { version = "=0.44.7", default-features = false, features = ["std", "nip44", "nip59"] }
+serde_json = { version = "=1.0.149", features = ["raw_value"] }
+tempfile = "=3.23.0"
+thiserror = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "net", "time", "macros"] }
+tokio-tungstenite = "=0.28.0"
+uniffi = { version = "=0.32.2", default-features = false, features = ["tokio"] }

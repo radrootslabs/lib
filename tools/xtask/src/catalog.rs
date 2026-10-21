@@ -362,6 +362,8 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), String> {
             "radroots" => "crates/radroots".to_owned(),
             // shared_sdk_refactor.v1.json fixes the browser artifact-root path.
             "radroots_browser" => "crates/radroots_browser".to_owned(),
+            // The same approved decision fixes the concrete native boundary.
+            "radroots_ffi" => "crates/radroots_ffi".to_owned(),
             "xtask" => "tools/xtask".to_owned(),
             name => format!(
                 "crates/{}",

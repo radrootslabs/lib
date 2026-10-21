@@ -294,6 +294,7 @@ struct CoverageProfileRaw {
     features: Option<Vec<String>>,
     test_threads: Option<u32>,
     test_packages: Option<Vec<String>>,
+    test_manifest: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -302,6 +303,7 @@ struct CoverageProfile {
     features: Vec<String>,
     test_threads: Option<u32>,
     test_packages: Vec<String>,
+    test_manifest: Option<String>,
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -1186,6 +1188,7 @@ fn merge_coverage_profile(
         test_packages: overlay
             .test_packages
             .unwrap_or_else(|| base.test_packages.unwrap_or_default()),
+        test_manifest: overlay.test_manifest.or(base.test_manifest),
     }
 }
 
@@ -1202,6 +1205,7 @@ fn read_coverage_profile(
             features: Vec::new(),
             test_threads: None,
             test_packages: Vec::new(),
+            test_manifest: None,
         });
     }
     let parsed = parse_toml::<CoverageProfilesFile>(&path)?;
@@ -1227,7 +1231,15 @@ fn read_coverage_profile(
             "coverage profile for {crate_name} must set test_threads > 0"
         ));
     }
-    let workspace_packages = if resolved.test_packages.is_empty() {
+    let fixture = coverage_fixture_manifest(
+        workspace_root,
+        crate_name,
+        resolved.test_manifest.as_deref(),
+    )?;
+    let workspace_packages = if let Some(manifest) = fixture {
+        let parsed: PackageManifest = parse_toml(&manifest)?;
+        BTreeSet::from([parsed.package.name])
+    } else if resolved.test_packages.is_empty() {
         BTreeSet::new()
     } else {
         read_workspace_packages(workspace_root)?
@@ -1259,6 +1271,45 @@ fn read_coverage_profile(
         }
     }
     Ok(resolved)
+}
+
+fn coverage_fixture_manifest(
+    root: &Path,
+    crate_name: &str,
+    relative: Option<&str>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(relative) = relative else {
+        return Ok(None);
+    };
+    let package = read_workspace_packages(root)?
+        .into_iter()
+        .find(|(name, _)| name == crate_name)
+        .ok_or_else(|| format!("coverage fixture target {crate_name} is not a workspace package"))?
+        .1;
+    let path = Path::new(relative);
+    if !path
+        .components()
+        .all(|component| matches!(component, std::path::Component::Normal(_)))
+        || path.file_name().is_none_or(|name| name != "Cargo.toml")
+        || !path.starts_with(package.join("tests"))
+    {
+        return Err(
+            "coverage fixture manifest must be below the target package tests directory".to_owned(),
+        );
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|error| format!("resolve coverage root: {error}"))?;
+    let manifest = root
+        .join(path)
+        .canonicalize()
+        .map_err(|error| format!("resolve coverage fixture: {error}"))?;
+    if manifest != canonical_root.join(path) || !manifest.is_file() {
+        return Err(
+            "coverage fixture manifest must be a regular non-symlink source path".to_owned(),
+        );
+    }
+    Ok(Some(manifest))
 }
 
 pub fn read_lcov(path: &Path) -> Result<LcovCoverage, String> {
@@ -1740,6 +1791,15 @@ fn run_crate_with_runner_at_root(
 ) -> Result<(), String> {
     let crate_name = parse_string_arg(args, "crate")?;
     let profile = read_coverage_profile(workspace_root, &crate_name)?;
+    let fixture = coverage_fixture_manifest(
+        workspace_root,
+        &crate_name,
+        profile.test_manifest.as_deref(),
+    )?;
+    let test_root = fixture
+        .as_deref()
+        .and_then(Path::parent)
+        .unwrap_or(workspace_root);
     let out_dir = if let Some(raw) = parse_optional_string_arg(args, "out") {
         PathBuf::from(raw)
     } else {
@@ -1774,6 +1834,9 @@ fn run_crate_with_runner_at_root(
         {
             let mut cmd = coverage_llvm_cov_command();
             cmd.arg("-p").arg(&crate_name);
+            if fixture.is_some() {
+                cmd.arg("--dep-coverage").arg(&crate_name);
+            }
             for package in &profile.test_packages {
                 cmd.arg("-p").arg(package);
             }
@@ -1782,7 +1845,7 @@ fn run_crate_with_runner_at_root(
                 .arg("--branch")
                 .arg("--")
                 .arg(format!("--test-threads={test_threads}"))
-                .current_dir(workspace_root);
+                .current_dir(test_root);
             cmd
         },
         "cargo llvm-cov --no-report",
@@ -4181,6 +4244,113 @@ features = ["rt"]
     }
 
     #[test]
+    fn standalone_fixture_coverage_uses_the_owned_manifest_and_preserves_target_filters() {
+        let root = temp_dir_path("native_fixture_profile");
+        let fixture = root.join("crates/radroots_ffi/tests/native");
+        write_file(
+            &root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/radroots_ffi\"]\n",
+        );
+        write_file(
+            &root.join("crates/radroots_ffi/Cargo.toml"),
+            "[package]\nname = \"radroots_ffi\"\n",
+        );
+        write_file(
+            &fixture.join("Cargo.toml"),
+            "[package]\nname = \"radroots_native_binding_fixture\"\n[workspace]\n",
+        );
+        write_file(
+            &root.join("contracts/coverage-profiles.toml"),
+            "[profiles.crates.radroots_ffi]\ntest_manifest = \"crates/radroots_ffi/tests/native/Cargo.toml\"\ntest_packages = [\"radroots_native_binding_fixture\"]\nfeatures = [\"radroots_ffi/bindgen\"]\n",
+        );
+        let profile = read_coverage_profile(&root, "radroots_ffi").expect("owned fixture profile");
+        assert_eq!(profile.test_packages, ["radroots_native_binding_fixture"]);
+        let out = root.join("evidence");
+        let execution_root = fixture.canonicalize().expect("canonical fixture root");
+        let mut commands = Vec::new();
+        let mut runner = |command: Command, _: &str| {
+            let expected = if commands.len() == 1 {
+                execution_root.as_path()
+            } else {
+                root.as_path()
+            };
+            assert_eq!(command.get_current_dir(), Some(expected));
+            commands.push(
+                command
+                    .get_args()
+                    .map(|arg| arg.to_string_lossy().into_owned())
+                    .collect::<Vec<_>>(),
+            );
+            Ok(())
+        };
+        run_crate_with_runner_at_root(
+            &[
+                "--crate".into(),
+                "radroots_ffi".into(),
+                "--out".into(),
+                out.display().to_string(),
+            ],
+            &root,
+            &mut runner,
+        )
+        .expect("fixture commands");
+        assert_eq!(commands.len(), 5);
+        assert!(
+            commands[1]
+                .windows(2)
+                .any(|pair| pair == ["-p", "radroots_native_binding_fixture"])
+        );
+        assert!(
+            commands[1]
+                .windows(2)
+                .any(|pair| pair == ["--dep-coverage", "radroots_ffi"])
+        );
+        for command in commands.iter().skip(2) {
+            assert!(
+                command
+                    .windows(2)
+                    .any(|pair| pair == ["-p", "radroots_ffi"])
+            );
+            assert!(!command.iter().any(|arg| arg == "--dep-coverage"));
+        }
+        assert!(commands[2].iter().any(|arg| arg.contains("tests/")));
+        for path in [
+            "../Cargo.toml",
+            "/tmp/Cargo.toml",
+            "crates/other/tests/Cargo.toml",
+            "crates/radroots_ffi/tests/../Cargo.toml",
+            "crates/radroots_ffi/tests/missing/Cargo.toml",
+        ] {
+            assert!(
+                coverage_fixture_manifest(&root, "radroots_ffi", Some(path)).is_err(),
+                "{path}"
+            );
+        }
+        assert!(
+            coverage_fixture_manifest(
+                &root,
+                "unknown",
+                Some("crates/radroots_ffi/tests/native/Cargo.toml")
+            )
+            .is_err()
+        );
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(&fixture, root.join("crates/radroots_ffi/tests/linked"))
+                .expect("fixture symlink");
+            assert!(
+                coverage_fixture_manifest(
+                    &root,
+                    "radroots_ffi",
+                    Some("crates/radroots_ffi/tests/linked/Cargo.toml")
+                )
+                .is_err()
+            );
+        }
+        fs::remove_dir_all(root).expect("remove fixture profile");
+    }
+
+    #[test]
     fn coverage_profiles_accept_positive_test_threads() {
         let root = temp_dir_path("profile_positive_threads");
         let coverage_dir = root.join("contracts");
@@ -4671,6 +4841,7 @@ test_threads = 0
             features: vec!["std".to_string(), "serde".to_string()],
             test_threads: Some(2),
             test_packages: Vec::new(),
+            test_manifest: None,
         };
         let mut command = Command::new("cargo");
         apply_coverage_profile_flags(&mut command, &profile);

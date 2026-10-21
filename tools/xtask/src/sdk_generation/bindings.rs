@@ -12,7 +12,7 @@ use crate::{build_control::Mode, sdk_generation::fs::write_or_check};
 
 const FFI_PACKAGE: &str = "radroots_sdk_ffi";
 const FFI_VERSION: &str = "0.1.0-alpha";
-const BINDGEN_VERSION: &str = "0.29.5";
+const BINDGEN_VERSION: &str = "0.32.2";
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct SourceLock {

@@ -21,6 +21,12 @@ no_default_features = false
 features = ["native"]
 test_threads = 1
 
+[profiles.crates."radroots_ffi"]
+features = []
+test_manifest = "crates/radroots_ffi/tests/native/Cargo.toml"
+test_packages = ["radroots_native_binding_fixture"]
+test_threads = 1
+
 [profiles.crates."radroots_log"]
 no_default_features = true
 features = []

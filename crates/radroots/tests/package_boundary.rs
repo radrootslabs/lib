@@ -73,7 +73,14 @@ fn root_has_exact_exports_and_no_sdk_namespace() {
         "pub use radroots_execution::{\n    ArtifactObservation, BusinessInstallation, Delivery, DeliveryObservation, Issuance,\n    OperationKind, OperationReceipt, OperationStatus, OperationValue, RecoveryRequirement,\n    TargetObservation, WaitTermination,\n};"
     ));
     assert!(ROOT.contains("pub mod listings;"));
-    assert_eq!(ROOT.matches("pub use ").count(), 7);
+    assert!(ROOT.contains("pub use radroots_execution::session::SessionState;"));
+    assert!(
+        ROOT.contains(
+            "pub use radroots_execution::{Admission, Code, OperationContext, RetryClass};"
+        )
+    );
+    assert!(ROOT.contains("pub use radroots_protocol::command::CommandError;"));
+    assert_eq!(ROOT.matches("pub use ").count(), 10);
     assert!(README.contains("```compile_fail\nuse radroots::sdk;\n```"));
 }
 

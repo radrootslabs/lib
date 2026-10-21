@@ -1,0 +1,28 @@
+[package]
+name = "radroots_ffi"
+description = "Concrete native language boundary over the Radroots client"
+version = "0.1.0-alpha"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "README.md"
+publish = false
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[features]
+default = []
+
+[dependencies]
+radroots = { path = "../radroots", version = "=0.1.0-alpha", default-features = false, features = ["native"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+uniffi = { workspace = true, features = ["tokio"] }
+zeroize = { workspace = true, features = ["alloc"] }
+
+[lints]
+workspace = true

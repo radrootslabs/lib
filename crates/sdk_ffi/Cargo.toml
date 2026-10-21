@@ -24,7 +24,7 @@ radroots_event = { workspace = true, features = ["std"] }
 radroots_event_codec = { workspace = true, features = ["json", "std"] }
 radroots_sdk = { workspace = true, features = ["memory"] }
 thiserror = { workspace = true }
-uniffi = { workspace = true, features = ["cli"] }
+uniffi = { workspace = true, features = ["cli", "cargo-metadata"] }
 
 [dev-dependencies]
 serde_json = { workspace = true }

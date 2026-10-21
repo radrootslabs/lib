@@ -1,5 +1,5 @@
 schema = "radroots.workspace.platform-inventory.v1"
-catalog_sha256 = "12fe6f5f020e988da3fa6f37319ffe17bc64d16acb4dce7a5d9d539c06f6b8cb"
+catalog_sha256 = "424909855b2af1ffc8fa6bbfd5aa0e6d17642662c18212fef4660e71700fbfc8"
 
 [[platform]]
 id = "any"
@@ -7,7 +7,7 @@ packages = ["radroots", "radroots_blossom", "radroots_core", "radroots_domain", 
 
 [[platform]]
 id = "native"
-packages = ["radroots_core_bindings", "radroots_event_bindings", "radroots_geonames", "radroots_identity_bindings", "radroots_mesh", "radroots_mesh_agent_client", "radroots_nostrdb", "radroots_replica_schema_bindings", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_sdk_ffi", "radroots_secrets", "radroots_service_host", "radroots_service_sqlite", "radroots_simplex_app_store", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade_bindings", "radroots_transport_nostr", "radroots_transport_nostr_native", "radroots_transport_reticulum", "xtask"]
+packages = ["radroots_core_bindings", "radroots_event_bindings", "radroots_ffi", "radroots_geonames", "radroots_identity_bindings", "radroots_mesh", "radroots_mesh_agent_client", "radroots_nostrdb", "radroots_replica_schema_bindings", "radroots_replica_store", "radroots_replica_sync", "radroots_runtime_distribution", "radroots_runtime_manager", "radroots_runtime_paths", "radroots_sdk_ffi", "radroots_secrets", "radroots_service_host", "radroots_service_sqlite", "radroots_simplex_app_store", "radroots_simplex_smp_transport", "radroots_sql_core", "radroots_storage", "radroots_storage_sqlite", "radroots_sync", "radroots_trade_bindings", "radroots_transport_nostr", "radroots_transport_nostr_native", "radroots_transport_reticulum", "xtask"]
 
 [[platform]]
 id = "wasm32"
