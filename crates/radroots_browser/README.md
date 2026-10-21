@@ -25,6 +25,23 @@ and `Date.now`; do not combine it with another provider selection. Importing the
 module and constructing configuration perform no I/O. Native targets compile
 only host-independent task mechanics, not a browser client or fallback store.
 
-This private implementation is not yet a packed browser distribution. Generated
-JavaScript calls, scoped worker signer bridges and clean artifact installation
-require their own executable qualification.
+The `bindings` module generates local JavaScript handles and TypeScript
+declarations for listing, inquiry, operation observation/resume and explicit
+lifecycle calls. Its Rust constructors accept actual configured client and
+authenticated workspace handles. Foreign descriptors cannot create workspace
+authority. Inputs use the shared bounded parsers; IDs and times remain exact
+strings. Owned typed results retain independent admission, installation,
+issuance, delivery, wait, recovery and per-target provenance. String
+admission bounds UTF-16 before a Rust copy, rejects unpaired surrogates and
+checks the exact UTF-8 budget. Listing bytes are bounded before copying into
+WASM memory. Shared parsers remain the semantic authority. Presentation text
+copies have the foreign caller's lifetime; Rust retains zeroizing private data.
+Close the client explicitly before releasing its handles. Dropping or freeing
+one foreign wrapper does not complete asynchronous resource closure or undo
+accepted commands.
+
+The browser test package packs generated exports with a clearly synthetic
+Rust-authenticated host fixture for neutral TypeScript page/worker calls. That
+fixture is not a general host/custody factory or the complete SDK distribution.
+Scoped worker signer bridges and complete distribution remain separately
+qualified work.

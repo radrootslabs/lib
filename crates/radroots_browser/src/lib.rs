@@ -6,6 +6,8 @@
 mod tasks;
 
 #[cfg(target_arch = "wasm32")]
+pub mod bindings;
+#[cfg(target_arch = "wasm32")]
 mod client;
 #[cfg(all(target_arch = "wasm32", feature = "artifact_clock"))]
 mod clock;

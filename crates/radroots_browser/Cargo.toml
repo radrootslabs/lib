@@ -34,6 +34,8 @@ radroots_nostr = { workspace = true, features = ["signing", "nip17"] }
 radroots_protocol = { workspace = true, features = ["chat", "listing"] }
 radroots_secrets = { workspace = true, features = ["browser"] }
 js-sys = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc"] }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 web-sys = { workspace = true, features = ["Crypto"] }

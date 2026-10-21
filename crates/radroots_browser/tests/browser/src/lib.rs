@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod binding_fixture;
 use futures::FutureExt;
 use nostr::JsonUtil;
 use radroots_browser::{
