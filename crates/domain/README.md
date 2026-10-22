@@ -87,6 +87,47 @@ Private fulfillment data retains a required window, explicit pickup/delivery
 mode and bounded zeroizing address/instructions/contact. It has no public wire
 serialization and grants no agreement, destination or delivery authority.
 
+`Terms` retains complete immutable bilateral values: one through32 uniquely
+identified lines, one through8 uniquely identified private fulfillment groups,
+explicit participants, original listing revision/product/option snapshots,
+selected positive purchase amounts, fulfillment fee, aggregate cap and supply
+commitment. Every line names a declared group and a source coordinate for the
+named seller. Coordinate/revision bytes and snapshots remain unverified claims
+until independent authenticated source admission.
+
+`AgreementPrice` admits resolved fixed or absolute variable measurement terms;
+quote-required has no agreed-price representation. `AgreedFixedPrice` retains
+the selected rate/threshold, basis and discount independently of the unchanged
+public option. It uses the shared half-even primitive and refuses a selected
+threshold above the purchased amount. Lines validate original purchase rules
+and recompute the declared fixed total or explicit variable cap. `Terms` sums
+those checked maxima and the explicit fee in one currency within the money cap.
+Variable line bounds are explicit absolute values; construction performs no
+per-sale-unit scaling. Future promises retain a required expected window and
+bounded nonempty risk disclosure, with no physical hold. Cancellation and
+rounding identities are fixed by the supported value contract.
+
+Private terms, line/group data and supply promises expose borrowed accessors
+and redacted diagnostics, with no automatic serialization/deserialization.
+Their constructors grant no participant consent, installed agreement, signer
+permission or stock effect. Private wire/hash admission remains separate.
+
+Line and group identities cannot be substituted:
+
+```compile_fail
+use radroots_domain::{AgreementLineId, FulfillmentGroupId};
+let group = FulfillmentGroupId::from_bytes([0; 32]);
+let _: AgreementLineId = group;
+```
+
+Private terms have no automatic public wire encoder:
+
+```compile_fail
+fn encode(terms: &radroots_domain::Terms) {
+    let _ = serde_json::to_string(terms);
+}
+```
+
 Namespaces remain separate across native calls:
 
 ```compile_fail

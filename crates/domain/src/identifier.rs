@@ -116,6 +116,14 @@ identifier!(
     ListingOptionId,
     "An exact 256-bit public sale-option identifier."
 );
+identifier!(
+    AgreementLineId,
+    "An exact 256-bit line identity within an agreement lineage."
+);
+identifier!(
+    FulfillmentGroupId,
+    "An exact 256-bit private fulfillment-group identity."
+);
 identifier!(ThreadId, "An exact 256-bit private thread identifier.");
 identifier!(
     WorkspaceId,

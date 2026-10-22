@@ -1,5 +1,5 @@
 //! Immutable public values. Construction authenticates no source or installation.
-use super::{ListingError, ListingId, ListingTerms, text};
+use super::{ListingCoordinate, ListingError, ListingId, ListingRevision, ListingTerms, text};
 use crate::{EnvelopeEventId, PublicKey, UnixSeconds};
 use alloc::string::String;
 use core::fmt;
@@ -95,6 +95,10 @@ impl Listing {
     /// Exact signed event identity for this revision.
     pub const fn revision(&self) -> EnvelopeEventId {
         self.revision
+    }
+    /// Returns the exact structural source reference, without new source proof.
+    pub const fn source(&self) -> ListingRevision {
+        ListingRevision::new(ListingCoordinate::new(self.author, self.id), self.revision)
     }
     /// Original signed event time, not local installation or current time.
     pub const fn created_at(&self) -> UnixSeconds {

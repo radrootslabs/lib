@@ -10,6 +10,8 @@ use core::{fmt, str::FromStr};
 
 mod view;
 pub use view::{Listing, ListingText};
+mod reference;
+pub use reference::{ListingCoordinate, ListingRevision};
 mod price;
 pub use price::Price;
 mod media;

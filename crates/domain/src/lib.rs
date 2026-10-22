@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+mod agreement;
 mod amount;
 mod context;
 mod currency;
@@ -23,6 +24,10 @@ mod variable_price;
 /// The identity-owned validated participant key; no second key type is defined.
 pub use radroots_identity::PublicKey;
 
+pub use agreement::{
+    AgreedFixedPrice, AgreementLine, AgreementPrice, FulfillmentGroup, FuturePromise,
+    SupplyCommitment, Terms, TermsError,
+};
 pub use amount::{AmountError, Decimal, PositiveDecimal};
 pub use context::{
     ActorRef, ActorRole, Approval, AuthorityRef, CheckpointRef, CommandContextData, ContextError,
@@ -34,9 +39,10 @@ pub use currency::{
 };
 pub use fulfillment::{FulfillmentError, PrivateFulfillment};
 pub use identifier::{
-    ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId, ExecutorId, GrantId,
-    IdentifierError, ListingOptionId, MessageId, OperationId, OrderId, RecordId, RouteDigest,
-    SigningAttemptId, SourceId, ThreadId, TransactionId, WorkspaceId,
+    AgreementLineId, ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId,
+    ExecutorId, FulfillmentGroupId, GrantId, IdentifierError, ListingOptionId, MessageId,
+    OperationId, OrderId, RecordId, RouteDigest, SigningAttemptId, SourceId, ThreadId,
+    TransactionId, WorkspaceId,
 };
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};
 pub use message::{CHAT_MAX_BYTES, ChatMessage, ChatRelation, MessageError};

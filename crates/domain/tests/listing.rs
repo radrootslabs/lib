@@ -6,6 +6,9 @@ mod media;
 #[path = "support/listing_time.rs"]
 mod time;
 
+#[path = "support/agreement.rs"]
+mod agreement;
+
 #[test]
 fn public_text_has_shared_unicode_bounds_and_revision_data_rejects_inverted_time() {
     use radroots_domain::{EnvelopeEventId, PublicKey, UnixSeconds};
