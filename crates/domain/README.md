@@ -128,6 +128,42 @@ fn encode(terms: &radroots_domain::Terms) {
 }
 ```
 
+`CommerceContent` retains the19 supported logical record families as immutable
+private data before protocol-owned canonical record-ID computation. Its header
+requires distinct participants, a participant author, a positive sequence with
+the explicit first/later previous-link shape, and at most8 strictly sorted
+unique full parent digests. Fixed seller/buyer record roles are checked; all
+non-quote families require an order ID. Terms-bearing records match header
+participants and declare their exact listing sources. Each payload's required
+source references and the author's previous record must appear in the parent
+set. Source-array, line, text and parent bounds apply jointly; construction
+refuses missing references and never silently omits them to fit a limit.
+
+Complete payloads preserve typed terms digests, positive seller sequences,
+explicit authority claims, bounded line/measurement assertions, issue data and
+resolution proposals. Measurements cannot repeat or name a line outside their
+handover claim. Private text is zeroizing and diagnostics are redacted. There is
+no automatic serialization/deserialization, numeric Nostr rumor kind, ambient
+clock, signature or installed effect. An exact zero observation remains data;
+it never grants a movement, release or trusted measurement.
+
+Declared parent membership is not authenticated coverage. Actual parent
+author/thread/order/type/sequence continuity, counterparty consent, source and
+terms hashes, deadline readiness, measurement economics and cumulative business
+state remain separate admission/execution requirements. Record and terms
+digests remain distinct from unsigned chat rumors and signed carrier IDs.
+
+```compile_fail
+use radroots_domain::{RecordId, TermsDigest};
+let _: TermsDigest = RecordId::from_bytes([0; 32]);
+```
+
+```compile_fail
+fn encode(content: &radroots_domain::CommerceContent) {
+    let _ = serde_json::to_string(content);
+}
+```
+
 Namespaces remain separate across native calls:
 
 ```compile_fail

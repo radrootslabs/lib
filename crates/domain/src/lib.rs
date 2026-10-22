@@ -7,6 +7,7 @@ extern crate alloc;
 
 mod agreement;
 mod amount;
+mod commerce;
 mod context;
 mod currency;
 mod fulfillment;
@@ -29,6 +30,13 @@ pub use agreement::{
     SupplyCommitment, Terms, TermsError,
 };
 pub use amount::{AmountError, Decimal, PositiveDecimal};
+pub use commerce::{
+    AgreementCommitment, CancellationProposal, CommerceContent, CommerceError, CommerceHeader,
+    CommercePayload, CommerceType, FinalMeasurement, HandoverClaim, IssueCode, IssueReport,
+    LineQuantity, ProposalAuthorization, ReadinessClaim, ReceiptObservation, RecordReason,
+    ResidualRelease, Resolution, ResolutionCommitment, ResolutionProposal, TermsAuthorization,
+    TermsProposal, TermsQuote, TermsRequest, WithdrawalAcknowledgement,
+};
 pub use context::{
     ActorRef, ActorRole, Approval, AuthorityRef, CheckpointRef, CommandContextData, ContextError,
     CorrelationId, Coverage, ExpectedOrder, Generation, Sequence, UnixSeconds,
@@ -41,7 +49,7 @@ pub use fulfillment::{FulfillmentError, PrivateFulfillment};
 pub use identifier::{
     AgreementLineId, ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId,
     ExecutorId, FulfillmentGroupId, GrantId, IdentifierError, ListingOptionId, MessageId,
-    OperationId, OrderId, RecordId, RouteDigest, SigningAttemptId, SourceId, ThreadId,
+    OperationId, OrderId, RecordId, RouteDigest, SigningAttemptId, SourceId, TermsDigest, ThreadId,
     TransactionId, WorkspaceId,
 };
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};

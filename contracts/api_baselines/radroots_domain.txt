@@ -186,6 +186,68 @@ pub radroots_domain::ChatRelation::Reply
 pub radroots_domain::ChatRelation::Reply::parent: radroots_domain::MessageId
 impl core::fmt::Debug for radroots_domain::ChatRelation
 pub fn radroots_domain::ChatRelation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::CommerceError
+pub radroots_domain::CommerceError::InvalidAuthor
+pub radroots_domain::CommerceError::InvalidLines
+pub radroots_domain::CommerceError::InvalidMeasurements
+pub radroots_domain::CommerceError::InvalidOrder
+pub radroots_domain::CommerceError::InvalidParents
+pub radroots_domain::CommerceError::InvalidPrevious
+pub radroots_domain::CommerceError::InvalidReferences
+pub radroots_domain::CommerceError::InvalidSequence
+pub radroots_domain::CommerceError::InvalidText
+pub radroots_domain::CommerceError::MissingParent
+pub radroots_domain::CommerceError::PartiesCoincide
+pub radroots_domain::CommerceError::TermsPartiesMismatch
+impl core::error::Error for radroots_domain::CommerceError
+impl core::fmt::Display for radroots_domain::CommerceError
+pub fn radroots_domain::CommerceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::CommercePayload
+pub radroots_domain::CommercePayload::AgreementCommitted(radroots_domain::AgreementCommitment)
+pub radroots_domain::CommercePayload::CancellationAuthorized(radroots_domain::ProposalAuthorization)
+pub radroots_domain::CommercePayload::CancellationProposed(radroots_domain::CancellationProposal)
+pub radroots_domain::CommercePayload::Decline(radroots_domain::RecordReason)
+pub radroots_domain::CommercePayload::Handover(radroots_domain::HandoverClaim)
+pub radroots_domain::CommercePayload::Issue(radroots_domain::IssueReport)
+pub radroots_domain::CommercePayload::Quote(radroots_domain::TermsQuote)
+pub radroots_domain::CommercePayload::Ready(radroots_domain::ReadinessClaim)
+pub radroots_domain::CommercePayload::Receipt(radroots_domain::ReceiptObservation)
+pub radroots_domain::CommercePayload::Request(radroots_domain::TermsRequest)
+pub radroots_domain::CommercePayload::ResidualReleased(radroots_domain::ResidualRelease)
+pub radroots_domain::CommercePayload::ResolutionAuthorized(radroots_domain::ProposalAuthorization)
+pub radroots_domain::CommercePayload::ResolutionCommitted(radroots_domain::ResolutionCommitment)
+pub radroots_domain::CommercePayload::ResolutionProposed(radroots_domain::ResolutionProposal)
+pub radroots_domain::CommercePayload::TermsAuthorized(radroots_domain::TermsAuthorization)
+pub radroots_domain::CommercePayload::TermsProposed(radroots_domain::TermsProposal)
+pub radroots_domain::CommercePayload::TermsRejected(radroots_domain::RecordReason)
+pub radroots_domain::CommercePayload::WithdrawalAcknowledged(radroots_domain::WithdrawalAcknowledgement)
+pub radroots_domain::CommercePayload::WithdrawalRequested(radroots_domain::RecordReason)
+impl radroots_domain::CommercePayload
+pub const fn radroots_domain::CommercePayload::record_type(&self) -> radroots_domain::CommerceType
+impl core::fmt::Debug for radroots_domain::CommercePayload
+pub fn radroots_domain::CommercePayload::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::CommerceType
+pub radroots_domain::CommerceType::AgreementCommitted
+pub radroots_domain::CommerceType::CancellationAuthorized
+pub radroots_domain::CommerceType::CancellationProposed
+pub radroots_domain::CommerceType::Decline
+pub radroots_domain::CommerceType::Handover
+pub radroots_domain::CommerceType::Issue
+pub radroots_domain::CommerceType::Quote
+pub radroots_domain::CommerceType::Ready
+pub radroots_domain::CommerceType::Receipt
+pub radroots_domain::CommerceType::Request
+pub radroots_domain::CommerceType::ResidualReleased
+pub radroots_domain::CommerceType::ResolutionAuthorized
+pub radroots_domain::CommerceType::ResolutionCommitted
+pub radroots_domain::CommerceType::ResolutionProposed
+pub radroots_domain::CommerceType::TermsAuthorized
+pub radroots_domain::CommerceType::TermsProposed
+pub radroots_domain::CommerceType::TermsRejected
+pub radroots_domain::CommerceType::WithdrawalAcknowledged
+pub radroots_domain::CommerceType::WithdrawalRequested
+impl radroots_domain::CommerceType
+pub const fn radroots_domain::CommerceType::as_str(self) -> &'static str
 pub enum radroots_domain::ContentMeasure
 pub radroots_domain::ContentMeasure::Estimated
 pub radroots_domain::ContentMeasure::Estimated::quantity: radroots_domain::Quantity
@@ -227,6 +289,15 @@ pub radroots_domain::IdentifierError::InvalidLength
 impl core::error::Error for radroots_domain::IdentifierError
 impl core::fmt::Display for radroots_domain::IdentifierError
 pub fn radroots_domain::IdentifierError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::IssueCode
+pub radroots_domain::IssueCode::Collection
+pub radroots_domain::IssueCode::Excess
+pub radroots_domain::IssueCode::Other
+pub radroots_domain::IssueCode::Quality
+pub radroots_domain::IssueCode::Shortage
+pub radroots_domain::IssueCode::Substitution
+impl radroots_domain::IssueCode
+pub const fn radroots_domain::IssueCode::as_str(self) -> &'static str
 pub enum radroots_domain::MessageError
 pub radroots_domain::MessageError::LimitExceeded
 impl core::error::Error for radroots_domain::MessageError
@@ -329,6 +400,16 @@ pub const fn radroots_domain::AgreedFixedPrice::selected_tier_from(self) -> core
 pub fn radroots_domain::AgreedFixedPrice::total(self, radroots_domain::PositiveDecimal) -> core::result::Result<radroots_domain::Money, radroots_domain::TermsError>
 impl core::fmt::Debug for radroots_domain::AgreedFixedPrice
 pub fn radroots_domain::AgreedFixedPrice::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::AgreementCommitment
+impl radroots_domain::AgreementCommitment
+pub const fn radroots_domain::AgreementCommitment::authority(&self) -> radroots_domain::AuthorityRef
+pub const fn radroots_domain::AgreementCommitment::authorization(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::AgreementCommitment::base_agreement(&self) -> core::option::Option<radroots_domain::RecordId>
+pub fn radroots_domain::AgreementCommitment::new(core::option::Option<radroots_domain::RecordId>, radroots_domain::RecordId, radroots_domain::TermsDigest, radroots_domain::AuthorityRef, radroots_domain::Sequence) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::AgreementCommitment::seller_sequence(&self) -> radroots_domain::Sequence
+pub const fn radroots_domain::AgreementCommitment::terms_digest(&self) -> radroots_domain::TermsDigest
+impl core::fmt::Debug for radroots_domain::AgreementCommitment
+pub fn radroots_domain::AgreementCommitment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::AgreementLine
 impl radroots_domain::AgreementLine
 pub const fn radroots_domain::AgreementLine::amount(&self) -> radroots_domain::PositiveDecimal
@@ -387,6 +468,15 @@ impl radroots_domain::AuthorityRef
 pub const fn radroots_domain::AuthorityRef::executor_id(self) -> radroots_domain::ExecutorId
 pub const fn radroots_domain::AuthorityRef::generation(self) -> radroots_domain::Generation
 pub const fn radroots_domain::AuthorityRef::new(radroots_domain::ExecutorId, radroots_domain::Generation) -> Self
+pub struct radroots_domain::CancellationProposal
+impl radroots_domain::CancellationProposal
+pub const fn radroots_domain::CancellationProposal::agreement(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::CancellationProposal::expires_at(&self) -> radroots_domain::UnixSeconds
+pub fn radroots_domain::CancellationProposal::new(radroots_domain::RecordId, alloc::vec::Vec<radroots_domain::LineQuantity>, &str, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub fn radroots_domain::CancellationProposal::reason(&self) -> &str
+pub fn radroots_domain::CancellationProposal::residual(&self) -> &[radroots_domain::LineQuantity]
+impl core::fmt::Debug for radroots_domain::CancellationProposal
+pub fn radroots_domain::CancellationProposal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ChatMessage
 impl radroots_domain::ChatMessage
 pub const fn radroots_domain::ChatMessage::author(&self) -> radroots_identity::key::PublicKey
@@ -452,6 +542,31 @@ impl serde_core::ser::Serialize for radroots_domain::CommandDigest
 pub fn radroots_domain::CommandDigest::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::CommandDigest
 pub fn radroots_domain::CommandDigest::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::CommerceContent
+impl radroots_domain::CommerceContent
+pub const fn radroots_domain::CommerceContent::header(&self) -> &radroots_domain::CommerceHeader
+pub fn radroots_domain::CommerceContent::new(radroots_domain::CommerceHeader, radroots_domain::CommercePayload) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::CommerceContent::payload(&self) -> &radroots_domain::CommercePayload
+pub const fn radroots_domain::CommerceContent::profile(&self) -> &'static str
+pub const fn radroots_domain::CommerceContent::record_type(&self) -> radroots_domain::CommerceType
+pub const fn radroots_domain::CommerceContent::version(&self) -> u32
+impl core::fmt::Debug for radroots_domain::CommerceContent
+pub fn radroots_domain::CommerceContent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::CommerceHeader
+impl radroots_domain::CommerceHeader
+pub const radroots_domain::CommerceHeader::MAX_PARENTS: usize
+pub const fn radroots_domain::CommerceHeader::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::CommerceHeader::author_previous(&self) -> core::option::Option<radroots_domain::RecordId>
+pub const fn radroots_domain::CommerceHeader::author_sequence(&self) -> radroots_domain::Sequence
+pub const fn radroots_domain::CommerceHeader::buyer(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::CommerceHeader::created_at(&self) -> radroots_domain::UnixSeconds
+pub fn radroots_domain::CommerceHeader::new(radroots_domain::ThreadId, core::option::Option<radroots_domain::OrderId>, radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, radroots_domain::UnixSeconds, radroots_domain::Sequence, core::option::Option<radroots_domain::RecordId>, alloc::vec::Vec<radroots_domain::SourceId>) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::CommerceHeader::order_id(&self) -> core::option::Option<radroots_domain::OrderId>
+pub fn radroots_domain::CommerceHeader::parents(&self) -> &[radroots_domain::SourceId]
+pub const fn radroots_domain::CommerceHeader::seller(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::CommerceHeader::thread_id(&self) -> radroots_domain::ThreadId
+impl core::fmt::Debug for radroots_domain::CommerceHeader
+pub fn radroots_domain::CommerceHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::CorrelationId(_)
 impl radroots_domain::CorrelationId
 pub fn radroots_domain::CorrelationId::as_str(&self) -> &str
@@ -555,6 +670,14 @@ pub const fn radroots_domain::ExpectedOrder::order_id(&self) -> radroots_domain:
 pub const fn radroots_domain::ExpectedOrder::seller_sequence(&self) -> radroots_domain::Sequence
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ExpectedOrder
 pub fn radroots_domain::ExpectedOrder::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::FinalMeasurement
+impl radroots_domain::FinalMeasurement
+pub const fn radroots_domain::FinalMeasurement::line_id(self) -> radroots_domain::AgreementLineId
+pub const fn radroots_domain::FinalMeasurement::line_total(self) -> radroots_domain::Money
+pub const fn radroots_domain::FinalMeasurement::new(radroots_domain::AgreementLineId, radroots_domain::Quantity, radroots_domain::Money) -> Self
+pub const fn radroots_domain::FinalMeasurement::quantity(self) -> radroots_domain::Quantity
+impl core::fmt::Debug for radroots_domain::FinalMeasurement
+pub fn radroots_domain::FinalMeasurement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::FixedPrice
 impl radroots_domain::FixedPrice
 pub const radroots_domain::FixedPrice::MAX_TIERS: usize
@@ -621,12 +744,33 @@ impl serde_core::ser::Serialize for radroots_domain::GrantId
 pub fn radroots_domain::GrantId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::GrantId
 pub fn radroots_domain::GrantId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::HandoverClaim
+impl radroots_domain::HandoverClaim
+pub const fn radroots_domain::HandoverClaim::agreement(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::HandoverClaim::authority(&self) -> radroots_domain::AuthorityRef
+pub const fn radroots_domain::HandoverClaim::fulfillment_group(&self) -> radroots_domain::FulfillmentGroupId
+pub fn radroots_domain::HandoverClaim::lines(&self) -> &[radroots_domain::LineQuantity]
+pub fn radroots_domain::HandoverClaim::measurements(&self) -> &[radroots_domain::FinalMeasurement]
+pub fn radroots_domain::HandoverClaim::new(radroots_domain::RecordId, radroots_domain::FulfillmentGroupId, alloc::vec::Vec<radroots_domain::LineQuantity>, alloc::vec::Vec<radroots_domain::FinalMeasurement>, radroots_domain::UnixSeconds, radroots_domain::AuthorityRef, radroots_domain::Sequence) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::HandoverClaim::occurred_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::HandoverClaim::seller_sequence(&self) -> radroots_domain::Sequence
+impl core::fmt::Debug for radroots_domain::HandoverClaim
+pub fn radroots_domain::HandoverClaim::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::IssuanceWindow
 impl radroots_domain::IssuanceWindow
 pub fn radroots_domain::IssuanceWindow::capture(radroots_domain::UnixSeconds, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::ContextError>
 pub const fn radroots_domain::IssuanceWindow::first_issue_not_after(self) -> radroots_domain::UnixSeconds
 pub fn radroots_domain::IssuanceWindow::new(radroots_domain::UnixSeconds, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::ContextError>
 pub const fn radroots_domain::IssuanceWindow::prepared_at(self) -> radroots_domain::UnixSeconds
+pub struct radroots_domain::IssueReport
+impl radroots_domain::IssueReport
+pub const fn radroots_domain::IssueReport::code(&self) -> radroots_domain::IssueCode
+pub fn radroots_domain::IssueReport::description(&self) -> &str
+pub fn radroots_domain::IssueReport::lines(&self) -> &[radroots_domain::LineQuantity]
+pub fn radroots_domain::IssueReport::new(radroots_domain::IssueCode, &str, alloc::vec::Vec<radroots_domain::LineQuantity>, alloc::vec::Vec<radroots_domain::RecordId>) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub fn radroots_domain::IssueReport::source_records(&self) -> &[radroots_domain::RecordId]
+impl core::fmt::Debug for radroots_domain::IssueReport
+pub fn radroots_domain::IssueReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::LinePrice
 impl radroots_domain::LinePrice
 pub const fn radroots_domain::LinePrice::basis(self) -> radroots_domain::PositiveDecimal
@@ -636,6 +780,13 @@ pub const fn radroots_domain::LinePrice::selected_tier_from(self) -> core::optio
 pub const fn radroots_domain::LinePrice::total(self) -> radroots_domain::Money
 impl core::fmt::Debug for radroots_domain::LinePrice
 pub fn radroots_domain::LinePrice::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::LineQuantity
+impl radroots_domain::LineQuantity
+pub const fn radroots_domain::LineQuantity::amount(self) -> radroots_domain::Decimal
+pub const fn radroots_domain::LineQuantity::line_id(self) -> radroots_domain::AgreementLineId
+pub const fn radroots_domain::LineQuantity::new(radroots_domain::AgreementLineId, radroots_domain::Decimal) -> Self
+impl core::fmt::Debug for radroots_domain::LineQuantity
+pub fn radroots_domain::LineQuantity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ListingOptionId(_)
 impl radroots_domain::ListingOptionId
 pub const fn radroots_domain::ListingOptionId::as_bytes(&self) -> &[u8; 32]
@@ -763,6 +914,13 @@ pub fn radroots_domain::PrivateFulfillment::new(radroots_domain::listing::Fulfil
 pub const fn radroots_domain::PrivateFulfillment::window(&self) -> radroots_domain::Window
 impl core::fmt::Debug for radroots_domain::PrivateFulfillment
 pub fn radroots_domain::PrivateFulfillment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::ProposalAuthorization
+impl radroots_domain::ProposalAuthorization
+pub const fn radroots_domain::ProposalAuthorization::expires_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::ProposalAuthorization::new(radroots_domain::RecordId, radroots_domain::UnixSeconds) -> Self
+pub const fn radroots_domain::ProposalAuthorization::proposal(&self) -> radroots_domain::RecordId
+impl core::fmt::Debug for radroots_domain::ProposalAuthorization
+pub fn radroots_domain::ProposalAuthorization::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::Quantity
 impl radroots_domain::Quantity
 pub const fn radroots_domain::Quantity::amount(self) -> radroots_domain::Decimal
@@ -773,6 +931,25 @@ pub fn radroots_domain::Quantity::new(radroots_domain::Decimal, radroots_domain:
 pub const fn radroots_domain::Quantity::unit(self) -> radroots_domain::listing::MeasurementUnit
 impl core::fmt::Debug for radroots_domain::Quantity
 pub fn radroots_domain::Quantity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::ReadinessClaim
+impl radroots_domain::ReadinessClaim
+pub const fn radroots_domain::ReadinessClaim::agreement(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::ReadinessClaim::fulfillment_group(&self) -> radroots_domain::FulfillmentGroupId
+pub fn radroots_domain::ReadinessClaim::lines(&self) -> &[radroots_domain::LineQuantity]
+pub fn radroots_domain::ReadinessClaim::new(radroots_domain::RecordId, radroots_domain::FulfillmentGroupId, alloc::vec::Vec<radroots_domain::LineQuantity>, radroots_domain::Window) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::ReadinessClaim::window(&self) -> radroots_domain::Window
+impl core::fmt::Debug for radroots_domain::ReadinessClaim
+pub fn radroots_domain::ReadinessClaim::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::ReceiptObservation
+impl radroots_domain::ReceiptObservation
+pub const fn radroots_domain::ReceiptObservation::handover(&self) -> radroots_domain::RecordId
+pub fn radroots_domain::ReceiptObservation::lines(&self) -> &[radroots_domain::LineQuantity]
+pub fn radroots_domain::ReceiptObservation::new(radroots_domain::RecordId, alloc::vec::Vec<radroots_domain::LineQuantity>, core::option::Option<radroots_domain::RecordId>, radroots_domain::UnixSeconds, &str) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub fn radroots_domain::ReceiptObservation::note(&self) -> &str
+pub const fn radroots_domain::ReceiptObservation::occurred_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::ReceiptObservation::supersedes(&self) -> core::option::Option<radroots_domain::RecordId>
+impl core::fmt::Debug for radroots_domain::ReceiptObservation
+pub fn radroots_domain::ReceiptObservation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::RecordId(_)
 impl radroots_domain::RecordId
 pub const fn radroots_domain::RecordId::as_bytes(&self) -> &[u8; 32]
@@ -787,6 +964,50 @@ impl serde_core::ser::Serialize for radroots_domain::RecordId
 pub fn radroots_domain::RecordId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::RecordId
 pub fn radroots_domain::RecordId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::RecordReason
+impl radroots_domain::RecordReason
+pub fn radroots_domain::RecordReason::new(radroots_domain::RecordId, &str) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub fn radroots_domain::RecordReason::reason(&self) -> &str
+pub const fn radroots_domain::RecordReason::target(&self) -> radroots_domain::RecordId
+impl core::fmt::Debug for radroots_domain::RecordReason
+pub fn radroots_domain::RecordReason::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::ResidualRelease
+impl radroots_domain::ResidualRelease
+pub const fn radroots_domain::ResidualRelease::agreement(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::ResidualRelease::authority(&self) -> radroots_domain::AuthorityRef
+pub const fn radroots_domain::ResidualRelease::authorization(&self) -> radroots_domain::RecordId
+pub fn radroots_domain::ResidualRelease::new(radroots_domain::RecordId, radroots_domain::RecordId, radroots_domain::RecordId, alloc::vec::Vec<radroots_domain::LineQuantity>, radroots_domain::AuthorityRef, radroots_domain::Sequence) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::ResidualRelease::proposal(&self) -> radroots_domain::RecordId
+pub fn radroots_domain::ResidualRelease::residual(&self) -> &[radroots_domain::LineQuantity]
+pub const fn radroots_domain::ResidualRelease::seller_sequence(&self) -> radroots_domain::Sequence
+impl core::fmt::Debug for radroots_domain::ResidualRelease
+pub fn radroots_domain::ResidualRelease::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::Resolution
+impl radroots_domain::Resolution
+pub fn radroots_domain::Resolution::accepted_receipts(&self) -> &[radroots_domain::RecordId]
+pub fn radroots_domain::Resolution::issues(&self) -> &[radroots_domain::RecordId]
+pub fn radroots_domain::Resolution::new(alloc::vec::Vec<radroots_domain::RecordId>, alloc::vec::Vec<radroots_domain::RecordId>, alloc::vec::Vec<radroots_domain::LineQuantity>, &str) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub fn radroots_domain::Resolution::release_residual(&self) -> &[radroots_domain::LineQuantity]
+pub fn radroots_domain::Resolution::summary(&self) -> &str
+impl core::fmt::Debug for radroots_domain::Resolution
+pub fn radroots_domain::Resolution::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::ResolutionCommitment
+impl radroots_domain::ResolutionCommitment
+pub const fn radroots_domain::ResolutionCommitment::authority(&self) -> radroots_domain::AuthorityRef
+pub const fn radroots_domain::ResolutionCommitment::authorization(&self) -> radroots_domain::RecordId
+pub fn radroots_domain::ResolutionCommitment::new(radroots_domain::RecordId, radroots_domain::RecordId, radroots_domain::AuthorityRef, radroots_domain::Sequence) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::ResolutionCommitment::proposal(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::ResolutionCommitment::seller_sequence(&self) -> radroots_domain::Sequence
+impl core::fmt::Debug for radroots_domain::ResolutionCommitment
+pub fn radroots_domain::ResolutionCommitment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::ResolutionProposal
+impl radroots_domain::ResolutionProposal
+pub const fn radroots_domain::ResolutionProposal::agreement(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::ResolutionProposal::expires_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::ResolutionProposal::new(radroots_domain::RecordId, radroots_domain::Resolution, radroots_domain::UnixSeconds) -> Self
+pub const fn radroots_domain::ResolutionProposal::resolution(&self) -> &radroots_domain::Resolution
+impl core::fmt::Debug for radroots_domain::ResolutionProposal
+pub fn radroots_domain::ResolutionProposal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::RouteDigest(_)
 impl radroots_domain::RouteDigest
 pub const fn radroots_domain::RouteDigest::as_bytes(&self) -> &[u8; 32]
@@ -857,6 +1078,53 @@ pub const fn radroots_domain::Terms::seller(&self) -> radroots_identity::key::Pu
 pub const fn radroots_domain::Terms::supply(&self) -> &radroots_domain::SupplyCommitment
 impl core::fmt::Debug for radroots_domain::Terms
 pub fn radroots_domain::Terms::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::TermsAuthorization
+impl radroots_domain::TermsAuthorization
+pub const fn radroots_domain::TermsAuthorization::expires_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::TermsAuthorization::new(radroots_domain::RecordId, radroots_domain::TermsDigest, radroots_domain::UnixSeconds) -> Self
+pub const fn radroots_domain::TermsAuthorization::proposal(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::TermsAuthorization::terms_digest(&self) -> radroots_domain::TermsDigest
+impl core::fmt::Debug for radroots_domain::TermsAuthorization
+pub fn radroots_domain::TermsAuthorization::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::TermsDigest(_)
+impl radroots_domain::TermsDigest
+pub const fn radroots_domain::TermsDigest::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::TermsDigest::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::TermsDigest::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::TermsDigest
+pub fn radroots_domain::TermsDigest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::TermsDigest
+pub type radroots_domain::TermsDigest::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::TermsDigest::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::TermsDigest
+pub fn radroots_domain::TermsDigest::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::TermsDigest
+pub fn radroots_domain::TermsDigest::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::TermsProposal
+impl radroots_domain::TermsProposal
+pub const fn radroots_domain::TermsProposal::base_agreement(&self) -> core::option::Option<radroots_domain::RecordId>
+pub const fn radroots_domain::TermsProposal::expires_at(&self) -> radroots_domain::UnixSeconds
+pub fn radroots_domain::TermsProposal::new(core::option::Option<radroots_domain::RecordId>, radroots_domain::Terms, radroots_domain::UnixSeconds, &str) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub fn radroots_domain::TermsProposal::reason(&self) -> &str
+pub const fn radroots_domain::TermsProposal::terms(&self) -> &radroots_domain::Terms
+impl core::fmt::Debug for radroots_domain::TermsProposal
+pub fn radroots_domain::TermsProposal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::TermsQuote
+impl radroots_domain::TermsQuote
+pub const fn radroots_domain::TermsQuote::expires_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::TermsQuote::in_reply_to(&self) -> core::option::Option<radroots_domain::SourceId>
+pub fn radroots_domain::TermsQuote::new(radroots_domain::Terms, radroots_domain::UnixSeconds, core::option::Option<radroots_domain::SourceId>) -> Self
+pub const fn radroots_domain::TermsQuote::terms(&self) -> &radroots_domain::Terms
+impl core::fmt::Debug for radroots_domain::TermsQuote
+pub fn radroots_domain::TermsQuote::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::TermsRequest
+impl radroots_domain::TermsRequest
+pub const fn radroots_domain::TermsRequest::expires_at(&self) -> radroots_domain::UnixSeconds
+pub fn radroots_domain::TermsRequest::new(radroots_domain::Terms, radroots_domain::UnixSeconds, core::option::Option<radroots_domain::RecordId>) -> Self
+pub const fn radroots_domain::TermsRequest::quote(&self) -> core::option::Option<radroots_domain::RecordId>
+pub const fn radroots_domain::TermsRequest::terms(&self) -> &radroots_domain::Terms
+impl core::fmt::Debug for radroots_domain::TermsRequest
+pub fn radroots_domain::TermsRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ThreadId(_)
 impl radroots_domain::ThreadId
 pub const fn radroots_domain::ThreadId::as_bytes(&self) -> &[u8; 32]
@@ -924,6 +1192,13 @@ pub const fn radroots_domain::Window::start(self) -> radroots_domain::UnixSecond
 pub const fn radroots_domain::Window::timezone(self) -> radroots_domain::TimeZoneId
 impl core::fmt::Debug for radroots_domain::Window
 pub fn radroots_domain::Window::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::WithdrawalAcknowledgement
+impl radroots_domain::WithdrawalAcknowledgement
+pub fn radroots_domain::WithdrawalAcknowledgement::new(radroots_domain::RecordId, radroots_domain::Sequence) -> core::result::Result<Self, radroots_domain::CommerceError>
+pub const fn radroots_domain::WithdrawalAcknowledgement::seller_sequence(&self) -> radroots_domain::Sequence
+pub const fn radroots_domain::WithdrawalAcknowledgement::withdrawal(&self) -> radroots_domain::RecordId
+impl core::fmt::Debug for radroots_domain::WithdrawalAcknowledgement
+pub fn radroots_domain::WithdrawalAcknowledgement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::WorkspaceId(_)
 impl radroots_domain::WorkspaceId
 pub const fn radroots_domain::WorkspaceId::as_bytes(&self) -> &[u8; 32]

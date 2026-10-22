@@ -124,6 +124,10 @@ identifier!(
     FulfillmentGroupId,
     "An exact 256-bit private fulfillment-group identity."
 );
+identifier!(
+    TermsDigest,
+    "A canonical complete-terms commitment; bytes alone convey no consent."
+);
 identifier!(ThreadId, "An exact 256-bit private thread identifier.");
 identifier!(
     WorkspaceId,

@@ -6,13 +6,13 @@ use radroots_domain::{
     listing::*,
 };
 
-fn seller() -> PublicKey {
+pub(super) fn seller() -> PublicKey {
     PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").unwrap()
 }
-fn buyer() -> PublicKey {
+pub(super) fn buyer() -> PublicKey {
     PublicKey::from_hex("c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5").unwrap()
 }
-fn money(minor: &str) -> Money {
+pub(super) fn money(minor: &str) -> Money {
     Money::from_parts("CAD", minor, 2).unwrap()
 }
 fn source(author: PublicKey) -> ListingRevision {
@@ -21,7 +21,7 @@ fn source(author: PublicKey) -> ListingRevision {
         EnvelopeEventId::from_bytes([3; 32]),
     )
 }
-fn window() -> Window {
+pub(super) fn window() -> Window {
     Window::new(
         UnixSeconds::new(100).unwrap(),
         UnixSeconds::new(200).unwrap(),
@@ -29,7 +29,7 @@ fn window() -> Window {
     )
     .unwrap()
 }
-fn group(id: u8) -> FulfillmentGroup {
+pub(super) fn group(id: u8) -> FulfillmentGroup {
     FulfillmentGroup::new(
         FulfillmentGroupId::from_bytes([id; 32]),
         PrivateFulfillment::new(
@@ -90,7 +90,7 @@ fn line_with(
         total,
     )
 }
-fn line(id: u8, group: u8) -> AgreementLine {
+pub(super) fn line(id: u8, group: u8) -> AgreementLine {
     line_with(
         id,
         source(seller()),
@@ -104,7 +104,7 @@ fn line(id: u8, group: u8) -> AgreementLine {
     )
     .unwrap()
 }
-fn terms(
+pub(super) fn terms(
     lines: Vec<AgreementLine>,
     groups: Vec<FulfillmentGroup>,
     fee: Money,
