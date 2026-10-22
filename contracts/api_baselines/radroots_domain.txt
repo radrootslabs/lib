@@ -141,6 +141,14 @@ pub fn radroots_domain::ContextError::fmt(&self, &mut core::fmt::Formatter<'_>) 
 #[non_exhaustive] pub enum radroots_domain::Coverage
 pub radroots_domain::Coverage::Partial
 pub radroots_domain::Coverage::ScopeSatisfied
+#[non_exhaustive] pub enum radroots_domain::CurrencyError
+pub radroots_domain::CurrencyError::InvalidFormat
+pub radroots_domain::CurrencyError::UnsupportedCode
+impl core::convert::From<radroots_domain::CurrencyError> for radroots_domain::MoneyError
+pub fn radroots_domain::MoneyError::from(radroots_domain::CurrencyError) -> Self
+impl core::error::Error for radroots_domain::CurrencyError
+impl core::fmt::Display for radroots_domain::CurrencyError
+pub fn radroots_domain::CurrencyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::IdentifierError
 pub radroots_domain::IdentifierError::InvalidEncoding
 pub radroots_domain::IdentifierError::InvalidLength
@@ -152,6 +160,21 @@ pub radroots_domain::MessageError::LimitExceeded
 impl core::error::Error for radroots_domain::MessageError
 impl core::fmt::Display for radroots_domain::MessageError
 pub fn radroots_domain::MessageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::MoneyError
+pub radroots_domain::MoneyError::Currency(radroots_domain::CurrencyError)
+pub radroots_domain::MoneyError::CurrencyMismatch
+pub radroots_domain::MoneyError::ExponentMismatch
+pub radroots_domain::MoneyError::InvalidExponent
+pub radroots_domain::MoneyError::InvalidMinorFormat
+pub radroots_domain::MoneyError::MinorOutOfRange
+pub radroots_domain::MoneyError::NegativeResult
+pub radroots_domain::MoneyError::NonCanonicalMinor
+impl core::convert::From<radroots_domain::CurrencyError> for radroots_domain::MoneyError
+pub fn radroots_domain::MoneyError::from(radroots_domain::CurrencyError) -> Self
+impl core::error::Error for radroots_domain::MoneyError
+pub fn radroots_domain::MoneyError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_domain::MoneyError
+pub fn radroots_domain::MoneyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ActorRef
 impl radroots_domain::ActorRef
 pub const fn radroots_domain::ActorRef::grant_id(self) -> core::option::Option<radroots_domain::GrantId>
@@ -265,6 +288,21 @@ impl serde_core::ser::Serialize for radroots_domain::CorrelationId
 pub fn radroots_domain::CorrelationId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::CorrelationId
 pub fn radroots_domain::CorrelationId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::Currency
+impl radroots_domain::Currency
+pub const fn radroots_domain::Currency::code(self) -> &'static str
+pub const fn radroots_domain::Currency::exponent(self) -> u8
+pub fn radroots_domain::Currency::from_code(&str) -> core::result::Result<Self, radroots_domain::CurrencyError>
+pub fn radroots_domain::Currency::supported() -> impl core::iter::traits::iterator::Iterator<Item = Self> + core::clone::Clone
+impl core::fmt::Debug for radroots_domain::Currency
+pub fn radroots_domain::Currency::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::Currency
+pub type radroots_domain::Currency::Err = radroots_domain::CurrencyError
+pub fn radroots_domain::Currency::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::Currency
+pub fn radroots_domain::Currency::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Currency
+pub fn radroots_domain::Currency::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::Decimal
 impl radroots_domain::Decimal
 pub const radroots_domain::Decimal::MAX: Self
@@ -396,6 +434,42 @@ impl serde_core::ser::Serialize for radroots_domain::MessageId
 pub fn radroots_domain::MessageId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::MessageId
 pub fn radroots_domain::MessageId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::MinorAmount(_)
+impl radroots_domain::MinorAmount
+pub const radroots_domain::MinorAmount::MAX: Self
+pub const radroots_domain::MinorAmount::MAX_VALUE: u64
+pub const radroots_domain::MinorAmount::ZERO: Self
+pub const fn radroots_domain::MinorAmount::get(self) -> u64
+pub const fn radroots_domain::MinorAmount::new(u64) -> core::result::Result<Self, radroots_domain::MoneyError>
+impl core::convert::TryFrom<u64> for radroots_domain::MinorAmount
+pub type radroots_domain::MinorAmount::Error = radroots_domain::MoneyError
+pub fn radroots_domain::MinorAmount::try_from(u64) -> core::result::Result<Self, Self::Error>
+impl core::fmt::Debug for radroots_domain::MinorAmount
+pub fn radroots_domain::MinorAmount::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for radroots_domain::MinorAmount
+pub fn radroots_domain::MinorAmount::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::MinorAmount
+pub type radroots_domain::MinorAmount::Err = radroots_domain::MoneyError
+pub fn radroots_domain::MinorAmount::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::MinorAmount
+pub fn radroots_domain::MinorAmount::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::MinorAmount
+pub fn radroots_domain::MinorAmount::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::Money
+impl radroots_domain::Money
+pub fn radroots_domain::Money::checked_add(self, Self) -> core::result::Result<Self, radroots_domain::MoneyError>
+pub fn radroots_domain::Money::checked_sub(self, Self) -> core::result::Result<Self, radroots_domain::MoneyError>
+pub const fn radroots_domain::Money::currency(self) -> radroots_domain::Currency
+pub const fn radroots_domain::Money::exponent(self) -> u8
+pub fn radroots_domain::Money::from_parts(&str, &str, u8) -> core::result::Result<Self, radroots_domain::MoneyError>
+pub const fn radroots_domain::Money::minor(self) -> radroots_domain::MinorAmount
+pub const fn radroots_domain::Money::new(radroots_domain::Currency, radroots_domain::MinorAmount) -> Self
+impl core::fmt::Debug for radroots_domain::Money
+pub fn radroots_domain::Money::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_domain::Money
+pub fn radroots_domain::Money::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Money
+pub fn radroots_domain::Money::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::OperationId(_)
 impl radroots_domain::OperationId
 pub const fn radroots_domain::OperationId::as_bytes(&self) -> &[u8; 32]
@@ -567,4 +641,7 @@ pub fn radroots_domain::WorkspaceId::serialize<S: serde_core::ser::Serializer>(&
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::WorkspaceId
 pub fn radroots_domain::WorkspaceId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub const radroots_domain::CHAT_MAX_BYTES: usize
+pub const radroots_domain::CURRENCY_REGISTRY_ID: &str
+pub const radroots_domain::CURRENCY_REGISTRY_SHA256: &str
 pub const radroots_domain::FIRST_ISSUANCE_MAX_SECONDS: u64
+pub const radroots_domain::SUPPORTED_CURRENCY_COUNT: usize

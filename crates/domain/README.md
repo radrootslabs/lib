@@ -12,8 +12,16 @@ reject results outside the supported representation. No floating conversion
 or implicit rounding is available.
 
 The package supports `no_std`; `serde` and `std` are independent features.
-It performs no I/O, clock, randomness, storage or network work. Currency and
-economic rules remain separate implementation requirements.
+It performs no I/O, clock, randomness, storage or network work.
+
+`Currency` admits the 165 fixed supported currency/fund codes and their exact
+minor-unit exponents. Unknown codes and unavailable minor units never receive
+a guessed exponent. `MinorAmount` admits canonical integer strings up to
+999999999999999. `Money` checks the explicit wire exponent against that registry
+and performs checked signed 128-bit addition/subtraction within one currency.
+JSON minor amounts remain strings; private monetary diagnostics are redacted.
+Pricing, rounding, complete agreement terms and command effects remain separate
+implementation requirements. Explicit zero money does not imply a price mode.
 
 Order, thread, workspace, executor and operation IDs have distinct Rust types.
 Each stores 32 bytes and uses exactly 64 lowercase hexadecimal characters in
@@ -59,4 +67,8 @@ empty text and Unicode contents are preserved exactly. Private text uses
 zeroizing owned storage and redacted diagnostics, with no automatic payload
 serialization. Constructing a value proves no signature, history or installation.
 
-Licensed under MIT OR Apache-2.0; see LICENSE-MIT and LICENSE-APACHE.
+Crate-owned Rust is licensed under MIT OR Apache-2.0; see LICENSE-MIT and
+LICENSE-APACHE. The minimal derived currency data retains its upstream
+Apache-2.0 license, copyright and attribution in
+`data/currency_registry_v1.license` and `data/currency_registry_v1.notice`.
+No upstream Rust/generator, country/name data or official XML is included.

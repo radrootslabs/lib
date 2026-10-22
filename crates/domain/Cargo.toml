@@ -10,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 description = "Exact values and deterministic shared Radroots domain invariants"
 readme = "README.md"
-include = ["src/**", "tests/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+include = ["src/**", "tests/**", "data/**", "Cargo.toml", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 
 [features]
 default = ["std", "serde"]

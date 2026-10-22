@@ -7,10 +7,12 @@ fn public_text_has_shared_unicode_bounds_and_revision_data_rejects_inverted_time
     let summary = "é".repeat(280);
     let body = " ".repeat(16_384);
     let value = ListingText::new(&title, &summary, &body).unwrap();
+    #[cfg(feature = "serde")]
     assert_eq!(
         serde_json::to_value(&value).unwrap(),
         serde_json::json!({"title":title,"summary":summary,"description_markdown":body})
     );
+    assert!(!format!("{value:?}").contains('🥕'));
     for (title, summary, body) in [
         ("🥕".repeat(161), "summary".into(), String::new()),
         ("title".into(), "é".repeat(281), String::new()),
@@ -135,6 +137,7 @@ fn spare_caller_capacity_preserves_exact_terms_and_default_selection() {
         expanded.default_option().id(),
         ListingOptionId::from_bytes([2; 32])
     );
+    #[cfg(feature = "serde")]
     assert_eq!(
         serde_json::to_vec(&expanded).unwrap(),
         serde_json::to_vec(&expected).unwrap()

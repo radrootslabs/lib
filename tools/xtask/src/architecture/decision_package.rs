@@ -10,6 +10,8 @@ use serde::Deserialize;
 const CONTRACT: &str = "contracts/architecture/decisions/shared_sdk_refactor.v1.json";
 const MAX_BYTES: usize = 65_536;
 
+mod currency_registry;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Policy {
@@ -210,7 +212,8 @@ pub(super) fn validate(workspace_root: &Path) -> Result<(), String> {
         MAX_BYTES as u64,
     )
     .map_err(|_| "shared SDK contract: bounded regular source admission failed".to_owned())?;
-    validate_bytes(&raw)
+    validate_bytes(&raw)?;
+    currency_registry::validate(workspace_root)
 }
 
 fn require(condition: bool, rule: &'static str) -> Result<(), String> {

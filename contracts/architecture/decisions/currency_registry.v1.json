@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots.currency_registry.v1",
+  "state": "pinned_data_source",
+  "registry_id": "radroots.currency_registry.v1",
+  "implementation": "independent_rust_api_over_minimal_pinned_data",
+  "upstream": {
+    "repository": "https://github.com/rust-iso/rust_iso4217",
+    "revision": "ce6b74546b3645ce11866acc93117128d2f7b1e0",
+    "path": "src/lib.rs",
+    "sha256": "7401727ea4da05fcbf0d1d679705c0245989e83dbc697e831066f992875e183d",
+    "license": "Apache-2.0",
+    "license_sha256": "665618a8c4b9ef6ceafb35482a3e010834fae9e9cbb22041b74310bcc52ac500",
+    "copyright": "Copyright 2023-2026 rust_iso4217 contributors"
+  },
+  "data": {
+    "path": "crates/domain/data/currency_registry_v1.csv",
+    "sha256": "60d8282b2d7ddc27929b097d4de9e76a900a64f1de4a5aa7a4cb3308b55b82d0",
+    "entries": 165,
+    "minimum_exponent": 0,
+    "maximum_exponent": 4,
+    "current_currency_and_funds_only": true,
+    "historic_entries_excluded": true,
+    "no_minor_unit_entries_excluded": true,
+    "guessed_default_exponents_allowed": false
+  },
+  "notices": {
+    "license_path": "crates/domain/data/currency_registry_v1.license",
+    "license_sha256": "665618a8c4b9ef6ceafb35482a3e010834fae9e9cbb22041b74310bcc52ac500",
+    "notice_path": "crates/domain/data/currency_registry_v1.notice",
+    "notice_sha256": "c43ef0d0f9d6f64656ca6a619c3c43cd9cc2b378217ab19a083ca92255a91d7d",
+    "source_distribution_required": true,
+    "derived_artifact_inclusion_required_before_adoption": true,
+    "crate_owned_rust_license_unchanged": true
+  },
+  "independent_crosscheck": {
+    "authority": "SIX ISO 4217 Maintenance Agency",
+    "url": "https://www.six-group.com/dam/download/financial-information/data-center/iso-currrency/lists/list-one.xml",
+    "publication_date": "2026-09-17",
+    "source_sha256": "33139b438657d1cee116ba737807ea71d19d6de4b90f799a09c56f0cc6a1b0ff",
+    "all_selected_pairs_equal": true,
+    "official_xml_redistributed": false
+  },
+  "limits": {
+    "runtime_io_allowed": false,
+    "automatic_updates_allowed": false,
+    "exchange_or_payment_semantics_allowed": false,
+    "qualified_economics_or_agreement_authoring_claimed": false
+  }
+}

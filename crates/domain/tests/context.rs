@@ -1,5 +1,6 @@
 use radroots_domain::*;
 use radroots_identity::PublicKey;
+#[cfg(feature = "serde")]
 use serde_json::{Value, json};
 use std::str::FromStr;
 
@@ -45,19 +46,23 @@ fn exact_integers_never_round_or_accept_numeric_json_coercions() {
         let sequence = Sequence::new(value).unwrap();
         assert_eq!(sequence.get(), value);
         assert_eq!(sequence.to_string().parse::<Sequence>(), Ok(sequence));
-        assert_eq!(
-            serde_json::to_value(sequence).unwrap(),
-            json!(value.to_string())
-        );
-        assert_eq!(
-            serde_json::from_value::<Sequence>(json!(value.to_string())).unwrap(),
-            sequence
-        );
-        assert!(serde_json::from_value::<Sequence>(json!(value)).is_err());
+        #[cfg(feature = "serde")]
+        {
+            assert_eq!(
+                serde_json::to_value(sequence).unwrap(),
+                json!(value.to_string())
+            );
+            assert_eq!(
+                serde_json::from_value::<Sequence>(json!(value.to_string())).unwrap(),
+                sequence
+            );
+            assert!(serde_json::from_value::<Sequence>(json!(value)).is_err());
+        }
         if value > 0 {
             let generation = Generation::new(value).unwrap();
             assert_eq!(generation.get(), value);
             assert_eq!(generation.to_string().parse::<Generation>(), Ok(generation));
+            #[cfg(feature = "serde")]
             assert_eq!(
                 serde_json::from_value::<Generation>(json!(value.to_string())).unwrap(),
                 generation
@@ -80,6 +85,7 @@ fn exact_integers_never_round_or_accept_numeric_json_coercions() {
     ] {
         assert!(text.parse::<Sequence>().is_err(), "{text:?}");
         assert!(text.parse::<Generation>().is_err());
+        #[cfg(feature = "serde")]
         assert!(serde_json::from_value::<Sequence>(json!(text)).is_err());
     }
     assert!(Generation::new(0).is_err());
@@ -90,33 +96,41 @@ fn exact_integers_never_round_or_accept_numeric_json_coercions() {
         let timestamp = UnixSeconds::new(value).unwrap();
         assert_eq!(timestamp.get(), value);
         assert_eq!(timestamp.to_string().parse::<UnixSeconds>(), Ok(timestamp));
-        assert_eq!(
-            serde_json::from_value::<UnixSeconds>(json!(value.to_string())).unwrap(),
-            timestamp
-        );
-        assert_eq!(
-            serde_json::to_value(timestamp).unwrap(),
-            json!(value.to_string())
-        );
+        #[cfg(feature = "serde")]
+        {
+            assert_eq!(
+                serde_json::from_value::<UnixSeconds>(json!(value.to_string())).unwrap(),
+                timestamp
+            );
+            assert_eq!(
+                serde_json::to_value(timestamp).unwrap(),
+                json!(value.to_string())
+            );
+        }
     }
     assert!(UnixSeconds::new(253_402_300_800).is_err());
     assert!("253402300800".parse::<UnixSeconds>().is_err());
+    #[cfg(feature = "serde")]
     assert!(serde_json::from_value::<UnixSeconds>(json!(1)).is_err());
 }
 
 #[test]
 fn captured_descriptors_preserve_every_field_and_explicit_null() {
     let data = context();
-    let wire = serde_json::to_value(&data).unwrap();
-    assert_eq!(wire["operation_id"], json!("01".repeat(32)));
-    assert_eq!(wire["authority"]["generation"], json!("9007199254740993"));
-    for name in ["approval", "expected", "correlation_id"] {
-        assert!(wire[name].is_null());
-    }
-    assert_eq!(
-        serde_json::from_value::<CommandContextData>(wire.clone()).unwrap(),
-        data
-    );
+    #[cfg(feature = "serde")]
+    let wire = {
+        let wire = serde_json::to_value(&data).unwrap();
+        assert_eq!(wire["operation_id"], json!("01".repeat(32)));
+        assert_eq!(wire["authority"]["generation"], json!("9007199254740993"));
+        for name in ["approval", "expected", "correlation_id"] {
+            assert!(wire[name].is_null());
+        }
+        assert_eq!(
+            serde_json::from_value::<CommandContextData>(wire.clone()).unwrap(),
+            data
+        );
+        wire
+    };
     assert_eq!(data.operation_id(), OperationId::from_bytes([1; 32]));
     assert_eq!(data.actor(), actor());
     assert_eq!(data.workspace_id(), WorkspaceId::from_bytes([2; 32]));
@@ -137,31 +151,34 @@ fn captured_descriptors_preserve_every_field_and_explicit_null() {
     assert_eq!(data.actor().role(), ActorRole::Buyer);
     assert_eq!(data.actor().organization(), None);
     assert_eq!(data.actor().grant_id(), Some(GrantId::from_bytes([4; 32])));
-    for field in ["approval", "expected", "correlation_id"] {
-        let mut missing = wire.clone();
-        missing.as_object_mut().unwrap().remove(field);
-        assert!(
-            serde_json::from_value::<CommandContextData>(missing).is_err(),
-            "required {field}"
-        );
+    #[cfg(feature = "serde")]
+    {
+        for field in ["approval", "expected", "correlation_id"] {
+            let mut missing = wire.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<CommandContextData>(missing).is_err(),
+                "required {field}"
+            );
+        }
+        for field in ["organization", "grant_id"] {
+            let mut missing = wire.clone();
+            missing["actor"].as_object_mut().unwrap().remove(field);
+            assert!(
+                serde_json::from_value::<CommandContextData>(missing).is_err(),
+                "required actor {field}"
+            );
+        }
+        let raw = serde_json::to_string(&data).unwrap();
+        let duplicate = format!("{{\"operation_id\":\"{}\",{}", "ff".repeat(32), &raw[1..]);
+        assert!(serde_json::from_str::<CommandContextData>(&duplicate).is_err());
+        let mut unknown = wire.clone();
+        unknown["authenticated"] = json!(true);
+        assert!(serde_json::from_value::<CommandContextData>(unknown).is_err());
+        let mut unknown = wire;
+        unknown["actor"]["role"] = json!("operator");
+        assert!(serde_json::from_value::<CommandContextData>(unknown).is_err());
     }
-    for field in ["organization", "grant_id"] {
-        let mut missing = wire.clone();
-        missing["actor"].as_object_mut().unwrap().remove(field);
-        assert!(
-            serde_json::from_value::<CommandContextData>(missing).is_err(),
-            "required actor {field}"
-        );
-    }
-    let raw = serde_json::to_string(&data).unwrap();
-    let duplicate = format!("{{\"operation_id\":\"{}\",{}", "ff".repeat(32), &raw[1..]);
-    assert!(serde_json::from_str::<CommandContextData>(&duplicate).is_err());
-    let mut unknown = wire.clone();
-    unknown["authenticated"] = json!(true);
-    assert!(serde_json::from_value::<CommandContextData>(unknown).is_err());
-    let mut unknown = wire;
-    unknown["actor"]["role"] = json!("operator");
-    assert!(serde_json::from_value::<CommandContextData>(unknown).is_err());
     assert!(!format!("{data:?}").contains(KEY));
 }
 
@@ -200,29 +217,32 @@ fn complete_preconditions_and_approval_data_remain_untrusted_bounded_values() {
         expected.checkpoint().missing(),
         &[SourceId::from_bytes([9; 32])]
     );
-    let mut wire = serde_json::to_value(context()).unwrap();
-    wire["approval"] = serde_json::to_value(&approval).unwrap();
-    wire["expected"] = serde_json::to_value(&expected).unwrap();
-    wire["correlation_id"] = json!("synthetic diagnostic");
-    let data: CommandContextData = serde_json::from_value(wire.clone()).unwrap();
-    assert_eq!(data.approval(), Some(&approval));
-    assert_eq!(data.expected(), Some(&expected));
-    assert_eq!(
-        data.correlation_id().unwrap().as_str(),
-        "synthetic diagnostic"
-    );
-    assert_eq!(serde_json::to_value(&data).unwrap(), wire);
-    for field in ["agreement", "buyer_head"] {
-        let mut missing = wire.clone();
-        missing["expected"].as_object_mut().unwrap().remove(field);
-        assert!(serde_json::from_value::<CommandContextData>(missing).is_err());
+    #[cfg(feature = "serde")]
+    {
+        let mut wire = serde_json::to_value(context()).unwrap();
+        wire["approval"] = serde_json::to_value(&approval).unwrap();
+        wire["expected"] = serde_json::to_value(&expected).unwrap();
+        wire["correlation_id"] = json!("synthetic diagnostic");
+        let data: CommandContextData = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(data.approval(), Some(&approval));
+        assert_eq!(data.expected(), Some(&expected));
+        assert_eq!(
+            data.correlation_id().unwrap().as_str(),
+            "synthetic diagnostic"
+        );
+        assert_eq!(serde_json::to_value(&data).unwrap(), wire);
+        for field in ["agreement", "buyer_head"] {
+            let mut missing = wire.clone();
+            missing["expected"].as_object_mut().unwrap().remove(field);
+            assert!(serde_json::from_value::<CommandContextData>(missing).is_err());
+        }
+        for nested in ["authority", "approval", "expected"] {
+            let mut changed = wire.clone();
+            changed[nested]["extra"] = Value::Bool(true);
+            assert!(serde_json::from_value::<CommandContextData>(changed).is_err());
+        }
+        assert!(!format!("{data:?}").contains("synthetic diagnostic"));
     }
-    for nested in ["authority", "approval", "expected"] {
-        let mut changed = wire.clone();
-        changed[nested]["extra"] = Value::Bool(true);
-        assert!(serde_json::from_value::<CommandContextData>(changed).is_err());
-    }
-    assert!(!format!("{data:?}").contains("synthetic diagnostic"));
     assert!(!format!("{approval:?}").contains("orders.accept"));
 }
 
@@ -231,13 +251,16 @@ fn bounds_and_coverage_claims_fail_without_echoing_sensitive_text() {
     assert!(CorrelationId::new("é".repeat(64)).is_ok());
     assert!(CorrelationId::new("é".repeat(65)).is_err());
     assert!(CorrelationId::new("diagnostic\nsecret").is_err());
-    assert_eq!(
-        serde_json::from_str::<CorrelationId>("\"hello\"")
-            .unwrap()
-            .as_str(),
-        "hello"
-    );
-    assert!(serde_json::from_value::<CorrelationId>(json!("x".repeat(129))).is_err());
+    #[cfg(feature = "serde")]
+    {
+        assert_eq!(
+            serde_json::from_str::<CorrelationId>("\"hello\"")
+                .unwrap()
+                .as_str(),
+            "hello"
+        );
+        assert!(serde_json::from_value::<CorrelationId>(json!("x".repeat(129))).is_err());
+    }
     assert!(
         !format!("{:?}", CorrelationId::new("private diagnostic").unwrap())
             .contains("private diagnostic")
@@ -292,7 +315,10 @@ fn bounds_and_coverage_claims_fail_without_echoing_sensitive_text() {
         ContextError::InconsistentCoverage
     );
     assert!(CheckpointRef::new(digest, sequence, Coverage::ScopeSatisfied, vec![]).is_ok());
-    let mut invalid = serde_json::to_value(context()).unwrap();
-    invalid["not_after"] = json!("0");
-    assert!(serde_json::from_value::<CommandContextData>(invalid).is_err());
+    #[cfg(feature = "serde")]
+    {
+        let mut invalid = serde_json::to_value(context()).unwrap();
+        invalid["not_after"] = json!("0");
+        assert!(serde_json::from_value::<CommandContextData>(invalid).is_err());
+    }
 }
