@@ -49,7 +49,11 @@ positional arrays, and the closed typed decoder rejects duplicate, missing and
 unknown fields. Up to eight complete media-reference objects retain exact
 URL/digest/MIME/alt claims; missing, malformed or excessive references are
 refused. Media never activates fetching, uploading or a decoder. Estimated
-supply/windows remain unsupported.
+supply retains its exact nonnegative amount and a required nullable absolute
+window. Windows require strictly ordered Unix-second strings and an exact known
+IANA zone from the pinned dataset; missing fields, positional arrays, duplicates,
+noncanonical zones and extra offset/fold/wall-time claims are refused. Estimates
+do not provide stock, reservation or freshness authority.
 Only the fixed default contributes a three-field NIP-99 base-rate `price` tag;
 the monetary summary identifies its basis, unit, discount and tier conditions.
 Variable bounds/caps stay explicit in the profile and summary. No recurring
@@ -66,7 +70,7 @@ with at most nine tags and19 fields shared by signer and storage admission.
 | `nip01` | no | enables pure exact NIP-01 serialization and complete byte counting |
 | `intent` | no | enables pure domain-separated v1 signing commitment data |
 | `chat` | no | enables commands, NIP-01 and the bounded known-kind chat/plan data profile |
-| `listing` | no | enables portable typed quote-required listing input and exact public profile/event production |
+| `listing` | no | enables portable complete listing input and exact public profile/event production |
 
 The listing producer emits one canonical `radroots.listing` version-1 profile,
 explicit default units and no fabricated price. Paused/withdrawn projections
@@ -74,10 +78,9 @@ keep the same addressable coordinate, state non-availability in summary and
 content, and omit a standard status that cannot represent that state. Complete
 signed-event framing is bounded to 64 KiB before the canonical preimage is
 allocated. Canonical profile ordering remains explicit when a consumer enables
-JSON insertion-order preservation. The early producer supports unspecified
-package contents, unknown/available public supply and empty media. Full prices,
-registered currencies and the remaining profile modes require their own
-validated implementation. Pure input/preimage construction supplies no workspace
+JSON insertion-order preservation. The producer retains all implemented price,
+package-content and public-supply modes, including estimated supply windows,
+and the explicit media list. Pure input/preimage construction supplies no workspace
 permission, durable preparation, signature, installed record or delivery receipt.
 
 Disabling default features leaves the catalog and structural validation APIs

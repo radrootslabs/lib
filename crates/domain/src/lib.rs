@@ -8,6 +8,7 @@ extern crate alloc;
 mod amount;
 mod context;
 mod currency;
+mod fulfillment;
 mod identifier;
 mod issuance;
 /// Validated public-offer values; these establish no stock or command authority.
@@ -16,6 +17,7 @@ mod message;
 mod money;
 mod pricing;
 mod quantity;
+mod time;
 mod variable_price;
 
 /// The identity-owned validated participant key; no second key type is defined.
@@ -30,6 +32,7 @@ pub use currency::{
     CURRENCY_REGISTRY_ID, CURRENCY_REGISTRY_SHA256, Currency, CurrencyError,
     SUPPORTED_CURRENCY_COUNT,
 };
+pub use fulfillment::{FulfillmentError, PrivateFulfillment};
 pub use identifier::{
     ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId, ExecutorId, GrantId,
     IdentifierError, ListingOptionId, MessageId, OperationId, OrderId, RecordId, RouteDigest,
@@ -43,4 +46,5 @@ pub use pricing::{
     checked_order_total,
 };
 pub use quantity::{ContentMeasure, Quantity, QuantityError};
+pub use time::{TIME_ZONE_DATABASE_VERSION, TimeError, TimeZoneId, Window};
 pub use variable_price::VariableWeight;

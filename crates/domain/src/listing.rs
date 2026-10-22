@@ -3,7 +3,7 @@
 
 use crate::{
     AuthorityRef, ContentMeasure, Decimal, LinePrice, ListingOptionId, PositiveDecimal,
-    PricingError, PublicKey, Sequence,
+    PricingError, PublicKey, Sequence, Window,
 };
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{fmt, str::FromStr};
@@ -275,6 +275,13 @@ pub enum Supply {
         /// Public advertised quantity, without backing authority.
         amount: Decimal,
     },
+    /// An estimate and optional declared expected window, without reservation.
+    Estimated {
+        /// Exact nonnegative estimate in the selected sale unit.
+        amount: Decimal,
+        /// Explicit absent or validated absolute expected window.
+        window: Option<Window>,
+    },
 }
 
 /// Validated public product description; producer data grants no agency rights.
@@ -372,7 +379,7 @@ impl ListingOption {
             || (unit.integral()
                 && (inc.scale() != 0
                     || min.scale() != 0
-                    || matches!(supply, Supply::Available { amount } if amount.scale() != 0)))
+                    || matches!(supply, Supply::Available { amount } | Supply::Estimated { amount,.. } if amount.scale() != 0)))
         {
             return Err(ListingError::InvalidQuantity);
         }
@@ -402,6 +409,10 @@ impl ListingOption {
     /// Returns the exact positive advertised minimum.
     pub const fn minimum(&self) -> PositiveDecimal {
         self.minimum
+    }
+    /// Returns the advertised supply claim without freshness or stock authority.
+    pub const fn supply(&self) -> Supply {
+        self.supply
     }
     /// Checks minimum, increment and integral count rules without claiming stock.
     /// Advertised supply is an estimate, not an implicit quantity ceiling.

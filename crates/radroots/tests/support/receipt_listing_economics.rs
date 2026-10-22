@@ -30,6 +30,8 @@ async fn monetary_listings_sign_install_deliver_and_reopen_without_repricing_or_
             "mime":"application/octet-stream","alt":""}]);
         wire["profile"]["options"][0]["price"] = price;
         wire["profile"]["options"][0]["unit"]["contents"] = contents;
+        wire["profile"]["options"][0]["supply"] = json!({"type":"estimated","amount":"10",
+            "window":{"start":"1793480400","end":"1793487600","timezone":"America/Toronto"}});
         let captured = PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap();
         let deadline = now() + 120;
         let receipt = ready

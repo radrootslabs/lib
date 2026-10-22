@@ -104,6 +104,133 @@ fn fixed_price(code: &str, minor: &str, exponent: u8) -> Value {
         "basis":"2","discount_bps":1000,"tiers":[]})
 }
 
+fn estimated_supply(window: Value) -> Value {
+    json!({"type":"estimated","amount":"10","window":window})
+}
+fn absolute_window() -> Value {
+    json!({"start":"1793480400","end":"1793487600","timezone":"America/Toronto"})
+}
+
+#[test]
+fn estimated_supply_preserves_explicit_null_and_exact_absolute_window_in_commands_and_events() {
+    use radroots_protocol::listing::ListingEvent;
+    for window in [Value::Null, absolute_window()] {
+        let mut wire = input();
+        wire["profile"]["options"][0]["supply"] = estimated_supply(window);
+        let parsed = PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap();
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+        let event = ListingEvent::new(&parsed, key(), UnixSeconds::new(101).unwrap()).unwrap();
+        let profile = event
+            .fields()
+            .tags
+            .iter()
+            .find(|tag| tag[0] == "radroots:listing")
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&profile[1]).unwrap(),
+            wire["profile"]
+        );
+        let captured = CapturedListingCommand::capture(context(), parsed).unwrap();
+        let replay = CapturedListingCommand::parse(captured.protected_wire()).unwrap();
+        assert_eq!(captured.digest(), replay.digest());
+        assert_eq!(captured.protected_wire(), replay.protected_wire());
+    }
+}
+
+#[test]
+fn estimated_supply_refuses_missing_duplicate_array_noncanonical_and_ambiguous_window_data() {
+    let mut original = input();
+    original["profile"]["options"][0]["supply"] = estimated_supply(absolute_window());
+    for (pointer, bad) in [
+        (
+            "/profile/options/0/supply",
+            json!({"type":"estimated","amount":"10"}),
+        ),
+        ("/profile/options/0/supply/amount", json!("0.5")),
+        ("/profile/options/0/supply/amount", json!("-1")),
+        ("/profile/options/0/supply/amount", json!(10)),
+        (
+            "/profile/options/0/supply/window",
+            json!(["1793480400", "1793487600", "America/Toronto"]),
+        ),
+        (
+            "/profile/options/0/supply/window",
+            json!({"start":"100","timezone":"Etc/UTC"}),
+        ),
+        ("/profile/options/0/supply/window/start", json!(1793480400)),
+        (
+            "/profile/options/0/supply/window/start",
+            json!("01793480400"),
+        ),
+        ("/profile/options/0/supply/window/start", json!("-1")),
+        (
+            "/profile/options/0/supply/window/start",
+            json!("253402300800"),
+        ),
+        ("/profile/options/0/supply/window/end", json!("1793480400")),
+        ("/profile/options/0/supply/window/end", json!("0")),
+        (
+            "/profile/options/0/supply/window/timezone",
+            json!("america/toronto"),
+        ),
+        (
+            "/profile/options/0/supply/window/timezone",
+            json!("Invented/Zone"),
+        ),
+        (
+            "/profile/options/0/supply/window/timezone",
+            json!("America/Toronto "),
+        ),
+        (
+            "/profile/options/0/supply/window/timezone",
+            json!("a".repeat(81)),
+        ),
+        ("/profile/options/0/supply/window/timezone", json!(null)),
+    ] {
+        let mut wire = original.clone();
+        *wire.pointer_mut(pointer).unwrap() = bad;
+        assert_eq!(
+            PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap_err(),
+            CommandError::InvalidInput,
+            "{pointer}"
+        );
+    }
+    for key in ["start", "end", "timezone"] {
+        let mut missing = original.clone();
+        missing["profile"]["options"][0]["supply"]["window"]
+            .as_object_mut()
+            .unwrap()
+            .remove(key);
+        assert!(PublishInput::parse(&serde_json::to_vec(&missing).unwrap()).is_err());
+    }
+    for (key, value) in [
+        ("offset", json!("-04:00")),
+        ("fold", json!(1)),
+        ("wall_time", json!("2026-11-01T01:30:00")),
+    ] {
+        let mut extra = original.clone();
+        extra["profile"]["options"][0]["supply"]["window"][key] = value;
+        assert!(PublishInput::parse(&serde_json::to_vec(&extra).unwrap()).is_err());
+    }
+    let raw = serde_json::to_string(&original).unwrap();
+    for (needle, replacement) in [
+        (
+            "\"start\":\"1793480400\"",
+            "\"start\":\"1793480400\",\"start\":\"1793480401\"",
+        ),
+        ("\"window\":{", "\"window\":null,\"window\":{"),
+    ] {
+        assert!(raw.contains(needle));
+        assert!(PublishInput::parse(raw.replacen(needle, replacement, 1).as_bytes()).is_err());
+    }
+    let mut measured = original;
+    measured["profile"]["options"][0]["unit"] = json!({"type":"measured","unit":"kg"});
+    measured["profile"]["options"][0]["supply"]["amount"] = json!("0.5");
+    assert!(PublishInput::parse(&serde_json::to_vec(&measured).unwrap()).is_ok());
+    measured["profile"]["options"][0]["supply"]["amount"] = json!("0");
+    assert!(PublishInput::parse(&serde_json::to_vec(&measured).unwrap()).is_ok());
+}
+
 #[test]
 fn media_references_round_trip_without_upload_fetch_or_empty_profile_fallback() {
     use radroots_protocol::listing::ListingEvent;
@@ -527,7 +654,7 @@ fn unsupported_profile_features_are_refused_without_silent_fallback() {
         ),
         (
             "/profile/options/0/supply",
-            json!({"type":"estimated","amount":"10","window":null}),
+            json!({"type":"future_supply","amount":"10","window":null}),
         ),
         (
             "/profile/options/0/unit/contents",

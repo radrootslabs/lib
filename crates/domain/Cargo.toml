@@ -18,6 +18,7 @@ std = ["radroots_identity/std"]
 serde = ["dep:serde", "radroots_identity/serde"]
 
 [dependencies]
+jiff-tzdb = { workspace = true }
 radroots_identity = { workspace = true, default-features = false }
 serde = { workspace = true, optional = true }
 zeroize = { workspace = true, features = ["alloc"] }

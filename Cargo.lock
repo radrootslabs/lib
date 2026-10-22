@@ -3142,6 +3142,7 @@ dependencies = [
 name = "radroots_domain"
 version = "0.1.0-alpha"
 dependencies = [
+ "jiff-tzdb",
  "radroots_identity",
  "serde",
  "serde_json",

@@ -3,6 +3,9 @@ use radroots_domain::{ListingOptionId, listing::*};
 #[path = "support/listing_media.rs"]
 mod media;
 
+#[path = "support/listing_time.rs"]
+mod time;
+
 #[test]
 fn public_text_has_shared_unicode_bounds_and_revision_data_rejects_inverted_time() {
     use radroots_domain::{EnvelopeEventId, PublicKey, UnixSeconds};

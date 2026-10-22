@@ -41,6 +41,9 @@ pub fn radroots_domain::listing::Price::serialize<S: serde_core::ser::Serializer
 #[non_exhaustive] pub enum radroots_domain::listing::Supply
 pub radroots_domain::listing::Supply::Available
 pub radroots_domain::listing::Supply::Available::amount: radroots_domain::Decimal
+pub radroots_domain::listing::Supply::Estimated
+pub radroots_domain::listing::Supply::Estimated::amount: radroots_domain::Decimal
+pub radroots_domain::listing::Supply::Estimated::window: core::option::Option<radroots_domain::Window>
 pub radroots_domain::listing::Supply::Unknown
 pub struct radroots_domain::listing::LeadSeconds(_)
 impl radroots_domain::listing::LeadSeconds
@@ -81,6 +84,7 @@ pub const fn radroots_domain::listing::ListingOption::minimum(&self) -> radroots
 pub fn radroots_domain::listing::ListingOption::new(radroots_domain::ListingOptionId, &str, radroots_domain::listing::SaleUnit, radroots_domain::PositiveDecimal, radroots_domain::PositiveDecimal, radroots_domain::listing::Price, radroots_domain::listing::Supply, radroots_domain::listing::LeadSeconds) -> core::result::Result<Self, radroots_domain::listing::ListingError>
 pub const fn radroots_domain::listing::ListingOption::price(&self) -> &radroots_domain::listing::Price
 pub fn radroots_domain::listing::ListingOption::quote_required(radroots_domain::ListingOptionId, &str, radroots_domain::listing::SaleUnit, radroots_domain::PositiveDecimal, radroots_domain::PositiveDecimal, radroots_domain::listing::Supply, radroots_domain::listing::LeadSeconds) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub const fn radroots_domain::listing::ListingOption::supply(&self) -> radroots_domain::listing::Supply
 pub const fn radroots_domain::listing::ListingOption::unit(&self) -> &radroots_domain::listing::SaleUnit
 pub fn radroots_domain::listing::ListingOption::validate_amount(&self, radroots_domain::PositiveDecimal) -> core::result::Result<(), radroots_domain::listing::ListingError>
 impl core::fmt::Debug for radroots_domain::listing::ListingOption
@@ -189,6 +193,11 @@ pub fn radroots_domain::MoneyError::from(radroots_domain::CurrencyError) -> Self
 impl core::error::Error for radroots_domain::CurrencyError
 impl core::fmt::Display for radroots_domain::CurrencyError
 pub fn radroots_domain::CurrencyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::FulfillmentError
+pub radroots_domain::FulfillmentError::InvalidText
+impl core::error::Error for radroots_domain::FulfillmentError
+impl core::fmt::Display for radroots_domain::FulfillmentError
+pub fn radroots_domain::FulfillmentError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::IdentifierError
 pub radroots_domain::IdentifierError::InvalidEncoding
 pub radroots_domain::IdentifierError::InvalidLength
@@ -247,6 +256,13 @@ impl core::error::Error for radroots_domain::QuantityError
 pub fn radroots_domain::QuantityError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
 impl core::fmt::Display for radroots_domain::QuantityError
 pub fn radroots_domain::QuantityError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::TimeError
+pub radroots_domain::TimeError::InvalidTimeZone
+pub radroots_domain::TimeError::InvalidWindow
+pub radroots_domain::TimeError::UnsupportedDatabase
+impl core::error::Error for radroots_domain::TimeError
+impl core::fmt::Display for radroots_domain::TimeError
+pub fn radroots_domain::TimeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ActorRef
 impl radroots_domain::ActorRef
 pub const fn radroots_domain::ActorRef::grant_id(self) -> core::option::Option<radroots_domain::GrantId>
@@ -623,6 +639,16 @@ pub const fn radroots_domain::PriceTier::new(radroots_domain::Decimal, radroots_
 pub const fn radroots_domain::PriceTier::rate(self) -> radroots_domain::Money
 impl core::fmt::Debug for radroots_domain::PriceTier
 pub fn radroots_domain::PriceTier::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::PrivateFulfillment
+impl radroots_domain::PrivateFulfillment
+pub fn radroots_domain::PrivateFulfillment::address(&self) -> &str
+pub fn radroots_domain::PrivateFulfillment::contact(&self) -> core::option::Option<&str>
+pub fn radroots_domain::PrivateFulfillment::instructions(&self) -> &str
+pub const fn radroots_domain::PrivateFulfillment::mode(&self) -> radroots_domain::listing::FulfillmentMode
+pub fn radroots_domain::PrivateFulfillment::new(radroots_domain::listing::FulfillmentMode, radroots_domain::Window, &str, &str, core::option::Option<&str>) -> core::result::Result<Self, radroots_domain::FulfillmentError>
+pub const fn radroots_domain::PrivateFulfillment::window(&self) -> radroots_domain::Window
+impl core::fmt::Debug for radroots_domain::PrivateFulfillment
+pub fn radroots_domain::PrivateFulfillment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::Quantity
 impl radroots_domain::Quantity
 pub const fn radroots_domain::Quantity::amount(self) -> radroots_domain::Decimal
@@ -716,6 +742,12 @@ impl serde_core::ser::Serialize for radroots_domain::ThreadId
 pub fn radroots_domain::ThreadId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ThreadId
 pub fn radroots_domain::ThreadId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::TimeZoneId(_)
+impl radroots_domain::TimeZoneId
+pub fn radroots_domain::TimeZoneId::from_name(&str) -> core::result::Result<Self, radroots_domain::TimeError>
+pub const fn radroots_domain::TimeZoneId::name(self) -> &'static str
+impl core::fmt::Debug for radroots_domain::TimeZoneId
+pub fn radroots_domain::TimeZoneId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::TransactionId(_)
 impl radroots_domain::TransactionId
 pub const fn radroots_domain::TransactionId::as_bytes(&self) -> &[u8; 32]
@@ -755,6 +787,14 @@ pub const fn radroots_domain::VariableWeight::rate(self) -> radroots_domain::Mon
 pub fn radroots_domain::VariableWeight::total_at(self, radroots_domain::Quantity) -> core::result::Result<radroots_domain::Money, radroots_domain::PricingError>
 impl core::fmt::Debug for radroots_domain::VariableWeight
 pub fn radroots_domain::VariableWeight::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::Window
+impl radroots_domain::Window
+pub const fn radroots_domain::Window::end(self) -> radroots_domain::UnixSeconds
+pub fn radroots_domain::Window::new(radroots_domain::UnixSeconds, radroots_domain::UnixSeconds, radroots_domain::TimeZoneId) -> core::result::Result<Self, radroots_domain::TimeError>
+pub const fn radroots_domain::Window::start(self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::Window::timezone(self) -> radroots_domain::TimeZoneId
+impl core::fmt::Debug for radroots_domain::Window
+pub fn radroots_domain::Window::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::WorkspaceId(_)
 impl radroots_domain::WorkspaceId
 pub const fn radroots_domain::WorkspaceId::as_bytes(&self) -> &[u8; 32]
@@ -776,4 +816,5 @@ pub const radroots_domain::FIRST_ISSUANCE_MAX_SECONDS: u64
 pub const radroots_domain::MAX_PRICED_LINES: usize
 pub const radroots_domain::PRICING_PROFILE: &str
 pub const radroots_domain::SUPPORTED_CURRENCY_COUNT: usize
+pub const radroots_domain::TIME_ZONE_DATABASE_VERSION: &str
 pub fn radroots_domain::checked_order_total(&[radroots_domain::Money], radroots_domain::Money) -> core::result::Result<radroots_domain::Money, radroots_domain::PricingError>

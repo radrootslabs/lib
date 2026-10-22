@@ -33,7 +33,7 @@ impl CommandKind {
 pub enum CapturedCommand {
     /// Original chat profile, retaining its exact established commitments.
     Chat(CapturedChatCommand),
-    /// Supported quote-required public profile.
+    /// Supported complete public listing profile.
     #[cfg(feature = "listing")]
     Listing(crate::listing::CapturedListingCommand),
 }

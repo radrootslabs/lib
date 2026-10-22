@@ -76,6 +76,17 @@ approve an endpoint, fetch a file, verify its contents or promise a decoder.
 references and preserved order. Empty media is explicit. Media descriptors
 serialize complete exact strings and have no unchecked deserialization route.
 
+`Supply::Estimated` retains an exact nonnegative amount and an explicit nullable
+`Window`. Package and `each` estimates remain integral. Estimates are neither
+stock balances nor reservations, ceilings or current-availability guarantees.
+`Window` requires strictly ordered absolute Unix-second instants and an exact
+canonical `TimeZoneId` from the already pinned no_std `jiff-tzdb` 0.1.8 / IANA
+2026c data (MIT OR Unlicense). No system zone, clock, local wall-time, offset or
+fold is inferred. The timezone dependency retains its own upstream notices.
+Private fulfillment data retains a required window, explicit pickup/delivery
+mode and bounded zeroizing address/instructions/contact. It has no public wire
+serialization and grants no agreement, destination or delivery authority.
+
 Namespaces remain separate across native calls:
 
 ```compile_fail

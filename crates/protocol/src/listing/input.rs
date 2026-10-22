@@ -5,7 +5,8 @@ use crate::command::{CommandError, check_frame, required_nullable};
 use alloc::{string::String, vec::Vec};
 use radroots_domain::{
     AuthorityRef, ContentMeasure, Decimal, DiscountBps, FixedPrice, ListingOptionId, Money,
-    PositiveDecimal, PriceTier, PublicKey, Quantity, UnixSeconds, VariableWeight, listing::*,
+    PositiveDecimal, PriceTier, PublicKey, Quantity, TimeZoneId, UnixSeconds, VariableWeight,
+    Window, listing::*,
 };
 use serde::Deserialize;
 
@@ -183,7 +184,30 @@ impl RawPrice {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawSupply {
     Unknown,
-    Available { amount: Decimal },
+    Available {
+        amount: Decimal,
+    },
+    Estimated {
+        amount: Decimal,
+        #[serde(deserialize_with = "required_nullable")]
+        window: Option<RawWindow>,
+    },
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawWindow {
+    start: UnixSeconds,
+    end: UnixSeconds,
+    timezone: String,
+}
+impl RawWindow {
+    fn domain(self) -> Result<Window, CommandError> {
+        invalid(Window::new(
+            self.start,
+            self.end,
+            invalid(TimeZoneId::from_name(&self.timezone))?,
+        ))
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -244,6 +268,10 @@ impl Input {
                 match option.supply {
                     RawSupply::Unknown => Supply::Unknown,
                     RawSupply::Available { amount } => Supply::Available { amount },
+                    RawSupply::Estimated { amount, window } => Supply::Estimated {
+                        amount,
+                        window: window.map(RawWindow::domain).transpose()?,
+                    },
                 },
                 option.lead_seconds,
             ))?);
@@ -326,7 +354,7 @@ impl PublishInput {
                         || option
                             .pointer("/supply/type")
                             .and_then(serde_json::Value::as_str)
-                            .is_some_and(|v| !matches!(v, "unknown" | "available"))
+                            .is_some_and(|v| !matches!(v, "unknown" | "available" | "estimated"))
                         || option
                             .pointer("/unit/contents/type")
                             .and_then(serde_json::Value::as_str)
@@ -381,6 +409,11 @@ fn object_shapes(value: &serde_json::Value) -> Result<(), CommandError> {
         object(&option["unit"])?;
         object(&option["price"])?;
         object(&option["supply"])?;
+        if let Some(window) = option["supply"].get("window")
+            && !window.is_null()
+        {
+            object(window)?;
+        }
         if let Some(contents) = option["unit"].get("contents") {
             object(contents)?;
             if let Some(quantity) = contents.get("quantity") {
