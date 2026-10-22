@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "contract_id": "radroots.shared_sdk.protocol.v1",
+  "state": "assigned_implementation_and_qualification_pending",
+  "profile_version": 1,
+  "commerce": {
+    "kind": 8890,
+    "class": "regular",
+    "profile": "radroots.commerce"
+  },
+  "capabilities": {
+    "kind": 18890,
+    "class": "replaceable",
+    "profile": "radroots.capabilities"
+  },
+  "structured_authoring_qualified": false,
+  "collision_review": {
+    "reviewed_at": "2026-10-22",
+    "nips_repository": "https://github.com/nostr-protocol/nips",
+    "nips_revision": "d47a2ec8aacb9d01ac00e6294ae77582f483ff68",
+    "nips_readme_sha256": "6db76d7a87f9f0997fe10f323d68fdde38fe5a2505b0679172703a9d6ce6c692",
+    "registry_repository": "https://github.com/nostr-protocol/registry-of-kinds",
+    "registry_revision": "2ae5c82dc82e0d1e62dc23f9895e5ef1d4a922de",
+    "registry_schema_sha256": "560821b6dff52a4faf7b736aeca958011a0f7a3070aae7da717e47ba79e21445",
+    "registry_numeric_entries": 281,
+    "nips_source_files_scanned": 101,
+    "known_collisions": [],
+    "coordination": "The primary registry accepts definitions and requires implementation and usage guidance elsewhere. Neither reviewed NIP-01 nor the registry contribution guidance requires central assignment permission. These are Radroots protocol assignments, not a claim of registry inclusion or exclusive global reservation.",
+    "proposal_search": "Exact numeric searches across issues and pull requests in both primary repositories returned zero results with incomplete_results=false on the review date.",
+    "limits": "A pinned source census and proposal search cannot prove global nonuse. No external maintainers were contacted. One owner reviewed the assignments; independent producer interoperability and full protocol acceptance remain pending."
+  },
+  "rules": [
+    "Commerce content is closed radroots.commerce v1 and is carried only by unsigned kind8890 rumors, NIP-44 v2 encrypted under signed kind13 seals and durable kind1059 gift wraps.",
+    "Kind14 remains NIP-17 plaintext chat; it is not a structured-commerce fallback. Kinds78 and30078 are not cross-application commerce substitutes.",
+    "Seal tags are empty. Authenticate the outer signature and recipient, then the seal signature, then recompute the rumor ID. Seal author, rumor author, content author and participant/recipient bindings must agree before admission.",
+    "Peer and self copies retain identical logical content and record identity with distinct recipient-specific seals and envelopes. Preserve each obtained result independently.",
+    "Capability kind18890 is replaceable per author and kind, has closed radroots.capabilities v1 content, and carries no d coordinate, grant, stock balance or trusted endpoint. Support is a bounded participant claim, not authority.",
+    "Authenticate observed heads before supported-profile, expiry or clock-actionability filtering. Newer authentic unsupported or anomalous heads prevent actionable fallback; bad signatures do not replace heads.",
+    "Recipient routing uses kind10050 DM relay information. Structured support readiness is distinct from route reachability; no advertised usable route blocks sending.",
+    "Existing kind30402 listings and their d coordinates, service event reservations, NIP-01 tag order, public interoperability and separately typed record/rumor/seal/envelope identities remain distinct.",
+    "Unknown profile versions and types remain unsupported evidence rather than partially interpreted records. Exact tags and bounded parsers require prospective qualification before authoring."
+  ]
+}

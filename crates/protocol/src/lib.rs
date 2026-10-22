@@ -37,6 +37,9 @@ extern crate std;
 /// Versioned capability catalog contracts.
 pub mod capability;
 
+/// Exact assigned commerce and capability wire identities.
+pub mod profile;
+
 /// Versioned stable error-report contracts.
 pub mod error;
 

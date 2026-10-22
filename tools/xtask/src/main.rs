@@ -62,6 +62,7 @@ mod service_source_lock_parts;
 #[cfg(test)]
 mod service_source_lock_v3;
 mod service_source_lock_v4;
+mod shared_protocol;
 #[cfg_attr(coverage_nightly, coverage(off))]
 mod supply_chain_qualification;
 #[cfg_attr(coverage_nightly, coverage(off))]
@@ -532,6 +533,7 @@ fn validate_contract() -> Result<(), String> {
     // Retain historical qualification integrity separately from current requirements.
     service_build_qualification::validate_contract(&root)?;
     compiler_preparation::validate_contract(&root)?;
+    shared_protocol::validate_contract(&root)?;
     service_release_artifacts::validate_contract(&root)?;
     service_repro_install::validate_contract(&root)?;
     dto_roots::check(&root)?;

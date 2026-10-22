@@ -614,6 +614,12 @@ impl core::convert::From<radroots_identity::key::PublicKey> for radroots_protoco
 pub fn radroots_protocol::plan::SigningTarget::from(radroots_identity::key::PublicKey) -> Self
 impl core::fmt::Debug for radroots_protocol::plan::SigningTarget
 pub fn radroots_protocol::plan::SigningTarget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_protocol::profile
+pub const radroots_protocol::profile::CAPABILITIES_KIND: u16
+pub const radroots_protocol::profile::CAPABILITIES_PROFILE: &str
+pub const radroots_protocol::profile::COMMERCE_KIND: u16
+pub const radroots_protocol::profile::COMMERCE_PROFILE: &str
+pub const radroots_protocol::profile::PROFILE_VERSION: u32
 pub mod radroots_protocol::radrootsd
 pub mod radroots_protocol::radrootsd::transport_publish
 pub mod radroots_protocol::radrootsd::transport_publish::v5

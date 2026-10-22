@@ -14,6 +14,7 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/radrootsd/transport_publish/v5.rs"),
     include_str!("../src/runtime/v1.rs"),
     include_str!("../src/schema.rs"),
+    include_str!("../src/profile.rs"),
     include_str!("../src/command.rs"),
     include_str!("../src/nip01.rs"),
     include_str!("../src/intent.rs"),
@@ -72,6 +73,7 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             "intent",
             "listing",
             "plan",
+            "profile",
             "radrootsd",
             "runtime",
             "schema"

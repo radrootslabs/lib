@@ -30,6 +30,7 @@ numbers embedded in wire and schema contracts.
 | `runtime::v1` | operation descriptors, risk, approval, idempotency, and effects |
 | `radrootsd::transport_publish::v5` | daemon transport-publish request, job, outcome, and capability DTOs |
 | `schema` | schema IDs, module generations, descriptors, and aggregate registries |
+| `profile` | assigned regular commerce kind8890 and replaceable capability kind18890, with closed profile identities; authoring qualification remains pending |
 | `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
 | `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |

@@ -180,6 +180,7 @@ struct Protocol {
     gift_wrap_kind: u16,
     commerce_kind: Option<u16>,
     capability_kind: Option<u16>,
+    assignment_contract: String,
     structured_authoring: String,
     independent_vectors_required: bool,
     duplicate_json_fields_rejected: bool,
@@ -213,6 +214,7 @@ pub(super) fn validate(workspace_root: &Path) -> Result<(), String> {
     )
     .map_err(|_| "shared SDK contract: bounded regular source admission failed".to_owned())?;
     validate_bytes(&raw)?;
+    crate::shared_protocol::validate_contract(workspace_root)?;
     currency_registry::validate(workspace_root)
 }
 
@@ -566,9 +568,10 @@ fn validate_execution(e: &Execution, p: &Protocol, c: &Cutover) -> Result<(), St
             p.seal_kind,
             p.gift_wrap_kind,
         ) == (30_402, 14, 13, 1_059)
-            && p.commerce_kind.is_none()
-            && p.capability_kind.is_none()
-            && p.structured_authoring == "blocked_until_qualified_kind_assignment"
+            && p.commerce_kind == Some(radroots_protocol::profile::COMMERCE_KIND)
+            && p.capability_kind == Some(radroots_protocol::profile::CAPABILITIES_KIND)
+            && p.assignment_contract == "radroots.shared_sdk.protocol.v1"
+            && p.structured_authoring == "blocked_until_wire_and_crypto_qualification"
             && p.independent_vectors_required
             && p.duplicate_json_fields_rejected,
         "protocol assignment or authenticated admission prerequisites drift",
@@ -774,9 +777,19 @@ mod tests {
     }
 
     #[test]
-    fn unassigned_kinds_and_target_metadata_cannot_authorize_publication() {
-        assert!(validate_bytes(&changed("/protocol/commerce_kind", json!(8890))).is_err());
+    fn assigned_protocol_kinds_and_target_metadata_cannot_authorize_publication() {
+        assert!(validate_bytes(&changed("/protocol/commerce_kind", json!(8891))).is_err());
+        assert!(validate_bytes(&changed("/protocol/commerce_kind", json!(null))).is_err());
         assert!(validate_bytes(&changed("/protocol/capability_kind", json!(38990))).is_err());
+        assert!(validate_bytes(&changed("/protocol/capability_kind", json!(null))).is_err());
+        assert!(validate_bytes(&changed("/protocol/assignment_contract", json!("other"))).is_err());
+        assert!(
+            validate_bytes(&changed(
+                "/protocol/structured_authoring",
+                json!("qualified")
+            ))
+            .is_err()
+        );
         assert!(validate_bytes(&changed("/publication_authorized", json!(true))).is_err());
         assert!(
             validate_bytes(&changed(

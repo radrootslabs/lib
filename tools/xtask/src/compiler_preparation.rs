@@ -12,7 +12,7 @@ const MAX_CONTRACT_BYTES: usize = 65_536;
 const BOUND_INPUTS: [(&str, &str); 3] = [
     (
         "contracts/architecture/decisions/shared_sdk_refactor.v1.json",
-        "d434039e9199bd35bf51886ee3bb46f88a764b80f1bce9317381bf6fcf91d5f0",
+        "cc9906ff7c811b80100a0a1a1d363a7a58fb301b901b3f059eee3cb259e95e9e",
     ),
     (
         "contracts/architecture/decisions/services_hardening_source_lock.v4.json",
