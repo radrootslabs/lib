@@ -65,10 +65,13 @@ pub fn radroots_domain::listing::ListingId::deserialize<D: serde_core::de::Deser
 pub struct radroots_domain::listing::ListingOption
 impl radroots_domain::listing::ListingOption
 pub const fn radroots_domain::listing::ListingOption::id(&self) -> radroots_domain::ListingOptionId
+pub const fn radroots_domain::listing::ListingOption::increment(&self) -> radroots_domain::PositiveDecimal
 pub fn radroots_domain::listing::ListingOption::label(&self) -> &str
+pub const fn radroots_domain::listing::ListingOption::minimum(&self) -> radroots_domain::PositiveDecimal
 pub const fn radroots_domain::listing::ListingOption::price(&self) -> radroots_domain::listing::Price
 pub fn radroots_domain::listing::ListingOption::quote_required(radroots_domain::ListingOptionId, &str, radroots_domain::listing::SaleUnit, radroots_domain::PositiveDecimal, radroots_domain::PositiveDecimal, radroots_domain::listing::Supply, radroots_domain::listing::LeadSeconds) -> core::result::Result<Self, radroots_domain::listing::ListingError>
 pub const fn radroots_domain::listing::ListingOption::unit(&self) -> &radroots_domain::listing::SaleUnit
+pub fn radroots_domain::listing::ListingOption::validate_amount(&self, radroots_domain::PositiveDecimal) -> core::result::Result<(), radroots_domain::listing::ListingError>
 impl core::fmt::Debug for radroots_domain::listing::ListingOption
 pub fn radroots_domain::listing::ListingOption::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::listing::ListingTerms
@@ -119,6 +122,8 @@ pub radroots_domain::AmountError::MustBePositive
 pub radroots_domain::AmountError::NegativeResult
 pub radroots_domain::AmountError::NonCanonical
 pub radroots_domain::AmountError::ScaleOutOfRange
+impl core::convert::From<radroots_domain::AmountError> for radroots_domain::QuantityError
+pub fn radroots_domain::QuantityError::from(radroots_domain::AmountError) -> Self
 impl core::error::Error for radroots_domain::AmountError
 impl core::fmt::Display for radroots_domain::AmountError
 pub fn radroots_domain::AmountError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -129,6 +134,16 @@ pub radroots_domain::ChatRelation::Reply
 pub radroots_domain::ChatRelation::Reply::parent: radroots_domain::MessageId
 impl core::fmt::Debug for radroots_domain::ChatRelation
 pub fn radroots_domain::ChatRelation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_domain::ContentMeasure
+pub radroots_domain::ContentMeasure::Estimated
+pub radroots_domain::ContentMeasure::Estimated::quantity: radroots_domain::Quantity
+pub radroots_domain::ContentMeasure::Fixed
+pub radroots_domain::ContentMeasure::Fixed::quantity: radroots_domain::Quantity
+pub radroots_domain::ContentMeasure::Unspecified
+impl radroots_domain::ContentMeasure
+pub const fn radroots_domain::ContentMeasure::fixed_quantity(self) -> core::option::Option<radroots_domain::Quantity>
+impl core::fmt::Debug for radroots_domain::ContentMeasure
+pub fn radroots_domain::ContentMeasure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::ContextError
 pub radroots_domain::ContextError::InconsistentCoverage
 pub radroots_domain::ContextError::InvalidInteger
@@ -190,6 +205,19 @@ impl core::error::Error for radroots_domain::PricingError
 pub fn radroots_domain::PricingError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
 impl core::fmt::Display for radroots_domain::PricingError
 pub fn radroots_domain::PricingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::QuantityError
+pub radroots_domain::QuantityError::Amount(radroots_domain::AmountError)
+pub radroots_domain::QuantityError::ArithmeticOutOfRange
+pub radroots_domain::QuantityError::FractionalCount
+pub radroots_domain::QuantityError::IncompatibleDimension
+pub radroots_domain::QuantityError::PrecisionLoss
+pub radroots_domain::QuantityError::UnitMismatch
+impl core::convert::From<radroots_domain::AmountError> for radroots_domain::QuantityError
+pub fn radroots_domain::QuantityError::from(radroots_domain::AmountError) -> Self
+impl core::error::Error for radroots_domain::QuantityError
+pub fn radroots_domain::QuantityError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_domain::QuantityError
+pub fn radroots_domain::QuantityError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ActorRef
 impl radroots_domain::ActorRef
 pub const fn radroots_domain::ActorRef::grant_id(self) -> core::option::Option<radroots_domain::GrantId>
@@ -566,6 +594,16 @@ pub const fn radroots_domain::PriceTier::new(radroots_domain::Decimal, radroots_
 pub const fn radroots_domain::PriceTier::rate(self) -> radroots_domain::Money
 impl core::fmt::Debug for radroots_domain::PriceTier
 pub fn radroots_domain::PriceTier::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::Quantity
+impl radroots_domain::Quantity
+pub const fn radroots_domain::Quantity::amount(self) -> radroots_domain::Decimal
+pub fn radroots_domain::Quantity::checked_add(self, Self) -> core::result::Result<Self, radroots_domain::QuantityError>
+pub fn radroots_domain::Quantity::checked_sub(self, Self) -> core::result::Result<Self, radroots_domain::QuantityError>
+pub fn radroots_domain::Quantity::convert(self, radroots_domain::listing::MeasurementUnit) -> core::result::Result<Self, radroots_domain::QuantityError>
+pub fn radroots_domain::Quantity::new(radroots_domain::Decimal, radroots_domain::listing::MeasurementUnit) -> core::result::Result<Self, radroots_domain::QuantityError>
+pub const fn radroots_domain::Quantity::unit(self) -> radroots_domain::listing::MeasurementUnit
+impl core::fmt::Debug for radroots_domain::Quantity
+pub fn radroots_domain::Quantity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::RecordId(_)
 impl radroots_domain::RecordId
 pub const fn radroots_domain::RecordId::as_bytes(&self) -> &[u8; 32]

@@ -325,9 +325,7 @@ impl ListingOption {
         text(label, 120, false)?;
         let inc = increment.amount();
         let min = minimum.amount();
-        let scale = inc.scale().max(min.scale());
-        let align = |v: Decimal| v.coefficient() * 10_u64.pow(u32::from(scale - v.scale()));
-        if !align(min).is_multiple_of(align(inc))
+        if !exact_multiple(min, inc)
             || (unit.integral()
                 && (inc.scale() != 0
                     || min.scale() != 0
@@ -354,6 +352,26 @@ impl ListingOption {
     pub const fn unit(&self) -> &SaleUnit {
         &self.unit
     }
+    /// Returns the exact positive purchase increment.
+    pub const fn increment(&self) -> PositiveDecimal {
+        self.increment
+    }
+    /// Returns the exact positive advertised minimum.
+    pub const fn minimum(&self) -> PositiveDecimal {
+        self.minimum
+    }
+    /// Checks minimum, increment and integral count rules without claiming stock.
+    /// Advertised supply is an estimate, not an implicit quantity ceiling.
+    pub fn validate_amount(&self, amount: PositiveDecimal) -> Result<(), ListingError> {
+        let amount = amount.amount();
+        if amount < self.minimum.amount()
+            || !exact_multiple(amount, self.increment.amount())
+            || (self.unit.integral() && amount.scale() != 0)
+        {
+            return Err(ListingError::InvalidQuantity);
+        }
+        Ok(())
+    }
     /// Returns the validated price mode, without inventing a quoted amount.
     pub const fn price(&self) -> Price {
         self.price
@@ -367,6 +385,15 @@ impl fmt::Debug for ListingOption {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("ListingOption(<redacted>)")
     }
+}
+
+fn exact_multiple(value: Decimal, increment: Decimal) -> bool {
+    let scale = value.scale().max(increment.scale());
+    let align = |amount: Decimal| {
+        i128::from(amount.coefficient())
+            .checked_mul(10_i128.checked_pow(u32::from(scale - amount.scale()))?)
+    };
+    align(value).and_then(|value| value.checked_rem(align(increment)?)) == Some(0)
 }
 
 /// Public fulfillment mode, without exact private destination or time window.

@@ -265,6 +265,78 @@ fn exact_increments_and_units_never_invent_fractional_packages_or_conversion() {
 }
 
 #[test]
+fn selected_amounts_validate_minimum_and_increment_without_using_advertised_stock() {
+    let measured = option(
+        1,
+        SaleUnit::measured(MeasurementUnit::Kilogram),
+        "0.25",
+        "0.5",
+        "0",
+    )
+    .unwrap();
+    assert_eq!(measured.minimum().to_string(), "0.5");
+    assert_eq!(measured.increment().to_string(), "0.25");
+    for amount in ["0.5", "0.75", "10.25", "999999999999"] {
+        measured.validate_amount(amount.parse().unwrap()).unwrap();
+    }
+    for amount in ["0.25", "0.6", "0.500001"] {
+        assert_eq!(
+            measured.validate_amount(amount.parse().unwrap()),
+            Err(ListingError::InvalidQuantity)
+        );
+    }
+    for unit in [
+        SaleUnit::measured(MeasurementUnit::Each),
+        SaleUnit::package_unspecified("bag").unwrap(),
+    ] {
+        let value = option(2, unit, "2", "4", "0").unwrap();
+        for amount in ["4", "6", "100"] {
+            value.validate_amount(amount.parse().unwrap()).unwrap();
+        }
+        for amount in ["1", "3", "4.5", "5"] {
+            assert_eq!(
+                value.validate_amount(amount.parse().unwrap()),
+                Err(ListingError::InvalidQuantity)
+            );
+        }
+    }
+}
+
+#[test]
+fn selected_amounts_preserve_extreme_exact_scales_and_shared_constructor_rules() {
+    let tiny = option(
+        1,
+        SaleUnit::measured(MeasurementUnit::Gram),
+        "0.000001",
+        "0.000002",
+        "0",
+    )
+    .unwrap();
+    for amount in ["0.000002", "1", "999999999999"] {
+        tiny.validate_amount(amount.parse().unwrap()).unwrap();
+    }
+    assert_eq!(
+        tiny.validate_amount("0.000001".parse().unwrap()),
+        Err(ListingError::InvalidQuantity)
+    );
+    let large = option(
+        2,
+        SaleUnit::measured(MeasurementUnit::Litre),
+        "999999999999",
+        "999999999999",
+        "0",
+    )
+    .unwrap();
+    large
+        .validate_amount("999999999999".parse().unwrap())
+        .unwrap();
+    assert_eq!(
+        large.validate_amount("1".parse().unwrap()),
+        Err(ListingError::InvalidQuantity)
+    );
+}
+
+#[test]
 fn bounded_unique_options_preserve_exact_default_without_fallback() {
     let make = |n| {
         option(

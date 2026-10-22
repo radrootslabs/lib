@@ -32,6 +32,15 @@ and performs no implicit physical conversion. Complete option/terms admission,
 fixed-price listing authoring, agreement installation and command effects remain
 separate requirements; calculation values establish no authorization or stock.
 
+`Quantity` uses the existing measurement identity and exact decimal bounds.
+Conversions between g/kg and mL/L are explicit and reject precision loss;
+arithmetic requires matching units. `each` counts remain integral. Standalone
+`ContentMeasure` descriptors distinguish fixed, estimated and unspecified
+contents; estimates do not provide fixed conversions or stock backing. Existing
+sale options validate selected amounts against their minimum, increment and
+integral package/count rules. Advertised supply establishes no quantity ceiling
+or actual availability. Complete listing/term integration remains separate.
+
 Order, thread, workspace, executor and operation IDs have distinct Rust types.
 Each stores 32 bytes and uses exactly 64 lowercase hexadecimal characters in
 strings and JSON. Byte/string construction validates representation; generation
