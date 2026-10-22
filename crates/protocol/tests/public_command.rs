@@ -35,6 +35,289 @@ fn input() -> Value {
 }
 
 #[test]
+fn listing_objects_reject_positional_arrays_at_every_struct_boundary() {
+    let mut accepted = Vec::new();
+    for (pointer, fields) in [
+        (
+            "",
+            &[
+                "id",
+                "title",
+                "summary",
+                "description_markdown",
+                "published_at",
+                "profile",
+            ][..],
+        ),
+        (
+            "/profile",
+            &[
+                "profile",
+                "version",
+                "state",
+                "product",
+                "default_option",
+                "options",
+                "fulfillment",
+                "authority",
+                "media",
+            ][..],
+        ),
+        (
+            "/profile/product",
+            &["name", "description", "producer", "origin_summary"][..],
+        ),
+        (
+            "/profile/options/0",
+            &[
+                "id",
+                "label",
+                "unit",
+                "increment",
+                "minimum",
+                "price",
+                "supply",
+                "lead_seconds",
+            ][..],
+        ),
+        (
+            "/profile/fulfillment",
+            &["modes", "area", "lead_seconds"][..],
+        ),
+    ] {
+        let mut value = input();
+        let object = value.pointer(pointer).unwrap();
+        let array = Value::Array(fields.iter().map(|key| object[*key].clone()).collect());
+        *value.pointer_mut(pointer).unwrap() = array;
+        if PublishInput::parse(&serde_json::to_vec(&value).unwrap()).is_ok() {
+            accepted.push(pointer);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "object-only fields accepted arrays: {accepted:?}"
+    );
+}
+
+fn fixed_price(code: &str, minor: &str, exponent: u8) -> Value {
+    json!({"type":"fixed","rate":{"currency":code,"minor":minor,"exponent":exponent},
+        "basis":"2","discount_bps":1000,"tiers":[]})
+}
+
+#[test]
+fn fixed_default_projection_preserves_basis_currency_and_full_command_plan_replay() {
+    use radroots_protocol::{
+        listing::{ListingEvent, PublicSigningPlan},
+        plan::SigningReplay,
+    };
+    for (code, minor, exponent, amount) in [
+        ("JPY", "101", 0, "101"),
+        ("CAD", "101", 2, "1.01"),
+        ("KWD", "101", 3, "0.101"),
+        ("CLF", "101", 4, "0.0101"),
+        ("CAD", "0", 2, "0.00"),
+    ] {
+        let mut wire = input();
+        wire["profile"]["options"][0]["price"] = fixed_price(code, minor, exponent);
+        wire["summary"] = json!("Carrot offering");
+        wire["profile"]["options"][0]["unit"]["contents"] =
+            json!({"type":"fixed","quantity":{"amount":"0.5","unit":"kg"}});
+        let mut cheaper = wire["profile"]["options"][0].clone();
+        cheaper["id"] = json!("03".repeat(32));
+        cheaper["price"]["rate"]["minor"] = json!("0");
+        wire["profile"]["options"]
+            .as_array_mut()
+            .unwrap()
+            .push(cheaper);
+        let parsed = PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap();
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+        let event = ListingEvent::new(&parsed, key(), UnixSeconds::new(101).unwrap()).unwrap();
+        let fields = event.fields();
+        let prices: Vec<_> = fields.tags.iter().filter(|tag| tag[0] == "price").collect();
+        assert_eq!(prices.len(), 1);
+        assert_eq!(prices[0].as_slice(), ["price", amount, code]);
+        assert_eq!(fields.tags.len(), 9);
+        assert_eq!(fields.tags.iter().map(Vec::len).sum::<usize>(), 19);
+        let summary = &fields.tags.iter().find(|tag| tag[0] == "summary").unwrap()[1];
+        assert!(summary.contains("per 2 bunch"));
+        assert!(summary.contains("discount 1000 bps"));
+        assert!(summary.contains("One bunch"));
+        let public = CapturedListingCommand::capture(context(), parsed).unwrap();
+        let captured = CapturedListingCommand::parse(public.protected_wire()).unwrap();
+        assert_eq!(captured.digest(), public.digest());
+        assert_eq!(captured.protected_wire(), public.protected_wire());
+        let plan = PublicSigningPlan::capture(
+            &public,
+            UnixSeconds::new(101).unwrap(),
+            &["wss://listing.fixture.example".into()],
+            SigningReplay::LocalReplaySafe,
+        )
+        .unwrap();
+        let restored = PublicSigningPlan::parse(&captured, plan.protected_wire()).unwrap();
+        assert_eq!(restored.event().event_id(), event.event_id());
+        assert_eq!(restored.protected_wire(), plan.protected_wire());
+    }
+}
+
+#[test]
+fn variable_per_sale_unit_profile_preserves_all_bounds_and_estimated_contents_without_fixed_price()
+{
+    use radroots_protocol::listing::ListingEvent;
+    let mut wire = input();
+    wire["profile"]["options"][0]["price"] = json!({"type":"variable_weight","measurement_unit":"kg",
+        "minimum_per_sale_unit":"0.8","maximum_per_sale_unit":"1.2","rate":{"currency":"CAD","minor":"325","exponent":2},
+        "basis":"1","maximum_per_sale_unit_total":{"currency":"CAD","minor":"400","exponent":2}});
+    wire["profile"]["options"][0]["unit"]["contents"] =
+        json!({"type":"estimated","quantity":{"amount":"1","unit":"kg"}});
+    let parsed = PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap();
+    assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    let event = ListingEvent::new(&parsed, key(), UnixSeconds::new(101).unwrap()).unwrap();
+    assert!(!event.fields().tags.iter().any(|tag| tag[0] == "price"));
+    let summary = &event
+        .fields()
+        .tags
+        .iter()
+        .find(|tag| tag[0] == "summary")
+        .unwrap()[1];
+    assert!(summary.contains("0.8..1.2 kg per sale unit"));
+    assert!(summary.contains("cap 4.00 CAD"));
+    assert!(summary.contains("per 1 kg"));
+    assert!(
+        parsed
+            .terms()
+            .default_option()
+            .unit()
+            .contents()
+            .unwrap()
+            .fixed_quantity()
+            .is_none()
+    );
+    let public = CapturedListingCommand::capture(context(), parsed).unwrap();
+    assert_eq!(
+        CapturedListingCommand::parse(public.protected_wire())
+            .unwrap()
+            .digest(),
+        public.digest()
+    );
+}
+
+#[test]
+fn monetary_profile_admission_rejects_incomplete_inconsistent_duplicate_and_array_values() {
+    let mut original = input();
+    original["profile"]["options"][0]["price"] = fixed_price("CAD", "325", 2);
+    for (pointer, invalid) in [
+        (
+            "/profile/options/0/price",
+            json!({"type":"fixed","rate":{"currency":"CAD","minor":"325","exponent":2}}),
+        ),
+        ("/profile/options/0/price/basis", json!("0")),
+        ("/profile/options/0/price/discount_bps", json!(10001)),
+        ("/profile/options/0/price/rate/exponent", json!(3)),
+        ("/profile/options/0/price/rate/minor", json!(325)),
+        ("/profile/options/0/price/rate", json!(["CAD", "325", 2])),
+        (
+            "/profile/options/0/price/tiers",
+            json!([["1",{"currency":"CAD","minor":"300","exponent":2}]]),
+        ),
+        (
+            "/profile/options/0/price/tiers",
+            json!([{"from":"1","rate":{"currency":"USD","minor":"300","exponent":2}}]),
+        ),
+        (
+            "/profile/options/0/unit/contents",
+            json!({"type":"fixed","quantity":["1","kg"]}),
+        ),
+        (
+            "/profile/options/0/unit/contents",
+            json!({"type":"fixed","quantity":{"amount":"0.5","unit":"each"}}),
+        ),
+    ] {
+        let mut wire = original.clone();
+        *wire.pointer_mut(pointer).unwrap() = invalid;
+        assert!(
+            PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).is_err(),
+            "{pointer}"
+        );
+    }
+    let raw = serde_json::to_string(&original).unwrap();
+    for (needle, duplicate) in [
+        ("\"basis\":\"2\"", "\"basis\":\"2\",\"basis\":\"2\""),
+        ("\"minor\":\"325\"", "\"minor\":\"325\",\"minor\":\"325\""),
+    ] {
+        let changed = raw.replacen(needle, duplicate, 1);
+        assert_ne!(changed, raw);
+        assert!(PublishInput::parse(changed.as_bytes()).is_err());
+    }
+    let mut extra = original.clone();
+    extra["profile"]["options"][0]["price"]["unapproved"] = json!(true);
+    assert!(PublishInput::parse(&serde_json::to_vec(&extra).unwrap()).is_err());
+}
+
+#[test]
+fn variable_wire_terms_refuse_inverted_ranges_infeasible_caps_and_currency_changes() {
+    let mut original = input();
+    original["profile"]["options"][0]["price"] = json!({"type":"variable_weight","measurement_unit":"kg",
+        "minimum_per_sale_unit":"0.8","maximum_per_sale_unit":"1.2","rate":{"currency":"CAD","minor":"325","exponent":2},
+        "basis":"1","maximum_per_sale_unit_total":{"currency":"CAD","minor":"400","exponent":2}});
+    for (pointer, bad) in [
+        (
+            "/profile/options/0/price/minimum_per_sale_unit",
+            json!("1.3"),
+        ),
+        ("/profile/options/0/price/maximum_per_sale_unit", json!("0")),
+        ("/profile/options/0/price/basis", json!("0")),
+        ("/profile/options/0/price/measurement_unit", json!("each")),
+        (
+            "/profile/options/0/price/maximum_per_sale_unit_total/minor",
+            json!("259"),
+        ),
+        (
+            "/profile/options/0/price/maximum_per_sale_unit_total/currency",
+            json!("USD"),
+        ),
+    ] {
+        let mut wire = original.clone();
+        *wire.pointer_mut(pointer).unwrap() = bad;
+        assert_eq!(
+            PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap_err(),
+            CommandError::InvalidInput
+        );
+    }
+    let mut extra = original;
+    extra["profile"]["options"][0]["price"]["discount_bps"] = json!(0);
+    assert!(PublishInput::parse(&serde_json::to_vec(&extra).unwrap()).is_err());
+}
+
+#[test]
+fn monetary_listing_limits_include_projection_profile_and_complete_signed_framing() {
+    use radroots_protocol::{
+        listing::{LISTING_EVENT_MAX_BYTES, ListingEvent},
+        nip01::{self, WireError},
+    };
+    let mut wire = input();
+    wire["description_markdown"] = json!("");
+    wire["profile"]["options"][0]["price"] = fixed_price("CAD", "325", 2);
+    let make = |wire: &Value| PublishInput::parse(&serde_json::to_vec(wire).unwrap()).unwrap();
+    let base = ListingEvent::new(&make(&wire), key(), UnixSeconds::new(101).unwrap()).unwrap();
+    let free = LISTING_EVENT_MAX_BYTES
+        - nip01::signed_json_len(&base.fields(), LISTING_EVENT_MAX_BYTES).unwrap();
+    let body = "\u{0001}".repeat(free / 6) + &"a".repeat(free % 6);
+    assert!(body.chars().count() <= 16_384);
+    wire["description_markdown"] = json!(body);
+    let exact = ListingEvent::new(&make(&wire), key(), UnixSeconds::new(101).unwrap()).unwrap();
+    assert_eq!(
+        nip01::signed_json_len(&exact.fields(), LISTING_EVENT_MAX_BYTES).unwrap(),
+        LISTING_EVENT_MAX_BYTES
+    );
+    let larger = wire["description_markdown"].as_str().unwrap().to_owned() + "a";
+    wire["description_markdown"] = json!(larger);
+    assert!(matches!(
+        ListingEvent::new(&make(&wire), key(), UnixSeconds::new(101).unwrap()),
+        Err(WireError::LimitExceeded)
+    ));
+}
+
+#[test]
 fn both_families_round_trip_without_rehashing_or_fabricating_chat_data() {
     let chat = CapturedChatCommand::inquire(
         context(),
@@ -162,7 +445,7 @@ fn unsupported_full_profile_features_are_refused_without_silent_quote_or_media_f
         ),
         (
             "/profile/options/0/price",
-            json!({"type":"fixed","rate":{"currency":"CAD","minor":"325","exponent":2}}),
+            json!({"type":"future_price","rate":{"currency":"CAD","minor":"325","exponent":2}}),
         ),
         (
             "/profile/options/0/supply",
@@ -170,7 +453,7 @@ fn unsupported_full_profile_features_are_refused_without_silent_quote_or_media_f
         ),
         (
             "/profile/options/0/unit/contents",
-            json!({"type":"fixed","quantity":{"amount":"1","unit":"kg"}}),
+            json!({"type":"future_contents","quantity":{"amount":"1","unit":"kg"}}),
         ),
     ] {
         let mut value = input();

@@ -1,5 +1,5 @@
-//! Known public listing producer. Full monetary/media admission is separate;
-//! unsupported features are never reduced to an invented quote or zero price.
+//! Closed public listing producer with exact default-option price projections.
+//! Unsupported media is never silently stripped or reduced to an empty value.
 
 use crate::nip01::{self, EventFields, WireError};
 use alloc::{
@@ -10,7 +10,7 @@ use alloc::{
 };
 use core::fmt;
 use radroots_domain::{
-    PublicKey, UnixSeconds,
+    Money, PublicKey, UnixSeconds,
     listing::{ListingId, ListingState, ListingTerms, ListingText, Price},
 };
 use serde::Serialize;
@@ -27,10 +27,10 @@ pub use plan::PublicSigningPlan;
 pub const LISTING_KIND: u32 = 30402;
 /// Complete public event cap, including NIP-01 key, ID and signature framing.
 pub const LISTING_EVENT_MAX_BYTES: usize = 65_536;
-/// The closed public profile emits at most eight ordered two-field tags.
-pub const LISTING_TAG_MAX_COUNT: usize = 8;
+/// At most eight ordinary two-field tags and one fixed-price three-field tag.
+pub const LISTING_TAG_MAX_COUNT: usize = 9;
 /// Both key and value count toward the closed public profile's field budget.
-pub const LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT: usize = 16;
+pub const LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT: usize = 19;
 
 /// Explicit immutable public-offer input; no IDs, time or authority are inferred.
 #[derive(Clone, Serialize)]
@@ -43,8 +43,8 @@ pub struct PublishInput {
     terms: ListingTerms,
 }
 impl PublishInput {
-    /// Captures bounded text and validated quote-required terms. The human
-    /// summary describes the selected default unit/basis. No price is inferred.
+    /// Captures bounded text and validated sale terms. Monetary event summaries
+    /// name the selected default's explicit rate/basis and pricing conditions.
     pub fn new(
         id: ListingId,
         title: &str,
@@ -95,10 +95,6 @@ fn profile_value(terms: &ListingTerms) -> Result<Value, WireError> {
                 "authority" | "default_option" | "fulfillment" | "options" | "product" | "state"
             )
         })
-        || terms
-            .options()
-            .iter()
-            .any(|option| !matches!(option.price(), Price::QuoteRequired))
     {
         return Err(WireError::InvalidInput);
     }
@@ -147,9 +143,40 @@ impl ListingEvent {
             ListingState::Paused => Some("Paused: unavailable"),
             ListingState::Withdrawn => Some("Withdrawn: unavailable"),
         };
+        let default = input.terms.default_option();
+        let description = match default.price() {
+            Price::Fixed(value) => format!(
+                "[Default: {}; base {} {} per {} {}; discount {} bps; {} tiers] {}",
+                default.label(),
+                money_amount(value.rate()),
+                value.rate().currency().code(),
+                value.basis(),
+                default.unit().label(),
+                value.discount_bps().get(),
+                value.tiers().len(),
+                input.text.summary(),
+            ),
+            Price::VariableWeight(value) => format!(
+                "[Default: {} {}; {}..{} {} per sale unit; {} {} per {} {}; cap {} {}] {}",
+                default.label(),
+                default.unit().label(),
+                value.minimum(),
+                value.maximum(),
+                value.measurement_unit().symbol(),
+                money_amount(value.rate()),
+                value.rate().currency().code(),
+                value.basis(),
+                value.measurement_unit().symbol(),
+                money_amount(value.maximum_total()),
+                value.maximum_total().currency().code(),
+                input.text.summary(),
+            ),
+            Price::QuoteRequired => input.text.summary().into(),
+            _ => return Err(WireError::InvalidInput),
+        };
         let summary = match inactive {
-            Some(label) => format!("[{label}] {}", input.text.summary()),
-            None => input.text.summary().into(),
+            Some(label) => format!("[{label}] {description}"),
+            None => description,
         };
         let content = match inactive {
             Some(label) => format!("[{label}]\n\n{}", input.text.description_markdown()),
@@ -168,6 +195,13 @@ impl ListingEvent {
         ];
         if inactive.is_none() {
             tags.push(vec!["status".into(), "active".into()]);
+        }
+        if let Price::Fixed(value) = default.price() {
+            tags.push(vec![
+                "price".into(),
+                money_amount(value.rate()),
+                value.rate().currency().code().into(),
+            ]);
         }
         tags.push(vec!["radroots:listing".into(), profile]);
         let fields = EventFields {
@@ -201,6 +235,18 @@ impl ListingEvent {
     pub const fn event_id(&self) -> &[u8; 32] {
         &self.id
     }
+}
+
+fn money_amount(value: Money) -> String {
+    let exponent = value.currency().exponent();
+    let minor = value.minor().get();
+    if exponent == 0 {
+        return minor.to_string();
+    }
+    let divisor = 10_u64.pow(u32::from(exponent));
+    let whole = minor / divisor;
+    let fraction = minor % divisor;
+    format!("{whole}.{fraction:0width$}", width = usize::from(exponent))
 }
 impl fmt::Debug for ListingEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

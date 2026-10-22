@@ -4,7 +4,8 @@ use super::PublishInput;
 use crate::command::{CommandError, check_frame, required_nullable};
 use alloc::{string::String, vec::Vec};
 use radroots_domain::{
-    AuthorityRef, Decimal, ListingOptionId, PositiveDecimal, PublicKey, UnixSeconds, listing::*,
+    AuthorityRef, ContentMeasure, Decimal, DiscountBps, FixedPrice, ListingOptionId, Money,
+    PositiveDecimal, PriceTier, PublicKey, Quantity, UnixSeconds, VariableWeight, listing::*,
 };
 use serde::Deserialize;
 
@@ -58,7 +59,7 @@ struct OptionInput {
     unit: Unit,
     increment: PositiveDecimal,
     minimum: PositiveDecimal,
-    price: Quote,
+    price: RawPrice,
     supply: RawSupply,
     lead_seconds: LeadSeconds,
 }
@@ -81,15 +82,95 @@ enum Measure {
     #[serde(rename = "each")]
     Each,
 }
+impl Measure {
+    fn domain(self) -> MeasurementUnit {
+        match self {
+            Self::Gram => MeasurementUnit::Gram,
+            Self::Kilogram => MeasurementUnit::Kilogram,
+            Self::Millilitre => MeasurementUnit::Millilitre,
+            Self::Litre => MeasurementUnit::Litre,
+            Self::Each => MeasurementUnit::Each,
+        }
+    }
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawQuantity {
+    amount: Decimal,
+    unit: Measure,
+}
+impl RawQuantity {
+    fn domain(self) -> Result<Quantity, CommandError> {
+        invalid(Quantity::new(self.amount, self.unit.domain()))
+    }
+}
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum Contents {
+    Fixed { quantity: RawQuantity },
+    Estimated { quantity: RawQuantity },
     Unspecified,
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
-enum Quote {
+enum RawPrice {
+    Fixed {
+        rate: Money,
+        basis: PositiveDecimal,
+        discount_bps: u16,
+        tiers: Vec<RawTier>,
+    },
     QuoteRequired,
+    VariableWeight {
+        measurement_unit: Measure,
+        minimum_per_sale_unit: PositiveDecimal,
+        maximum_per_sale_unit: PositiveDecimal,
+        rate: Money,
+        basis: PositiveDecimal,
+        maximum_per_sale_unit_total: Money,
+    },
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawTier {
+    from: Decimal,
+    rate: Money,
+}
+impl RawPrice {
+    fn domain(self) -> Result<Price, CommandError> {
+        match self {
+            Self::QuoteRequired => Ok(Price::QuoteRequired),
+            Self::Fixed {
+                rate,
+                basis,
+                discount_bps,
+                tiers,
+            } => Ok(Price::Fixed(invalid(FixedPrice::new(
+                rate,
+                basis,
+                invalid(DiscountBps::new(discount_bps))?,
+                tiers
+                    .into_iter()
+                    .map(|tier| PriceTier::new(tier.from, tier.rate))
+                    .collect(),
+            ))?)),
+            Self::VariableWeight {
+                measurement_unit,
+                minimum_per_sale_unit,
+                maximum_per_sale_unit,
+                rate,
+                basis,
+                maximum_per_sale_unit_total,
+            } => Ok(Price::VariableWeight(invalid(VariableWeight::new(
+                measurement_unit.domain(),
+                minimum_per_sale_unit,
+                maximum_per_sale_unit,
+                rate,
+                basis,
+                maximum_per_sale_unit_total,
+            ))?)),
+        }
+    }
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -111,7 +192,7 @@ enum Mode {
     Delivery,
 }
 
-fn invalid<T>(value: Result<T, ListingError>) -> Result<T, CommandError> {
+fn invalid<T, E>(value: Result<T, E>) -> Result<T, CommandError> {
     value.map_err(|_| CommandError::InvalidInput)
 }
 impl Input {
@@ -131,26 +212,28 @@ impl Input {
         }
         let mut options = Vec::with_capacity(profile.options.len());
         for option in profile.options {
-            let Quote::QuoteRequired = option.price;
             let unit = match option.unit {
-                Unit::Measured { unit } => SaleUnit::measured(match unit {
-                    Measure::Gram => MeasurementUnit::Gram,
-                    Measure::Kilogram => MeasurementUnit::Kilogram,
-                    Measure::Millilitre => MeasurementUnit::Millilitre,
-                    Measure::Litre => MeasurementUnit::Litre,
-                    Measure::Each => MeasurementUnit::Each,
-                }),
+                Unit::Measured { unit } => SaleUnit::measured(unit.domain()),
                 Unit::Package { label, contents } => {
-                    let Contents::Unspecified = contents;
-                    invalid(SaleUnit::package_unspecified(&label))?
+                    let contents = match contents {
+                        Contents::Fixed { quantity } => ContentMeasure::Fixed {
+                            quantity: quantity.domain()?,
+                        },
+                        Contents::Estimated { quantity } => ContentMeasure::Estimated {
+                            quantity: quantity.domain()?,
+                        },
+                        Contents::Unspecified => ContentMeasure::Unspecified,
+                    };
+                    invalid(SaleUnit::package(&label, contents))?
                 }
             };
-            options.push(invalid(ListingOption::quote_required(
+            options.push(invalid(ListingOption::new(
                 option.id,
                 &option.label,
                 unit,
                 option.increment,
                 option.minimum,
+                option.price.domain()?,
                 match option.supply {
                     RawSupply::Unknown => Supply::Unknown,
                     RawSupply::Available { amount } => Supply::Available { amount },
@@ -195,7 +278,7 @@ impl Input {
     }
 }
 impl PublishInput {
-    /// Admits bounded closed quote-required input. Known unsupported features
+    /// Admits bounded closed sale-option input. Known unsupported features
     /// return an explicit refusal; they are never silently stripped or coerced.
     pub fn parse(raw: &[u8]) -> Result<Self, CommandError> {
         check_frame(raw)?;
@@ -204,6 +287,7 @@ impl PublishInput {
         // required nulls and all nested domain constructors.
         let value: serde_json::Value =
             serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
+        object_shapes(&value)?;
         if let Some(profile) = value.get("profile") {
             if profile
                 .get("profile")
@@ -221,7 +305,9 @@ impl PublishInput {
                     if option
                         .pointer("/price/type")
                         .and_then(serde_json::Value::as_str)
-                        .is_some_and(|v| v != "quote_required")
+                        .is_some_and(|v| {
+                            !matches!(v, "quote_required" | "fixed" | "variable_weight")
+                        })
                         || option
                             .pointer("/supply/type")
                             .and_then(serde_json::Value::as_str)
@@ -229,7 +315,7 @@ impl PublishInput {
                         || option
                             .pointer("/unit/contents/type")
                             .and_then(serde_json::Value::as_str)
-                            .is_some_and(|v| v != "unspecified")
+                            .is_some_and(|v| !matches!(v, "unspecified" | "fixed" | "estimated"))
                     {
                         return Err(CommandError::UnsupportedProfile);
                     }
@@ -239,4 +325,53 @@ impl PublishInput {
         let input: Input = serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
         input.validate()
     }
+}
+
+// Serde's derived struct decoder also accepts positional sequences. The wire
+// profile requires JSON objects; this bounded structural pass never supplies
+// acceptance without the independent duplicate/unknown-field-aware parser.
+fn object(value: &serde_json::Value) -> Result<(), CommandError> {
+    if value.is_object() {
+        Ok(())
+    } else {
+        Err(CommandError::InvalidInput)
+    }
+}
+fn object_shapes(value: &serde_json::Value) -> Result<(), CommandError> {
+    object(value)?;
+    let profile = &value["profile"];
+    object(profile)?;
+    object(&profile["product"])?;
+    object(&profile["fulfillment"])?;
+    if !profile["authority"].is_null() {
+        object(&profile["authority"])?;
+    }
+    let options = profile["options"]
+        .as_array()
+        .ok_or(CommandError::InvalidInput)?;
+    if options.is_empty() || options.len() > 16 {
+        return Err(CommandError::LimitExceeded);
+    }
+    for option in options {
+        object(option)?;
+        object(&option["unit"])?;
+        object(&option["price"])?;
+        object(&option["supply"])?;
+        if let Some(contents) = option["unit"].get("contents") {
+            object(contents)?;
+            if let Some(quantity) = contents.get("quantity") {
+                object(quantity)?;
+            }
+        }
+        if let Some(tiers) = option["price"].get("tiers") {
+            let tiers = tiers.as_array().ok_or(CommandError::InvalidInput)?;
+            if tiers.len() > FixedPrice::MAX_TIERS {
+                return Err(CommandError::LimitExceeded);
+            }
+            for tier in tiers {
+                object(tier)?;
+            }
+        }
+    }
+    Ok(())
 }

@@ -12,7 +12,10 @@ pub radroots_domain::listing::ListingError::InvalidOptions
 pub radroots_domain::listing::ListingError::InvalidQuantity
 pub radroots_domain::listing::ListingError::InvalidText
 pub radroots_domain::listing::ListingError::InvalidTime
+pub radroots_domain::listing::ListingError::NotFixedPrice
+pub radroots_domain::listing::ListingError::Pricing(radroots_domain::PricingError)
 impl core::error::Error for radroots_domain::listing::ListingError
+pub fn radroots_domain::listing::ListingError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
 impl core::fmt::Display for radroots_domain::listing::ListingError
 pub fn radroots_domain::listing::ListingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_domain::listing::ListingState
@@ -28,7 +31,11 @@ pub radroots_domain::listing::MeasurementUnit::Millilitre
 impl radroots_domain::listing::MeasurementUnit
 pub const fn radroots_domain::listing::MeasurementUnit::symbol(self) -> &'static str
 #[non_exhaustive] pub enum radroots_domain::listing::Price
+pub radroots_domain::listing::Price::Fixed(radroots_domain::FixedPrice)
 pub radroots_domain::listing::Price::QuoteRequired
+pub radroots_domain::listing::Price::VariableWeight(radroots_domain::VariableWeight)
+impl serde_core::ser::Serialize for radroots_domain::listing::Price
+pub fn radroots_domain::listing::Price::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 #[non_exhaustive] pub enum radroots_domain::listing::Supply
 pub radroots_domain::listing::Supply::Available
 pub radroots_domain::listing::Supply::Available::amount: radroots_domain::Decimal
@@ -64,11 +71,13 @@ impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::listing::Listing
 pub fn radroots_domain::listing::ListingId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::listing::ListingOption
 impl radroots_domain::listing::ListingOption
+pub fn radroots_domain::listing::ListingOption::fixed_line(&self, radroots_domain::PositiveDecimal) -> core::result::Result<radroots_domain::LinePrice, radroots_domain::listing::ListingError>
 pub const fn radroots_domain::listing::ListingOption::id(&self) -> radroots_domain::ListingOptionId
 pub const fn radroots_domain::listing::ListingOption::increment(&self) -> radroots_domain::PositiveDecimal
 pub fn radroots_domain::listing::ListingOption::label(&self) -> &str
 pub const fn radroots_domain::listing::ListingOption::minimum(&self) -> radroots_domain::PositiveDecimal
-pub const fn radroots_domain::listing::ListingOption::price(&self) -> radroots_domain::listing::Price
+pub fn radroots_domain::listing::ListingOption::new(radroots_domain::ListingOptionId, &str, radroots_domain::listing::SaleUnit, radroots_domain::PositiveDecimal, radroots_domain::PositiveDecimal, radroots_domain::listing::Price, radroots_domain::listing::Supply, radroots_domain::listing::LeadSeconds) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub const fn radroots_domain::listing::ListingOption::price(&self) -> &radroots_domain::listing::Price
 pub fn radroots_domain::listing::ListingOption::quote_required(radroots_domain::ListingOptionId, &str, radroots_domain::listing::SaleUnit, radroots_domain::PositiveDecimal, radroots_domain::PositiveDecimal, radroots_domain::listing::Supply, radroots_domain::listing::LeadSeconds) -> core::result::Result<Self, radroots_domain::listing::ListingError>
 pub const fn radroots_domain::listing::ListingOption::unit(&self) -> &radroots_domain::listing::SaleUnit
 pub fn radroots_domain::listing::ListingOption::validate_amount(&self, radroots_domain::PositiveDecimal) -> core::result::Result<(), radroots_domain::listing::ListingError>
@@ -105,9 +114,11 @@ impl core::fmt::Debug for radroots_domain::listing::PublicFulfillment
 pub fn radroots_domain::listing::PublicFulfillment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::listing::SaleUnit(_)
 impl radroots_domain::listing::SaleUnit
+pub const fn radroots_domain::listing::SaleUnit::contents(&self) -> core::option::Option<radroots_domain::ContentMeasure>
 pub const fn radroots_domain::listing::SaleUnit::integral(&self) -> bool
 pub fn radroots_domain::listing::SaleUnit::label(&self) -> &str
 pub const fn radroots_domain::listing::SaleUnit::measured(radroots_domain::listing::MeasurementUnit) -> Self
+pub fn radroots_domain::listing::SaleUnit::package(&str, radroots_domain::ContentMeasure) -> core::result::Result<Self, radroots_domain::listing::ListingError>
 pub fn radroots_domain::listing::SaleUnit::package_unspecified(&str) -> core::result::Result<Self, radroots_domain::listing::ListingError>
 impl core::fmt::Debug for radroots_domain::listing::SaleUnit
 pub fn radroots_domain::listing::SaleUnit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

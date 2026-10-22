@@ -1,12 +1,17 @@
 //! Public offer values without protocol effects or private inventory backing.
-//! Quote-required choices are supported independently of monetary registries.
+//! Exact economics remain separate from execution and physical backing.
 
-use crate::{AuthorityRef, Decimal, ListingOptionId, PositiveDecimal, PublicKey, Sequence};
+use crate::{
+    AuthorityRef, ContentMeasure, Decimal, LinePrice, ListingOptionId, PositiveDecimal,
+    PricingError, PublicKey, Sequence,
+};
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{fmt, str::FromStr};
 
 mod view;
 pub use view::{Listing, ListingText};
+mod price;
+pub use price::Price;
 
 /// A fixed, input-free public-offer value failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -26,6 +31,10 @@ pub enum ListingError {
     InvalidDuration,
     /// Declared publication time follows the signed revision time.
     InvalidTime,
+    /// The requested calculation requires a fixed-price option.
+    NotFixedPrice,
+    /// Exact price calculation cannot be represented within the approved bounds.
+    Pricing(PricingError),
 }
 impl fmt::Display for ListingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -37,10 +46,19 @@ impl fmt::Display for ListingError {
             Self::InvalidFulfillment => "invalid public fulfillment",
             Self::InvalidDuration => "invalid listing duration",
             Self::InvalidTime => "invalid listing time",
+            Self::NotFixedPrice => "listing option has no fixed price",
+            Self::Pricing(error) => return error.fmt(f),
         })
     }
 }
-impl core::error::Error for ListingError {}
+impl core::error::Error for ListingError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            Self::Pricing(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 /// Stable128-bit coordinate discriminator. Generation requires host entropy;
 /// parsing this descriptor never proves novelty, ownership or publication.
@@ -179,14 +197,8 @@ enum UnitKind {
     },
     Package {
         label: String,
-        contents: UnspecifiedContents,
+        contents: ContentMeasure,
     },
-}
-#[derive(Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "snake_case"))]
-enum UnspecifiedContents {
-    Unspecified,
 }
 
 /// Validated sale unit. An unspecified package implies no mass/volume mapping.
@@ -201,11 +213,22 @@ impl SaleUnit {
     }
     /// Selects a labelled package without inventing its physical contents.
     pub fn package_unspecified(label: &str) -> Result<Self, ListingError> {
+        Self::package(label, ContentMeasure::Unspecified)
+    }
+    /// Captures declared contents without inferring physical conversion or stock.
+    pub fn package(label: &str, contents: ContentMeasure) -> Result<Self, ListingError> {
         text(label, 80, false)?;
         Ok(Self(UnitKind::Package {
             label: label.into(),
-            contents: UnspecifiedContents::Unspecified,
+            contents,
         }))
+    }
+    /// Returns package metadata; a measured sale unit has no package contents.
+    pub const fn contents(&self) -> Option<ContentMeasure> {
+        match self.0 {
+            UnitKind::Package { contents, .. } => Some(contents),
+            UnitKind::Measured { .. } => None,
+        }
     }
     /// Borrows the explicit display label/symbol used by public projections.
     pub fn label(&self) -> &str {
@@ -244,17 +267,6 @@ pub enum Supply {
         /// Public advertised quantity, without backing authority.
         amount: Decimal,
     },
-}
-
-/// Supported quote-required price. Monetary modes require their validated
-/// registry and exact economics before they can be represented here.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "snake_case"))]
-pub enum Price {
-    /// No zero-price, rate, currency, discount or hold is inferred.
-    QuoteRequired,
 }
 
 /// Validated public product description; producer data grants no agency rights.
@@ -297,7 +309,7 @@ impl fmt::Debug for Product {
     }
 }
 
-/// A validated buyer-selectable quote choice, with no private pool/lot IDs.
+/// A validated buyer-selectable sale choice, with no private pool/lot IDs.
 #[derive(Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct ListingOption {
@@ -322,6 +334,29 @@ impl ListingOption {
         supply: Supply,
         lead_seconds: LeadSeconds,
     ) -> Result<Self, ListingError> {
+        Self::new(
+            id,
+            label,
+            unit,
+            increment,
+            minimum,
+            Price::QuoteRequired,
+            supply,
+            lead_seconds,
+        )
+    }
+    /// Captures complete explicit price and purchase rules without stock effects.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: ListingOptionId,
+        label: &str,
+        unit: SaleUnit,
+        increment: PositiveDecimal,
+        minimum: PositiveDecimal,
+        price: Price,
+        supply: Supply,
+        lead_seconds: LeadSeconds,
+    ) -> Result<Self, ListingError> {
         text(label, 120, false)?;
         let inc = increment.amount();
         let min = minimum.amount();
@@ -339,7 +374,7 @@ impl ListingOption {
             unit,
             increment,
             minimum,
-            price: Price::QuoteRequired,
+            price,
             supply,
             lead_seconds,
         })
@@ -372,9 +407,17 @@ impl ListingOption {
         }
         Ok(())
     }
-    /// Returns the validated price mode, without inventing a quoted amount.
-    pub const fn price(&self) -> Price {
-        self.price
+    /// Borrows the complete validated mode without inventing a quoted amount.
+    pub const fn price(&self) -> &Price {
+        &self.price
+    }
+    /// Admits purchase rules before selecting a tier and pricing one fixed line.
+    pub fn fixed_line(&self, amount: PositiveDecimal) -> Result<LinePrice, ListingError> {
+        self.validate_amount(amount)?;
+        match &self.price {
+            Price::Fixed(value) => value.line(amount).map_err(ListingError::Pricing),
+            Price::QuoteRequired | Price::VariableWeight(_) => Err(ListingError::NotFixedPrice),
+        }
     }
     /// Borrows the public default-choice description.
     pub fn label(&self) -> &str {
@@ -443,7 +486,7 @@ impl fmt::Debug for PublicFulfillment {
     }
 }
 
-/// Immutable public-offer terms for the supported quote-required producer.
+/// Immutable public-offer terms, with complete explicit sale-option prices.
 /// These are data, without workspace authority, signing or private backing.
 #[derive(Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]

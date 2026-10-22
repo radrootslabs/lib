@@ -34,7 +34,7 @@ numbers embedded in wire and schema contracts.
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
 | `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |
 | `chat` (`chat` feature) | bounded kind-14/13 data, complete immutable signing-plan codec and observed DM route descriptors |
-| `listing` (`listing` feature) | typed quote-required input and bounded kind-30402/profile-v1 preimages without command or publication authority |
+| `listing` (`listing` feature) | closed sale-option inputs and bounded kind-30402/profile-v1 preimages without execution or publication authority |
 
 Versioned DTOs live below an explicit generation module. The command codec
 implements its fixed v1 profile without exposing automatic serialization of
@@ -42,6 +42,16 @@ captured private commands. Parsed command data supplies no authority or consent.
 The crate root
 does not reexport individual DTOs, so consumers must name the contract version
 they use.
+
+Public listing inputs retain fixed, quote-required or per-sale-unit variable
+prices, with fixed/estimated/unspecified package metadata. Object fields reject
+positional arrays, and the closed typed decoder rejects duplicate, missing and
+unknown fields. Media and estimated supply/windows remain unsupported.
+Only the fixed default contributes a three-field NIP-99 base-rate `price` tag;
+the monetary summary identifies its basis, unit, discount and tier conditions.
+Variable bounds/caps stay explicit in the profile and summary. No recurring
+frequency field is used for units. Complete signed events retain the64KiB cap,
+with at most nine tags and19 fields shared by signer and storage admission.
 
 ## Features
 

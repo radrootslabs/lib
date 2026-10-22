@@ -1,7 +1,7 @@
 # Radroots domain
 
 Independently implemented exact values for the shared SDK successor. This
-pre-release package provides validated values and public quote-required offer
+pre-release package provides validated values and public sale-option offer
 terms. It does not execute commands, install agreements or establish stock.
 
 `Decimal` has a nonnegative coefficient up to 999999999999 and scale 0–6.
@@ -28,18 +28,20 @@ threshold, applies the discount before rounding, and rounds once per net line
 using half-even checked signed 128-bit rational arithmetic. `checked_order_total`
 sums one through 32 rounded lines and an explicit same-currency fulfillment
 charge within the money cap. The calculation uses one selected sale-unit basis
-and performs no implicit physical conversion. Complete option/terms admission,
-fixed-price listing authoring, agreement installation and command effects remain
-separate requirements; calculation values establish no authorization or stock.
+and performs no implicit physical conversion. Sale options validate purchase
+rules before using this engine. Complete bilateral terms, agreement installation
+and command effects remain separate requirements; calculations establish no
+authorization or stock.
 
 `Quantity` uses the existing measurement identity and exact decimal bounds.
 Conversions between g/kg and mL/L are explicit and reject precision loss;
-arithmetic requires matching units. `each` counts remain integral. Standalone
+arithmetic requires matching units. `each` counts remain integral.
 `ContentMeasure` descriptors distinguish fixed, estimated and unspecified
 contents; estimates do not provide fixed conversions or stock backing. Existing
 sale options validate selected amounts against their minimum, increment and
 integral package/count rules. Advertised supply establishes no quantity ceiling
-or actual availability. Complete listing/term integration remains separate.
+or actual availability. Sale-unit packages retain all three content modes;
+complete bilateral-term integration remains separate.
 
 `VariableWeight` retains a positive inclusive measurement range, exact rate and
 basis, and an explicit same-currency maximum total. Its minimum is feasible
@@ -59,7 +61,11 @@ belongs to the execution owner's qualified CSPRNG boundary.
 and deduplicate options, retain an exact selected default, and validate positive
 increments/minimums without floating conversion. Package and `each` quantities
 remain integral; measured units imply no conversion. Quote-required prices
-contain no invented zero amount or currency. Optional opaque authority and
+contain no invented zero amount or currency. Fixed options retain their complete
+rate/basis, discount and tiers; `fixed_line` validates the selected purchase
+amount before calculating it. Variable option bounds and caps describe one
+sale unit and require complete absolute agreement terms before installation.
+Optional opaque authority and
 producer metadata establish no permission or endpoint trust. These immutable
 terms serialize public data explicitly and redact ordinary diagnostics.
 

@@ -229,7 +229,7 @@ fn exact_increments_and_units_never_invent_fractional_packages_or_conversion() {
         let value = option(1, SaleUnit::measured(unit), "0.25", "0.5", "1.5").unwrap();
         assert_eq!(value.unit().label(), unit.symbol());
         assert!(!value.unit().integral());
-        assert_eq!(value.price(), Price::QuoteRequired);
+        assert_eq!(value.price(), &Price::QuoteRequired);
         assert!(option(1, SaleUnit::measured(unit), "0.25", "0.3", "1.5").is_err());
     }
     for unit in [

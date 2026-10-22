@@ -1,4 +1,6 @@
 //! Ordinary public commands with a signing-only provider and measured relay reads.
+#[path = "receipt_listing_economics.rs"]
+mod economics;
 #[path = "receipt_public_snapshots.rs"]
 mod snapshots;
 
