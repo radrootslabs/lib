@@ -473,6 +473,19 @@ fn line_admission_refuses_snapshot_quantity_tier_text_and_claimed_total_mismatch
 #[test]
 fn complete_terms_enforce_collection_identity_seller_and_group_closure_before_capture() {
     assert_eq!(
+        Terms::new(
+            seller(),
+            seller(),
+            vec![line(1, 1)],
+            vec![group(1)],
+            money("0"),
+            money("650"),
+            SupplyCommitment::StockBacked
+        )
+        .unwrap_err(),
+        TermsError::PartiesCoincide
+    );
+    assert_eq!(
         terms(vec![], vec![group(1)], money("0"), money("0")).unwrap_err(),
         TermsError::InvalidLineCount
     );
@@ -664,6 +677,7 @@ fn exact_listing_source_references_retain_full_coordinate_and_signed_revision_id
 #[test]
 fn agreement_failures_remain_typed_bounded_and_input_free() {
     for error in [
+        TermsError::PartiesCoincide,
         TermsError::InvalidLineCount,
         TermsError::InvalidFulfillmentCount,
         TermsError::DuplicateLine,

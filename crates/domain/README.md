@@ -89,7 +89,7 @@ serialization and grants no agreement, destination or delivery authority.
 
 `Terms` retains complete immutable bilateral values: one through32 uniquely
 identified lines, one through8 uniquely identified private fulfillment groups,
-explicit participants, original listing revision/product/option snapshots,
+explicit distinct buyer/seller participants, original listing revision/product/option snapshots,
 selected positive purchase amounts, fulfillment fee, aggregate cap and supply
 commitment. Every line names a declared group and a source coordinate for the
 named seller. Coordinate/revision bytes and snapshots remain unverified claims

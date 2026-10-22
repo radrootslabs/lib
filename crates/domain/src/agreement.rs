@@ -275,6 +275,9 @@ impl Terms {
         maximum_total: Money,
         supply: SupplyCommitment,
     ) -> Result<Self, TermsError> {
+        if buyer == seller {
+            return Err(TermsError::PartiesCoincide);
+        }
         if lines.is_empty() || lines.len() > MAX_PRICED_LINES {
             return Err(TermsError::InvalidLineCount);
         }
@@ -374,6 +377,8 @@ fn text(value: &str, maximum: usize, nonempty: bool) -> Result<(), TermsError> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum TermsError {
+    /// Buyer and seller name the same participant in bilateral terms.
+    PartiesCoincide,
     /// The complete agreement requires one through32 lines.
     InvalidLineCount,
     /// The complete agreement requires one through8 private groups.
@@ -402,6 +407,7 @@ pub enum TermsError {
 impl fmt::Display for TermsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+            Self::PartiesCoincide => "bilateral participants must be distinct",
             Self::InvalidLineCount => "invalid agreement line count",
             Self::InvalidFulfillmentCount => "invalid private fulfillment count",
             Self::DuplicateLine => "duplicate agreement line",

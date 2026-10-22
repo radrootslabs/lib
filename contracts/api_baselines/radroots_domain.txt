@@ -292,6 +292,7 @@ pub radroots_domain::TermsError::InvalidLineCount
 pub radroots_domain::TermsError::InvalidSelectedTier
 pub radroots_domain::TermsError::InvalidText
 pub radroots_domain::TermsError::OptionMismatch
+pub radroots_domain::TermsError::PartiesCoincide
 pub radroots_domain::TermsError::Pricing(radroots_domain::PricingError)
 pub radroots_domain::TermsError::Purchase(radroots_domain::listing::ListingError)
 pub radroots_domain::TermsError::SellerMismatch
