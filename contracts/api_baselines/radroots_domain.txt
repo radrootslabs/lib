@@ -194,9 +194,13 @@ impl core::fmt::Display for radroots_domain::MoneyError
 pub fn radroots_domain::MoneyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::PricingError
 pub radroots_domain::PricingError::ArithmeticOutOfRange
+pub radroots_domain::PricingError::CapExceeded
 pub radroots_domain::PricingError::InvalidDiscount
 pub radroots_domain::PricingError::InvalidLineCount
+pub radroots_domain::PricingError::InvalidMeasurementRange
 pub radroots_domain::PricingError::InvalidTierOrder
+pub radroots_domain::PricingError::MeasurementOutOfRange
+pub radroots_domain::PricingError::MeasurementUnitMismatch
 pub radroots_domain::PricingError::Money(radroots_domain::MoneyError)
 pub radroots_domain::PricingError::TooManyTiers
 impl core::convert::From<radroots_domain::MoneyError> for radroots_domain::PricingError
@@ -714,6 +718,18 @@ impl serde_core::ser::Serialize for radroots_domain::UnixSeconds
 pub fn radroots_domain::UnixSeconds::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::UnixSeconds
 pub fn radroots_domain::UnixSeconds::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::VariableWeight
+impl radroots_domain::VariableWeight
+pub const fn radroots_domain::VariableWeight::basis(self) -> radroots_domain::PositiveDecimal
+pub const fn radroots_domain::VariableWeight::maximum(self) -> radroots_domain::PositiveDecimal
+pub const fn radroots_domain::VariableWeight::maximum_total(self) -> radroots_domain::Money
+pub const fn radroots_domain::VariableWeight::measurement_unit(self) -> radroots_domain::listing::MeasurementUnit
+pub const fn radroots_domain::VariableWeight::minimum(self) -> radroots_domain::PositiveDecimal
+pub fn radroots_domain::VariableWeight::new(radroots_domain::listing::MeasurementUnit, radroots_domain::PositiveDecimal, radroots_domain::PositiveDecimal, radroots_domain::Money, radroots_domain::PositiveDecimal, radroots_domain::Money) -> core::result::Result<Self, radroots_domain::PricingError>
+pub const fn radroots_domain::VariableWeight::rate(self) -> radroots_domain::Money
+pub fn radroots_domain::VariableWeight::total_at(self, radroots_domain::Quantity) -> core::result::Result<radroots_domain::Money, radroots_domain::PricingError>
+impl core::fmt::Debug for radroots_domain::VariableWeight
+pub fn radroots_domain::VariableWeight::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::WorkspaceId(_)
 impl radroots_domain::WorkspaceId
 pub const fn radroots_domain::WorkspaceId::as_bytes(&self) -> &[u8; 32]

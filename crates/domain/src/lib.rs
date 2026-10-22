@@ -16,6 +16,7 @@ mod message;
 mod money;
 mod pricing;
 mod quantity;
+mod variable_price;
 
 /// The identity-owned validated participant key; no second key type is defined.
 pub use radroots_identity::PublicKey;
@@ -42,3 +43,4 @@ pub use pricing::{
     checked_order_total,
 };
 pub use quantity::{ContentMeasure, Quantity, QuantityError};
+pub use variable_price::VariableWeight;

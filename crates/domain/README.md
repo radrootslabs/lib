@@ -41,6 +41,14 @@ sale options validate selected amounts against their minimum, increment and
 integral package/count rules. Advertised supply establishes no quantity ceiling
 or actual availability. Complete listing/term integration remains separate.
 
+`VariableWeight` retains a positive inclusive measurement range, exact rate and
+basis, and an explicit same-currency maximum total. Its minimum is feasible
+within the cap. Final measurements must use the declared unit, remain in range,
+and recompute within the cap using the same half-even engine without a discount.
+An in-range measurement can still exceed the cap and require refusal; this does
+not amend the terms or consume stock. Offer/line scaling and installation remain
+the responsibility of complete enclosing validated terms and execution.
+
 Order, thread, workspace, executor and operation IDs have distinct Rust types.
 Each stores 32 bytes and uses exactly 64 lowercase hexadecimal characters in
 strings and JSON. Byte/string construction validates representation; generation

@@ -192,7 +192,7 @@ pub fn checked_order_total(
     Ok(total)
 }
 
-fn net_line_minor(
+pub(crate) fn net_line_minor(
     rate: MinorAmount,
     amount: PositiveDecimal,
     basis: PositiveDecimal,
@@ -249,6 +249,14 @@ pub enum PricingError {
     InvalidTierOrder,
     /// An aggregate has no lines or exceeds 32 lines.
     InvalidLineCount,
+    /// Measurement bounds are inverted or contain fractional each counts.
+    InvalidMeasurementRange,
+    /// The final measurement uses a different explicit unit.
+    MeasurementUnitMismatch,
+    /// A final measurement is outside the authorized inclusive range.
+    MeasurementOutOfRange,
+    /// The exact recomputed price exceeds the explicit monetary cap.
+    CapExceeded,
     /// A checked intermediate operation could not be represented.
     ArithmeticOutOfRange,
     /// The monetary bound or exact currency invariant was violated.
@@ -268,6 +276,10 @@ impl fmt::Display for PricingError {
             Self::TooManyTiers => "too many price tiers",
             Self::InvalidTierOrder => "price thresholds must strictly increase",
             Self::InvalidLineCount => "invalid priced line count",
+            Self::InvalidMeasurementRange => "invalid measurement range",
+            Self::MeasurementUnitMismatch => "measurement unit differs from authorized unit",
+            Self::MeasurementOutOfRange => "measurement is outside authorized range",
+            Self::CapExceeded => "measurement price exceeds authorized cap",
             Self::ArithmeticOutOfRange => "pricing arithmetic exceeds supported bounds",
             Self::Money(error) => return error.fmt(f),
         })
