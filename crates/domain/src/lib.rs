@@ -14,6 +14,7 @@ mod issuance;
 pub mod listing;
 mod message;
 mod money;
+mod pricing;
 
 /// The identity-owned validated participant key; no second key type is defined.
 pub use radroots_identity::PublicKey;
@@ -35,3 +36,7 @@ pub use identifier::{
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};
 pub use message::{CHAT_MAX_BYTES, ChatMessage, ChatRelation, MessageError};
 pub use money::{MinorAmount, Money, MoneyError};
+pub use pricing::{
+    DiscountBps, FixedPrice, LinePrice, MAX_PRICED_LINES, PRICING_PROFILE, PriceTier, PricingError,
+    checked_order_total,
+};

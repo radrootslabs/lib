@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "profile": "half_even_net_line_v1",
+  "provenance": {
+    "source": "Radroots synthetic fixed-price design vectors",
+    "source_sha256": "cbfe6a7ba97d1825bbaf62e82bb3a591f3d2f09f7352e2af9c433f392234a5e6",
+    "original_vectors": 10,
+    "additional_vectors": 16,
+    "expected_values": "independent Python Fraction and Decimal precision120 agreement"
+  },
+  "vectors": [
+    {
+      "id": "net-line-tie-even",
+      "rate_minor": "325",
+      "quantity": "2.5",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "812",
+      "expected_error": null,
+      "unbounded_rounded_minor": "812"
+    },
+    {
+      "id": "net-line-tie-odd",
+      "rate_minor": "327",
+      "quantity": "2.5",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "818",
+      "expected_error": null,
+      "unbounded_rounded_minor": "818"
+    },
+    {
+      "id": "half-cent-even",
+      "rate_minor": "101",
+      "quantity": "0.5",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "50",
+      "expected_error": null,
+      "unbounded_rounded_minor": "50"
+    },
+    {
+      "id": "half-cent-odd",
+      "rate_minor": "103",
+      "quantity": "0.5",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "52",
+      "expected_error": null,
+      "unbounded_rounded_minor": "52"
+    },
+    {
+      "id": "discount-before-one-round",
+      "rate_minor": "299",
+      "quantity": "3.5",
+      "basis": "1",
+      "discount_bps": 1000,
+      "expected_minor": "942",
+      "expected_error": null,
+      "unbounded_rounded_minor": "942"
+    },
+    {
+      "id": "free-is-valid",
+      "rate_minor": "0",
+      "quantity": "2",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    },
+    {
+      "id": "case-price",
+      "rate_minor": "2450",
+      "quantity": "3",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "7350",
+      "expected_error": null,
+      "unbounded_rounded_minor": "7350"
+    },
+    {
+      "id": "per-100-grams",
+      "rate_minor": "175",
+      "quantity": "250",
+      "basis": "100",
+      "discount_bps": 0,
+      "expected_minor": "438",
+      "expected_error": null,
+      "unbounded_rounded_minor": "438"
+    },
+    {
+      "id": "large-exact-intermediate-beyond-js-safe",
+      "rate_minor": "999999999999999",
+      "quantity": "999999999999",
+      "basis": "999999999999",
+      "discount_bps": 0,
+      "expected_minor": "999999999999999",
+      "expected_error": null,
+      "unbounded_rounded_minor": "999999999999999"
+    },
+    {
+      "id": "full-discount",
+      "rate_minor": "999",
+      "quantity": "5",
+      "basis": "1",
+      "discount_bps": 10000,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    },
+    {
+      "id": "boundary-00",
+      "rate_minor": "1",
+      "quantity": "0.499999",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    },
+    {
+      "id": "boundary-01",
+      "rate_minor": "1",
+      "quantity": "0.500001",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "1",
+      "expected_error": null,
+      "unbounded_rounded_minor": "1"
+    },
+    {
+      "id": "boundary-02",
+      "rate_minor": "1",
+      "quantity": "0.5",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    },
+    {
+      "id": "boundary-03",
+      "rate_minor": "3",
+      "quantity": "0.5",
+      "basis": "1",
+      "discount_bps": 0,
+      "expected_minor": "2",
+      "expected_error": null,
+      "unbounded_rounded_minor": "2"
+    },
+    {
+      "id": "boundary-04",
+      "rate_minor": "325",
+      "quantity": "0.000001",
+      "basis": "0.000001",
+      "discount_bps": 1,
+      "expected_minor": "325",
+      "expected_error": null,
+      "unbounded_rounded_minor": "325"
+    },
+    {
+      "id": "boundary-05",
+      "rate_minor": "999999999999999",
+      "quantity": "999999999999",
+      "basis": "999999999999",
+      "discount_bps": 1,
+      "expected_minor": "999899999999999",
+      "expected_error": null,
+      "unbounded_rounded_minor": "999899999999999"
+    },
+    {
+      "id": "boundary-06",
+      "rate_minor": "999999999999999",
+      "quantity": "999999999999",
+      "basis": "0.000001",
+      "discount_bps": 0,
+      "expected_minor": null,
+      "expected_error": "minor_out_of_range",
+      "unbounded_rounded_minor": "999999999998999000000000001000000"
+    },
+    {
+      "id": "boundary-07",
+      "rate_minor": "999999999999999",
+      "quantity": "999999999999",
+      "basis": "0.000001",
+      "discount_bps": 10000,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    },
+    {
+      "id": "boundary-08",
+      "rate_minor": "999999999999999",
+      "quantity": "0.000001",
+      "basis": "999999999999",
+      "discount_bps": 0,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    },
+    {
+      "id": "boundary-09",
+      "rate_minor": "101",
+      "quantity": "1.5",
+      "basis": "0.1",
+      "discount_bps": 1000,
+      "expected_minor": "1364",
+      "expected_error": null,
+      "unbounded_rounded_minor": "1364"
+    },
+    {
+      "id": "boundary-10",
+      "rate_minor": "103",
+      "quantity": "2.5",
+      "basis": "0.1",
+      "discount_bps": 9999,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    },
+    {
+      "id": "boundary-11",
+      "rate_minor": "175",
+      "quantity": "250",
+      "basis": "100",
+      "discount_bps": 1000,
+      "expected_minor": "394",
+      "expected_error": null,
+      "unbounded_rounded_minor": "394"
+    },
+    {
+      "id": "boundary-12",
+      "rate_minor": "333",
+      "quantity": "1",
+      "basis": "3",
+      "discount_bps": 1,
+      "expected_minor": "111",
+      "expected_error": null,
+      "unbounded_rounded_minor": "111"
+    },
+    {
+      "id": "boundary-13",
+      "rate_minor": "1",
+      "quantity": "999999999999",
+      "basis": "0.000001",
+      "discount_bps": 0,
+      "expected_minor": null,
+      "expected_error": "minor_out_of_range",
+      "unbounded_rounded_minor": "999999999999000000"
+    },
+    {
+      "id": "boundary-14",
+      "rate_minor": "100",
+      "quantity": "1",
+      "basis": "0.000003",
+      "discount_bps": 0,
+      "expected_minor": "33333333",
+      "expected_error": null,
+      "unbounded_rounded_minor": "33333333"
+    },
+    {
+      "id": "boundary-15",
+      "rate_minor": "0",
+      "quantity": "999999999999",
+      "basis": "0.000001",
+      "discount_bps": 0,
+      "expected_minor": "0",
+      "expected_error": null,
+      "unbounded_rounded_minor": "0"
+    }
+  ]
+}

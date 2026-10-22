@@ -20,8 +20,17 @@ a guessed exponent. `MinorAmount` admits canonical integer strings up to
 999999999999999. `Money` checks the explicit wire exponent against that registry
 and performs checked signed 128-bit addition/subtraction within one currency.
 JSON minor amounts remain strings; private monetary diagnostics are redacted.
-Pricing, rounding, complete agreement terms and command effects remain separate
-implementation requirements. Explicit zero money does not imply a price mode.
+Explicit zero money does not imply a price mode.
+
+`FixedPrice` validates at most eight strictly increasing same-currency tiers
+and one discount in basis points 0–10000. It selects the greatest applicable
+threshold, applies the discount before rounding, and rounds once per net line
+using half-even checked signed 128-bit rational arithmetic. `checked_order_total`
+sums one through 32 rounded lines and an explicit same-currency fulfillment
+charge within the money cap. The calculation uses one selected sale-unit basis
+and performs no implicit physical conversion. Complete option/terms admission,
+fixed-price listing authoring, agreement installation and command effects remain
+separate requirements; calculation values establish no authorization or stock.
 
 Order, thread, workspace, executor and operation IDs have distinct Rust types.
 Each stores 32 bytes and uses exactly 64 lowercase hexadecimal characters in

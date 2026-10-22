@@ -171,10 +171,25 @@ pub radroots_domain::MoneyError::NegativeResult
 pub radroots_domain::MoneyError::NonCanonicalMinor
 impl core::convert::From<radroots_domain::CurrencyError> for radroots_domain::MoneyError
 pub fn radroots_domain::MoneyError::from(radroots_domain::CurrencyError) -> Self
+impl core::convert::From<radroots_domain::MoneyError> for radroots_domain::PricingError
+pub fn radroots_domain::PricingError::from(radroots_domain::MoneyError) -> Self
 impl core::error::Error for radroots_domain::MoneyError
 pub fn radroots_domain::MoneyError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
 impl core::fmt::Display for radroots_domain::MoneyError
 pub fn radroots_domain::MoneyError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum radroots_domain::PricingError
+pub radroots_domain::PricingError::ArithmeticOutOfRange
+pub radroots_domain::PricingError::InvalidDiscount
+pub radroots_domain::PricingError::InvalidLineCount
+pub radroots_domain::PricingError::InvalidTierOrder
+pub radroots_domain::PricingError::Money(radroots_domain::MoneyError)
+pub radroots_domain::PricingError::TooManyTiers
+impl core::convert::From<radroots_domain::MoneyError> for radroots_domain::PricingError
+pub fn radroots_domain::PricingError::from(radroots_domain::MoneyError) -> Self
+impl core::error::Error for radroots_domain::PricingError
+pub fn radroots_domain::PricingError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for radroots_domain::PricingError
+pub fn radroots_domain::PricingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ActorRef
 impl radroots_domain::ActorRef
 pub const fn radroots_domain::ActorRef::grant_id(self) -> core::option::Option<radroots_domain::GrantId>
@@ -335,6 +350,14 @@ impl serde_core::ser::Serialize for radroots_domain::Decimal
 pub fn radroots_domain::Decimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Decimal
 pub fn radroots_domain::Decimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::DiscountBps(_)
+impl radroots_domain::DiscountBps
+pub const radroots_domain::DiscountBps::FULL: Self
+pub const radroots_domain::DiscountBps::NONE: Self
+pub const fn radroots_domain::DiscountBps::get(self) -> u16
+pub const fn radroots_domain::DiscountBps::new(u16) -> core::result::Result<Self, radroots_domain::PricingError>
+impl core::fmt::Debug for radroots_domain::DiscountBps
+pub fn radroots_domain::DiscountBps::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::EnvelopeEventId(_)
 impl radroots_domain::EnvelopeEventId
 pub const fn radroots_domain::EnvelopeEventId::as_bytes(&self) -> &[u8; 32]
@@ -373,6 +396,17 @@ pub const fn radroots_domain::ExpectedOrder::order_id(&self) -> radroots_domain:
 pub const fn radroots_domain::ExpectedOrder::seller_sequence(&self) -> radroots_domain::Sequence
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::ExpectedOrder
 pub fn radroots_domain::ExpectedOrder::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::FixedPrice
+impl radroots_domain::FixedPrice
+pub const radroots_domain::FixedPrice::MAX_TIERS: usize
+pub const fn radroots_domain::FixedPrice::basis(&self) -> radroots_domain::PositiveDecimal
+pub const fn radroots_domain::FixedPrice::discount_bps(&self) -> radroots_domain::DiscountBps
+pub fn radroots_domain::FixedPrice::line(&self, radroots_domain::PositiveDecimal) -> core::result::Result<radroots_domain::LinePrice, radroots_domain::PricingError>
+pub fn radroots_domain::FixedPrice::new(radroots_domain::Money, radroots_domain::PositiveDecimal, radroots_domain::DiscountBps, alloc::vec::Vec<radroots_domain::PriceTier>) -> core::result::Result<Self, radroots_domain::PricingError>
+pub const fn radroots_domain::FixedPrice::rate(&self) -> radroots_domain::Money
+pub fn radroots_domain::FixedPrice::tiers(&self) -> &[radroots_domain::PriceTier]
+impl core::fmt::Debug for radroots_domain::FixedPrice
+pub fn radroots_domain::FixedPrice::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::Generation(_)
 impl radroots_domain::Generation
 pub const fn radroots_domain::Generation::get(self) -> u64
@@ -406,6 +440,15 @@ pub fn radroots_domain::IssuanceWindow::capture(radroots_domain::UnixSeconds, ra
 pub const fn radroots_domain::IssuanceWindow::first_issue_not_after(self) -> radroots_domain::UnixSeconds
 pub fn radroots_domain::IssuanceWindow::new(radroots_domain::UnixSeconds, radroots_domain::UnixSeconds) -> core::result::Result<Self, radroots_domain::ContextError>
 pub const fn radroots_domain::IssuanceWindow::prepared_at(self) -> radroots_domain::UnixSeconds
+pub struct radroots_domain::LinePrice
+impl radroots_domain::LinePrice
+pub const fn radroots_domain::LinePrice::basis(self) -> radroots_domain::PositiveDecimal
+pub const fn radroots_domain::LinePrice::discount_bps(self) -> radroots_domain::DiscountBps
+pub const fn radroots_domain::LinePrice::rate(self) -> radroots_domain::Money
+pub const fn radroots_domain::LinePrice::selected_tier_from(self) -> core::option::Option<radroots_domain::Decimal>
+pub const fn radroots_domain::LinePrice::total(self) -> radroots_domain::Money
+impl core::fmt::Debug for radroots_domain::LinePrice
+pub fn radroots_domain::LinePrice::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::ListingOptionId(_)
 impl radroots_domain::ListingOptionId
 pub const fn radroots_domain::ListingOptionId::as_bytes(&self) -> &[u8; 32]
@@ -516,6 +559,13 @@ impl serde_core::ser::Serialize for radroots_domain::PositiveDecimal
 pub fn radroots_domain::PositiveDecimal::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::PositiveDecimal
 pub fn radroots_domain::PositiveDecimal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::PriceTier
+impl radroots_domain::PriceTier
+pub const fn radroots_domain::PriceTier::from(self) -> radroots_domain::Decimal
+pub const fn radroots_domain::PriceTier::new(radroots_domain::Decimal, radroots_domain::Money) -> Self
+pub const fn radroots_domain::PriceTier::rate(self) -> radroots_domain::Money
+impl core::fmt::Debug for radroots_domain::PriceTier
+pub fn radroots_domain::PriceTier::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::RecordId(_)
 impl radroots_domain::RecordId
 pub const fn radroots_domain::RecordId::as_bytes(&self) -> &[u8; 32]
@@ -644,4 +694,7 @@ pub const radroots_domain::CHAT_MAX_BYTES: usize
 pub const radroots_domain::CURRENCY_REGISTRY_ID: &str
 pub const radroots_domain::CURRENCY_REGISTRY_SHA256: &str
 pub const radroots_domain::FIRST_ISSUANCE_MAX_SECONDS: u64
+pub const radroots_domain::MAX_PRICED_LINES: usize
+pub const radroots_domain::PRICING_PROFILE: &str
 pub const radroots_domain::SUPPORTED_CURRENCY_COUNT: usize
+pub fn radroots_domain::checked_order_total(&[radroots_domain::Money], radroots_domain::Money) -> core::result::Result<radroots_domain::Money, radroots_domain::PricingError>
