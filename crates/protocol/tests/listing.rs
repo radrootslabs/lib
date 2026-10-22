@@ -39,6 +39,7 @@ fn input(state: ListingState, body: &str) -> PublishInput {
         )
         .unwrap(),
         None,
+        vec![],
     )
     .unwrap();
     PublishInput::new(
@@ -146,6 +147,7 @@ fn measured_choice_and_opaque_metadata_supply_no_pool_or_endpoint_authority() {
             ExecutorId::from_bytes([4; 32]),
             Generation::new(2).unwrap(),
         )),
+        vec![],
     )
     .unwrap();
     let captured = PublishInput::new(

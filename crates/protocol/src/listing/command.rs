@@ -10,7 +10,7 @@ use zeroize::Zeroizing;
 /// durable admission, event signing, installation or network work.
 pub struct CapturedListingCommand {
     context: CommandContextData,
-    input: PublishInput,
+    input: Box<PublishInput>,
     wire: Zeroizing<Box<[u8]>>,
     digest: CommandDigest,
     approval: ApprovalIntentDigest,
@@ -55,7 +55,7 @@ impl CapturedListingCommand {
         ));
         Ok(Self {
             context,
-            input,
+            input: Box::new(input),
             wire,
             digest,
             approval,

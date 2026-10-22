@@ -105,6 +105,88 @@ fn fixed_price(code: &str, minor: &str, exponent: u8) -> Value {
 }
 
 #[test]
+fn media_references_round_trip_without_upload_fetch_or_empty_profile_fallback() {
+    use radroots_protocol::listing::ListingEvent;
+    let reference = json!({"url":"https://media.fixture.invalid/carrot?version=1",
+        "sha256":"ab".repeat(32),"mime":"image/jpeg","alt":"Carrot 🥕\nExact text"});
+    for count in [0, 1, 8] {
+        let mut wire = input();
+        wire["profile"]["media"] = Value::Array(vec![reference.clone(); count]);
+        let parsed = PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap();
+        assert_eq!(parsed.terms().media().len(), count);
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+        let event = ListingEvent::new(&parsed, key(), UnixSeconds::new(101).unwrap()).unwrap();
+        let profile = event
+            .fields()
+            .tags
+            .iter()
+            .find(|tag| tag[0] == "radroots:listing")
+            .unwrap();
+        let observed: Value = serde_json::from_str(&profile[1]).unwrap();
+        assert_eq!(observed, wire["profile"]);
+        let public = CapturedListingCommand::capture(context(), parsed).unwrap();
+        assert_eq!(
+            CapturedListingCommand::parse(public.protected_wire())
+                .unwrap()
+                .protected_wire(),
+            public.protected_wire()
+        );
+    }
+}
+
+#[test]
+fn media_admission_refuses_missing_unknown_duplicate_array_and_out_of_bound_values() {
+    let reference = json!({"url":"https://media.fixture.invalid/carrot",
+        "sha256":"ab".repeat(32),"mime":"image/jpeg","alt":""});
+    let mut original = input();
+    original["profile"]["media"] = json!([reference.clone()]);
+    for (pointer, bad) in [
+        ("/profile/media", json!(vec![reference.clone(); 9])),
+        ("/profile/media", json!(null)),
+        (
+            "/profile/media/0",
+            json!([
+                "https://media.fixture.invalid/carrot",
+                "ab".repeat(32),
+                "image/jpeg",
+                ""
+            ]),
+        ),
+        (
+            "/profile/media/0",
+            json!({"url":"https://media.fixture.invalid/carrot"}),
+        ),
+        ("/profile/media/0/sha256", json!("AB".repeat(32))),
+        ("/profile/media/0/sha256", json!("ab".repeat(31))),
+        ("/profile/media/0/sha256", json!(vec![0; 32])),
+        ("/profile/media/0/url", json!("x".repeat(2049))),
+        ("/profile/media/0/mime", json!("x".repeat(81))),
+        ("/profile/media/0/alt", json!("🥕".repeat(241))),
+    ] {
+        let mut wire = original.clone();
+        *wire.pointer_mut(pointer).unwrap() = bad;
+        assert!(
+            PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).is_err(),
+            "{pointer}"
+        );
+    }
+    let mut missing = original.clone();
+    missing["profile"].as_object_mut().unwrap().remove("media");
+    assert!(PublishInput::parse(&serde_json::to_vec(&missing).unwrap()).is_err());
+    let mut extra = original.clone();
+    extra["profile"]["media"][0]["verified"] = json!(true);
+    assert!(PublishInput::parse(&serde_json::to_vec(&extra).unwrap()).is_err());
+    let raw = serde_json::to_string(&original).unwrap();
+    let duplicate = raw.replacen(
+        "\"mime\":\"image/jpeg\"",
+        "\"mime\":\"image/jpeg\",\"mime\":\"image/jpeg\"",
+        1,
+    );
+    assert_ne!(duplicate, raw);
+    assert!(PublishInput::parse(duplicate.as_bytes()).is_err());
+}
+
+#[test]
 fn fixed_default_projection_preserves_basis_currency_and_full_command_plan_replay() {
     use radroots_protocol::{
         listing::{ListingEvent, PublicSigningPlan},
@@ -435,14 +517,10 @@ fn closed_input_refuses_unknown_duplicate_missing_nullable_and_invalid_value_pat
 }
 
 #[test]
-fn unsupported_full_profile_features_are_refused_without_silent_quote_or_media_fallback() {
+fn unsupported_profile_features_are_refused_without_silent_fallback() {
     for (pointer, bad) in [
         ("/profile/version", json!(2)),
         ("/profile/profile", json!("other.profile")),
-        (
-            "/profile/media",
-            json!([{"url":"https://example.invalid/image"}]),
-        ),
         (
             "/profile/options/0/price",
             json!({"type":"future_price","rate":{"currency":"CAD","minor":"325","exponent":2}}),

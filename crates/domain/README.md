@@ -69,6 +69,13 @@ Optional opaque authority and
 producer metadata establish no permission or endpoint trust. These immutable
 terms serialize public data explicitly and redact ordinary diagnostics.
 
+`listing::Media` retains bounded, nonempty URL/MIME claims, exact alternative
+text and a declared SHA-256 digest. Construction does not normalize claims,
+approve an endpoint, fetch a file, verify its contents or promise a decoder.
+`ListingTerms::new` requires the explicit media list, with at most eight
+references and preserved order. Empty media is explicit. Media descriptors
+serialize complete exact strings and have no unchecked deserialization route.
+
 Namespaces remain separate across native calls:
 
 ```compile_fail

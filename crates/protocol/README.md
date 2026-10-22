@@ -46,7 +46,10 @@ they use.
 Public listing inputs retain fixed, quote-required or per-sale-unit variable
 prices, with fixed/estimated/unspecified package metadata. Object fields reject
 positional arrays, and the closed typed decoder rejects duplicate, missing and
-unknown fields. Media and estimated supply/windows remain unsupported.
+unknown fields. Up to eight complete media-reference objects retain exact
+URL/digest/MIME/alt claims; missing, malformed or excessive references are
+refused. Media never activates fetching, uploading or a decoder. Estimated
+supply/windows remain unsupported.
 Only the fixed default contributes a three-field NIP-99 base-rate `price` tag;
 the monetary summary identifies its basis, unit, discount and tier conditions.
 Variable bounds/caps stay explicit in the profile and summary. No recurring

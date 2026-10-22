@@ -12,6 +12,8 @@ mod view;
 pub use view::{Listing, ListingText};
 mod price;
 pub use price::Price;
+mod media;
+pub use media::Media;
 
 /// A fixed, input-free public-offer value failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -35,6 +37,10 @@ pub enum ListingError {
     NotFixedPrice,
     /// Exact price calculation cannot be represented within the approved bounds.
     Pricing(PricingError),
+    /// A media digest is not exactly64 lowercase hexadecimal digits.
+    InvalidMediaDigest,
+    /// More than eight public object references were supplied.
+    TooManyMedia,
 }
 impl fmt::Display for ListingError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -48,6 +54,8 @@ impl fmt::Display for ListingError {
             Self::InvalidTime => "invalid listing time",
             Self::NotFixedPrice => "listing option has no fixed price",
             Self::Pricing(error) => return error.fmt(f),
+            Self::InvalidMediaDigest => "invalid media digest",
+            Self::TooManyMedia => "too many public media references",
         })
     }
 }
@@ -497,10 +505,13 @@ pub struct ListingTerms {
     options: Box<[ListingOption]>,
     fulfillment: PublicFulfillment,
     authority: Option<AuthorityRef>,
+    media: Box<[Media]>,
     #[cfg_attr(feature = "serde", serde(skip))]
     default_index: usize,
 }
 impl ListingTerms {
+    /// Largest number of public object references in one complete profile.
+    pub const MAX_MEDIA: usize = 8;
     /// Checks bounded unique choices and exact default membership before capture.
     pub fn new(
         state: ListingState,
@@ -509,7 +520,11 @@ impl ListingTerms {
         options: Vec<ListingOption>,
         fulfillment: PublicFulfillment,
         authority: Option<AuthorityRef>,
+        media: Vec<Media>,
     ) -> Result<Self, ListingError> {
+        if media.len() > Self::MAX_MEDIA {
+            return Err(ListingError::TooManyMedia);
+        }
         if options.is_empty()
             || options.len() > 16
             || options
@@ -530,6 +545,7 @@ impl ListingTerms {
             options: options.into_boxed_slice(),
             fulfillment,
             authority,
+            media: media.into_boxed_slice(),
             default_index,
         })
     }
@@ -550,6 +566,10 @@ impl ListingTerms {
     /// Borrows the coarse public fulfillment data.
     pub const fn fulfillment(&self) -> &PublicFulfillment {
         &self.fulfillment
+    }
+    /// Borrows bounded declared references without fetching or verifying files.
+    pub fn media(&self) -> &[Media] {
+        &self.media
     }
 }
 impl fmt::Debug for ListingTerms {

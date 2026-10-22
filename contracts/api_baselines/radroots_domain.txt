@@ -8,12 +8,14 @@ pub radroots_domain::listing::FulfillmentMode::Pickup
 pub radroots_domain::listing::ListingError::InvalidDuration
 pub radroots_domain::listing::ListingError::InvalidFulfillment
 pub radroots_domain::listing::ListingError::InvalidIdentifier
+pub radroots_domain::listing::ListingError::InvalidMediaDigest
 pub radroots_domain::listing::ListingError::InvalidOptions
 pub radroots_domain::listing::ListingError::InvalidQuantity
 pub radroots_domain::listing::ListingError::InvalidText
 pub radroots_domain::listing::ListingError::InvalidTime
 pub radroots_domain::listing::ListingError::NotFixedPrice
 pub radroots_domain::listing::ListingError::Pricing(radroots_domain::PricingError)
+pub radroots_domain::listing::ListingError::TooManyMedia
 impl core::error::Error for radroots_domain::listing::ListingError
 pub fn radroots_domain::listing::ListingError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
 impl core::fmt::Display for radroots_domain::listing::ListingError
@@ -85,9 +87,11 @@ impl core::fmt::Debug for radroots_domain::listing::ListingOption
 pub fn radroots_domain::listing::ListingOption::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::listing::ListingTerms
 impl radroots_domain::listing::ListingTerms
+pub const radroots_domain::listing::ListingTerms::MAX_MEDIA: usize
 pub fn radroots_domain::listing::ListingTerms::default_option(&self) -> &radroots_domain::listing::ListingOption
 pub const fn radroots_domain::listing::ListingTerms::fulfillment(&self) -> &radroots_domain::listing::PublicFulfillment
-pub fn radroots_domain::listing::ListingTerms::new(radroots_domain::listing::ListingState, radroots_domain::listing::Product, radroots_domain::ListingOptionId, alloc::vec::Vec<radroots_domain::listing::ListingOption>, radroots_domain::listing::PublicFulfillment, core::option::Option<radroots_domain::AuthorityRef>) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub fn radroots_domain::listing::ListingTerms::media(&self) -> &[radroots_domain::listing::Media]
+pub fn radroots_domain::listing::ListingTerms::new(radroots_domain::listing::ListingState, radroots_domain::listing::Product, radroots_domain::ListingOptionId, alloc::vec::Vec<radroots_domain::listing::ListingOption>, radroots_domain::listing::PublicFulfillment, core::option::Option<radroots_domain::AuthorityRef>, alloc::vec::Vec<radroots_domain::listing::Media>) -> core::result::Result<Self, radroots_domain::listing::ListingError>
 pub fn radroots_domain::listing::ListingTerms::options(&self) -> &[radroots_domain::listing::ListingOption]
 pub const fn radroots_domain::listing::ListingTerms::state(&self) -> radroots_domain::listing::ListingState
 impl core::fmt::Debug for radroots_domain::listing::ListingTerms
@@ -100,6 +104,16 @@ pub fn radroots_domain::listing::ListingText::summary(&self) -> &str
 pub fn radroots_domain::listing::ListingText::title(&self) -> &str
 impl core::fmt::Debug for radroots_domain::listing::ListingText
 pub fn radroots_domain::listing::ListingText::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::listing::Media
+impl radroots_domain::listing::Media
+pub fn radroots_domain::listing::Media::alt(&self) -> &str
+pub fn radroots_domain::listing::Media::from_hex_digest(&str, &str, &str, &str) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub fn radroots_domain::listing::Media::mime(&self) -> &str
+pub fn radroots_domain::listing::Media::new(&str, [u8; 32], &str, &str) -> core::result::Result<Self, radroots_domain::listing::ListingError>
+pub const fn radroots_domain::listing::Media::sha256(&self) -> &[u8; 32]
+pub fn radroots_domain::listing::Media::url(&self) -> &str
+impl core::fmt::Debug for radroots_domain::listing::Media
+pub fn radroots_domain::listing::Media::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::listing::Product
 impl radroots_domain::listing::Product
 pub fn radroots_domain::listing::Product::name(&self) -> &str

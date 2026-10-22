@@ -1,5 +1,5 @@
 //! Closed public listing producer with exact default-option price projections.
-//! Unsupported media is never silently stripped or reduced to an empty value.
+//! Declared media references do not grant transport or decoder authority.
 
 use crate::nip01::{self, EventFields, WireError};
 use alloc::{
@@ -88,11 +88,17 @@ impl fmt::Debug for PublishInput {
 fn profile_value(terms: &ListingTerms) -> Result<Value, WireError> {
     let mut value = serde_json::to_value(terms).map_err(|_| WireError::InvalidInput)?;
     let object = value.as_object_mut().ok_or(WireError::InvalidInput)?;
-    if object.len() != 6
+    if object.len() != 7
         || object.keys().any(|key| {
             !matches!(
                 key.as_str(),
-                "authority" | "default_option" | "fulfillment" | "options" | "product" | "state"
+                "authority"
+                    | "default_option"
+                    | "fulfillment"
+                    | "options"
+                    | "product"
+                    | "state"
+                    | "media"
             )
         })
     {
@@ -100,9 +106,6 @@ fn profile_value(terms: &ListingTerms) -> Result<Value, WireError> {
     }
     object.insert("profile".into(), Value::String("radroots.listing".into()));
     object.insert("version".into(), Value::from(1_u8));
-    // This producer supports no media. It never parses and silently strips
-    // media supplied by another producer or coerces an unsupported price.
-    object.insert("media".into(), Value::Array(Vec::new()));
     Ok(value)
 }
 fn serialize_profile<S: serde::Serializer>(

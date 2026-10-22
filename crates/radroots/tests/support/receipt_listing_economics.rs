@@ -24,6 +24,10 @@ async fn monetary_listings_sign_install_deliver_and_reopen_without_repricing_or_
     ] {
         let mut wire = serde_json::to_value(input(id)).unwrap();
         wire["summary"] = json!("Native carrot offering");
+        wire["profile"]["media"] = json!([{"url":"https://media.fixture.invalid/carrot",
+            "sha256":"ab".repeat(32),"mime":"image/jpeg","alt":"Carrot 🥕"},
+            {"url":"ipfs://declared-object","sha256":"00".repeat(32),
+            "mime":"application/octet-stream","alt":""}]);
         wire["profile"]["options"][0]["price"] = price;
         wire["profile"]["options"][0]["unit"]["contents"] = contents;
         let captured = PublishInput::parse(&serde_json::to_vec(&wire).unwrap()).unwrap();
@@ -70,6 +74,7 @@ async fn monetary_listings_sign_install_deliver_and_reopen_without_repricing_or_
             .unwrap();
         let actual: serde_json::Value = serde_json::from_str(&profile_tag.as_slice()[1]).unwrap();
         assert_eq!(actual, wire["profile"]);
+        assert_eq!(listing.terms().media().len(), 2);
         let replay = ready
             .client
             .listings()
@@ -89,6 +94,7 @@ async fn monetary_listings_sign_install_deliver_and_reopen_without_repricing_or_
     }
     assert_eq!(ready.signer.calls.load(Ordering::SeqCst), 2);
     assert_eq!(ready.signer.private_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(relay.requests.load(Ordering::SeqCst), 0);
     assert_eq!(relay.count.load(Ordering::SeqCst), 2);
     ready.client.close().await.unwrap();
     let store = ready.fixture.reopen(ready.input.clone()).await;

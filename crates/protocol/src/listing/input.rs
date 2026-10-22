@@ -31,8 +31,15 @@ struct Profile {
     fulfillment: Fulfillment,
     #[serde(deserialize_with = "required_nullable")]
     authority: Option<AuthorityRef>,
-    #[serde(rename = "media")]
-    _media: [(); 0],
+    media: Vec<RawMedia>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawMedia {
+    url: String,
+    sha256: String,
+    mime: String,
+    alt: String,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -265,6 +272,18 @@ impl Input {
             options,
             fulfillment,
             profile.authority,
+            profile
+                .media
+                .into_iter()
+                .map(|media| {
+                    invalid(Media::from_hex_digest(
+                        &media.url,
+                        &media.sha256,
+                        &media.mime,
+                        &media.alt,
+                    ))
+                })
+                .collect::<Result<Vec<_>, _>>()?,
         ))?;
         PublishInput::new(
             self.id,
@@ -293,10 +312,6 @@ impl PublishInput {
                 .get("profile")
                 .is_some_and(|v| v != "radroots.listing")
                 || profile.get("version").is_some_and(|v| v != 1)
-                || profile
-                    .get("media")
-                    .and_then(serde_json::Value::as_array)
-                    .is_some_and(|v| !v.is_empty())
             {
                 return Err(CommandError::UnsupportedProfile);
             }
@@ -343,6 +358,15 @@ fn object_shapes(value: &serde_json::Value) -> Result<(), CommandError> {
     object(profile)?;
     object(&profile["product"])?;
     object(&profile["fulfillment"])?;
+    let media = profile["media"]
+        .as_array()
+        .ok_or(CommandError::InvalidInput)?;
+    if media.len() > ListingTerms::MAX_MEDIA {
+        return Err(CommandError::LimitExceeded);
+    }
+    for reference in media {
+        object(reference)?;
+    }
     if !profile["authority"].is_null() {
         object(&profile["authority"])?;
     }

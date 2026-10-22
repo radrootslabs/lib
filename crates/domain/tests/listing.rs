@@ -1,5 +1,8 @@
 use radroots_domain::{ListingOptionId, listing::*};
 
+#[path = "support/listing_media.rs"]
+mod media;
+
 #[test]
 fn public_text_has_shared_unicode_bounds_and_revision_data_rejects_inverted_time() {
     use radroots_domain::{EnvelopeEventId, PublicKey, UnixSeconds};
@@ -30,6 +33,7 @@ fn public_text_has_shared_unicode_bounds_and_revision_data_rejects_inverted_time
         vec![option(1, SaleUnit::measured(MeasurementUnit::Each), "1", "1", "10").unwrap()],
         fulfillment(),
         None,
+        vec![],
     )
     .unwrap();
     let key =
@@ -121,6 +125,7 @@ fn spare_caller_capacity_preserves_exact_terms_and_default_selection() {
         options,
         PublicFulfillment::new(modes, "Example region", LeadSeconds::new(0).unwrap()).unwrap(),
         None,
+        vec![],
     )
     .unwrap();
     let expected = ListingTerms::new(
@@ -130,6 +135,7 @@ fn spare_caller_capacity_preserves_exact_terms_and_default_selection() {
         compact,
         fulfillment(),
         None,
+        vec![],
     )
     .unwrap();
     assert_eq!(expanded, expected);
@@ -356,6 +362,7 @@ fn bounded_unique_options_preserve_exact_default_without_fallback() {
             choices,
             fulfillment(),
             None,
+            vec![],
         )
     };
     assert!(terms(vec![], 1).is_err());
@@ -403,6 +410,7 @@ fn serialized_values_have_exact_string_numbers_and_no_private_or_derived_fields(
         vec![choice],
         fulfillment(),
         None,
+        vec![],
     )
     .unwrap();
     let value = serde_json::to_value(terms).unwrap();
@@ -420,5 +428,6 @@ fn serialized_values_have_exact_string_numbers_and_no_private_or_derived_fields(
         serde_json::json!({"type":"available","amount":"10"})
     );
     assert!(value.get("default_index").is_none());
-    assert_eq!(value.as_object().unwrap().len(), 6);
+    assert_eq!(value["media"], serde_json::json!([]));
+    assert_eq!(value.as_object().unwrap().len(), 7);
 }
