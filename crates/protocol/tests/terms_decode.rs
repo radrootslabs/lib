@@ -5,6 +5,34 @@ use serde_json::{Value, json};
 fn fixtures() -> Value {
     serde_json::from_str(include_str!("fixtures/terms_wire.v1.json")).unwrap()
 }
+
+#[test]
+fn profile_keys_require_the_approved_lowercase_spelling() {
+    let original = example(0);
+    let mut accepted = Vec::new();
+    for path in [
+        "/buyer",
+        "/seller",
+        "/lines/0/source/coordinate/author",
+        "/lines/0/product/producer",
+    ] {
+        let mut altered = original.clone();
+        let key = altered
+            .pointer(path)
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_ascii_uppercase();
+        *altered.pointer_mut(path).unwrap() = json!(key);
+        if decode(&bytes(&altered)).is_ok() {
+            accepted.push(path);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "noncanonical profile keys accepted: {accepted:?}"
+    );
+}
 fn example(index: usize) -> Value {
     serde_json::from_str(fixtures()["vectors"][index]["wire"].as_str().unwrap()).unwrap()
 }

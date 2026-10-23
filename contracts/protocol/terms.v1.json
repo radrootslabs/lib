@@ -41,6 +41,7 @@
     "objects_only": true,
     "unknown_duplicate_and_missing_fields_rejected": true,
     "nullable_fields_must_be_present": true,
+    "public_keys_require_identity_owned_canonical_lowercase_spelling": true,
     "private_fields_borrow_original_raw_json_until_protected_decoding": true,
     "private_text_decoded_scratch": "Two-pass count then zeroizing UTF-8 output; explicit JSON escapes and paired UTF-16 surrogates, with no normalization.",
     "domain_validation": "Every complete line, group, money, price, window, supply commitment and Terms constructor runs; no missing field or snapshot is synthesized.",

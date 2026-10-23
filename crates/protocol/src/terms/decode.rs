@@ -101,7 +101,9 @@ impl<'de: 'a, 'a, const N: usize> Deserialize<'de> for RawArray<'a, N> {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawTerms<'a> {
+    #[serde(deserialize_with = "crate::command::canonical_key")]
     buyer: PublicKey,
+    #[serde(deserialize_with = "crate::command::canonical_key")]
     seller: PublicKey,
     #[serde(borrow)]
     lines: RawArray<'a, 32>,
@@ -166,6 +168,7 @@ struct RawSource {
 #[serde(deny_unknown_fields)]
 struct RawCoordinate {
     kind: u16,
+    #[serde(deserialize_with = "crate::command::canonical_key")]
     author: PublicKey,
     d: ListingId,
 }

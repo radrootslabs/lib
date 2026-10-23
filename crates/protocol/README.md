@@ -96,6 +96,10 @@ Private text is borrowed from the caller's original frame until explicitly
 decoded into zeroizing buffers; only public snapshots enter temporary JSON
 trees. Decoding a claim establishes no signature, consent or current source
 availability. Callers retain responsibility for protecting original bytes.
+Profile public keys must match the identity library's canonical lowercase
+spelling. The general identity parser remains case insensitive; profile input
+does not silently normalize an uppercase participant, organization, peer,
+listing author or product producer.
 
 The listing producer emits one canonical `radroots.listing` version-1 profile,
 explicit default units and no fabricated price. Paused/withdrawn projections

@@ -53,6 +53,53 @@ fn inquiry(
 }
 
 #[test]
+fn profile_keys_require_canonical_spelling_at_all_chat_command_entry_points() {
+    use radroots_protocol::command::CapturedCommand;
+    let mut base: Value =
+        serde_json::from_slice(inquiry(None, None, "private").protected_wire()).unwrap();
+    base["context"]["actor"]["organization"] = json!(alice().to_hex());
+    base["input"]["source"] = json!({"coordinate":{"kind":30402,"author":alice().to_hex(),"d":"01".repeat(16)},"event_id":"03".repeat(32)});
+    assert!(CapturedChatCommand::parse(&serde_json::to_vec(&base).unwrap()).is_ok());
+    for path in [
+        "/context/actor/participant",
+        "/context/actor/organization",
+        "/input/peer",
+        "/input/source/coordinate/author",
+    ] {
+        let mut altered = base.clone();
+        let uppercase = altered
+            .pointer(path)
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_ascii_uppercase();
+        *altered.pointer_mut(path).unwrap() = json!(uppercase);
+        let wire = serde_json::to_vec(&altered).unwrap();
+        assert!(CapturedChatCommand::parse(&wire).is_err(), "{path}");
+        assert!(CapturedCommand::parse(&wire).is_err(), "dispatcher {path}");
+    }
+    let mut reply: Value = serde_json::from_slice(
+        CapturedChatCommand::reply(
+            context(None, None),
+            ReplyInput::new(
+                ThreadId::from_bytes([6; 32]),
+                bob(),
+                MessageId::from_bytes([7; 32]),
+                "private",
+            )
+            .unwrap(),
+        )
+        .unwrap()
+        .protected_wire(),
+    )
+    .unwrap();
+    reply["input"]["peer"] = json!(bob().to_hex().to_ascii_uppercase());
+    let wire = serde_json::to_vec(&reply).unwrap();
+    assert!(CapturedChatCommand::parse(&wire).is_err());
+    assert!(CapturedCommand::parse(&wire).is_err());
+}
+
+#[test]
 fn closed_commands_require_objects_at_every_context_and_inquiry_boundary() {
     use radroots_protocol::command::CapturedCommand;
 

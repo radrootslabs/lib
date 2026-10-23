@@ -453,6 +453,31 @@ pub(crate) fn required_nullable<'de, D: serde::Deserializer<'de>, T: Deserialize
 ) -> Result<Option<T>, D::Error> {
     Option::deserialize(d)
 }
+pub(crate) fn canonical_key<'de, D: serde::Deserializer<'de>>(d: D) -> Result<PublicKey, D::Error> {
+    struct KeyVisitor;
+    impl serde::de::Visitor<'_> for KeyVisitor {
+        type Value = PublicKey;
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a canonical public key")
+        }
+        fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<PublicKey, E> {
+            let key = PublicKey::from_hex(value).map_err(|_| E::custom("invalid public key"))?;
+            if key.to_hex() != value {
+                return Err(E::custom("noncanonical public key"));
+            }
+            Ok(key)
+        }
+    }
+    d.deserialize_str(KeyVisitor)
+}
+#[cfg(any(feature = "listing", feature = "terms"))]
+pub(crate) fn nullable_canonical_key<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<PublicKey>, D::Error> {
+    #[derive(Deserialize)]
+    struct Key(#[serde(deserialize_with = "canonical_key")] PublicKey);
+    Option::<Key>::deserialize(d).map(|value| value.map(|key| key.0))
+}
 fn private_text<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Zeroizing<String>, D::Error> {
     String::deserialize(d).map(Zeroizing::new)
 }
@@ -460,6 +485,7 @@ fn private_text<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Zeroizing<Stri
 #[serde(deny_unknown_fields)]
 struct RawInquiry {
     thread_id: ThreadId,
+    #[serde(deserialize_with = "canonical_key")]
     peer: PublicKey,
     #[serde(deserialize_with = "required_nullable")]
     source: Option<MapOnly<RawSource>>,
@@ -470,6 +496,7 @@ struct RawInquiry {
 #[serde(deny_unknown_fields)]
 struct RawReply {
     thread_id: ThreadId,
+    #[serde(deserialize_with = "canonical_key")]
     peer: PublicKey,
     parent: MessageId,
     #[serde(deserialize_with = "private_text")]
@@ -486,6 +513,7 @@ struct RawSource {
 #[serde(deny_unknown_fields)]
 struct RawCoordinate {
     kind: u32,
+    #[serde(deserialize_with = "canonical_key")]
     author: PublicKey,
     d: String,
 }

@@ -35,6 +35,29 @@ fn input() -> Value {
 }
 
 #[test]
+fn profile_keys_require_canonical_spelling_in_public_input_and_command_dispatch() {
+    let mut public = input();
+    public["profile"]["product"]["producer"] = json!(key().to_hex());
+    let parsed = PublishInput::parse(&serde_json::to_vec(&public).unwrap()).unwrap();
+    let captured = CapturedListingCommand::capture(context(), parsed).unwrap();
+    let mut base: Value = serde_json::from_slice(captured.protected_wire()).unwrap();
+    base["context"]["actor"]["organization"] = json!(key().to_hex());
+    for path in [
+        "/context/actor/participant",
+        "/context/actor/organization",
+        "/input/profile/product/producer",
+    ] {
+        let mut altered = base.clone();
+        *altered.pointer_mut(path).unwrap() = json!(key().to_hex().to_ascii_uppercase());
+        let wire = serde_json::to_vec(&altered).unwrap();
+        assert!(CapturedListingCommand::parse(&wire).is_err(), "{path}");
+        assert!(CapturedCommand::parse(&wire).is_err(), "dispatcher {path}");
+    }
+    public["profile"]["product"]["producer"] = json!(key().to_hex().to_ascii_uppercase());
+    assert!(PublishInput::parse(&serde_json::to_vec(&public).unwrap()).is_err());
+}
+
+#[test]
 fn public_command_root_and_context_reject_positional_arrays() {
     let command = CapturedListingCommand::capture(
         context(),

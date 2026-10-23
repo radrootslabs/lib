@@ -473,6 +473,30 @@ mod serialization {
     use super::*;
     use serde::{Deserialize, Deserializer, Serializer, de::Error};
 
+    fn canonical_key<'de, D: Deserializer<'de>>(d: D) -> Result<PublicKey, D::Error> {
+        struct KeyVisitor;
+        impl serde::de::Visitor<'_> for KeyVisitor {
+            type Value = PublicKey;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a canonical public key")
+            }
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<PublicKey, E> {
+                let key =
+                    PublicKey::from_hex(value).map_err(|_| E::custom("invalid public key"))?;
+                if key.to_hex() != value {
+                    return Err(E::custom("noncanonical public key"));
+                }
+                Ok(key)
+            }
+        }
+        d.deserialize_str(KeyVisitor)
+    }
+    fn nullable_key<'de, D: Deserializer<'de>>(d: D) -> Result<Option<PublicKey>, D::Error> {
+        #[derive(Deserialize)]
+        struct Key(#[serde(deserialize_with = "canonical_key")] PublicKey);
+        Option::<Key>::deserialize(d).map(|value| value.map(|key| key.0))
+    }
+
     fn object<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<T, D::Error> {
         struct ObjectVisitor<T>(core::marker::PhantomData<T>);
         impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for ObjectVisitor<T> {
@@ -519,9 +543,10 @@ mod serialization {
             #[derive(Deserialize)]
             #[serde(deny_unknown_fields)]
             struct Raw {
+                #[serde(deserialize_with = "canonical_key")]
                 participant: PublicKey,
                 role: ActorRole,
-                #[serde(deserialize_with = "nullable")]
+                #[serde(deserialize_with = "nullable_key")]
                 organization: Option<PublicKey>,
                 #[serde(deserialize_with = "nullable")]
                 grant_id: Option<GrantId>,

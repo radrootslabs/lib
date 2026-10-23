@@ -19,7 +19,7 @@ fn invalid<T, E>(value: Result<T, E>) -> Result<T, CommandError> {
 pub(crate) struct RawProduct {
     name: String,
     description: String,
-    #[serde(deserialize_with = "required_nullable")]
+    #[serde(deserialize_with = "crate::command::nullable_canonical_key")]
     producer: Option<PublicKey>,
     #[serde(deserialize_with = "required_nullable")]
     origin_summary: Option<String>,

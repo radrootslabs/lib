@@ -42,6 +42,30 @@ fn context() -> CommandContextData {
 
 #[cfg(feature = "serde")]
 #[test]
+fn profile_keys_require_canonical_spelling_in_direct_actor_and_context_decoding() {
+    let uppercase = KEY.to_ascii_uppercase();
+    assert!(PublicKey::from_hex(&uppercase).is_ok());
+    let mut descriptor = serde_json::to_value(actor()).unwrap();
+    descriptor["organization"] = json!(KEY);
+    assert!(serde_json::from_value::<ActorRef>(descriptor.clone()).is_ok());
+    for field in ["participant", "organization"] {
+        let mut altered = descriptor.clone();
+        altered[field] = json!(uppercase);
+        assert!(
+            serde_json::from_value::<ActorRef>(altered.clone()).is_err(),
+            "{field}"
+        );
+        let mut command = serde_json::to_value(context()).unwrap();
+        command["actor"] = altered;
+        assert!(
+            serde_json::from_value::<CommandContextData>(command).is_err(),
+            "context {field}"
+        );
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
 fn context_descriptors_require_objects_when_decoded_directly() {
     fn check<T>(value: T, fields: &[&str])
     where
