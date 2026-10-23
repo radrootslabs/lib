@@ -57,6 +57,7 @@ mod tests {
         fs::write(source.path().join("LICENSE-MIT"), "MIT fixture\n").expect("MIT license");
         fs::write(source.path().join("LICENSE-APACHE"), "Apache fixture\n")
             .expect("Apache license");
+        super::super::package_metadata::tests::prepare_materials(source.path());
         for (package_name, package_dir) in package_specs()
             .iter()
             .map(|spec| (spec.package_name, spec.package_dir))

@@ -132,6 +132,9 @@ fn install_outputs(
     if outputs.is_empty() {
         return Err(format!("{language} binding generator emitted no files"));
     }
+    let notice_hash =
+        crate::generate::data_notices::install(source_root, &output_dir.join("NOTICE"), mode)?;
+    outputs.insert("NOTICE".to_owned(), notice_hash);
     let lock = SourceLock {
         schema_version: 1,
         source_package: FFI_PACKAGE.to_owned(),
@@ -239,7 +242,7 @@ fn check_language(
     let expected_inventory = expected
         .iter()
         .map(|name| (*name).to_owned())
-        .chain(["source.lock".to_owned()])
+        .chain(["source.lock".to_owned(), "NOTICE".to_owned()])
         .collect::<BTreeSet<_>>();
     if actual != expected_inventory {
         return Err(format!(
@@ -261,6 +264,12 @@ fn check_language(
             format!("{:x}", Sha256::digest(contents)),
         );
     }
+    let notice_hash = crate::generate::data_notices::install(
+        source_root,
+        &output_dir.join("NOTICE"),
+        Mode::Check,
+    )?;
+    outputs.insert("NOTICE".to_owned(), notice_hash);
     let expected_lock = SourceLock {
         schema_version: 1,
         source_package: FFI_PACKAGE.to_owned(),
@@ -285,6 +294,9 @@ fn ffi_source_sha256(root: &Path) -> Result<String, String> {
     let mut paths = vec![crate_dir.join("Cargo.toml"), crate_dir.join("README.md")];
     collect_files(&crate_dir.join("src"), &mut paths)?;
     paths.push(root.join("tools/xtask/src/sdk_generation/bindings.rs"));
+    paths.push(root.join("tools/xtask/src/generate/data_notices.rs"));
+    paths.push(root.join(crate::generate::data_notices::CONTRACT));
+    paths.push(root.join(crate::generate::data_notices::OUTPUT));
     collect_files(
         &root.join("tools/xtask/src/bin/radroots_ffi_bindgen"),
         &mut paths,
@@ -342,7 +354,7 @@ mod tests {
         let source = crate::workspace_root();
         let output_dir = consumer.path().join("generated/swift");
         fs::create_dir_all(&output_dir).expect("Swift output directory");
-        let outputs = BTreeMap::from([
+        let mut outputs = BTreeMap::from([
             ("radroots_sdk.swift".to_owned(), "swift\n"),
             ("radroots_sdkFFI.h".to_owned(), "header\n"),
             ("radroots_sdkFFI.modulemap".to_owned(), "module\n"),
@@ -350,6 +362,9 @@ mod tests {
         for (name, contents) in &outputs {
             fs::write(output_dir.join(name), contents).expect("Swift fixture output");
         }
+        let material = crate::generate::data_notices::render(&source).unwrap();
+        fs::write(output_dir.join("NOTICE"), &material).unwrap();
+        outputs.insert("NOTICE".to_owned(), material.as_str());
         let lock = SourceLock {
             schema_version: 1,
             source_package: FFI_PACKAGE.to_owned(),

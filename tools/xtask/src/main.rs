@@ -538,6 +538,7 @@ fn validate_contract() -> Result<(), String> {
     service_repro_install::validate_contract(&root)?;
     dto_roots::check(&root)?;
     generate::protocol::check(&root)?;
+    generate::data_notices::run("--check", &root)?;
     contract::load_contract_bundle(&root)
         .and_then(|bundle| contract::validate_contract_bundle(&bundle))
         .and_then(|_| contract::validate_canonical_event_boundary(&root))

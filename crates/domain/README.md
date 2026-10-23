@@ -1,5 +1,11 @@
 # Radroots domain
 
+The generated `NOTICE` retains the pinned currency facts, original data
+attribution and license texts, and selected MIT timezone dependency material.
+Keep it with derived artifacts. Regenerate it from the source-owned contract
+with `cargo extbuild run -- cargo xtask generate data-notices --write`;
+`--check` and canonical contract validation enforce byte freshness.
+
 Independently implemented exact values for the shared SDK successor. This
 pre-release package provides validated values and public sale-option offer
 terms. It does not execute commands, install agreements or establish stock.

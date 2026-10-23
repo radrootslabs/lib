@@ -3363,6 +3363,37 @@ version = "0.1.0-alpha"
     }
 
     #[test]
+    fn dependency_license_admission_retains_complete_domain_data_material() {
+        let root = crate::workspace_root();
+        let mut dependency = package(
+            "domain",
+            "radroots_domain",
+            Some("git+https://github.com/radrootslabs/lib"),
+            None,
+            Some("MIT OR Apache-2.0"),
+            false,
+        );
+        dependency.manifest_path = root
+            .join("crates/domain/Cargo.toml")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let texts = dependency_license_texts(&dependency).unwrap();
+        let notice = texts.iter().find(|v| v.filename == "NOTICE").unwrap();
+        assert_eq!(
+            notice.text,
+            crate::generate::data_notices::render(&root).unwrap()
+        );
+        assert_eq!(notice.sha256, sha256_bytes(notice.text.as_bytes()));
+        assert!(
+            notice
+                .text
+                .contains("Copyright 2023-2026 rust_iso4217 contributors")
+        );
+        assert!(notice.text.contains("IANA time zone database 2026c"));
+    }
+
+    #[test]
     fn dependency_license_admission_preserves_exact_text_and_rejects_missing_or_unsafe_paths() {
         let temporary = TempDir::new().unwrap();
         let root = temporary.path().canonicalize().unwrap();

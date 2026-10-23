@@ -1,0 +1,11 @@
+Timezone registry v1 data attribution
+
+Package: jiff-tzdb 0.1.8; IANA time zone database 2026c.
+Source: https://crates.io/crates/jiff-tzdb/0.1.8
+Exact published crate SHA256: 142bd39932ad231f10513df9ab62661fead8719872150b7ad02a2df79f4e141e.
+Selected redistribution license: MIT (upstream offers Unlicense OR MIT).
+The accompanying timezone_registry_v1.license and timezone_registry_v1.copying
+retain the exact upstream LICENSE-MIT and COPYING texts. No upstream Rust or
+zoneinfo data is copied into these source notice inputs. The separately locked
+jiff-tzdb dependency supplies the database; this material accompanies derived
+artifacts without asserting physical location or present-day time-zone policy.

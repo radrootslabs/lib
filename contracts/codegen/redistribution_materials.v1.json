@@ -1,0 +1,33 @@
+{
+  "schema": "radroots.redistribution_materials.v1",
+  "output": "crates/domain/NOTICE",
+  "max_input_bytes": 16384,
+  "max_output_bytes": 65536,
+  "source_distribution": "Retain exact material texts and provenance; currency facts are separately Apache-2.0, timezone dependency MIT is selected. Radroots Rust source remains MIT OR Apache-2.0.",
+  "materials": [
+    {
+      "path": "crates/domain/data/currency_registry_v1.csv",
+      "sha256": "60d8282b2d7ddc27929b097d4de9e76a900a64f1de4a5aa7a4cb3308b55b82d0"
+    },
+    {
+      "path": "crates/domain/data/currency_registry_v1.notice",
+      "sha256": "c43ef0d0f9d6f64656ca6a619c3c43cd9cc2b378217ab19a083ca92255a91d7d"
+    },
+    {
+      "path": "crates/domain/data/currency_registry_v1.license",
+      "sha256": "665618a8c4b9ef6ceafb35482a3e010834fae9e9cbb22041b74310bcc52ac500"
+    },
+    {
+      "path": "crates/domain/data/timezone_registry_v1.notice",
+      "sha256": "af3945c88f4843e34f418d88fcc690dc6f71387c679fd63b2f5684381dfe177e"
+    },
+    {
+      "path": "crates/domain/data/timezone_registry_v1.license",
+      "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+    },
+    {
+      "path": "crates/domain/data/timezone_registry_v1.copying",
+      "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+    }
+  ]
+}

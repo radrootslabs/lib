@@ -1,7 +1,7 @@
 mod bindings;
 mod contracts;
 mod dto_roots;
-mod fs;
+pub(crate) mod fs;
 mod generate;
 mod manifest;
 mod output;

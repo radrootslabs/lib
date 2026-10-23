@@ -50,7 +50,7 @@ pub(crate) fn package_description<'a>(
 
 pub(crate) fn package_readme(package_name: &str, description: &str) -> String {
     format!(
-        "# {package_name}\n\n{description}\n\nThis package publishes generated ESM JavaScript, TypeScript declarations, and any runtime artifacts from the Radroots SDK build pipeline. Runtime files are distributed from `dist/`; source and provenance metadata are kept outside the npm package payload.\n\n## License\n\nLicensed under either MIT or Apache-2.0, at your option. See `LICENSE-MIT` and `LICENSE-APACHE`.\n"
+        "# {package_name}\n\n{description}\n\nThis package publishes generated ESM JavaScript, TypeScript declarations, and any runtime artifacts from the Radroots SDK build pipeline. Runtime files are distributed from `dist/`; source and provenance metadata are kept outside the npm package payload.\n\n## License\n\nRadroots source is licensed under either MIT or Apache-2.0, at your option. See `LICENSE-MIT` and `LICENSE-APACHE`. Retain `NOTICE` for the separately attributed pinned currency and timezone data material.\n"
     )
 }
 
@@ -68,6 +68,15 @@ fn write_package_metadata(
     let previous_readme = fs::read_to_string(&readme_path).ok();
     write_or_check(&readme_path, &readme, mode)?;
     let mut changed = previous_readme.as_deref() != Some(readme.as_str());
+    let notice = package_dir.join("NOTICE");
+    let previous_notice = fs::read(&notice).ok();
+    crate::generate::data_notices::install(source_root, &notice, mode)?;
+    changed |= previous_notice.as_deref()
+        != Some(
+            fs::read(&notice)
+                .map_err(|_| "generated package NOTICE is missing".to_owned())?
+                .as_slice(),
+        );
     for file_name in PACKAGE_LICENSE_FILES {
         let source_path = source_root.join(file_name);
         let contents = fs::read(&source_path)
@@ -108,7 +117,7 @@ fn package_name<'a>(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use std::{
         fs,
         path::PathBuf,
@@ -126,6 +135,7 @@ mod tests {
         fs::create_dir_all(&package_dir).expect("create package");
         fs::write(root.join("LICENSE-MIT"), "MIT license\n").expect("write MIT license");
         fs::write(root.join("LICENSE-APACHE"), "Apache license\n").expect("write Apache license");
+        prepare_materials(&root);
         fs::write(
             package_dir.join("package.json"),
             r#"{
@@ -151,6 +161,9 @@ mod tests {
         );
         write_package_metadata(&root, &package_dir, Mode::Check).expect("fresh metadata");
 
+        fs::write(package_dir.join("NOTICE"), "missing attribution\n").unwrap();
+        assert!(write_package_metadata(&root, &package_dir, Mode::Check).is_err());
+
         let _ = fs::remove_dir_all(root);
     }
 
@@ -166,5 +179,24 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&root);
         root
+    }
+
+    pub(crate) fn prepare_materials(root: &std::path::Path) {
+        let source = crate::workspace_root();
+        let contract = crate::generate::data_notices::CONTRACT;
+        let raw = fs::read(source.join(contract)).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&raw).unwrap();
+        for name in std::iter::once(contract).chain(
+            value["materials"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v["path"].as_str().unwrap()),
+        ) {
+            let destination = root.join(name);
+            fs::create_dir_all(destination.parent().unwrap()).unwrap();
+            fs::copy(source.join(name), destination).unwrap();
+        }
+        crate::generate::data_notices::run("--write", root).unwrap();
     }
 }
