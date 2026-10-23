@@ -140,10 +140,10 @@ impl PublishInput {
         // required nulls and all nested domain constructors.
         let value: serde_json::Value =
             serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
-        object_shapes(&value)?;
         if let Some(profile) = value.get("profile") {
             supported(profile)?;
         }
+        object_shapes(&value)?;
         let input: Input = serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
         input.validate()
     }

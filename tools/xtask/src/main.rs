@@ -1169,7 +1169,10 @@ mod tests {
         assert!(invalid_dto_roots.contains("--check|--write"));
         let invalid_generate =
             run(&["generate".to_string()]).expect_err("generate requires a target and mode");
-        assert!(invalid_generate.contains("generate protocol --check|--write"));
+        assert_eq!(
+            invalid_generate,
+            "usage: cargo xtask generate protocol|data-notices --check|--write"
+        );
 
         let removed_sdk = run(&["sdk".to_string(), "validate".to_string()])
             .expect_err("removed sdk command namespace");

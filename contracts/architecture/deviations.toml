@@ -2,6 +2,28 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-056"
+date = "2026-10-23"
+status = "active"
+approval = "The user authorizes the complete approved refactor, necessary dependency repairs across the supported closure, verified commits and master source publication."
+affected_steps = ["050", "130", "140"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "A current consumer supply-chain execution fails RUSTSEC-2026-0386 on Tokio1.50.0; supported locked inputs also retain affected1.47.1,1.51.0 and1.53.1.",
+  "The upstream advisory identifies patched Tokio1.51.6 LTS and1.53.3; Tokio1.53.3 preserves the supported stable compiler minimum and requires its current macros and Mio companions.",
+  "Current workspace Tokio version1 permits vulnerable resolutions. Continuing exact consumer adoption without a supported lower bound would propagate an affected graph.",
+]
+replacement_action = "Before continuing consumer adoption, constrain shared Tokio to>=1.53.3, update the exact lock and required companion packages only, verify current runtime/store/transport/lifecycle and source/license/advisory controls, then publish the provider before exact downstream pin and artifact adoption. Preserve preceding source-scoped results and the failed gate; add no advisory exception."
+verification = [
+  "Review the complete locked graph delta, upstream release/advisory provenance and any existing vet exemption-version updates without claiming independent audits.",
+  "Run current native workspace compilation/tests, strict lint/doc and contract/architecture/source policy, plus meaningful portable boundaries and affected API freshness.",
+  "Qualify each supported consumer and generated artifact against its actual repaired source before coherent parent adoption and final acceptance.",
+]
+unresolved_risk = "Provider repair, supported consumer/artifact adoption and final current acceptance are pending. Existing vet exemptions remain visible accepted review debt, not independent audits."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
 id = "RCRV1-DEV-055"
 date = "2026-10-23"
 status = "active"

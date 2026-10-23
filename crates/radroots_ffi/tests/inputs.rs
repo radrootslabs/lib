@@ -13,6 +13,14 @@ fn actual_shared_parser_retains_invalid_unsupported_and_limit_failures() {
             matches!(ListingInput::parse(input.to_vec()), Err(Error::CommandInput { field, kind: InputFailure::UnsupportedProfile }) if field == "listing_input")
         );
     }
+    for input in [
+        br#"{"profile":{"profile":"radroots.listing","version":1}}"#.as_slice(),
+        br#"{"profile":[]}"#,
+    ] {
+        assert!(
+            matches!(ListingInput::parse(input.to_vec()), Err(Error::InvalidInput { field }) if field == "listing_input")
+        );
+    }
     assert!(
         matches!(ListingInput::parse(vec![b' '; 65_537]), Err(Error::CommandInput { field, kind: InputFailure::LimitExceeded }) if field == "listing_input")
     );

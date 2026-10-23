@@ -116,14 +116,40 @@ fn validate(contract: &Contract, packages: &BTreeSet<String>) -> Result<(), Stri
     }
 
     for lane in &contract.sanitizer {
-        if lane.kind != "address" || lane.targets.len() != 4 || lane.packages.len() != 3 {
-            return Err("native sanitizer authority must cover address checks on four hosts and three boundaries".to_owned());
+        if lane.kind != "address" || lane.targets.len() != 4 || lane.packages.len() != 4 {
+            return Err("native sanitizer authority must cover address checks on four hosts and four boundaries".to_owned());
         }
         validate_authority(&lane.authority)?;
         let targets = lane.targets.iter().collect::<BTreeSet<_>>();
         let lane_packages = lane.packages.iter().collect::<BTreeSet<_>>();
         if targets.len() != lane.targets.len() || lane_packages.len() != lane.packages.len() {
             return Err("sanitizer targets and packages must be unique".to_owned());
+        }
+        if targets
+            .into_iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>()
+            != BTreeSet::from([
+                "aarch64-apple-darwin",
+                "x86_64-apple-darwin",
+                "aarch64-unknown-linux-gnu",
+                "x86_64-unknown-linux-gnu",
+            ])
+            || lane_packages
+                .into_iter()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>()
+                != BTreeSet::from([
+                    "radroots_ffi",
+                    "radroots_sdk_ffi",
+                    "radroots_storage_sqlite",
+                    "radroots_runtime_manager",
+                ])
+        {
+            return Err(
+                "native sanitizer hosts and boundaries must match the exact governed inventory"
+                    .to_owned(),
+            );
         }
         for package in &lane.packages {
             validate_identifier("sanitizer package", package)?;
@@ -343,5 +369,30 @@ mod tests {
             .expect("workspace root");
         let packages = workspace_packages(root).expect("workspace packages");
         validate(&load(root).expect("contract"), &packages).expect("valid safety matrix");
+    }
+
+    #[test]
+    fn sanitizer_inventory_refuses_missing_or_substituted_hosts_and_boundaries() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(std::path::Path::parent)
+            .expect("workspace root");
+        let packages = workspace_packages(root).expect("workspace packages");
+        for replace in [false, true] {
+            let mut contract = load(root).expect("contract");
+            if replace {
+                contract.sanitizer[0].packages[0] = "radroots_core".to_owned();
+            } else {
+                contract.sanitizer[0].packages.remove(0);
+            }
+            assert!(validate(&contract, &packages).is_err());
+            let mut contract = load(root).expect("contract");
+            if replace {
+                contract.sanitizer[0].targets[0] = "wasm32-unknown-unknown".to_owned();
+            } else {
+                contract.sanitizer[0].targets.remove(0);
+            }
+            assert!(validate(&contract, &packages).is_err());
+        }
     }
 }

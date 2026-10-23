@@ -20,6 +20,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
         "version = \"0.1.0-alpha\"",
         "publish = [\"crates-io\"]",
         "default = [\"std\", \"serde\"]",
+        "artifacts = [\"radroots_protocol/chat\", \"radroots_protocol/listing\"]",
         "radroots_domain = { workspace = true, default-features = false }",
         "radroots_event = { workspace = true, default-features = false }",
         "radroots_event_codec = { workspace = true, default-features = false }",
@@ -33,7 +34,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
     }
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
-        BTreeSet::from(["chat", "default", "serde", "std"])
+        BTreeSet::from(["artifacts", "chat", "default", "serde", "std"])
     );
     assert_eq!(
         table_keys(MANIFEST, "[dependencies]"),

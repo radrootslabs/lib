@@ -251,7 +251,7 @@ mod tests {
     use super::*;
 
     const PUBLIC_KEY: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    #[cfg(feature = "local-signing")]
+    #[cfg(all(feature = "local-signing", feature = "blossom"))]
     const SECRET_KEY: &str = "7e0112ad58b2d2d13fb80532625195dc169b86d72b0e1db48347837a785cae90";
 
     struct ScriptedSigner {
@@ -320,7 +320,7 @@ mod tests {
         )
     }
 
-    #[cfg(feature = "local-signing")]
+    #[cfg(all(feature = "local-signing", feature = "blossom"))]
     fn local_signer() -> radroots_nostr::signing::LocalSigner {
         radroots_nostr::signing::LocalSigner::new(
             radroots_nostr::key::SecretKey::parse(SECRET_KEY).expect("secret fixture"),

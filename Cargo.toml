@@ -271,7 +271,7 @@ sled = { version = "0.34" }
 tempfile = { version = "3" }
 tar = { version = "0.4" }
 thiserror = { version = "1" }
-tokio = { version = "1" }
+tokio = { version = "1.53.3" }
 tokio-rustls = { version = "0.26.4", default-features = false }
 tokio-util = { version = "0.7", features = ["rt"] }
 tokio-tungstenite = { version = "0.28.0", default-features = false, features = [

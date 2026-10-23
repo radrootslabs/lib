@@ -1289,8 +1289,9 @@ version = "0.8.9"
 criteria = "network-parser-reviewed"
 
 [[exemptions.mio]]
-version = "1.1.1"
+version = "1.2.4"
 criteria = "network-parser-reviewed"
+notes = "Existing version-specific review debt advanced as the required Tokio1.53.3 companion after RUSTSEC-2026-0386. Independent full-crate review remains outstanding; source compatibility, current policy checks and runtime tests do not claim that audit."
 
 [[exemptions.negentropy]]
 version = "0.5.0"
@@ -2080,12 +2081,14 @@ version = "0.1.1"
 criteria = "network-parser-reviewed"
 
 [[exemptions.tokio]]
-version = "1.47.1"
+version = "1.53.3"
 criteria = "network-parser-reviewed"
+notes = "Existing version-specific review debt advanced to the upstream patched branch after RUSTSEC-2026-0386. Independent full-crate review remains outstanding; advisory remediation, current policy checks and runtime tests do not claim that audit. No advisory exception is added."
 
 [[exemptions.tokio-macros]]
-version = "2.5.0"
+version = "2.7.2"
 criteria = "network-parser-reviewed"
+notes = "Existing version-specific review debt advanced as the required Tokio1.53.3 macro companion after RUSTSEC-2026-0386. Independent full-crate review remains outstanding; compiler and runtime tests do not claim that audit."
 
 [[exemptions.tokio-rustls]]
 version = "0.26.4"

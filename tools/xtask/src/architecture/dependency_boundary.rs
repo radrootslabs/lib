@@ -610,7 +610,7 @@ mod tests {
     fn policy_covers_the_exact_architecture_catalog() {
         let policy = policy();
         let placements = placements(&policy);
-        assert_eq!(placements.len(), 21);
+        assert_eq!(placements.len(), 22);
     }
 
     #[test]
