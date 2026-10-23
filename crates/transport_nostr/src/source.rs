@@ -29,6 +29,10 @@ mod window;
 #[path = "source_paging_tests.rs"]
 mod paging_tests;
 
+#[cfg(test)]
+#[path = "source_original_tests.rs"]
+mod original_tests;
+
 const UPSTREAM_FETCH_LIMIT: usize = 1_000;
 const CURSOR_PREFIX: &str = "nostr-v2";
 const CURSOR_SCOPE_DOMAIN: &[u8] = b"radroots.transport-nostr.fetch-cursor.v2\0";
@@ -155,6 +159,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
             let mut batches: Vec<RelayFetchBatch> = stream::iter(relays.into_iter().map(|relay| {
                 let selector = selector.clone();
                 let budget = Arc::clone(&budget);
+                let registration = &registration;
                 async move {
                     let url = relay.as_str().to_owned();
                     let result = async {
@@ -216,6 +221,11 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             .with_gaps()
                             .map(|item| item.map_err(|_| ()));
                         let subscription_id = SubscriptionId::generate();
+                        let Some(originals) =
+                            registration.bind_originals(&url, subscription_id.as_str())
+                        else {
+                            return Ok(RelayFetchResult::ResourceLimit(Vec::new()));
+                        };
                         let remaining =
                             deadline.saturating_duration_since(crate::host_time::Instant::now());
                         if remaining.is_zero() {
@@ -243,6 +253,7 @@ impl RelaySourceClient for LiveRelaySourceClient {
                             &subscription_id,
                             deadline,
                             &budget,
+                            |event| originals.take(event),
                         )
                         .await;
                         Ok(result)
@@ -321,7 +332,7 @@ async fn admit_fetch_connections(
 
 fn finish_fetch(
     batches: &mut [RelayFetchBatch],
-    registration: crate::source_ingress::FetchRegistration,
+    registration: crate::source_ingress::IngressRegistration,
 ) -> bool {
     if !batches
         .iter()
@@ -380,6 +391,7 @@ async fn collect_until_eose(
     subscription_id: &SubscriptionId,
     deadline: crate::host_time::Instant,
     budget: &FetchBudget,
+    mut original: impl FnMut(&nostr_sdk::prelude::Event) -> Option<String>,
 ) -> RelayFetchResult {
     let mut events = Vec::new();
     loop {
@@ -416,7 +428,11 @@ async fn collect_until_eose(
                     if events.len() >= UPSTREAM_FETCH_LIMIT {
                         return RelayFetchResult::ResourceLimit(events);
                     }
-                    let raw = event.as_ref().as_json();
+                    let Some(raw) = original(event.as_ref()) else {
+                        // A parsed notification cannot recreate lost original
+                        // evidence. Preserve partial results and require recovery.
+                        return RelayFetchResult::ResourceLimit(events);
+                    };
                     if !budget.event(raw.len()) {
                         return RelayFetchResult::ResourceLimit(events);
                     }
@@ -842,6 +858,18 @@ mod tests {
         atomic::{AtomicUsize, Ordering as AtomicOrdering},
     };
 
+    async fn collect_until_eose_test(
+        notifications: &mut (impl Stream<Item = Result<RelayNotification, ()>> + Unpin),
+        subscription_id: &SubscriptionId,
+        deadline: crate::host_time::Instant,
+        budget: &FetchBudget,
+    ) -> RelayFetchResult {
+        collect_until_eose(notifications, subscription_id, deadline, budget, |event| {
+            Some(event.as_json())
+        })
+        .await
+    }
+
     const FIRST: &str = r#"{"id":"762bee187e9e645b81ec26ade05a69b5e8398caf527be8de0d9a45311ed0c7a0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1800000100,"kind":0,"tags":[],"content":"{\"display_name\":\"Moss Street Farm\",\"bot\":false,\"website\":\"https://mossstreet.example\",\"picture\":42}","sig":"4290da0bb6422986647bc8cd5f63bd52d49f41e7b665d3b47105b8109183e8d596f322c531d4061df53e1d2b70fda12d5d1c14f3720d7a56d9d0a03746af5109"}"#;
     const SECOND: &str = r#"{"id":"56bfc78223bb2221bad82b539efdec1ade0f56d0eb0e1f592fd387df4b2ceee0","pubkey":"585591529da0bab31b3b1b1f986611cf5f435dca84f978c89ee8a40cca7103df","created_at":1700000001,"kind":0,"tags":[],"content":"{}","sig":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}"#;
 
@@ -1133,7 +1161,7 @@ mod tests {
             })
             .expect("EOSE");
         assert_eq!(
-            collect_until_eose(
+            collect_until_eose_test(
                 &mut test_notifications(&mut receiver),
                 &subscription_id,
                 crate::host_time::Instant::now() + Duration::from_secs(1),
@@ -1145,7 +1173,7 @@ mod tests {
 
         let (_sender, mut receiver) = tokio::sync::broadcast::channel(2);
         assert_eq!(
-            collect_until_eose(
+            collect_until_eose_test(
                 &mut test_notifications(&mut receiver),
                 &subscription_id,
                 crate::host_time::Instant::now(),
@@ -1170,7 +1198,7 @@ mod tests {
         let budget = FetchBudget::default();
         assert!(!budget.wire(budget::MAX_FETCH_BYTES + 1, 0, 0));
         assert_eq!(
-            collect_until_eose(
+            collect_until_eose_test(
                 &mut test_notifications(&mut receiver),
                 &subscription_id,
                 crate::host_time::Instant::now() + Duration::from_secs(1),
@@ -1196,7 +1224,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(
-            collect_until_eose(
+            collect_until_eose_test(
                 &mut test_notifications(&mut receiver),
                 &id,
                 crate::host_time::Instant::now() + Duration::from_secs(1),
@@ -1236,7 +1264,7 @@ mod tests {
                 .unwrap();
             batches.push(RelayFetchBatch {
                 relay: RelayUrl::parse(url, RelayUrlPolicy::Public).unwrap(),
-                result: collect_until_eose(
+                result: collect_until_eose_test(
                     &mut test_notifications(&mut receiver),
                     &id,
                     crate::host_time::Instant::now() + Duration::from_secs(1),
@@ -1776,7 +1804,7 @@ mod tests {
                 .unwrap();
         }
         assert_eq!(
-            collect_until_eose(
+            collect_until_eose_test(
                 &mut test_notifications(&mut receiver),
                 &id,
                 crate::host_time::Instant::now() + Duration::from_secs(10),
@@ -1802,7 +1830,7 @@ mod tests {
                 })
                 .unwrap();
         }
-        let result = collect_until_eose(
+        let result = collect_until_eose_test(
             &mut test_notifications(&mut receiver),
             &id,
             crate::host_time::Instant::now() + Duration::from_secs(10),
@@ -1879,7 +1907,7 @@ mod tests {
                     message: Box::new(RelayMessage::EndOfStoredEvents(Cow::Owned(id.clone()))),
                 })
                 .unwrap();
-            let result = collect_until_eose(
+            let result = collect_until_eose_test(
                 &mut test_notifications(&mut receiver),
                 &id,
                 crate::host_time::Instant::now() + Duration::from_secs(10),

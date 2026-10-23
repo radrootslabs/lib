@@ -318,12 +318,13 @@ impl NostrTransport {
             )),
             source_client: Arc::new(crate::source::LiveRelaySourceClient::new(
                 client.clone(),
-                ingress,
+                ingress.clone(),
                 Arc::clone(&connections),
             )),
             subscription_client: Arc::new(crate::subscription::LiveRelaySubscriptionClient::new(
                 client.clone(),
                 connections,
+                ingress,
             )),
             auth: Arc::new(crate::auth::AuthFlow::new(Arc::new(
                 crate::auth::LiveAuthClient::new(client),

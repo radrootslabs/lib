@@ -3828,6 +3828,7 @@ dependencies = [
  "radroots_event_codec",
  "radroots_nostr",
  "radroots_protocol",
+ "radroots_signing",
  "radroots_transport",
  "serde_json",
  "sha2",

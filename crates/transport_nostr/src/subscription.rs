@@ -64,16 +64,19 @@ pub(crate) trait RelaySubscriptionClient: Send + Sync {
 pub(crate) struct LiveRelaySubscriptionClient {
     client: nostr_sdk::client::Client,
     connections: std::sync::Arc<crate::connections::Connections>,
+    ingress: crate::source_ingress::IngressRegistry,
 }
 
 impl LiveRelaySubscriptionClient {
     pub(crate) const fn new(
         client: nostr_sdk::client::Client,
         connections: std::sync::Arc<crate::connections::Connections>,
+        ingress: crate::source_ingress::IngressRegistry,
     ) -> Self {
         Self {
             client,
             connections,
+            ingress,
         }
     }
 
@@ -85,6 +88,7 @@ impl LiveRelaySubscriptionClient {
             std::sync::Arc::new(crate::connections::Connections::new(
                 crate::client::MAX_RELAYS,
             )),
+            crate::source_ingress::IngressRegistry::default(),
         )
     }
 }
@@ -100,9 +104,22 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
             let subscription_id = SubscriptionId::new(query.id);
             let mut targeted = Vec::with_capacity(query.targets.len());
             let mut relay_lookup = BTreeMap::new();
+            let originals = self
+                .ingress
+                .register_live(
+                    query
+                        .targets
+                        .iter()
+                        .map(|target| target.relay.as_str().to_owned()),
+                )
+                .ok_or(())?;
+            let mut original_scopes = BTreeMap::new();
 
             for target in query.targets {
                 let url = target.relay.as_str().to_owned();
+                let original = originals
+                    .bind_originals(&url, subscription_id.as_str())
+                    .ok_or(())?;
                 let filter = subscription_filter(&query.selector, target.since_unix_seconds)?;
                 self.client
                     .add_relay(url.as_str())
@@ -118,6 +135,7 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
                 .await
                 .map_err(|_| ())?;
                 relay_lookup.insert(url.clone(), target.relay);
+                original_scopes.insert(url.clone(), original);
                 targeted.push((url, vec![filter]));
             }
 
@@ -149,6 +167,8 @@ impl RelaySubscriptionClient for LiveRelaySubscriptionClient {
                 notifications: Some(notifications),
                 relay_lookup,
                 cancelled: false,
+                originals: Some(originals),
+                original_scopes,
             };
             Ok(Box::new(session) as Box<dyn RelaySubscriptionSession>)
         })
@@ -161,6 +181,8 @@ struct LiveRelaySubscriptionSession {
     notifications: Option<nostr_sdk::stream::NotificationStreamWithGaps<ClientNotification>>,
     relay_lookup: BTreeMap<String, RelayUrl>,
     cancelled: bool,
+    originals: Option<crate::source_ingress::IngressRegistration>,
+    original_scopes: BTreeMap<String, crate::source_ingress::OriginalSubscription>,
 }
 
 impl RelaySubscriptionSession for LiveRelaySubscriptionSession {
@@ -171,13 +193,33 @@ impl RelaySubscriptionSession for LiveRelaySubscriptionSession {
                 return Ok(RelaySubscriptionItem::Shutdown);
             };
             loop {
-                let notification = match notifications.next().await {
+                if self
+                    .originals
+                    .as_ref()
+                    .is_none_or(|scope| scope.exhausted())
+                {
+                    return Err(());
+                }
+                let originals = self.originals.as_ref().ok_or(())?;
+                let received = tokio::select! {
+                    biased;
+                    _ = originals.wait_exhausted() => return Err(()),
+                    received = notifications.next() => received,
+                };
+                let notification = match received {
                     Some(Ok(notification)) => notification,
                     Some(Err(_)) => return Err(()),
                     None => {
                         return Ok(RelaySubscriptionItem::Shutdown);
                     }
                 };
+                if self
+                    .originals
+                    .as_ref()
+                    .is_none_or(|scope| scope.exhausted())
+                {
+                    return Err(());
+                }
                 match notification {
                     ClientNotification::Message { relay_url, message } => {
                         let Some(relay) = self.relay_lookup.get(relay_url.as_str()).cloned() else {
@@ -188,10 +230,12 @@ impl RelaySubscriptionSession for LiveRelaySubscriptionSession {
                                 subscription_id,
                                 event,
                             } if subscription_id.as_ref() == &self.subscription_id => {
-                                return Ok(RelaySubscriptionItem::Event {
-                                    relay,
-                                    raw: event.as_json(),
-                                });
+                                let raw = self
+                                    .original_scopes
+                                    .get(relay_url.as_str())
+                                    .and_then(|scope| scope.take(&event))
+                                    .ok_or(())?;
+                                return Ok(RelaySubscriptionItem::Event { relay, raw });
                             }
                             RelayMessage::Closed {
                                 subscription_id, ..
@@ -233,6 +277,8 @@ impl RelaySubscriptionSession for LiveRelaySubscriptionSession {
                 }
                 self.cancelled = true;
                 self.notifications = None;
+                self.original_scopes.clear();
+                self.originals = None;
             }
             Ok(())
         })

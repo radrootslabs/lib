@@ -22,6 +22,12 @@ struct Usage {
 pub(crate) struct FetchBudget(Mutex<Usage>, tokio::sync::Notify);
 
 impl FetchBudget {
+    pub(crate) fn exhaust(&self) {
+        if let Ok(mut usage) = self.0.lock() {
+            usage.exhausted = true;
+        }
+        self.1.notify_waiters();
+    }
     pub(crate) fn wire(&self, bytes: usize, frames: usize, data: usize) -> bool {
         let Ok(mut usage) = self.0.lock() else {
             return false;
@@ -45,7 +51,7 @@ impl FetchBudget {
         self.0.lock().map_or(true, |usage| usage.exhausted)
     }
 
-    pub(super) async fn wait_exhausted(&self) {
+    pub(crate) async fn wait_exhausted(&self) {
         loop {
             let notified = self.1.notified();
             tokio::pin!(notified);

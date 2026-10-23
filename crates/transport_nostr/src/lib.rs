@@ -16,6 +16,7 @@ mod sink;
 mod socket_write;
 mod source;
 mod source_ingress;
+mod source_original;
 
 mod status;
 mod subscription;

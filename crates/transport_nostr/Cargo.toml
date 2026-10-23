@@ -45,7 +45,7 @@ radroots_transport = { workspace = true, default-features = false, features = ["
 async-wsocket = { workspace = true }
 futures = { workspace = true }
 nostr-sdk = { workspace = true }
-serde_json = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std", "raw_value"] }
 sha2 = { workspace = true, default-features = false }
 tokio = { workspace = true, features = ["sync"] }
 url = { workspace = true }
@@ -60,6 +60,8 @@ wasm-bindgen-futures = { workspace = true }
 web-time = { workspace = true }
 
 [dev-dependencies]
+radroots_nostr = { workspace = true, default-features = false, features = ["commerce"] }
+radroots_signing = { workspace = true, default-features = false, features = ["std"] }
 tokio-tungstenite = { workspace = true }
 tokio = { workspace = true, features = [
   "macros",

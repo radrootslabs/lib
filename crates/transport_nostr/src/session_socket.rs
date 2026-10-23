@@ -89,6 +89,7 @@ impl WebSocketTransport for SessionWebsocketTransport {
                 .ingress
                 .connection(relay.as_str())
                 .ok_or_else(|| policy_error("relay ingress unavailable"))?;
+            let originals = ingress.clone();
             let admission = Arc::new(ConnectionAdmission { policy, ingress });
             let limit = NonZeroUsize::new(MAX_WIRE_MESSAGE_BYTES)
                 .expect("the fixed wire limit is positive");
@@ -104,11 +105,17 @@ impl WebSocketTransport for SessionWebsocketTransport {
                 crate::socket_write::SocketWriter::new(Box::pin(HostSink::new(socket.clone())));
             self.writers.install(relay.as_str(), &writer)?;
             let sink: WebSocketSink = Box::pin(crate::socket_write::SharedSocketSink::new(writer));
-            let receiver = stream::try_unfold(socket, |socket| async move {
-                let frame = socket.receive().await.map_err(host_error)?;
-                let message = frame.map(from_host_frame).transpose()?.flatten();
-                Ok(message.map(|message| (message, socket)))
-            });
+            let receiver =
+                stream::try_unfold((socket, originals), |(socket, originals)| async move {
+                    let frame = socket.receive().await.map_err(host_error)?;
+                    let message = frame.map(from_host_frame).transpose()?.flatten();
+                    if let Some(Message::Text(text)) = &message
+                        && !originals.capture(text)
+                    {
+                        return Err(policy_error("original relay ingress unavailable"));
+                    }
+                    Ok(message.map(|message| (message, (socket, originals))))
+                });
             Ok((sink, Box::pin(receiver) as WebSocketStream))
         })
     }

@@ -8,7 +8,13 @@ use std::{
     task::Context,
 };
 
-const MAX_ACTIVE_FETCHES: usize = 64;
+const MAX_ACTIVE_SCOPES: usize = 64;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ScopeMode {
+    Fetch,
+    Live,
+}
 
 #[derive(Debug, Default)]
 struct RelayState {
@@ -22,13 +28,24 @@ struct RelayState {
 struct Registration {
     targets: BTreeSet<String>,
     budget: Arc<FetchBudget>,
+    originals: Vec<OriginalScope>,
+    mode: ScopeMode,
+}
+
+#[derive(Debug)]
+struct OriginalScope {
+    relay: String,
+    subscription: String,
+    scope: u64,
 }
 
 #[derive(Debug, Default)]
 struct State {
     sequence: u64,
+    original_sequence: u64,
     relays: BTreeMap<String, RelayState>,
     active: BTreeMap<u64, Registration>,
+    originals: crate::source_original::OriginalQueue,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -48,9 +65,25 @@ impl IngressRegistry {
         &self,
         targets: impl Iterator<Item = String>,
         budget: Arc<FetchBudget>,
-    ) -> Option<FetchRegistration> {
+    ) -> Option<IngressRegistration> {
+        self.register_scope(targets, budget, ScopeMode::Fetch)
+    }
+
+    pub(crate) fn register_live(
+        &self,
+        targets: impl Iterator<Item = String>,
+    ) -> Option<IngressRegistration> {
+        self.register_scope(targets, Arc::new(FetchBudget::default()), ScopeMode::Live)
+    }
+
+    fn register_scope(
+        &self,
+        targets: impl Iterator<Item = String>,
+        budget: Arc<FetchBudget>,
+        mode: ScopeMode,
+    ) -> Option<IngressRegistration> {
         let mut state = self.0.lock().ok()?;
-        if state.active.len() == MAX_ACTIVE_FETCHES {
+        if state.active.len() == MAX_ACTIVE_SCOPES {
             return None;
         }
         let targets: BTreeSet<_> = targets.collect();
@@ -62,8 +95,16 @@ impl IngressRegistry {
         }
         let id = state.sequence.checked_add(1)?;
         state.sequence = id;
-        state.active.insert(id, Registration { targets, budget });
-        Some(FetchRegistration {
+        state.active.insert(
+            id,
+            Registration {
+                targets,
+                budget,
+                originals: Vec::new(),
+                mode,
+            },
+        );
+        Some(IngressRegistration {
             registry: self.clone(),
             id,
             finished: false,
@@ -120,7 +161,10 @@ impl IngressRegistry {
         }
         let mut denied = BTreeSet::new();
         for entry in state.active.values() {
-            if entry.targets.contains(relay) && !entry.budget.wire(bytes, frames, data) {
+            if entry.mode == ScopeMode::Fetch
+                && entry.targets.contains(relay)
+                && !entry.budget.wire(bytes, frames, data)
+            {
                 denied.extend(entry.targets.iter().cloned());
             }
         }
@@ -141,10 +185,11 @@ impl IngressRegistry {
         let Some(entry) = state.active.remove(&id) else {
             return false;
         };
+        state.originals.remove_owner(id);
         // Charge and completion use this same mutex. No ingress can exhaust
         // this registration between the budget check and its removal.
         let complete = !cancel && !entry.budget.exhausted();
-        if !complete {
+        if !complete && entry.mode == ScopeMode::Fetch {
             for target in entry.targets {
                 if let Some(row) = state.relays.get_mut(&target) {
                     row.invalidated = row.generation;
@@ -155,15 +200,152 @@ impl IngressRegistry {
         }
         complete
     }
+
+    fn bind_originals(
+        &self,
+        owner: u64,
+        relay: &str,
+        subscription: &str,
+    ) -> Option<OriginalSubscription> {
+        if subscription.is_empty() || subscription.len() > 256 {
+            return None;
+        }
+        let mut state = self.0.lock().ok()?;
+        if state.active.values().any(|entry| {
+            entry
+                .originals
+                .iter()
+                .any(|scope| scope.relay == relay && scope.subscription == subscription)
+        }) {
+            return None;
+        }
+        let entry = state.active.get(&owner)?;
+        if !entry.targets.contains(relay) || entry.originals.len() >= crate::client::MAX_RELAYS {
+            return None;
+        }
+        let scope = state.original_sequence.checked_add(1)?;
+        state.original_sequence = scope;
+        state.active.get_mut(&owner)?.originals.push(OriginalScope {
+            relay: relay.into(),
+            subscription: subscription.into(),
+            scope,
+        });
+        Some(OriginalSubscription {
+            registry: self.clone(),
+            owner,
+            scope,
+        })
+    }
+
+    fn capture(&self, relay: &str, generation: u64, text: &str) -> bool {
+        let Some((subscription, raw)) = crate::source_original::frame(text) else {
+            return true;
+        };
+        let selected = {
+            let Ok(state) = self.0.lock() else {
+                return false;
+            };
+            if !state
+                .relays
+                .get(relay)
+                .is_some_and(|row| generation == row.generation && generation > row.invalidated)
+            {
+                return false;
+            }
+            state.active.iter().find_map(|(owner, entry)| {
+                entry
+                    .originals
+                    .iter()
+                    .find(|scope| scope.relay == relay && scope.subscription == subscription)
+                    .map(|scope| (*owner, scope.scope))
+            })
+        };
+        let Some((owner, scope)) = selected else {
+            return true;
+        };
+        // Reuse the exact pinned upstream decoder only to correlate its later
+        // notification. It supplies no authentication or original-wire admission.
+        let Ok(event) = nostr_sdk::prelude::Event::from_json(raw.get()) else {
+            return true;
+        };
+        let correlation = crate::source_original::correlation(&event);
+        let Ok(mut state) = self.0.lock() else {
+            return false;
+        };
+        if !state
+            .relays
+            .get(relay)
+            .is_some_and(|row| generation == row.generation && generation > row.invalidated)
+        {
+            return false;
+        }
+        let Some(entry) = state.active.get(&owner) else {
+            return true;
+        };
+        if !entry.originals.iter().any(|entry| entry.scope == scope) {
+            return true;
+        }
+        if entry.budget.exhausted() {
+            return entry.mode == ScopeMode::Live;
+        }
+        if state.originals.insert(owner, scope, correlation, raw.get()) {
+            return true;
+        }
+        let entry = &state.active[&owner];
+        entry.budget.exhaust();
+        if entry.mode == ScopeMode::Live {
+            return true;
+        }
+        let targets = entry.targets.clone();
+        for target in targets {
+            if let Some(row) = state.relays.get_mut(&target) {
+                row.invalidated = row.generation;
+                row.waker.wake();
+                row.write_waker.wake();
+            }
+        }
+        false
+    }
 }
 
-pub(crate) struct FetchRegistration {
+pub(crate) struct IngressRegistration {
     registry: IngressRegistry,
     id: u64,
     finished: bool,
 }
 
-impl FetchRegistration {
+impl IngressRegistration {
+    pub(crate) async fn wait_exhausted(&self) {
+        let budget = self.registry.0.lock().ok().and_then(|state| {
+            state
+                .active
+                .get(&self.id)
+                .map(|entry| Arc::clone(&entry.budget))
+        });
+        if let Some(budget) = budget {
+            budget.wait_exhausted().await;
+        }
+    }
+    pub(crate) fn exhausted(&self) -> bool {
+        self.registry
+            .0
+            .lock()
+            .ok()
+            .and_then(|state| {
+                state
+                    .active
+                    .get(&self.id)
+                    .map(|entry| entry.budget.exhausted())
+            })
+            .unwrap_or(true)
+    }
+    pub(crate) fn bind_originals(
+        &self,
+        relay: &str,
+        subscription: &str,
+    ) -> Option<OriginalSubscription> {
+        self.registry.bind_originals(self.id, relay, subscription)
+    }
     pub(crate) fn finish(mut self) -> bool {
         let complete = self.registry.remove(self.id, false);
         self.finished = true;
@@ -171,7 +353,29 @@ impl FetchRegistration {
     }
 }
 
-impl Drop for FetchRegistration {
+pub(crate) struct OriginalSubscription {
+    registry: IngressRegistry,
+    owner: u64,
+    scope: u64,
+}
+impl OriginalSubscription {
+    pub(crate) fn take(&self, event: &nostr_sdk::prelude::Event) -> Option<String> {
+        let key = crate::source_original::correlation(event);
+        self.registry.0.lock().ok()?.originals.take(self.scope, key)
+    }
+}
+impl Drop for OriginalSubscription {
+    fn drop(&mut self) {
+        if let Ok(mut state) = self.registry.0.lock() {
+            state.originals.remove_scope(self.scope);
+            if let Some(entry) = state.active.get_mut(&self.owner) {
+                entry.originals.retain(|entry| entry.scope != self.scope);
+            }
+        }
+    }
+}
+
+impl Drop for IngressRegistration {
     fn drop(&mut self) {
         if !self.finished {
             self.registry.remove(self.id, true);
@@ -187,6 +391,9 @@ pub(crate) struct IngressConnection {
 }
 
 impl IngressConnection {
+    pub(crate) fn capture(&self, text: &str) -> bool {
+        self.registry.capture(&self.relay, self.generation, text)
+    }
     pub(crate) fn admitted(&self, context: &Context<'_>) -> bool {
         self.registry
             .admitted(&self.relay, self.generation, context, false)
@@ -208,6 +415,200 @@ mod tests {
     use super::*;
     use crate::source::budget::{MAX_FETCH_BYTES, MAX_FETCH_EVENTS, MAX_FETCH_NOTIFICATIONS};
 
+    fn original() -> (String, nostr_sdk::prelude::Event) {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/source_original.v1.json"))
+                .unwrap();
+        let raw = fixture["raw_wrap"].as_str().unwrap().to_owned();
+        let event = nostr_sdk::prelude::Event::from_json(&raw).unwrap();
+        (raw, event)
+    }
+    fn event_frame(subscription: &str, raw: &str) -> String {
+        format!(
+            "[\"EVENT\",{},{}]",
+            serde_json::to_string(subscription).unwrap(),
+            raw
+        )
+    }
+
+    #[test]
+    fn original_scope_refusals_and_unowned_frames_retain_no_evidence() {
+        let registry = registry();
+        let registration = register(&registry, &["one"], &Arc::new(FetchBudget::default()));
+        assert!(
+            registration
+                .bind_originals("one", &"a".repeat(257))
+                .is_none()
+        );
+        let mut scopes = Vec::new();
+        for index in 0..crate::client::MAX_RELAYS {
+            scopes.push(
+                registration
+                    .bind_originals("one", &format!("scope-{index}"))
+                    .unwrap(),
+            );
+        }
+        assert!(registration.bind_originals("one", "over-limit").is_none());
+        let connection = registry.connection("one").unwrap();
+        let (raw, event) = original();
+        assert!(connection.capture(&event_frame("unowned", &raw)));
+        assert!(connection.capture(&event_frame("scope-0", "{}")));
+        assert!(scopes[0].take(&event).is_none());
+        assert!(connection.capture(&event_frame("scope-0", &raw)));
+        assert_eq!(scopes[0].take(&event).as_deref(), Some(raw.as_str()));
+        assert!(registration.finish());
+        assert!(scopes[0].take(&event).is_none());
+    }
+
+    #[test]
+    fn originals_are_owned_by_exact_fetch_relay_and_subscription() {
+        let registry = registry();
+        let first = register(&registry, &["one"], &Arc::new(FetchBudget::default()));
+        let second = register(&registry, &["two"], &Arc::new(FetchBudget::default()));
+        let a = first.bind_originals("one", "a").unwrap();
+        let b = second.bind_originals("two", "a").unwrap();
+        assert!(first.bind_originals("one", "a").is_none());
+        assert!(first.bind_originals("missing", "b").is_none());
+        assert!(first.bind_originals("one", "").is_none());
+        let one = registry.connection("one").unwrap();
+        let two = registry.connection("two").unwrap();
+        let (raw, event) = original();
+        assert!(one.capture(&event_frame("a", &raw)));
+        assert!(b.take(&event).is_none());
+        assert!(two.capture(&event_frame("a", &raw)));
+        assert_eq!(a.take(&event).as_deref(), Some(raw.as_str()));
+        assert_eq!(b.take(&event).as_deref(), Some(raw.as_str()));
+        assert!(a.take(&event).is_none());
+        assert!(first.finish());
+        assert!(second.finish());
+    }
+
+    #[test]
+    fn original_scope_cleanup_and_reconnection_preserve_obtained_data_and_reject_stale_ingress() {
+        let registry = registry();
+        let first = register(&registry, &["one"], &Arc::new(FetchBudget::default()));
+        let scope = first.bind_originals("one", "a").unwrap();
+        let stale = registry.connection("one").unwrap();
+        let (raw, event) = original();
+        assert!(stale.capture(&event_frame("a", &raw)));
+        let fresh = registry.connection("one").unwrap();
+        assert!(!stale.capture(&event_frame("a", &raw)));
+        assert_eq!(scope.take(&event).as_deref(), Some(raw.as_str()));
+        assert!(fresh.capture(&event_frame("a", &raw)));
+        drop(scope);
+        assert_eq!(
+            registry.0.lock().unwrap().originals.retained_bytes(),
+            crate::source_original::OriginalQueue::default().retained_bytes()
+        );
+        assert!(fresh.capture(&event_frame("a", &raw)));
+        assert!(first.finish());
+        registry.0.lock().unwrap().original_sequence = u64::MAX;
+        let second = register(&registry, &["one"], &Arc::new(FetchBudget::default()));
+        assert!(second.bind_originals("one", "b").is_none());
+    }
+
+    #[test]
+    fn original_queue_is_globally_bounded_and_exhaustion_does_not_evict_other_fetch_data() {
+        let registry = registry();
+        let a_budget = Arc::new(FetchBudget::default());
+        let b_budget = Arc::new(FetchBudget::default());
+        let a = register(&registry, &["one"], &a_budget);
+        let b = register(&registry, &["two"], &b_budget);
+        let a_scope = a.bind_originals("one", "a").unwrap();
+        let b_scope = b.bind_originals("two", "b").unwrap();
+        let one = registry.connection("one").unwrap();
+        let two = registry.connection("two").unwrap();
+        let (raw, event) = original();
+        assert!(
+            raw.len() * crate::source_original::MAX_PENDING_EVENTS
+                + registry.0.lock().unwrap().originals.retained_bytes()
+                <= crate::source_original::MAX_PENDING_BYTES
+        );
+        for _ in 0..crate::source_original::MAX_PENDING_EVENTS / 2 {
+            assert!(one.capture(&event_frame("a", &raw)));
+            assert!(two.capture(&event_frame("b", &raw)));
+        }
+        assert!(!one.capture(&event_frame("a", &raw)));
+        assert!(a_budget.exhausted());
+        assert!(!b_budget.exhausted());
+        assert!(!admitted(&one));
+        assert!(admitted(&two));
+        assert_eq!(b_scope.take(&event).as_deref(), Some(raw.as_str()));
+        assert!(two.capture(&event_frame("b", &raw)));
+        assert_eq!(a_scope.take(&event).as_deref(), Some(raw.as_str()));
+        drop(a);
+        assert!(b_scope.take(&event).is_some());
+        assert!(b.finish());
+        assert_eq!(
+            registry.0.lock().unwrap().originals.retained_bytes(),
+            crate::source_original::OriginalQueue::default().retained_bytes()
+        );
+    }
+
+    #[test]
+    fn live_scope_cleanup_preserves_other_subscriptions_and_has_no_cumulative_fetch_budget() {
+        let registry = registry();
+        let first = registry
+            .register_live(["one".to_owned()].into_iter())
+            .unwrap();
+        let second = registry
+            .register_live(["one".to_owned()].into_iter())
+            .unwrap();
+        let a = first.bind_originals("one", "a").unwrap();
+        let b = second.bind_originals("one", "b").unwrap();
+        let connection = registry.connection("one").unwrap();
+        assert!(connection.charge(
+            MAX_FETCH_BYTES + 1,
+            MAX_FETCH_NOTIFICATIONS + 1,
+            MAX_FETCH_EVENTS + 1
+        ));
+        assert!(!first.exhausted());
+        assert!(!second.exhausted());
+        let (raw, event) = original();
+        assert!(connection.capture(&event_frame("a", &raw)));
+        assert!(connection.capture(&event_frame("b", &raw)));
+        drop(a);
+        drop(first);
+        assert!(admitted(&connection));
+        assert_eq!(b.take(&event).as_deref(), Some(raw.as_str()));
+        assert!(!second.exhausted());
+        drop(second);
+        assert!(b.take(&event).is_none());
+        assert!(admitted(&connection));
+    }
+
+    #[tokio::test]
+    async fn live_queue_loss_wakes_a_pending_observer_without_closing_another_scope() {
+        let registry = registry();
+        let live = registry
+            .register_live(["one".to_owned()].into_iter())
+            .unwrap();
+        let other = registry
+            .register_live(["one".to_owned()].into_iter())
+            .unwrap();
+        let scope = live.bind_originals("one", "a").unwrap();
+        let _other_scope = other.bind_originals("one", "b").unwrap();
+        let connection = registry.connection("one").unwrap();
+        let (raw, event) = original();
+        let wait = live.wait_exhausted();
+        futures::pin_mut!(wait);
+        assert!(futures::poll!(wait.as_mut()).is_pending());
+        for _ in 0..crate::source_original::MAX_PENDING_EVENTS {
+            assert!(connection.capture(&event_frame("a", &raw)));
+        }
+        assert!(connection.capture(&event_frame("a", &raw)));
+        tokio::time::timeout(std::time::Duration::from_secs(1), wait)
+            .await
+            .unwrap();
+        assert!(live.exhausted());
+        assert!(!other.exhausted());
+        assert!(admitted(&connection));
+        assert_eq!(scope.take(&event).as_deref(), Some(raw.as_str()));
+        // A lost scope cannot resume admission after unrelated dequeueing.
+        assert!(connection.capture(&event_frame("a", &raw)));
+        assert!(live.exhausted());
+    }
+
     fn registry() -> IngressRegistry {
         IngressRegistry::new(["one".to_owned(), "two".to_owned()].into_iter())
     }
@@ -216,7 +617,7 @@ mod tests {
         registry: &IngressRegistry,
         targets: &[&str],
         budget: &Arc<FetchBudget>,
-    ) -> FetchRegistration {
+    ) -> IngressRegistration {
         registry
             .register(
                 targets.iter().map(|target| (*target).to_owned()),
@@ -302,7 +703,7 @@ mod tests {
                 .is_none()
         );
         assert!(registry.connection("unknown").is_none());
-        let mut registrations = (0..MAX_ACTIVE_FETCHES)
+        let mut registrations = (0..MAX_ACTIVE_SCOPES)
             .map(|_| register(&registry, &["one"], &budget))
             .collect::<Vec<_>>();
         assert!(

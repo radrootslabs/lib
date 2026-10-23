@@ -1,0 +1,19 @@
+{
+  "schema": "radroots.transport_nostr.original_ingress.v1",
+  "contract_version": 1,
+  "state": "bounded_original_fetch_and_live_evidence",
+  "original_event_max_utf8_bytes": 65536,
+  "pending_events_max": 256,
+  "pending_bytes_max": 4194304,
+  "accounting": "Fixed reserved queue entry capacity, queue object and exact retained Box<str> lengths; no silent eviction. Other bounded session metadata, host buffers and caller-owned obtained results are separate.",
+  "ownership": "Exact registration, relay and subscription; monotonic private scope identities; stale connection generations cannot capture. Scope drop and registration finalization remove only their owned originals.",
+  "correlation": "The exact pinned upstream decoder and SHA256 of its serialization correlate a parsed notification to the original queued object. This key is not authenticity, profile admission or replacement wire evidence. FIFO retains distinct original spellings independently.",
+  "fetch": "Existing monotonic work/byte/frame budgets, ordered finalization and partial results remain. Missing originals or queue loss produce incomplete evidence, never reserialized fallback.",
+  "live": "Uses the same aggregate original queue with independent scope disposal, no inherited cumulative fetch budget and a wakeable loss signal. Queue loss or missing original returns a source error without advancing an event checkpoint. Cancelled live scopes do not invalidate another scope's physical connection.",
+  "admission": "Original objects pass through SignedEvent.raw_json to the owning protected reader. Only that reader establishes complete signature, recipient, seal, rumor and record bindings. Original source data alone supplies no business authority.",
+  "limits": [
+    "This contract governs original network evidence, not a second transport or durable journal.",
+    "Existing general EventWireLimits and ancillary direct-value policies retain their separately governed scope until coherent profile/consumer reconciliation. They do not enlarge this original-network-event bound or the protected reader's64KiB admission.",
+    "No structured authoring enablement, stock/consent/physical truth, coherent consumer adoption or final acceptance follows from this component."
+  ]
+}

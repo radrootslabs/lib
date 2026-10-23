@@ -216,13 +216,14 @@ it includes decrypted HTTP upgrade bytes, frame headers and payloads, malformed
 and discarded messages, duplicate events, unsolicited traffic, control frames,
 and empty continuation frames. Text and binary message starts conservatively
 consume data attempts without inspecting their JSON. The HTTP upgrade response
-is also limited to 16 KiB. Each relay retains at most 1,000 events. An event is
-at most 256 KiB, and the WebSocket connector explicitly limits both frames and
+is also limited to 16 KiB. Each relay retains at most 1,000 events. Original
+event objects from the network are limited to64KiB; the existing general
+canonical decoder's256KiB ceiling cannot enlarge network admission. The WebSocket connector explicitly limits both frames and
 complete messages to 512 KiB. SDK notification and canonical event collection
 retain independent limits of 8,192 notifications, 4,096 events and 8 MiB.
 Exhaustion is sticky and wakes all affected fetch collectors; later EOSE cannot
-turn it into completion. At most 64 fetch calls may hold ingress registrations
-on one transport; additional calls fail closed as partial evidence.
+turn it into completion. At most64 fetch/live scopes may hold ingress registrations
+on one transport; additional setup fails with partial evidence or a source error.
 The meter reads into a fixed 4 KiB plaintext scratch buffer before admission;
 at most that scratch capacity can be read beyond the remaining allowance and
 discarded without reaching WebSocket assembly or Nostr parsing. This bound
@@ -246,6 +247,19 @@ zero cannot underflow. Ordinary `nostr-v2` event cursors remain supported; the
 additive `nostr-until-v1` form is interpreted only by this concrete adapter.
 No automatic retry, unlimited scan, new protocol or global completeness claim
 is implied by either form.
+
+Fetch and live observations retain the original signed event object before
+upstream decoding. A shared queue bounds pending originals to256 events and4MiB,
+including its reserved entry storage and retained object bytes. Exact relay,
+subscription and registration ownership prevents cross-scope reuse. A digest
+of the pinned decoder's representation correlates notifications without granting
+authenticity or replacing original bytes. `SignedEvent::raw_json` retains those
+originals for subsequent protected admission. Missing originals and saturation
+produce incomplete fetch evidence or a live source error; no normalized fallback
+is used. Live scope disposal preserves other live scopes and does not inherit
+a finite fetch's cumulative work budget. Original data remains untrusted until
+its owning signature/profile/participant checks. The owning contract is
+[`source_original.v1.json`](../../contracts/protocol/source_original.v1.json).
 
 Live subscriptions use the same explicit readable targets and selector
 translation. A caller checkpoint is scoped to one exact target and selector;

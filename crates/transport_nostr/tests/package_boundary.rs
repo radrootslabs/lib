@@ -14,6 +14,44 @@ const SINK: &str = include_str!("../src/sink.rs");
 const SUBSCRIPTION: &str = include_str!("../src/subscription.rs");
 
 #[test]
+fn original_network_contract_preserves_bounded_untrusted_wire_and_standalone_fixture_provenance() {
+    let contract: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../contracts/protocol/source_original.v1.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        contract["original_event_max_utf8_bytes"],
+        radroots_protocol::profile::SIGNED_EVENT_MAX_BYTES
+    );
+    assert_eq!(contract["pending_events_max"], 256);
+    assert_eq!(contract["pending_bytes_max"], 4 * 1024 * 1024);
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/source_original.v1.json")).unwrap();
+    assert_eq!(
+        fixture["provenance"]["revision"],
+        "21ddcd6755fe7de99ea0284c88729fd6adfc5416"
+    );
+    assert_eq!(
+        fixture["provenance"]["sha256"],
+        "bd59710bedc337b5e4bdcb1c0753de06a74927027b76a0202b251b0e45d02565"
+    );
+    assert!(
+        !SUBSCRIPTION
+            .split("\n#[cfg(test)]")
+            .next()
+            .unwrap()
+            .contains("raw: event.as_json()")
+    );
+    assert!(
+        !include_str!("../src/source.rs")
+            .split("\n#[cfg(test)]\nmod tests")
+            .next()
+            .unwrap()
+            .contains("let raw = event.as_ref().as_json()")
+    );
+}
+
+#[test]
 fn manifest_and_root_match_the_governed_transport_boundary() {
     for required in [
         "name = \"radroots_transport_nostr\"",
@@ -52,6 +90,7 @@ fn manifest_and_root_match_the_governed_transport_boundary() {
             "socket_write",
             "source",
             "source_ingress",
+            "source_original",
             "session_socket",
             "test_host",
             "status",
@@ -336,6 +375,9 @@ fn adapter_owns_no_storage_outbox_or_orchestration_surface() {
             "source.rs".to_owned(),
             "source_budget.rs".to_owned(),
             "source_ingress.rs".to_owned(),
+            "source_original.rs".to_owned(),
+            "source_original_queue_tests.rs".to_owned(),
+            "source_original_tests.rs".to_owned(),
             "source_paging_tests.rs".to_owned(),
             "source_window.rs".to_owned(),
             "session_socket.rs".to_owned(),
