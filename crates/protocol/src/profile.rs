@@ -11,3 +11,10 @@ pub const COMMERCE_PROFILE: &str = "radroots.commerce";
 pub const CAPABILITIES_PROFILE: &str = "radroots.capabilities";
 /// Supported content version for these profiles.
 pub const PROFILE_VERSION: u32 = 1;
+
+/// Complete structured content, including its record identity and header.
+pub const PRIVATE_RECORD_MAX_BYTES: usize = 16_384;
+/// Complete private unsigned NIP-01 rumor representation.
+pub const UNSIGNED_RUMOR_MAX_BYTES: usize = 24_576;
+/// Complete signed private seal or outer event representation.
+pub const SIGNED_EVENT_MAX_BYTES: usize = 65_536;

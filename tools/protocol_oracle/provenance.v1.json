@@ -1,0 +1,110 @@
+{
+  "schema": "radroots.protocol.oracle.provenance.v1",
+  "purpose": "Optional independent synthetic fixture production; no runtime or standalone Rust test dependency",
+  "nostr_tools": {
+    "repository": "https://github.com/nbd-wtf/nostr-tools",
+    "tag": "v2.23.5",
+    "revision": "ed47ef8ef73d78c338fbaf530e48be0fd4282194",
+    "license": "Unlicense",
+    "primary_license_url": "https://raw.githubusercontent.com/nbd-wtf/nostr-tools/v2.23.5/LICENSE",
+    "primary_license_sha256": "f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff",
+    "installed_license_equal_primary": true,
+    "primary_nip44_source_url": "https://raw.githubusercontent.com/nbd-wtf/nostr-tools/v2.23.5/nip44.ts",
+    "primary_nip44_source_sha256": "4ffc65e860abeef37f314456f5deddc04359c3e16afdab3f0e118e9c2bafebc2"
+  },
+  "closure": [
+    {
+      "package": "@noble/ciphers",
+      "version": "2.1.1",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@noble/ciphers/-/ciphers-2.1.1.tgz",
+      "integrity": "sha512-bysYuiVfhxNJuldNXlFEitTVdNnYUc+XNJZd7Qm2a5j1vZHgY+fazadNFWFaMK/2vye0JVlxV3gHmC0WDfAOQw==",
+      "license_files": {
+        "LICENSE": "f36671a5487c9c5050efacb58011c37c24c55a889803cb036cf9d9a6347c1e2d"
+      },
+      "missing_license_text": null
+    },
+    {
+      "package": "@noble/curves",
+      "version": "2.0.1",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@noble/curves/-/curves-2.0.1.tgz",
+      "integrity": "sha512-vs1Az2OOTBiP4q0pwjW5aF0xp9n4MxVrmkFBxc6EKZc6ddYx5gaZiAsZoq0uRRXWbi3AT/sBqn05eRPtn1JCPw==",
+      "license_files": {
+        "LICENSE": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec"
+      },
+      "missing_license_text": null
+    },
+    {
+      "package": "@noble/hashes",
+      "version": "2.0.1",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@noble/hashes/-/hashes-2.0.1.tgz",
+      "integrity": "sha512-XlOlEbQcE9fmuXxrVTXCTlG2nlRXa9Rj3rr5Ue/+tX+nmkgbX720YHh0VR3hBF9xDvwnb8D2shVGOwNx+ulArw==",
+      "license_files": {
+        "LICENSE": "4f221aee6e072336700c408c68ab3b96a3fc09f6aebe6f48f1bd99e5ef13faec"
+      },
+      "missing_license_text": null
+    },
+    {
+      "package": "@scure/base",
+      "version": "2.0.0",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@scure/base/-/base-2.0.0.tgz",
+      "integrity": "sha512-3E1kpuZginKkek01ovG8krQ0Z44E3DHPjc5S2rjJw9lZn3KSQOs8S7wqikF/AH7iRanHypj85uGyxk0XAyC37w==",
+      "license_files": {
+        "LICENSE": "3239e134eb6e6d64538ca76498c7fcb08a395249dd9d4af9927bf6d0169ee429"
+      },
+      "missing_license_text": null
+    },
+    {
+      "package": "@scure/bip32",
+      "version": "2.0.1",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@scure/bip32/-/bip32-2.0.1.tgz",
+      "integrity": "sha512-4Md1NI5BzoVP+bhyJaY3K6yMesEFzNS1sE/cP+9nuvE7p/b0kx9XbpDHHFl8dHtufcbdHRUUQdRqLIPHN/s7yA==",
+      "license_files": {
+        "LICENSE": "1565efd0ec4580bfaa96c7eeaaa9af3791baa1cc562c3bde62d0a055910b9ec7"
+      },
+      "missing_license_text": null
+    },
+    {
+      "package": "@scure/bip39",
+      "version": "2.0.1",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/@scure/bip39/-/bip39-2.0.1.tgz",
+      "integrity": "sha512-PsxdFj/d2AcJcZDX1FXN3dDgitDDTmwf78rKZq1a6c1P1Nan1X/Sxc7667zU3U+AN60g7SxxP0YCVw2H/hBycg==",
+      "license_files": {
+        "LICENSE": "1565efd0ec4580bfaa96c7eeaaa9af3791baa1cc562c3bde62d0a055910b9ec7"
+      },
+      "missing_license_text": null
+    },
+    {
+      "package": "nostr-tools",
+      "version": "2.23.5",
+      "license": "Unlicense",
+      "resolved": "https://registry.npmjs.org/nostr-tools/-/nostr-tools-2.23.5.tgz",
+      "integrity": "sha512-Fa7ZlUdjfUW1P4E7H3yBexhOHYi18XNyvd2n7eNHkYR085xADX6Y8V8Vm7nT/XQajaFOBrptXmVIGkJ2E4vfVw==",
+      "license_files": {
+        "LICENSE": "f0510d3b9d1223c45e8fdd2b49270ec8734fff491c7f7d1b948ee70162e1ceff"
+      },
+      "missing_license_text": null
+    },
+    {
+      "package": "nostr-wasm",
+      "version": "0.1.0",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/nostr-wasm/-/nostr-wasm-0.1.0.tgz",
+      "integrity": "sha512-78BTryCLcLYv96ONU8Ws3Q1JzjlAt+43pWQhIl86xZmWeegYCNLPml7yQ+gG3vR6V5h4XGj+TxO+SS5dsThQIA==",
+      "license_files": {},
+      "missing_license_text": {
+        "revision": "8c65c3e1a2e5d7615f23727a882d3285c767c313",
+        "primary_manifest_url": "https://raw.githubusercontent.com/fiatjaf/nostr-wasm/8c65c3e1a2e5d7615f23727a882d3285c767c313/package.json",
+        "primary_manifest_sha256": "6f389a694a7356fe236fb6e5938efb46034dc5ccfc3d805b15c3c2f412fb3ed4",
+        "primary_tree_sha256": "bff333878680530cf2d57dddca33eb42ba261de3f7e30087ddd34770803f3dee",
+        "scope": "Unused transitive development dependency; not imported by pure/nip44 producer entrypoints, vendored or redistributed in Rust packages/artifacts. MIT declaration matches pinned primary package and npm metadata; no license text exists in this source tree or tarball. This is not license-text redistribution qualification."
+      }
+    }
+  ],
+  "implementation": "Producer invokes independently implemented pinned packages; no upstream implementation copied into Radroots source. Fixed public synthetic scalars/nonces/auxiliary randomness supply no production entropy claim."
+}

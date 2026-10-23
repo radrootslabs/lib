@@ -37,12 +37,14 @@ impl LocalSigner {
 impl ParticipantProvider for LocalSigner {
     fn provider_state(&self) -> BoxFuture<'_, Result<ProviderState, ProviderError>> {
         Box::pin(async move {
-            let decryption = if cfg!(feature = "nip17") {
+            let decryption = if cfg!(any(feature = "nip17", feature = "private_ingress")) {
                 PrivateCryptoCapability::Nip44V2
             } else {
                 PrivateCryptoCapability::Unavailable
             };
-            let encryption = if cfg!(feature = "nip17") && self.nonce_source.is_some() {
+            let encryption = if cfg!(any(feature = "nip17", feature = "private_ingress"))
+                && self.nonce_source.is_some()
+            {
                 PrivateCryptoCapability::Nip44V2
             } else {
                 PrivateCryptoCapability::Unavailable
@@ -74,11 +76,11 @@ impl ParticipantProvider for LocalSigner {
     ) -> BoxFuture<'_, Result<PrivateCiphertext, ProviderError>> {
         Box::pin(async move {
             self.admit_crypto(&call)?;
-            #[cfg(feature = "nip17")]
+            #[cfg(any(feature = "nip17", feature = "private_ingress"))]
             {
                 encrypt(self, recipient, &plaintext)
             }
-            #[cfg(not(feature = "nip17"))]
+            #[cfg(not(any(feature = "nip17", feature = "private_ingress")))]
             {
                 let _ = (recipient, plaintext);
                 Err(ProviderError::CapabilityUnavailable)
@@ -94,11 +96,11 @@ impl ParticipantProvider for LocalSigner {
     ) -> BoxFuture<'_, Result<PrivateText, ProviderError>> {
         Box::pin(async move {
             self.admit_crypto(&call)?;
-            #[cfg(feature = "nip17")]
+            #[cfg(any(feature = "nip17", feature = "private_ingress"))]
             {
                 decrypt(self, sender, &ciphertext)
             }
-            #[cfg(not(feature = "nip17"))]
+            #[cfg(not(any(feature = "nip17", feature = "private_ingress")))]
             {
                 let _ = (sender, ciphertext);
                 Err(ProviderError::CapabilityUnavailable)
@@ -107,7 +109,7 @@ impl ParticipantProvider for LocalSigner {
     }
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 fn encrypt(
     signer: &LocalSigner,
     recipient: PublicKey,
@@ -144,7 +146,7 @@ fn encrypt(
     PrivateCiphertext::parse(&base64::engine::general_purpose::STANDARD.encode(payload))
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 pub(super) fn encrypt_payload(
     secret: &nostr::SecretKey,
     recipient: &nostr::PublicKey,
@@ -166,7 +168,7 @@ pub(super) fn encrypt_payload(
     Ok(payload)
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 fn decrypt(
     signer: &LocalSigner,
     sender: PublicKey,
@@ -192,7 +194,7 @@ fn decrypt(
     PrivateText::new(text)
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 fn normalize_crypto(error: nostr::nips::nip44::Error) -> ProviderError {
     use nostr::nips::nip44::{Error, v2::ErrorV2};
     match error {
@@ -206,14 +208,14 @@ fn normalize_crypto(error: nostr::nips::nip44::Error) -> ProviderError {
 // Transcribes one nonce already obtained from the injected source into the
 // pinned codec's RngCore API. This is not an RNG and implements no CryptoRng
 // claim. Any different consumption pattern is refused before returning output.
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 struct NonceTranscript {
     nonce: [u8; 32],
     consumed: bool,
     invalid: bool,
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 impl Drop for NonceTranscript {
     fn drop(&mut self) {
         use zeroize::Zeroize;
@@ -221,7 +223,7 @@ impl Drop for NonceTranscript {
     }
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 impl nostr::secp256k1::rand::RngCore for NonceTranscript {
     fn next_u32(&mut self) -> u32 {
         self.invalid = true;

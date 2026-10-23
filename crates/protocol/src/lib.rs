@@ -9,6 +9,13 @@ extern crate alloc;
 #[cfg(feature = "commands")]
 pub mod command;
 
+#[cfg(any(feature = "terms", feature = "private_rumor"))]
+mod private_json;
+
+/// Bounded private NIP-01 rumor data, without cryptographic admission.
+#[cfg(feature = "private_rumor")]
+pub mod private_rumor;
+
 /// Explicit bounded private Terms encoding and its canonical v1 digest.
 #[cfg(feature = "terms")]
 pub mod terms;

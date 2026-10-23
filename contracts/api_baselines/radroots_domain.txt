@@ -1024,6 +1024,20 @@ impl serde_core::ser::Serialize for radroots_domain::RouteDigest
 pub fn radroots_domain::RouteDigest::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::RouteDigest
 pub fn radroots_domain::RouteDigest::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::RumorEventId(_)
+impl radroots_domain::RumorEventId
+pub const fn radroots_domain::RumorEventId::as_bytes(&self) -> &[u8; 32]
+pub const fn radroots_domain::RumorEventId::from_bytes([u8; 32]) -> Self
+pub const fn radroots_domain::RumorEventId::into_bytes(self) -> [u8; 32]
+impl core::fmt::Display for radroots_domain::RumorEventId
+pub fn radroots_domain::RumorEventId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::str::traits::FromStr for radroots_domain::RumorEventId
+pub type radroots_domain::RumorEventId::Err = radroots_domain::IdentifierError
+pub fn radroots_domain::RumorEventId::from_str(&str) -> core::result::Result<Self, Self::Err>
+impl serde_core::ser::Serialize for radroots_domain::RumorEventId
+pub fn radroots_domain::RumorEventId::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::RumorEventId
+pub fn radroots_domain::RumorEventId::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::Sequence(_)
 impl radroots_domain::Sequence
 pub const fn radroots_domain::Sequence::get(self) -> u64

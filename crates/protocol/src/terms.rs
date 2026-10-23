@@ -12,7 +12,6 @@ use zeroize::Zeroizing;
 pub(crate) mod writer;
 use writer::Writer;
 pub(crate) mod decode;
-pub(crate) mod text;
 pub use decode::decode;
 
 /// Private content budget. A complete record additionally includes its header;

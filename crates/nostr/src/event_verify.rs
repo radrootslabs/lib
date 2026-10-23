@@ -73,6 +73,47 @@ fn verification_error_status(error: &VerificationError) -> Verification {
     }
 }
 
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
+#[derive(Clone, Copy)]
+pub(crate) enum SignedReadError {
+    InvalidInput,
+    LimitExceeded,
+    Unauthenticated,
+}
+
+/// Admit original signed JSON before any upstream conversion or callback.
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
+pub(crate) fn signed_json(raw: &str) -> Result<EventEnvelope, SignedReadError> {
+    use radroots_event::wire::{EventWireError, EventWireLimits, Nip01EventWire};
+    const LIMIT: usize = 65_536;
+    let wire = Nip01EventWire::parse_json_exact_with_limits(
+        raw,
+        EventWireLimits {
+            max_raw_json_bytes: LIMIT,
+            max_content_bytes: LIMIT,
+            ..Default::default()
+        },
+    )
+    .map_err(|error| match error {
+        EventWireError::EventIdMismatch { .. } => SignedReadError::Unauthenticated,
+        EventWireError::RawJsonTooLarge { .. }
+        | EventWireError::ContentTooLarge { .. }
+        | EventWireError::TooManyTags { .. }
+        | EventWireError::TooManyTagElements { .. }
+        | EventWireError::TagElementTooLarge { .. }
+        | EventWireError::TagsTooLarge { .. } => SignedReadError::LimitExceeded,
+        _ => SignedReadError::InvalidInput,
+    })?;
+    let event = wire
+        .into_envelope()
+        .map_err(|_| SignedReadError::InvalidInput)?;
+    match verify_event(&event) {
+        Verification::Verified => Ok(event),
+        Verification::MalformedEnvelope => Err(SignedReadError::InvalidInput),
+        _ => Err(SignedReadError::Unauthenticated),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -3,7 +3,7 @@ use super::{Error, Event, Kind, NostrSigner, PublicKey, UnsignedEvent};
 use alloc::{string::String, vec::Vec};
 use base64::Engine as _;
 use nostr::JsonUtil;
-use radroots_event::wire::{EventWireLimits, Nip01EventWire};
+use radroots_event::wire::EventWireLimits;
 use radroots_protocol::{
     chat::{RUMOR_MAX_BYTES, SIGNED_MAX_BYTES},
     nip01::{EventFields, signed_json_len},
@@ -130,20 +130,7 @@ fn rumor(raw: &str, author: PublicKey, recipient: PublicKey) -> Result<OpenedRum
 }
 
 fn signed(raw: &str) -> Result<radroots_event::envelope::EventEnvelope, Error> {
-    let wire = Nip01EventWire::parse_json_exact_with_limits(
-        raw,
-        EventWireLimits {
-            max_raw_json_bytes: SIGNED_MAX_BYTES,
-            max_content_bytes: SIGNED_MAX_BYTES,
-            ..Default::default()
-        },
-    )
-    .map_err(|_| Error::GiftWrap)?;
-    let event = wire.into_envelope().map_err(|_| Error::GiftWrap)?;
-    if crate::event_verify::verify_event(&event) != crate::event_verify::Verification::Verified {
-        return Err(Error::GiftWrap);
-    }
-    Ok(event)
+    crate::event_verify::signed_json(raw).map_err(|_| Error::GiftWrap)
 }
 
 fn outer(event: &Event) -> Result<(), Error> {

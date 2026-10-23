@@ -13,9 +13,11 @@ use zeroize::Zeroizing;
 mod decode;
 mod payload;
 pub use decode::{DecodedRecord, decode};
+mod rumor;
+pub use rumor::EncodedCommerceRumor;
 
 /// The complete private content budget, including record ID, header and payload.
-pub const RECORD_MAX_BYTES: usize = 16_384;
+pub const RECORD_MAX_BYTES: usize = profile::PRIVATE_RECORD_MAX_BYTES;
 
 /// Input-free record codec failures. None contains private source data.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -51,6 +51,30 @@ pub fn radroots_nostr::blossom::decode_verify_authorization_header(&str, &radroo
 pub fn radroots_nostr::blossom::encode_authorization_header(&radroots_nostr::blossom::SignedAuthorization) -> radroots_nostr::blossom::AuthorizationHeader
 pub fn radroots_nostr::blossom::encode_signed_event_authorization_header(&radroots_event::draft::SignedEvent) -> core::result::Result<radroots_nostr::blossom::AuthorizationHeader, radroots_nostr::blossom::AuthorizationError>
 pub fn radroots_nostr::blossom::sign_authorization(&nostr::key::Keys, &radroots_blossom::authorization::AuthoredUploadClaim) -> core::result::Result<radroots_nostr::blossom::SignedAuthorization, radroots_nostr::blossom::AuthorizationError>
+pub mod radroots_nostr::commerce
+pub enum radroots_nostr::commerce::RecordOpening
+pub radroots_nostr::commerce::RecordOpening::Known(radroots_nostr::commerce::AuthenticatedRecord)
+pub radroots_nostr::commerce::RecordOpening::Rejected(radroots_nostr::commerce::NonActionable<radroots_nostr::commerce::RejectedReason>)
+pub radroots_nostr::commerce::RecordOpening::Unsupported(radroots_nostr::commerce::NonActionable<radroots_nostr::commerce::UnsupportedReason>)
+pub enum radroots_nostr::commerce::RejectedReason
+pub radroots_nostr::commerce::RejectedReason::CarrierMismatch
+pub radroots_nostr::commerce::RejectedReason::InvalidProfile
+pub radroots_nostr::commerce::RejectedReason::LimitExceeded
+pub radroots_nostr::commerce::RejectedReason::RecipientMismatch
+pub radroots_nostr::commerce::RejectedReason::RecordIdentityMismatch
+pub enum radroots_nostr::commerce::UnsupportedReason
+pub radroots_nostr::commerce::UnsupportedReason::CarrierKind
+pub radroots_nostr::commerce::UnsupportedReason::Profile
+pub struct radroots_nostr::commerce::AuthenticatedRecord
+impl radroots_nostr::commerce::AuthenticatedRecord
+pub const fn radroots_nostr::commerce::AuthenticatedRecord::carrier(&self) -> &radroots_nostr::private_ingress::AuthenticatedCarrier
+pub fn radroots_nostr::commerce::AuthenticatedRecord::record(&self) -> &radroots_protocol::commerce::decode::DecodedRecord
+pub struct radroots_nostr::commerce::NonActionable<R>
+impl<R: core::marker::Copy> radroots_nostr::commerce::NonActionable<R>
+pub const fn radroots_nostr::commerce::NonActionable<R>::carrier(&self) -> &radroots_nostr::private_ingress::AuthenticatedCarrier
+pub const fn radroots_nostr::commerce::NonActionable<R>::reason(&self) -> R
+pub fn radroots_nostr::commerce::admit(radroots_nostr::private_ingress::AuthenticatedCarrier) -> radroots_nostr::commerce::RecordOpening
+pub async fn radroots_nostr::commerce::open(&dyn radroots_signing::provider::ParticipantProvider, radroots_signing::provider::ProviderCall, &str) -> core::result::Result<radroots_nostr::commerce::RecordOpening, radroots_nostr::private_ingress::OpeningError>
 pub mod radroots_nostr::event
 pub enum radroots_nostr::event::Verification
 pub radroots_nostr::event::Verification::IdMismatch
@@ -263,6 +287,32 @@ pub fn radroots_nostr::nip17::WrapOptions::default() -> Self
 pub async fn radroots_nostr::nip17::unwrap_gift_wrap<T>(&T, &nostr::event::Event) -> core::result::Result<radroots_nostr::nip17::Rumor, radroots_nostr::nip17::Error> where T: nostr::signer::NostrSigner
 pub async fn radroots_nostr::nip17::wrap_message<T>(&T, &radroots_event::social::message::Message, radroots_nostr::nip17::WrapOptions) -> core::result::Result<alloc::vec::Vec<nostr::event::Event>, radroots_nostr::nip17::Error> where T: nostr::signer::NostrSigner
 pub async fn radroots_nostr::nip17::wrap_message_file<T>(&T, &radroots_event::social::message_file::MessageFile, radroots_nostr::nip17::WrapOptions) -> core::result::Result<alloc::vec::Vec<nostr::event::Event>, radroots_nostr::nip17::Error> where T: nostr::signer::NostrSigner
+pub mod radroots_nostr::private_ingress
+pub enum radroots_nostr::private_ingress::OpeningError
+pub radroots_nostr::private_ingress::OpeningError::CarrierMismatch
+pub radroots_nostr::private_ingress::OpeningError::InvalidInput
+pub radroots_nostr::private_ingress::OpeningError::LimitExceeded
+pub radroots_nostr::private_ingress::OpeningError::Provider(radroots_signing::provider::ProviderError)
+pub radroots_nostr::private_ingress::OpeningError::RecipientMismatch
+pub radroots_nostr::private_ingress::OpeningError::Unauthenticated
+pub radroots_nostr::private_ingress::OpeningError::UnsupportedVersion
+impl core::convert::From<radroots_signing::provider::ProviderError> for radroots_nostr::private_ingress::OpeningError
+pub fn radroots_nostr::private_ingress::OpeningError::from(radroots_signing::provider::ProviderError) -> Self
+impl core::error::Error for radroots_nostr::private_ingress::OpeningError
+impl core::fmt::Display for radroots_nostr::private_ingress::OpeningError
+pub fn radroots_nostr::private_ingress::OpeningError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_nostr::private_ingress::AuthenticatedCarrier
+impl radroots_nostr::private_ingress::AuthenticatedCarrier
+pub const fn radroots_nostr::private_ingress::AuthenticatedCarrier::envelope_id(&self) -> radroots_event::id::EventId
+pub fn radroots_nostr::private_ingress::AuthenticatedCarrier::protected_outer(&self) -> &str
+pub fn radroots_nostr::private_ingress::AuthenticatedCarrier::protected_rumor(&self) -> &str
+pub fn radroots_nostr::private_ingress::AuthenticatedCarrier::protected_seal(&self) -> &str
+pub const fn radroots_nostr::private_ingress::AuthenticatedCarrier::recipient(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_nostr::private_ingress::AuthenticatedCarrier::rumor(&self) -> &radroots_protocol::private_rumor::DecodedRumor
+pub const fn radroots_nostr::private_ingress::AuthenticatedCarrier::seal_id(&self) -> radroots_event::id::EventId
+impl core::fmt::Debug for radroots_nostr::private_ingress::AuthenticatedCarrier
+pub fn radroots_nostr::private_ingress::AuthenticatedCarrier::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub async fn radroots_nostr::private_ingress::open(&dyn radroots_signing::provider::ParticipantProvider, radroots_signing::provider::ProviderCall, &str) -> core::result::Result<radroots_nostr::private_ingress::AuthenticatedCarrier, radroots_nostr::private_ingress::OpeningError>
 pub mod radroots_nostr::signing
 pub mod radroots_nostr::signing::gift_wrap
 pub enum radroots_nostr::signing::gift_wrap::WrapError

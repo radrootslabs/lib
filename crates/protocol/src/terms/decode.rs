@@ -1,11 +1,11 @@
 //! Closed data decoding. No source, participant, authority or consent is admitted.
-use super::{TERMS_MAX_BYTES, TermsWireError, text};
+use super::{TERMS_MAX_BYTES, TermsWireError};
 use crate::{
     command::{CommandError, check_frame, object, parse_object, required_nullable},
     listing_values,
+    private_json::{self as text, RawArray},
 };
 use alloc::{string::String, vec::Vec};
-use core::{fmt, marker::PhantomData};
 use radroots_domain::{
     AgreedFixedPrice, AgreementLine, AgreementLineId, AgreementPrice, Decimal, DiscountBps,
     EnvelopeEventId, FulfillmentGroup, FulfillmentGroupId, FuturePromise, ListingOptionId, Money,
@@ -13,10 +13,7 @@ use radroots_domain::{
     UnixSeconds, VariableWeight, Window,
     listing::{FulfillmentMode, ListingCoordinate, ListingId, ListingRevision, MeasurementUnit},
 };
-use serde::{
-    Deserialize,
-    de::{IgnoredAny, SeqAccess, Visitor},
-};
+use serde::Deserialize;
 use serde_json::value::RawValue;
 
 /// Decodes bounded closed Terms claims and checks every domain constructor.
@@ -67,37 +64,6 @@ fn parse<'a, T: Deserialize<'a>>(raw: &'a RawValue) -> Result<T, TermsWireError>
     parse_object(raw.get().as_bytes()).map_err(command_error)
 }
 
-// Retain only bounded references into the caller's already byte/depth-bounded
-// frame. An excessive element is ignored without constructing its value.
-pub(crate) struct RawArray<'a, const N: usize>(pub(crate) Vec<&'a RawValue>);
-impl<'de: 'a, 'a, const N: usize> Deserialize<'de> for RawArray<'a, N> {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct ArrayVisitor<'a, const N: usize>(PhantomData<&'a ()>);
-        impl<'de: 'a, 'a, const N: usize> Visitor<'de> for ArrayVisitor<'a, N> {
-            type Value = RawArray<'a, N>;
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a bounded array")
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                let mut values = Vec::new();
-                loop {
-                    if values.len() == N {
-                        if seq.next_element::<IgnoredAny>()?.is_some() {
-                            return Err(serde::de::Error::custom("array limit exceeded"));
-                        }
-                        break;
-                    }
-                    let Some(value) = seq.next_element::<&'de RawValue>()? else {
-                        break;
-                    };
-                    values.push(value);
-                }
-                Ok(RawArray(values))
-            }
-        }
-        d.deserialize_seq(ArrayVisitor::<N>(PhantomData))
-    }
-}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawTerms<'a> {
@@ -142,7 +108,7 @@ fn line(raw: &RawValue) -> Result<AgreementLine, TermsWireError> {
     let value: RawLine<'_> = parse(raw)?;
     let lot = value
         .source_lot_label
-        .map(|v| text::decode(v.get(), 120))
+        .map(|v| text::decode(v.get(), 120).map_err(command_error))
         .transpose()?;
     invalid(AgreementLine::new(
         value.id,
@@ -193,8 +159,8 @@ struct RawMoney<'a> {
 }
 pub(crate) fn money(raw: &RawValue) -> Result<Money, TermsWireError> {
     let value: RawMoney<'_> = parse(raw)?;
-    let code = text::decode(value.currency.get(), 3)?;
-    let minor = text::decode(value.minor.get(), 15)?;
+    let code = text::decode(value.currency.get(), 3).map_err(command_error)?;
+    let minor = text::decode(value.minor.get(), 15).map_err(command_error)?;
     invalid(Money::from_parts(&code, &minor, value.exponent))
 }
 #[derive(Deserialize)]
@@ -295,11 +261,11 @@ struct RawFulfillment<'a> {
 fn group(raw: &RawValue) -> Result<FulfillmentGroup, TermsWireError> {
     let value: RawGroup<'_> = parse(raw)?;
     let terms: RawFulfillment<'_> = parse(value.terms)?;
-    let address = text::decode(terms.address.get(), 2048)?;
-    let instructions = text::decode(terms.instructions.get(), 2048)?;
+    let address = text::decode(terms.address.get(), 2048).map_err(command_error)?;
+    let instructions = text::decode(terms.instructions.get(), 2048).map_err(command_error)?;
     let contact = terms
         .contact
-        .map(|v| text::decode(v.get(), 256))
+        .map(|v| text::decode(v.get(), 256).map_err(command_error))
         .transpose()?;
     Ok(FulfillmentGroup::new(
         value.id,
@@ -326,7 +292,7 @@ struct RawWindow<'a> {
 }
 pub(crate) fn window(raw: &RawValue) -> Result<Window, TermsWireError> {
     let value: RawWindow<'_> = parse(raw)?;
-    let zone = text::decode(value.timezone.get(), 80)?;
+    let zone = text::decode(value.timezone.get(), 80).map_err(command_error)?;
     invalid(Window::new(
         value.start,
         value.end,
@@ -364,7 +330,7 @@ fn supply(raw: &RawValue) -> Result<SupplyCommitment, TermsWireError> {
             if value.kind != "future_promise" {
                 return Err(TermsWireError::InvalidInput);
             }
-            let risk = text::decode(value.risk_disclosure.get(), 512)?;
+            let risk = text::decode(value.risk_disclosure.get(), 512).map_err(command_error)?;
             Ok(SupplyCommitment::FuturePromise(invalid(
                 FuturePromise::new(window(value.expected_window)?, &risk),
             )?))

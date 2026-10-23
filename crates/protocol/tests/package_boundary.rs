@@ -22,10 +22,12 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/terms.rs"),
     include_str!("../src/terms/writer.rs"),
     include_str!("../src/terms/decode.rs"),
-    include_str!("../src/terms/text.rs"),
+    include_str!("../src/private_json.rs"),
+    include_str!("../src/private_rumor.rs"),
     include_str!("../src/commerce.rs"),
     include_str!("../src/commerce/decode.rs"),
     include_str!("../src/commerce/payload.rs"),
+    include_str!("../src/commerce/rumor.rs"),
     include_str!("../src/command.rs"),
     include_str!("../src/nip01.rs"),
     include_str!("../src/intent.rs"),
@@ -207,8 +209,17 @@ fn manifest_has_approved_data_only_features_and_dependencies() {
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
         BTreeSet::from([
-            "chat", "commands", "commerce", "default", "intent", "listing", "nip01", "serde",
-            "std", "terms"
+            "chat",
+            "commands",
+            "commerce",
+            "default",
+            "intent",
+            "listing",
+            "nip01",
+            "private_rumor",
+            "serde",
+            "std",
+            "terms"
         ])
     );
     assert_eq!(
@@ -245,6 +256,7 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             "listing",
             "plan",
             "profile",
+            "private_rumor",
             "radrootsd",
             "runtime",
             "schema",

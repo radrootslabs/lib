@@ -6,7 +6,7 @@ values, provides typed NIP helpers, and supplies an optional concrete local
 implementation of the `radroots_signing` SPI.
 
 With `signing`, `LocalSigner` also reports its actual participant identity.
-With `nip17`, it decrypts bounded NIP-44 v2 payloads and can encrypt after
+With `nip17` or `private_ingress`, it decrypts bounded NIP-44 v2 payloads and can encrypt after
 explicit nonce-source injection through `with_nonce_source`. Native hosts may
 choose `OsNonceSource`; deterministic sources belong only in controlled tests.
 Call identity/deadline/cancellation checks precede effects. Private text is
@@ -153,6 +153,24 @@ does not recover malformed raw fields already lost by an earlier decoder.
 Authentic unknown rumor kinds return unsupported after header/ID/author checks;
 their content and tags are not interpreted as known chat data.
 
+With `private_ingress`, `private_ingress::open` takes the original raw outer
+JSON and a captured `ParticipantProvider` call. It shares the exact signed
+reader with the existing adapter, verifies each carrier before decryption,
+and retains the original outer, protected seal and identity-checked rumor.
+Provider-owned custody, MAC validation, deadline and cancellation remain
+required; the composing host qualifies its actual provider implementation.
+
+With `commerce`, `commerce::open` additionally checks complete closed kind8890
+record data, its separate content hash, empty rumor tags, exact author/time,
+and the actual recipient's buyer/seller membership. Known records and protected
+authenticated unsupported or rejected outcomes remain distinct. Unknown
+profiles cannot become known records through a fallback. These values supply
+cryptographic provenance without granting business authority or executing a
+durable transition. The owning successor contract is
+[`commerce_ingress.v1.json`](../../contracts/protocol/commerce_ingress.v1.json).
+The optional pinned Node fixture producer under `tools/protocol_oracle` is
+development-only; standalone Rust tests consume checked-in synthetic vectors.
+
 ## Serialization contract
 
 - Canonical durable Radroots data should be serialized through
@@ -193,6 +211,8 @@ authority, upload completion, referenced-event existence, or relay trust.
 | `events` | yes | Enables typed event builders, deterministic Radroots/Nostr event conversion, and verified event adapters. |
 | `signing` | no | Adds opaque local secret handling, NIP-49 helpers, draft signing, and the concrete local `radroots_signing::Signer` adapter. |
 | `nip17` | no | Adds focused NIP-17/NIP-59 typed message and message-file wrapping/unwrapping; no delivery or persistence. |
+| `private_ingress` | no | Authenticates original raw NIP-59 carriers through participant-owned custody and retains protected evidence. |
+| `commerce` | no | Adds complete known commerce record admission and protected unsupported/rejected outcomes. |
 | `blossom` | no | Adds BUD-11 signed HTTP authorization value creation and verification; no HTTP client or endpoint operation. |
 
 Features are additive. `--no-default-features` provides the portable

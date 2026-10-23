@@ -15,9 +15,9 @@ use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 /// Complete unsigned-rumor byte limit, separate from plain chat text.
-pub const RUMOR_MAX_BYTES: usize = 24_576;
+pub const RUMOR_MAX_BYTES: usize = crate::profile::UNSIGNED_RUMOR_MAX_BYTES;
 /// Complete signed seal or gift-wrap limit.
-pub const SIGNED_MAX_BYTES: usize = 65_536;
+pub const SIGNED_MAX_BYTES: usize = crate::profile::SIGNED_EVENT_MAX_BYTES;
 const MAX_TIME: u64 = 253_402_300_799;
 const RANDOMIZED_PAST_SECONDS: u64 = 172_800;
 

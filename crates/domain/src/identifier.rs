@@ -147,6 +147,10 @@ identifier!(
     "An unsigned NIP-17 rumor identity, distinct from its signed carriers."
 );
 identifier!(
+    RumorEventId,
+    "An unsigned NIP-01 rumor identity, distinct from signed carriers and structured record IDs."
+);
+identifier!(
     EnvelopeEventId,
     "A signed NIP-01 artifact identity, distinct from a logical record or rumor."
 );

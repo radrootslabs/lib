@@ -26,7 +26,7 @@ include = [
 ]
 
 [package.metadata.docs.rs]
-features = ["std", "events", "blossom", "nip17", "signing"]
+features = ["std", "events", "blossom", "nip17", "signing", "commerce"]
 
 [lib]
 name = "radroots_nostr"
@@ -50,6 +50,8 @@ events = [
   "radroots_event_codec/json",
 ]
 nip17 = ["events", "nostr/nip44", "nostr/nip59", "dep:base64", "radroots_protocol/chat"]
+private_ingress = ["signing", "nostr/nip44", "dep:base64", "radroots_protocol/private_rumor"]
+commerce = ["private_ingress", "radroots_protocol/commerce"]
 signing = [
   "dep:radroots_protocol",
   "events",
@@ -122,6 +124,10 @@ required-features = ["blossom"]
 [[test]]
 name = "nip17_conformance"
 required-features = ["nip17"]
+
+[[test]]
+name = "commerce_envelopes"
+required-features = ["commerce"]
 
 [[example]]
 name = "participant_private"

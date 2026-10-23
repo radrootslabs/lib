@@ -1,0 +1,85 @@
+{
+  "schema": "radroots.nostr.commerce_ingress.v1",
+  "contract_version": 1,
+  "state": "protected_authenticated_carrier_and_record_admission",
+  "features": {
+    "radroots_protocol": [
+      "private_rumor",
+      "commerce"
+    ],
+    "radroots_nostr": [
+      "private_ingress",
+      "commerce"
+    ]
+  },
+  "content_max_utf8_bytes": 16384,
+  "rumor_max_utf8_bytes": 24576,
+  "signed_max_utf8_bytes": 65536,
+  "json_max_depth": 16,
+  "carrier": {
+    "outer_kind": 1059,
+    "seal_kind": 13,
+    "rumor_kind": 8890,
+    "seal_tags": [],
+    "known_rumor_tags": [],
+    "outer_recipient": "Exactly one canonical p tag matching the captured provider identity; optional relay hint and unrelated bounded tags remain permitted.",
+    "signed_fields": [
+      "id",
+      "pubkey",
+      "created_at",
+      "kind",
+      "tags",
+      "content",
+      "sig"
+    ],
+    "unsigned_fields": [
+      "id",
+      "pubkey",
+      "created_at",
+      "kind",
+      "tags",
+      "content"
+    ],
+    "signed_reader": "One shared exact bounded raw JSON reader verifies ID/signature before upstream conversion or private callbacks.",
+    "unsigned_reader": "Closed borrowed object, raw u16 kind, canonical keys/ID, bounded protected decoded text/tags and original NIP01 identity recomputation.",
+    "encryption": "NIP44 v2 bounded short-length profile; provider custody, MAC validation and per-call deadline/cancellation remain required. No extended multi-gigabyte profile is claimed."
+  },
+  "admission": [
+    "Admit original outer JSON, ID/signature, kind and actual recipient before provider callbacks.",
+    "Validate encryption framing and provider identity/support before decrypting the seal; recheck identity afterwards.",
+    "Admit raw seal ID/signature, kind13 and empty tags before decrypting the rumor; recheck identity afterwards.",
+    "Decode closed bounded rumor, recompute original identity and bind seal author to rumor author.",
+    "Retain authentic unsupported carrier kind before interpreting known commerce content.",
+    "Probe profile/version/type; retain authentic future content as unsupported rather than partial known data.",
+    "For known records verify complete closed data/hash, empty rumor tags, exact author/time/kind and actual recipient equal to buyer or seller."
+  ],
+  "retention": {
+    "original_outer_seal_and_rumor": true,
+    "decoded_private_text_and_tags_zeroizing": true,
+    "automatic_private_serialize_or_clone": false,
+    "debug": "redacted",
+    "unsupported_and_rejected": "Protected authenticated carrier evidence remains retained; no known record or business capability is minted.",
+    "provider_failure": "Returns a fixed source-redacted failure; original caller-owned encrypted outer remains available. No authenticated record is inferred."
+  },
+  "limits": {
+    "structured_execution_enabled": false,
+    "business_history_stock_consent_or_physical_truth": false,
+    "durable_storage_or_issuance": false,
+    "raw_transport_caller_disposition_complete": false,
+    "unsupported_listing_or_capability_heads_complete": false,
+    "provider_qualification": "A provider observation does not prove honest cryptography; each actual supported host provider requires execution qualification."
+  },
+  "independent_vectors": {
+    "path": "crates/nostr/tests/fixtures/commerce_envelopes.v1.json",
+    "sha256": "bd59710bedc337b5e4bdcb1c0753de06a74927027b76a0202b251b0e45d02565",
+    "producer_path": "tools/protocol_oracle/commerce_envelopes.mjs",
+    "producer_sha256": "7ed553fd68dc0df896a481f16eb1db3132d8bd23b23cee7c1f4fbf39eab02bcf",
+    "package_lock_path": "tools/protocol_oracle/package-lock.json",
+    "package_lock_sha256": "bd23a2b631ddd90c91ce044187e4feaaf27fb1f4590da2e203afc28d8ea6cd22",
+    "provenance_path": "tools/protocol_oracle/provenance.v1.json",
+    "provenance_sha256": "145d2cb14377bf67c0e65c452ed07ba10577a1e8ea1db3979d2d2780cb31a7a6",
+    "positives": 80,
+    "negative_or_unsupported": 36,
+    "primary_nip44_reference_equal": true
+  }
+}

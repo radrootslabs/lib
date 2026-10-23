@@ -40,7 +40,8 @@ nip01 = ["dep:radroots_identity", "dep:sha2", "dep:zeroize"]
 chat = ["commands", "nip01", "intent"]
 listing = ["commands", "nip01", "intent"]
 terms = ["commands"]
-commerce = ["terms"]
+private_rumor = ["commands", "nip01"]
+commerce = ["terms", "private_rumor"]
 
 [dependencies]
 radroots_identity = { workspace = true, default-features = false, optional = true }
@@ -55,6 +56,10 @@ serde = { workspace = true, default-features = false, features = [
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }
+
+[[example]]
+name = "inspect_contract"
+required-features = ["std"]
 
 [lints]
 workspace = true

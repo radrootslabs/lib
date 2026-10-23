@@ -2,6 +2,27 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-054"
+date = "2026-10-23"
+status = "active"
+approval = "The user authorizes the complete approved decision-package refactor, necessary breaking shared-library changes, verified commits and master source publication."
+affected_steps = ["050", "060", "070", "110", "120", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_protocol", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_nostr"]
+source_evidence = [
+  "The assigned shared_sdk_protocol.v1 decision requires complete authenticated structured kind8890 rumors under kind13 seals and kind1059 gift wraps. Existing nip17 is a typed chat adapter and cannot represent this protected structured admission boundary.",
+  "The historical feature/module vocabulary omits private_rumor, private_ingress and commerce admission. The approved target preserves protocol as passive data and Nostr as a concrete cryptographic adapter, without introducing transport, durable state or business authority.",
+]
+replacement_action = "Add protected private-rumor data to Protocol and concrete custody-preserving authenticated carrier/record admission to Nostr, governed by commerce_ingress.v1.json. Factor the existing exact signed reader and protected JSON algorithms rather than duplicating them. Extend explicit current feature/API guards and full coverage profiles while preserving all historical Release V1 artifacts. Keep generic authenticated evidence distinct from known complete records and protected unsupported/rejected outcomes."
+verification = [
+  "Execute independently produced full nested peer/self vectors over all19 record families and exact content/rumor/outer bounds, after matching the primary NIP44 reference. Retain malformed, ID/signature/MAC, scalar, recipient/author/time and unsupported-profile observations.",
+  "Prove invalid outer carriers trigger no provider callbacks, invalid seals cannot trigger second decryption, identity changes stop admission, and actual native provider deadline/cancellation behavior remains enforced.",
+  "Run native and portable feature checks/tests, strict lint, generated API freshness, original complete coverage gates and owning architecture/catalog/contracts/dependency/package guards. Node remains optional fixture tooling and no parent input enters standalone Rust tests.",
+]
+unresolved_risk = "This component does not complete raw transport caller disposition, unsupported listing/capability head selection, structured execution qualification, durable business transitions, coherent supported consumer adoption or final acceptance."
+normative_architecture_change = true
+adr_required = true
+
+[[deviation]]
 id = "RCRV1-DEV-053"
 date = "2026-10-17"
 status = "closed"

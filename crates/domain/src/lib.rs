@@ -49,8 +49,8 @@ pub use fulfillment::{FulfillmentError, PrivateFulfillment};
 pub use identifier::{
     AgreementLineId, ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId,
     ExecutorId, FulfillmentGroupId, GrantId, IdentifierError, ListingOptionId, MessageId,
-    OperationId, OrderId, RecordId, RouteDigest, SigningAttemptId, SourceId, TermsDigest, ThreadId,
-    TransactionId, WorkspaceId,
+    OperationId, OrderId, RecordId, RouteDigest, RumorEventId, SigningAttemptId, SourceId,
+    TermsDigest, ThreadId, TransactionId, WorkspaceId,
 };
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};
 pub use message::{CHAT_MAX_BYTES, ChatMessage, ChatRelation, MessageError};

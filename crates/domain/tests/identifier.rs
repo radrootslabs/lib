@@ -42,6 +42,7 @@ fn captured_context_identities_preserve_full_width_and_canonical_encoding() {
     check!(radroots_domain::TransactionId);
     check!(radroots_domain::MessageId);
     check!(radroots_domain::EnvelopeEventId);
+    check!(radroots_domain::RumorEventId);
 }
 
 #[test]

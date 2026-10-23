@@ -18,8 +18,12 @@ const FILTER_MODULE: &str = include_str!("../src/filter.rs");
 const KEY_MODULE: &str = include_str!("../src/key.rs");
 const NIP17_MODULE: &str = include_str!("../src/nip17.rs");
 const NIP17_OPENING: &str = include_str!("../src/nip17/opening.rs");
+#[cfg(feature = "nip17")]
 const PRIVATE_OPENING_CONTRACT: &str =
     include_str!("../../../contracts/protocol/private_opening.v1.json");
+#[cfg(feature = "commerce")]
+const COMMERCE_INGRESS_CONTRACT: &str =
+    include_str!("../../../contracts/protocol/commerce_ingress.v1.json");
 const BLOSSOM_MODULE: &str = include_str!("../src/blossom.rs");
 const README: &str = include_str!("../README.md");
 const SIGNING_MODULE: &str = include_str!("../src/signing.rs");
@@ -109,8 +113,17 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
     let features = table_keys(MANIFEST, "[features]");
     assert_eq!(
         features,
-        BTreeSet::from(["blossom", "default", "events", "nip17", "signing", "std"]),
-        "manifest feature vocabulary must match the Release V1 charter"
+        BTreeSet::from([
+            "blossom",
+            "commerce",
+            "default",
+            "events",
+            "nip17",
+            "private_ingress",
+            "signing",
+            "std"
+        ]),
+        "manifest feature vocabulary must match the base charter and commerce ingress contract"
     );
     for feature in features {
         let declaration = table_value(MANIFEST, "[features]", feature)
@@ -135,7 +148,15 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
 #[test]
 fn crate_root_establishes_the_final_public_module_skeleton() {
     for module in [
-        "blossom", "event", "filter", "key", "nip17", "signing", "tag",
+        "blossom",
+        "commerce",
+        "event",
+        "filter",
+        "key",
+        "nip17",
+        "private_ingress",
+        "signing",
+        "tag",
     ] {
         assert!(
             ROOT.contains(&format!("pub mod {module};")),
@@ -495,6 +516,45 @@ fn private_opening_contract_preserves_bounded_protocol_only_scope() {
     );
 }
 
+#[cfg(feature = "commerce")]
+#[test]
+fn commerce_ingress_contract_binds_complete_budgets_and_independent_packaged_vectors() {
+    use radroots_protocol::profile;
+    let contract: serde_json::Value = serde_json::from_str(COMMERCE_INGRESS_CONTRACT).unwrap();
+    assert_eq!(contract["schema"], "radroots.nostr.commerce_ingress.v1");
+    assert_eq!(
+        contract["content_max_utf8_bytes"],
+        profile::PRIVATE_RECORD_MAX_BYTES
+    );
+    assert_eq!(
+        contract["rumor_max_utf8_bytes"],
+        profile::UNSIGNED_RUMOR_MAX_BYTES
+    );
+    assert_eq!(
+        contract["signed_max_utf8_bytes"],
+        profile::SIGNED_EVENT_MAX_BYTES
+    );
+    assert_eq!(contract["carrier"]["rumor_kind"], profile::COMMERCE_KIND);
+    assert_eq!(contract["limits"]["structured_execution_enabled"], false);
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/commerce_envelopes.v1.json")).unwrap();
+    assert_eq!(
+        fixture["positives"].as_array().unwrap().len(),
+        contract["independent_vectors"]["positives"]
+            .as_u64()
+            .unwrap() as usize
+    );
+    assert_eq!(
+        fixture["negatives"].as_array().unwrap().len(),
+        contract["independent_vectors"]["negative_or_unsupported"]
+            .as_u64()
+            .unwrap() as usize
+    );
+    assert_eq!(fixture["producer"]["primary_nip44_reference_equal"], true);
+    assert_eq!(fixture["producer"]["production_entropy_claimed"], false);
+    assert!(!MANIFEST.contains("node_modules"));
+}
+
 #[test]
 fn production_api_declares_no_traits_or_host_runtime_implementations() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -601,10 +661,12 @@ fn superseded_surface_retirement_is_explicit_and_release_bounded() {
         public_modules,
         BTreeSet::from([
             "blossom",
+            "commerce",
             "event",
             "filter",
             "key",
             "nip17",
+            "private_ingress",
             "signing",
             "signing::gift_wrap",
             "tag"

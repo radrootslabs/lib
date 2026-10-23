@@ -1,12 +1,12 @@
 use super::*;
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 use crate::test_fixtures::FIXTURE_CAROL;
 use crate::{
     key::parse_secret_key,
     test_fixtures::{FIXTURE_ALICE, FIXTURE_BOB},
 };
 use core::num::NonZeroU64;
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 use radroots_signing::provider::PRIVATE_CRYPTO_MAX_BYTES;
 use radroots_signing::{host::Shared, recovery::ReplayCapability, request::CancellationSignal};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 fn clock() -> Result<u64, radroots_signing::Error> {
     Ok(100)
 }
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 fn unavailable_clock() -> Result<u64, radroots_signing::Error> {
     Err(radroots_signing::Error::new(
         radroots_signing::error::Kind::InternalError,
@@ -64,7 +64,7 @@ async fn identity_and_caps_report_the_actual_configuration() {
     assert_eq!(state.encryption(), PrivateCryptoCapability::Unavailable);
     assert_eq!(
         state.decryption(),
-        if cfg!(feature = "nip17") {
+        if cfg!(any(feature = "nip17", feature = "private_ingress")) {
             PrivateCryptoCapability::Nip44V2
         } else {
             PrivateCryptoCapability::Unavailable
@@ -86,13 +86,13 @@ async fn identity_and_caps_report_the_actual_configuration() {
     let local = local.with_nonce_source(nonce_source(false));
     assert_eq!(
         local.provider_state().await.unwrap().encryption(),
-        if cfg!(feature = "nip17") {
+        if cfg!(any(feature = "nip17", feature = "private_ingress")) {
             PrivateCryptoCapability::Nip44V2
         } else {
             PrivateCryptoCapability::Unavailable
         }
     );
-    if !cfg!(feature = "nip17") {
+    if !cfg!(any(feature = "nip17", feature = "private_ingress")) {
         let encoded = PrivateCiphertext::parse(&"A".repeat(132)).unwrap();
         assert_eq!(
             local
@@ -104,7 +104,7 @@ async fn identity_and_caps_report_the_actual_configuration() {
     }
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 #[tokio::test]
 async fn exact_primary_vector_and_both_participant_directions() {
     let vector: serde_json::Value = serde_json::from_str(include_str!(
@@ -157,7 +157,7 @@ async fn exact_primary_vector_and_both_participant_directions() {
     );
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 #[tokio::test]
 async fn tampering_foreign_key_and_unsupported_version_remain_distinct() {
     use base64::Engine;
@@ -213,7 +213,7 @@ async fn tampering_foreign_key_and_unsupported_version_remain_distinct() {
     );
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 #[tokio::test]
 async fn identity_cancel_deadline_and_capacity_refuse_before_nonce_use() {
     let entropy = nonce_source(false);
@@ -298,7 +298,7 @@ async fn identity_cancel_deadline_and_capacity_refuse_before_nonce_use() {
     assert_eq!(entropy.calls.load(Ordering::SeqCst), 0);
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 #[tokio::test]
 async fn bounded_full_rumor_and_entropy_failure_execute_the_real_codec() {
     let entropy = nonce_source(false);
@@ -339,7 +339,7 @@ async fn bounded_full_rumor_and_entropy_failure_execute_the_real_codec() {
     assert_eq!(failed_source.calls.load(Ordering::SeqCst), 1);
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 #[tokio::test]
 async fn malformed_payloads_and_encoded_size_refuse_without_entropy() {
     let entropy = nonce_source(false);
@@ -373,7 +373,7 @@ async fn malformed_payloads_and_encoded_size_refuse_without_entropy() {
     assert_eq!(entropy.calls.load(Ordering::SeqCst), 0);
 }
 
-#[cfg(feature = "nip17")]
+#[cfg(any(feature = "nip17", feature = "private_ingress"))]
 #[test]
 fn codec_nonce_consumption_is_exact_and_has_no_rng_quality_claim() {
     use nostr::secp256k1::rand::RngCore;

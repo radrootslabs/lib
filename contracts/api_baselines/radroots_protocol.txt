@@ -242,6 +242,14 @@ pub const fn radroots_protocol::commerce::DecodedRecord::content(&self) -> &radr
 pub const fn radroots_protocol::commerce::DecodedRecord::record_id(&self) -> radroots_domain::identifier::RecordId
 impl core::fmt::Debug for radroots_protocol::commerce::DecodedRecord
 pub fn radroots_protocol::commerce::DecodedRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::commerce::EncodedCommerceRumor
+impl radroots_protocol::commerce::EncodedCommerceRumor
+pub fn radroots_protocol::commerce::EncodedCommerceRumor::capture(&radroots_domain::commerce::CommerceContent) -> core::result::Result<Self, radroots_protocol::commerce::RecordWireError>
+pub const fn radroots_protocol::commerce::EncodedCommerceRumor::event_id(&self) -> radroots_domain::identifier::RumorEventId
+pub fn radroots_protocol::commerce::EncodedCommerceRumor::protected_wire(&self) -> &str
+pub const fn radroots_protocol::commerce::EncodedCommerceRumor::record_id(&self) -> radroots_domain::identifier::RecordId
+impl core::fmt::Debug for radroots_protocol::commerce::EncodedCommerceRumor
+pub fn radroots_protocol::commerce::EncodedCommerceRumor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::commerce::EncodedRecord
 impl radroots_protocol::commerce::EncodedRecord
 pub fn radroots_protocol::commerce::EncodedRecord::capture(&radroots_domain::commerce::CommerceContent) -> core::result::Result<Self, radroots_protocol::commerce::RecordWireError>
@@ -577,6 +585,8 @@ pub mod radroots_protocol::nip01
 pub enum radroots_protocol::nip01::WireError
 pub radroots_protocol::nip01::WireError::InvalidInput
 pub radroots_protocol::nip01::WireError::LimitExceeded
+impl core::convert::From<radroots_protocol::nip01::WireError> for radroots_protocol::private_rumor::RumorWireError
+pub fn radroots_protocol::private_rumor::RumorWireError::from(radroots_protocol::nip01::WireError) -> Self
 impl core::error::Error for radroots_protocol::nip01::WireError
 impl core::fmt::Display for radroots_protocol::nip01::WireError
 pub fn radroots_protocol::nip01::WireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -644,12 +654,37 @@ impl core::convert::From<radroots_identity::key::PublicKey> for radroots_protoco
 pub fn radroots_protocol::plan::SigningTarget::from(radroots_identity::key::PublicKey) -> Self
 impl core::fmt::Debug for radroots_protocol::plan::SigningTarget
 pub fn radroots_protocol::plan::SigningTarget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_protocol::private_rumor
+pub enum radroots_protocol::private_rumor::RumorWireError
+pub radroots_protocol::private_rumor::RumorWireError::IdentityMismatch
+pub radroots_protocol::private_rumor::RumorWireError::InvalidInput
+pub radroots_protocol::private_rumor::RumorWireError::LimitExceeded
+impl core::convert::From<radroots_protocol::nip01::WireError> for radroots_protocol::private_rumor::RumorWireError
+pub fn radroots_protocol::private_rumor::RumorWireError::from(radroots_protocol::nip01::WireError) -> Self
+impl core::error::Error for radroots_protocol::private_rumor::RumorWireError
+impl core::fmt::Display for radroots_protocol::private_rumor::RumorWireError
+pub fn radroots_protocol::private_rumor::RumorWireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::private_rumor::DecodedRumor
+impl radroots_protocol::private_rumor::DecodedRumor
+pub const fn radroots_protocol::private_rumor::DecodedRumor::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_protocol::private_rumor::DecodedRumor::created_at(&self) -> u64
+pub fn radroots_protocol::private_rumor::DecodedRumor::decode(&[u8]) -> core::result::Result<Self, radroots_protocol::private_rumor::RumorWireError>
+pub const fn radroots_protocol::private_rumor::DecodedRumor::event_id(&self) -> radroots_domain::identifier::RumorEventId
+pub fn radroots_protocol::private_rumor::DecodedRumor::has_tags(&self) -> bool
+pub const fn radroots_protocol::private_rumor::DecodedRumor::kind(&self) -> u16
+pub fn radroots_protocol::private_rumor::DecodedRumor::protected_content(&self) -> &str
+pub fn radroots_protocol::private_rumor::DecodedRumor::retained_bytes(&self) -> usize
+impl core::fmt::Debug for radroots_protocol::private_rumor::DecodedRumor
+pub fn radroots_protocol::private_rumor::DecodedRumor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_protocol::profile
 pub const radroots_protocol::profile::CAPABILITIES_KIND: u16
 pub const radroots_protocol::profile::CAPABILITIES_PROFILE: &str
 pub const radroots_protocol::profile::COMMERCE_KIND: u16
 pub const radroots_protocol::profile::COMMERCE_PROFILE: &str
+pub const radroots_protocol::profile::PRIVATE_RECORD_MAX_BYTES: usize
 pub const radroots_protocol::profile::PROFILE_VERSION: u32
+pub const radroots_protocol::profile::SIGNED_EVENT_MAX_BYTES: usize
+pub const radroots_protocol::profile::UNSIGNED_RUMOR_MAX_BYTES: usize
 pub mod radroots_protocol::radrootsd
 pub mod radroots_protocol::radrootsd::transport_publish
 pub mod radroots_protocol::radrootsd::transport_publish::v5

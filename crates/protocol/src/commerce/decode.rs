@@ -1,8 +1,8 @@
 use super::{EncodedRecord, RECORD_MAX_BYTES, RecordWireError};
 use crate::{
     command::{self, canonical_key, required_nullable},
-    profile,
-    terms::{self, decode::RawArray},
+    private_json::{self as text, RawArray},
+    profile, terms,
 };
 use alloc::{string::String, vec::Vec};
 use core::fmt;
@@ -396,7 +396,7 @@ struct ResolutionInput<'a> {
 }
 fn resolution(raw: &RawValue) -> Result<Resolution, RecordWireError> {
     let value: ResolutionInput<'_> = parse(raw)?;
-    let summary = terms::text::decode(value.summary.get(), 2048)?;
+    let summary = text::decode(value.summary.get(), 2048).map_err(command_error)?;
     invalid(Resolution::new(
         identifiers(value.issues)?,
         identifiers(value.accepted_receipts)?,
@@ -424,12 +424,12 @@ fn payload(kind: &str, raw: &RawValue) -> Result<CommercePayload, RecordWireErro
         }
         "decline" => {
             let value: Decline<'_> = parse(raw)?;
-            let reason = terms::text::decode(value.reason.get(), 1024)?;
+            let reason = text::decode(value.reason.get(), 1024).map_err(command_error)?;
             CommercePayload::Decline(invalid(RecordReason::new(value.request, &reason))?)
         }
         "terms_proposed" => {
             let value: Proposal<'_> = parse(raw)?;
-            let reason = terms::text::decode(value.reason.get(), 1024)?;
+            let reason = text::decode(value.reason.get(), 1024).map_err(command_error)?;
             CommercePayload::TermsProposed(invalid(TermsProposal::new(
                 value.base_agreement,
                 terms::decode(value.terms.get().as_bytes())?,
@@ -447,7 +447,7 @@ fn payload(kind: &str, raw: &RawValue) -> Result<CommercePayload, RecordWireErro
         }
         "terms_rejected" => {
             let value: Rejection<'_> = parse(raw)?;
-            let reason = terms::text::decode(value.reason.get(), 1024)?;
+            let reason = text::decode(value.reason.get(), 1024).map_err(command_error)?;
             CommercePayload::TermsRejected(invalid(RecordReason::new(value.proposal, &reason))?)
         }
         "agreement_committed" => {
@@ -462,7 +462,7 @@ fn payload(kind: &str, raw: &RawValue) -> Result<CommercePayload, RecordWireErro
         }
         "withdrawal_requested" => {
             let value: Withdrawal<'_> = parse(raw)?;
-            let reason = terms::text::decode(value.reason.get(), 1024)?;
+            let reason = text::decode(value.reason.get(), 1024).map_err(command_error)?;
             CommercePayload::WithdrawalRequested(invalid(RecordReason::new(
                 value.authorization,
                 &reason,
@@ -477,7 +477,7 @@ fn payload(kind: &str, raw: &RawValue) -> Result<CommercePayload, RecordWireErro
         }
         "cancellation_proposed" => {
             let value: Cancellation<'_> = parse(raw)?;
-            let reason = terms::text::decode(value.reason.get(), 1024)?;
+            let reason = text::decode(value.reason.get(), 1024).map_err(command_error)?;
             CommercePayload::CancellationProposed(invalid(CancellationProposal::new(
                 value.agreement,
                 lines(value.residual)?,
@@ -526,7 +526,7 @@ fn payload(kind: &str, raw: &RawValue) -> Result<CommercePayload, RecordWireErro
         }
         "receipt" => {
             let value: Receipt<'_> = parse(raw)?;
-            let note = terms::text::decode(value.note.get(), 1024)?;
+            let note = text::decode(value.note.get(), 1024).map_err(command_error)?;
             CommercePayload::Receipt(invalid(ReceiptObservation::new(
                 value.handover,
                 lines(value.lines)?,
@@ -537,7 +537,7 @@ fn payload(kind: &str, raw: &RawValue) -> Result<CommercePayload, RecordWireErro
         }
         "issue" => {
             let value: Issue<'_> = parse(raw)?;
-            let description = terms::text::decode(value.description.get(), 2048)?;
+            let description = text::decode(value.description.get(), 2048).map_err(command_error)?;
             let code = match value.code.as_str() {
                 "shortage" => IssueCode::Shortage,
                 "quality" => IssueCode::Quality,

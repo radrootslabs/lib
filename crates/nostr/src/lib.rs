@@ -38,6 +38,12 @@ pub mod nip17;
 #[cfg(feature = "signing")]
 pub mod signing;
 
+#[cfg(feature = "private_ingress")]
+pub mod private_ingress;
+
+#[cfg(feature = "commerce")]
+pub mod commerce;
+
 #[cfg(feature = "events")]
 mod event_convert;
 #[cfg(feature = "events")]

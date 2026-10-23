@@ -33,6 +33,7 @@ numbers embedded in wire and schema contracts.
 | `profile` | assigned regular commerce kind8890 and replaceable capability kind18890, with closed profile identities; authoring qualification remains pending |
 | `terms` (`terms` feature) | bounded closed Terms v1 decoding, explicit protected encoding and domain-separated digest; no authenticated consent, stock or signing authority |
 | `commerce` (`commerce` feature) | complete closed record data, canonical RecordId and exact final carrier-field matching; no authenticated ingress or issuing authority |
+| `private_rumor` (`private_rumor` feature) | closed protected unsigned data, bounded decoded text/tags and original NIP-01 RumorEventId recomputation; no cryptographic carrier admission |
 | `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
 | `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |
@@ -75,6 +76,7 @@ with at most nine tags and19 fields shared by signer and storage admission.
 | `serde` | yes | derives serialization and deserialization for wire-contract types |
 | `commands` | no | enables the portable closed chat codec, domain values, SHA-256 and zeroizing private command buffers |
 | `nip01` | no | enables pure exact NIP-01 serialization and complete byte counting |
+| `private_rumor` | no | enables bounded closed protected unsigned data and original rumor identity checks |
 | `intent` | no | enables pure domain-separated v1 signing commitment data |
 | `chat` | no | enables commands, NIP-01 and the bounded known-kind chat/plan data profile |
 | `listing` | no | enables portable complete listing input and exact public profile/event production |
