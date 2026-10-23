@@ -28,7 +28,7 @@ use radroots_storage::{
         AuthoredDeliveryPlanId, AuthoredDeliveryState, DELIVERY_PLAN_ATTEMPTS_MAX,
         DeliveryAttemptOutcome,
     },
-    event::{AdmissionDisposition, EventAdmission, EventStore},
+    event::{AdmissionDisposition, EventAdmission},
     journal::{IdempotencyKey, OperationInstanceId},
 };
 use radroots_transport::{
@@ -46,6 +46,7 @@ use crate::{
     policy::{Error, OperationKind, SyncId},
 };
 
+mod admission;
 mod delivery;
 
 const SIGNING_CLAIM_OWNER_EXACT: &str = "radroots-sync-signing-exact";
@@ -807,7 +808,15 @@ impl Engine {
                 return Err(error);
             }
         };
-        let admission_receipt = match EventStore::admit(self.storage.as_ref(), admission).await {
+        let admission_receipt = match admission::admit(
+            self.storage.as_ref(),
+            admission,
+            &event,
+            contract_id,
+            now,
+        )
+        .await
+        {
             Ok(receipt) => receipt,
             Err(error) => {
                 let applied_at = self.clock.now_unix_ms()?.max(claimed.updated_at_unix_ms());

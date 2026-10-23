@@ -16,7 +16,18 @@ pulling native SQLite test dependencies into the browser target.
 `StorageSpaceInsufficient` preserves the storage owner's typed capacity failure.
 It does not establish rollback or absence of signer or remote effects. Retain
 the original requests, signed bytes and unresolved receipts, then reconcile
-existing state before retrying. Sync never frees storage or retries implicitly.
+existing state before retrying. Storage cleanup and future retry scheduling
+remain host-owned.
+
+Local authored admission preserves an already stored event's original JSON.
+After a byte conflict, it reads at most one matching identifier and retries
+admission once only when the complete signed wire value matches, including
+signature and extension fields. It verifies that stored value again before
+advancing admission. The original signing artifact and delivery bytes remain
+unchanged; identifier equality alone never permits this reconciliation.
+Both representations must satisfy the duplicate-free, seven-field NIP-01
+profile with a 64 KiB byte limit. Other storage conflicts retain their
+existing failure classification.
 
 Ingest performs real event-ID and signature verification before host policy.
 Contract failure defaults to rejection. A host can explicitly retain such a

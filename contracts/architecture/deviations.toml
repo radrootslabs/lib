@@ -2,6 +2,27 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-058"
+date = "2026-10-23"
+status = "active"
+approval = "The user authorizes the complete approved refactor, necessary supported dependency corrections, verified owning commits and source publication."
+affected_steps = ["050", "060", "070", "130", "140"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_sync"]
+source_evidence = [
+  "Raw-preserving source admission exposes a deterministic authored-admission failure when an incoming copy of the original signed event precedes local admission with different JSON whitespace or object-key ordering.",
+  "The canonical event store deliberately rejects byte conflicts. The retained signing artifact and the first canonical raw event must both remain immutable; weakening storage equality or re-signing would lose original evidence.",
+]
+replacement_action = "Before qualifying further consumer artifacts, reconcile this shared push-admission boundary. Following an explicit event conflict, read at most one exact identifier and retry admission at most once using the stored bytes only when the complete signed wire value, including signature and extension fields, matches. Revalidate the stored event and retain all original artifact/delivery bytes."
+verification = [
+  "Exercise real signatures with both memory and SQLite stores, retain exact canonical and original artifact bytes, preserve extension/signature conflicts and verify explicit close/reopen and admission replay.",
+  "Run the complete affected shared push tests, package check/lint/docs, contract/architecture and portable feature checks; keep the consumer failure and earlier source-bound results unchanged.",
+  "Publish the verified provider before exact supported consumer and artifact adoption; no earlier candidate or prepared pin qualifies the successor.",
+]
+unresolved_risk = "Exact successor consumer and artifact adoption remains pending; provider qualification does not establish application restore, browser artifact, physical-device or full refactor acceptance."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
 id = "RCRV1-DEV-057"
 date = "2026-10-23"
 status = "active"

@@ -66,6 +66,9 @@ mod delivery_selection;
 #[path = "push_enqueue/capacity.rs"]
 mod capacity;
 
+#[path = "push_enqueue/wire_admission.rs"]
+mod wire_admission;
+
 struct MockSink;
 
 struct FaultStorage {
