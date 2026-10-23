@@ -1,0 +1,44 @@
+{
+  "schema": "radroots.terms.codec.v1",
+  "contract_version": 1,
+  "state": "canonical_encoder_contract",
+  "owner": "radroots_protocol::terms::EncodedTerms",
+  "feature": "terms",
+  "input": "Validated complete radroots_domain::Terms; all source snapshots and supply commitments remain unauthenticated claims.",
+  "content_max_utf8_bytes": 16384,
+  "canonicalization": "RFC8785 subset with fixed ASCII schema keys, exact integer/quantity/time strings, safe unsigned numeric schema fields, unchanged Unicode and semantic array order.",
+  "required_fields": [
+    "buyer", "cancellation", "fulfillment", "fulfillment_charge", "lines",
+    "maximum_total", "rounding", "seller", "supply"
+  ],
+  "digest": {
+    "algorithm": "SHA-256",
+    "domain_utf8_with_terminal_nul": "radroots.terms.v1\u0000",
+    "preimage": "domain || complete canonical Terms object",
+    "output": "radroots_domain::TermsDigest",
+    "is_record_or_rumor_id": false
+  },
+  "independent_vectors": {
+    "path": "crates/protocol/tests/fixtures/terms_wire.v1.json",
+    "sha256": "f9a73f25cdb590d5e2edb1a960f449fa0d4dc85959369616d88f776ef0a5e0c7",
+    "producer_path": "crates/protocol/tests/support/terms_wire_oracle.mjs",
+    "producer_sha256": "787b84271e9439d04e1d7f7d3c42bbec84e8d6be4752edc1e13b8453ad43adc0",
+    "scope": "Nine synthetic complete Terms byte/hash vectors plus exact-limit-plus-one rejection; ECMAScript canonicalization and Node.js SHA-256, without Rust encoder output."
+  },
+  "retention": {
+    "count_complete_output_before_private_allocation": true,
+    "private_output_zeroizing": true,
+    "automatic_private_serialize_or_clone": false,
+    "private_fields_in_temporary_json_trees": false,
+    "public_snapshot_serialization": "Only explicitly public product, option and listing-revision snapshots may enter a temporary serde_json Value. Private fulfillment, selected/agreed prices, lot labels and supply risk use the protected writer directly.",
+    "retained_bytes": "EncodedTerms fixed object plus retained output buffer capacity; caller input and outer record/rumor allocations remain separate."
+  },
+  "limits": {
+    "record_header_cost_included": false,
+    "decoder_or_authenticated_admission_implemented_by_this_contract": false,
+    "structured_record_authoring_enabled": false,
+    "consent_or_stock_authority_created": false,
+    "runtime_clock_entropy_signer_or_network_allowed": false,
+    "source_publication_implies_release_qualification": false
+  }
+}

@@ -1150,3 +1150,20 @@ pub type radroots_protocol::schema::SchemaId::Err = radroots_protocol::schema::E
 pub fn radroots_protocol::schema::SchemaId::from_str(&str) -> core::result::Result<Self, Self::Err>
 pub const radroots_protocol::schema::MAX_SCHEMA_ID_BYTES: usize
 pub fn radroots_protocol::schema::protocol_v1_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
+pub mod radroots_protocol::terms
+#[non_exhaustive] pub enum radroots_protocol::terms::TermsWireError
+pub radroots_protocol::terms::TermsWireError::InvalidInput
+pub radroots_protocol::terms::TermsWireError::LimitExceeded
+pub radroots_protocol::terms::TermsWireError::UnsupportedProfile
+impl core::error::Error for radroots_protocol::terms::TermsWireError
+impl core::fmt::Display for radroots_protocol::terms::TermsWireError
+pub fn radroots_protocol::terms::TermsWireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::terms::EncodedTerms
+impl radroots_protocol::terms::EncodedTerms
+pub fn radroots_protocol::terms::EncodedTerms::capture(&radroots_domain::agreement::Terms) -> core::result::Result<Self, radroots_protocol::terms::TermsWireError>
+pub const fn radroots_protocol::terms::EncodedTerms::digest(&self) -> radroots_domain::identifier::TermsDigest
+pub fn radroots_protocol::terms::EncodedTerms::protected_wire(&self) -> &[u8]
+pub fn radroots_protocol::terms::EncodedTerms::retained_bytes(&self) -> usize
+impl core::fmt::Debug for radroots_protocol::terms::EncodedTerms
+pub fn radroots_protocol::terms::EncodedTerms::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_protocol::terms::TERMS_MAX_BYTES: usize

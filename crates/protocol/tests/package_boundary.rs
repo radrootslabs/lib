@@ -7,6 +7,8 @@ const ERROR: &str = include_str!("../src/error.rs");
 const EVENT: &str = include_str!("../src/event.rs");
 const RADROOTSD: &str = include_str!("../src/radrootsd.rs");
 const RUNTIME: &str = include_str!("../src/runtime.rs");
+#[cfg(feature = "terms")]
+const TERMS_CONTRACT: &str = include_str!("../../../contracts/protocol/terms.v1.json");
 const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/capability/v1.rs"),
     include_str!("../src/error/v1.rs"),
@@ -15,6 +17,8 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/runtime/v1.rs"),
     include_str!("../src/schema.rs"),
     include_str!("../src/profile.rs"),
+    include_str!("../src/terms.rs"),
+    include_str!("../src/terms/writer.rs"),
     include_str!("../src/command.rs"),
     include_str!("../src/nip01.rs"),
     include_str!("../src/intent.rs"),
@@ -28,6 +32,65 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/plan.rs"),
 ];
 
+#[cfg(feature = "terms")]
+#[test]
+fn terms_contract_binds_limits_hash_domain_and_packaged_independent_fixtures() {
+    use sha2::{Digest as _, Sha256};
+    let contract: serde_json::Value = serde_json::from_str(TERMS_CONTRACT).unwrap();
+    assert_eq!(contract["schema"], "radroots.terms.codec.v1");
+    assert_eq!(
+        contract["content_max_utf8_bytes"],
+        radroots_protocol::terms::TERMS_MAX_BYTES
+    );
+    assert_eq!(
+        contract["digest"]["domain_utf8_with_terminal_nul"],
+        "radroots.terms.v1\0"
+    );
+    assert_eq!(
+        contract["limits"]["structured_record_authoring_enabled"],
+        false
+    );
+    assert_eq!(
+        contract["retention"]["automatic_private_serialize_or_clone"],
+        false
+    );
+    assert_eq!(
+        contract["retention"]["private_fields_in_temporary_json_trees"],
+        false
+    );
+    let fixture_bytes = include_bytes!("fixtures/terms_wire.v1.json");
+    let producer = include_bytes!("support/terms_wire_oracle.mjs");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(fixture_bytes)),
+        contract["independent_vectors"]["sha256"]
+    );
+    assert_eq!(
+        format!("{:x}", Sha256::digest(producer)),
+        contract["independent_vectors"]["producer_sha256"]
+    );
+    let fixture: serde_json::Value = serde_json::from_slice(fixture_bytes).unwrap();
+    let required: BTreeSet<_> = contract["required_fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(required.len(), 9);
+    for row in fixture["vectors"].as_array().unwrap() {
+        let object: serde_json::Value =
+            serde_json::from_str(row["wire"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            object
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            required
+        );
+    }
+}
+
 #[test]
 fn manifest_has_approved_data_only_features_and_dependencies() {
     assert!(MANIFEST.contains("name = \"radroots_protocol\""));
@@ -38,7 +101,7 @@ fn manifest_has_approved_data_only_features_and_dependencies() {
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
         BTreeSet::from([
-            "chat", "commands", "default", "intent", "listing", "nip01", "serde", "std"
+            "chat", "commands", "default", "intent", "listing", "nip01", "serde", "std", "terms"
         ])
     );
     assert_eq!(
@@ -76,7 +139,8 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             "profile",
             "radrootsd",
             "runtime",
-            "schema"
+            "schema",
+            "terms"
         ])
     );
     for source in [CAPABILITY, EVENT] {

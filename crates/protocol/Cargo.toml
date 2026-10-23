@@ -25,7 +25,7 @@ include = [
 ]
 
 [package.metadata.docs.rs]
-features = ["std", "serde", "commands"]
+features = ["std", "serde", "commands", "terms"]
 
 [lib]
 name = "radroots_protocol"
@@ -39,6 +39,7 @@ intent = ["dep:radroots_domain", "dep:sha2"]
 nip01 = ["dep:radroots_identity", "dep:sha2", "dep:zeroize"]
 chat = ["commands", "nip01", "intent"]
 listing = ["commands", "nip01", "intent"]
+terms = ["commands"]
 
 [dependencies]
 radroots_identity = { workspace = true, default-features = false, optional = true }

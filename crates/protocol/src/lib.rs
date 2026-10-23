@@ -9,6 +9,10 @@ extern crate alloc;
 #[cfg(feature = "commands")]
 pub mod command;
 
+/// Explicit bounded private Terms encoding and its canonical v1 digest.
+#[cfg(feature = "terms")]
+pub mod terms;
+
 /// Pure exact v1 signing-commitment data, without execution authority.
 #[cfg(feature = "intent")]
 pub mod intent;
