@@ -74,6 +74,7 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
+  "raw_value",
 ] }
 thiserror = { version = "2", default-features = false }
 

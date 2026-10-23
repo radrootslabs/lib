@@ -121,6 +121,7 @@ pub enum SigningReplay {
     /// The actual provider independently binds exact replay to request identity.
     ExactReplayByRequestId,
 }
+#[cfg(feature = "listing")]
 impl SigningReplay {
     pub(crate) const fn code(self) -> u8 {
         match self {

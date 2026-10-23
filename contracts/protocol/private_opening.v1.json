@@ -1,0 +1,29 @@
+{
+  "schema": "radroots.nostr.private_opening.v1",
+  "contract_version": 1,
+  "state": "existing_nip17_protocol_opening",
+  "feature": "nip17",
+  "outer_kind": 1059,
+  "seal_kind": 13,
+  "supported_rumor_kinds": [14, 15],
+  "signed_max_utf8_bytes": 65536,
+  "rumor_max_utf8_bytes": 24576,
+  "json_max_depth": 16,
+  "event_tag_budgets": "Reuse the owning EventWireLimits defaults, with the complete signed-event bound applied independently.",
+  "order": [
+    "Bound the typed outer and verify its exact ID/signature before any signer callback.",
+    "Bind exactly one canonical p recipient to the current signer identity; preserve unrelated bounded outer tags and optional relay hints.",
+    "Check NIP-44 v2 framing, decrypt, and recheck the selected identity.",
+    "Bound the complete raw seal and require exact duplicate-safe seven-field signed-event admission, kind13, empty tags, ID and signature.",
+    "Check seal ciphertext v2 framing, decrypt, and recheck identity again.",
+    "Bound the complete raw rumor and parse a closed object with a required canonical ID and raw u16 kind before upstream conversion.",
+    "Recompute the rumor ID and bind seal author and rumor author. Authentic unknown kinds return unsupported before chat-tag interpretation; known message kinds additionally bind the peer/self recipient before decoding."
+  ],
+  "rumor_required_fields": ["id", "pubkey", "created_at", "kind", "tags", "content"],
+  "private_temporary_retention": "Decrypted frames are zeroizing; the temporary parsed rumor clears owned content and tags on drop. Existing returned message/file DTOs remain ordinary owned application data. No whole-process zeroization guarantee is made.",
+  "limits": [
+    "Protocol-only existing message/file adapter; no commerce authoring, durable storage, consent, inventory or history authority.",
+    "Typed upstream outer input cannot recover malformed original raw fields already lost before this API; raw outer ingress closure remains separately required.",
+    "Actual same-library encrypted regression and existing conformance do not replace full independent nested commerce qualification."
+  ]
+}

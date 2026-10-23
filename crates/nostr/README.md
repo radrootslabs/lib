@@ -126,17 +126,32 @@ local signing only. It never opens a network connection, writes a file or
 database, selects an account, publishes an event, or installs a runtime.
 
 Some cryptographic adapters are async because their upstream protocol
-operations are async. Dropping one of those futures cancels local computation
-and creates no external durable effect. The crate has no remote publication or
-persistence commit point: the only successful result is the value returned to
-the caller. A transport or host that later publishes or stores that value owns
-its own cancellation and commit semantics.
+operations are async. Local key-backed work returns an in-memory result, while
+an injected upstream signer may invoke external custody. Dropping its observer
+does not prove that no artifact was obtained remotely. The protocol-only
+multi-recipient helper is not a durable issuance journal: an earlier recipient
+may already have an obtained seal when a later request fails. The composing
+executor must retain each disposition and exact obtained result. Transport and
+storage owners supply their own publication and durable commit semantics.
 
 The `blossom` module converts exact, verified signer output into and from
 signed `Authorization: Nostr` values but never sends an HTTP request. BUD-11
 plans remain distinct from relay-authored plans. The `nip17` module creates and
 opens gift-wrap events. It does not select relays, deliver events, retry
 operations, or persist message state.
+
+Opening verifies the bounded outer event and its single recipient before any
+signer callback, then authenticates a closed empty-tag kind13 seal. It checks
+NIP-44 v2 framing, identity continuity, complete24KiB rumors and depth16, raw
+u16 kinds before upstream conversion, required canonical IDs and author/recipient
+bindings. The original rumor ID is recomputed rather than trusted. Peer and
+sender self copies retain the same logical message. Decrypted frames and the
+temporary parsed rumor are cleared on drop; returned legacy message/file DTOs
+remain ordinary owned application data. This helper supplies no commerce,
+durability, consent, stock or current-history authority. Its typed outer input
+does not recover malformed raw fields already lost by an earlier decoder.
+Authentic unknown rumor kinds return unsupported after header/ID/author checks;
+their content and tags are not interpreted as known chat data.
 
 ## Serialization contract
 

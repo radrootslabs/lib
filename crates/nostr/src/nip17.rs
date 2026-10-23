@@ -24,6 +24,8 @@ use radroots_event_codec::decode::{EventParseError, message as message_decode};
 use radroots_event_codec::encode::message_file as message_file_encode;
 use radroots_event_codec::encode::{EventEncodeError, message as message_encode};
 
+mod opening;
+
 /// Stable, source-redacted failures from the focused NIP-17 adapter.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -277,8 +279,8 @@ pub async fn unwrap_gift_wrap<T>(signer: &T, gift_wrap: &Event) -> Result<Rumor,
 where
     T: NostrSigner,
 {
-    let unwrapped = nip59::extract_rumor(signer, gift_wrap).await?;
-    let mut rumor = unwrapped.rumor;
+    let mut opened = opening::open(signer, gift_wrap).await?;
+    let rumor = &mut opened.0;
     let id = rumor.id().to_string();
     let author = rumor.pubkey.to_string();
     let published_at = rumor.created_at.as_secs();
@@ -311,6 +313,9 @@ where
         other => Err(Error::UnsupportedRumorKind { kind: other }),
     }
 }
+
+#[cfg(all(test, feature = "nip17"))]
+mod opening_tests;
 
 #[cfg(all(test, feature = "nip17"))]
 mod tests {

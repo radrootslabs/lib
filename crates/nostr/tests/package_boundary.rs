@@ -17,6 +17,9 @@ const EVENT_MODULE: &str = include_str!("../src/event.rs");
 const FILTER_MODULE: &str = include_str!("../src/filter.rs");
 const KEY_MODULE: &str = include_str!("../src/key.rs");
 const NIP17_MODULE: &str = include_str!("../src/nip17.rs");
+const NIP17_OPENING: &str = include_str!("../src/nip17/opening.rs");
+const PRIVATE_OPENING_CONTRACT: &str =
+    include_str!("../../../contracts/protocol/private_opening.v1.json");
 const BLOSSOM_MODULE: &str = include_str!("../src/blossom.rs");
 const README: &str = include_str!("../README.md");
 const SIGNING_MODULE: &str = include_str!("../src/signing.rs");
@@ -396,7 +399,7 @@ fn local_signer_consumes_only_the_opaque_secret_boundary() {
 fn focused_nip_and_blossom_features_own_no_network_operations() {
     for required in [
         "blossom = [\"events\", \"dep:base64\", \"dep:radroots_blossom\"]",
-        "nip17 = [\"events\", \"nostr/nip44\", \"nostr/nip59\", \"dep:base64\", \"dep:radroots_protocol\"]",
+        "nip17 = [\"events\", \"nostr/nip44\", \"nostr/nip59\", \"dep:base64\", \"radroots_protocol/chat\"]",
     ] {
         assert!(
             MANIFEST.contains(required),
@@ -424,7 +427,11 @@ fn focused_nip_and_blossom_features_own_no_network_operations() {
             "Blossom adapter is missing `{required}`"
         );
     }
-    for (name, source) in [("NIP-17", NIP17_MODULE), ("Blossom", BLOSSOM_MODULE)] {
+    for (name, source) in [
+        ("NIP-17", NIP17_MODULE),
+        ("NIP-17 opening", NIP17_OPENING),
+        ("Blossom", BLOSSOM_MODULE),
+    ] {
         for forbidden in [
             "nostr_sdk",
             "reqwest::",
@@ -459,6 +466,33 @@ fn focused_nip_and_blossom_features_own_no_network_operations() {
             "README retains removed network ownership statement `{forbidden}`"
         );
     }
+}
+
+#[cfg(feature = "nip17")]
+#[test]
+fn private_opening_contract_preserves_bounded_protocol_only_scope() {
+    let contract: serde_json::Value = serde_json::from_str(PRIVATE_OPENING_CONTRACT).unwrap();
+    assert_eq!(
+        contract["signed_max_utf8_bytes"],
+        radroots_protocol::chat::SIGNED_MAX_BYTES
+    );
+    assert_eq!(
+        contract["rumor_max_utf8_bytes"],
+        radroots_protocol::chat::RUMOR_MAX_BYTES
+    );
+    assert_eq!(
+        contract["supported_rumor_kinds"],
+        serde_json::json!([14, 15])
+    );
+    assert!(!NIP17_MODULE.contains("nip59::extract_rumor(signer, gift_wrap)"));
+    assert!(NIP17_MODULE.contains("opening::open(signer, gift_wrap)"));
+    assert!(
+        contract["limits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str().unwrap().contains("raw outer ingress"))
+    );
 }
 
 #[test]
