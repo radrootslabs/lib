@@ -23,6 +23,9 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/terms/writer.rs"),
     include_str!("../src/terms/decode.rs"),
     include_str!("../src/private_json.rs"),
+    include_str!("../src/json_array.rs"),
+    include_str!("../src/advertisement.rs"),
+    include_str!("../src/listing/read.rs"),
     include_str!("../src/private_rumor.rs"),
     include_str!("../src/commerce.rs"),
     include_str!("../src/commerce/decode.rs"),
@@ -209,6 +212,7 @@ fn manifest_has_approved_data_only_features_and_dependencies() {
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
         BTreeSet::from([
+            "advertisement",
             "chat",
             "commands",
             "commerce",
@@ -245,6 +249,7 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
     assert_eq!(
         root_declarations("pub mod "),
         BTreeSet::from([
+            "advertisement",
             "capability",
             "chat",
             "command",

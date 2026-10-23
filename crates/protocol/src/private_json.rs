@@ -1,17 +1,6 @@
 //! Decode a private JSON string without a nonzeroizing decoded scratch buffer.
 use crate::command::CommandError;
 use alloc::string::String;
-#[cfg(any(feature = "terms", feature = "private_rumor"))]
-use alloc::vec::Vec;
-#[cfg(any(feature = "terms", feature = "private_rumor"))]
-use core::{fmt, marker::PhantomData};
-#[cfg(any(feature = "terms", feature = "private_rumor"))]
-use serde::{
-    Deserialize,
-    de::{IgnoredAny, SeqAccess, Visitor},
-};
-#[cfg(any(feature = "terms", feature = "private_rumor"))]
-use serde_json::value::RawValue;
 use zeroize::Zeroizing;
 
 #[cfg(any(feature = "terms", test))]
@@ -117,37 +106,7 @@ fn hex(chars: &mut core::str::Chars<'_>) -> Result<u16, CommandError> {
 
 // Retain only bounded references into the caller's already byte/depth-bounded
 // frame. An excessive element is ignored without constructing its value.
-#[cfg(any(feature = "terms", feature = "private_rumor"))]
-pub(crate) struct RawArray<'a, const N: usize>(pub(crate) Vec<&'a RawValue>);
-#[cfg(any(feature = "terms", feature = "private_rumor"))]
-impl<'de: 'a, 'a, const N: usize> Deserialize<'de> for RawArray<'a, N> {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct ArrayVisitor<'a, const N: usize>(PhantomData<&'a ()>);
-        impl<'de: 'a, 'a, const N: usize> Visitor<'de> for ArrayVisitor<'a, N> {
-            type Value = RawArray<'a, N>;
-            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                f.write_str("a bounded array")
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
-                let mut values = Vec::new();
-                loop {
-                    if values.len() == N {
-                        if seq.next_element::<IgnoredAny>()?.is_some() {
-                            return Err(serde::de::Error::custom("array limit exceeded"));
-                        }
-                        break;
-                    }
-                    let Some(value) = seq.next_element::<&'de RawValue>()? else {
-                        break;
-                    };
-                    values.push(value);
-                }
-                Ok(RawArray(values))
-            }
-        }
-        d.deserialize_seq(ArrayVisitor::<N>(PhantomData))
-    }
-}
+pub(crate) use crate::json_array::RawArray;
 
 #[cfg(test)]
 mod tests {

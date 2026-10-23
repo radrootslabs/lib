@@ -313,6 +313,33 @@ pub const fn radroots_nostr::private_ingress::AuthenticatedCarrier::seal_id(&sel
 impl core::fmt::Debug for radroots_nostr::private_ingress::AuthenticatedCarrier
 pub fn radroots_nostr::private_ingress::AuthenticatedCarrier::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub async fn radroots_nostr::private_ingress::open(&dyn radroots_signing::provider::ParticipantProvider, radroots_signing::provider::ProviderCall, &str) -> core::result::Result<radroots_nostr::private_ingress::AuthenticatedCarrier, radroots_nostr::private_ingress::OpeningError>
+pub mod radroots_nostr::public_ingress
+pub enum radroots_nostr::public_ingress::Error
+pub radroots_nostr::public_ingress::Error::InvalidInput
+pub radroots_nostr::public_ingress::Error::LimitExceeded
+pub radroots_nostr::public_ingress::Error::ScopeMismatch
+pub radroots_nostr::public_ingress::Error::Unauthenticated
+impl core::error::Error for radroots_nostr::public_ingress::Error
+impl core::fmt::Display for radroots_nostr::public_ingress::Error
+pub fn radroots_nostr::public_ingress::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_nostr::public_ingress::Interpretation
+pub radroots_nostr::public_ingress::Interpretation::Capabilities(radroots_protocol::advertisement::Advertisement)
+pub radroots_nostr::public_ingress::Interpretation::ClockAhead
+pub radroots_nostr::public_ingress::Interpretation::Expired
+pub radroots_nostr::public_ingress::Interpretation::Invalid
+pub radroots_nostr::public_ingress::Interpretation::Listing(alloc::boxed::Box<radroots_protocol::listing::read::DecodedListing>)
+pub radroots_nostr::public_ingress::Interpretation::Unsupported
+pub struct radroots_nostr::public_ingress::ObservedHead
+impl radroots_nostr::public_ingress::ObservedHead
+pub fn radroots_nostr::public_ingress::ObservedHead::capabilities(radroots_identity::key::PublicKey) -> Self
+pub fn radroots_nostr::public_ingress::ObservedHead::interpret(&self, radroots_domain::context::UnixSeconds) -> core::option::Option<radroots_nostr::public_ingress::Interpretation>
+pub fn radroots_nostr::public_ingress::ObservedHead::listing(radroots_identity::key::PublicKey, &str) -> core::result::Result<Self, radroots_nostr::public_ingress::Error>
+pub fn radroots_nostr::public_ingress::ObservedHead::new(radroots_event::envelope::event_head::v1::EventHeadCoordinate) -> core::result::Result<Self, radroots_nostr::public_ingress::Error>
+pub fn radroots_nostr::public_ingress::ObservedHead::observe(&mut self, &str) -> core::result::Result<radroots_event::envelope::event_head::v1::EventHeadDecision, radroots_nostr::public_ingress::Error>
+pub fn radroots_nostr::public_ingress::ObservedHead::raw_json(&self) -> core::option::Option<&str>
+pub fn radroots_nostr::public_ingress::ObservedHead::selected(&self) -> core::option::Option<&radroots_event::envelope::event_head::v1::CurrentEventHead>
+impl core::fmt::Debug for radroots_nostr::public_ingress::ObservedHead
+pub fn radroots_nostr::public_ingress::ObservedHead::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_nostr::signing
 pub mod radroots_nostr::signing::gift_wrap
 pub enum radroots_nostr::signing::gift_wrap::WrapError

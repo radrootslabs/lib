@@ -1,5 +1,15 @@
 # radroots_nostr
 
+The `public_ingress` feature retains one original authenticated listing or
+capability head per explicit scope. It applies frozen NIP-01 replacement order
+before profile, expiry or caller-injected clock evaluation. Newer authentic
+unsupported, invalid or future heads prevent older actionable fallback. Closed
+known profiles retain validated values; observed support remains a participant
+claim. This boundary performs no IO, publication, stock or permission decision.
+The successor public reader uses explicit64KiB event/tag budgets; legacy defaults
+and private profiles remain separately governed. The owning contract is
+[`public_ingress.v1.json`](../../contracts/protocol/public_ingress.v1.json).
+
 `radroots_nostr` is the portable Nostr protocol adapter for Radroots. It
 converts between canonical Radroots identity/event values and Nostr protocol
 values, provides typed NIP helpers, and supplies an optional concrete local

@@ -128,6 +128,44 @@ async fn ordinary_source_preserves_originals_through_protected_commerce_admissio
 }
 
 #[tokio::test]
+async fn ordinary_source_delivers_large_original_profiles_to_authenticated_public_heads() {
+    use radroots_nostr::public_ingress::{Interpretation, ObservedHead};
+    use radroots_protocol::advertisement::UnixSeconds;
+    tokio::time::timeout(Duration::from_secs(15), async {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/public_large.v1.json")).unwrap();
+        let raw = fixture["raw"].as_str().unwrap();
+        assert_eq!(raw.len(), 65536);
+        for live in [false, true] {
+            let obtained = observed_wire(raw.into(), live).await;
+            assert!(
+                obtained == raw,
+                "Original large profile must survive ordinary transport observation"
+            );
+            let mut head = ObservedHead::listing(
+                fixture["author"].as_str().unwrap().parse().unwrap(),
+                fixture["d"].as_str().unwrap(),
+            )
+            .unwrap();
+            head.observe(&obtained).unwrap();
+            let Some(Interpretation::Listing(value)) =
+                head.interpret(UnixSeconds::new(150).unwrap())
+            else {
+                panic!("Expected complete authenticated observed listing");
+            };
+            let terms = serde_json::to_value(value.listing().terms()).unwrap();
+            assert_eq!(
+                terms["product"]["description"].as_str().unwrap().len(),
+                4000
+            );
+            assert_eq!(head.raw_json(), Some(raw));
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
 async fn live_fetch_retains_original_signed_outer_object_bytes() {
     tokio::time::timeout(Duration::from_secs(10), async {
         let fixture: serde_json::Value =

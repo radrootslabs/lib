@@ -147,6 +147,8 @@ pub mod trade {
 }
 
 #[cfg(feature = "json")]
+pub use radroots_event::wire::EventWireLimits;
+#[cfg(feature = "json")]
 use radroots_event::{
     SignedEvent,
     admission::RawEvent,
@@ -242,19 +244,31 @@ pub fn event(raw_json: &str) -> Result<RawEvent, DecodeError> {
 /// Decodes compact NIP-01 JSON into an ID-verified signed event.
 #[cfg(feature = "json")]
 pub fn signed_event(raw_json: &str) -> Result<SignedEvent, DecodeError> {
-    let max = MAX_EVENT_JSON_BYTES;
+    signed_event_with_limits(raw_json, EventWireLimits::default())
+}
+
+/// Decode an ID-verified event under explicit caller-owned bounds. Legacy
+/// defaults remain unchanged; signature and product admission stay separate.
+#[cfg(feature = "json")]
+pub fn signed_event_with_limits(
+    raw_json: &str,
+    limits: EventWireLimits,
+) -> Result<SignedEvent, DecodeError> {
+    let max = limits.max_raw_json_bytes;
     let actual = raw_json.len();
     if actual > max {
         return Err(DecodeError::InputTooLarge { max, actual });
     }
-    let wire = Nip01EventWire::parse_json(raw_json).map_err(map_wire_error)?;
-    SignedEvent::from_wire_verified_id(wire, raw_json).map_err(|error| match error {
-        radroots_event::draft::SignedEventError::Envelope(error) => {
-            DecodeError::InvalidEnvelope(error)
+    let wire = Nip01EventWire::parse_json_with_limits(raw_json, limits).map_err(map_wire_error)?;
+    SignedEvent::from_wire_verified_id_with_limits(wire, raw_json, limits).map_err(|error| {
+        match error {
+            radroots_event::draft::SignedEventError::Envelope(error) => {
+                DecodeError::InvalidEnvelope(error)
+            }
+            radroots_event::draft::SignedEventError::Wire(error)
+            | radroots_event::draft::SignedEventError::RawJson(error) => map_wire_error(error),
+            radroots_event::draft::SignedEventError::RawJsonMismatch => DecodeError::InvalidJson,
         }
-        radroots_event::draft::SignedEventError::Wire(error)
-        | radroots_event::draft::SignedEventError::RawJson(error) => map_wire_error(error),
-        radroots_event::draft::SignedEventError::RawJsonMismatch => DecodeError::InvalidJson,
     })
 }
 

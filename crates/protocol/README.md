@@ -1,5 +1,12 @@
 # radroots_protocol
 
+With `listing`, the public decoder validates a complete canonical profile and
+its standard projections without assuming a particular tag order. With
+`advertisement`, the closed capability decoder preserves exact bounded versions,
+features and at-most-thirty-day author-time validity. These are passive claims;
+signature admission, observed-head ranking and current-time policy belong to the
+concrete adapter. Known values supply neither source freshness nor permission.
+
 The chat profile's `GiftWrapBudget` measures the complete kind-1059 envelope
 for the exact already obtained seal representation. Whitespace in retained
 signed JSON still consumes encryption and event budget; canonical event

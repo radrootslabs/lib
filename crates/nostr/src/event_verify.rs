@@ -73,7 +73,11 @@ fn verification_error_status(error: &VerificationError) -> Verification {
     }
 }
 
-#[cfg(any(feature = "nip17", feature = "private_ingress"))]
+#[cfg(any(
+    feature = "nip17",
+    feature = "private_ingress",
+    feature = "public_ingress"
+))]
 #[derive(Clone, Copy)]
 pub(crate) enum SignedReadError {
     InvalidInput,
@@ -84,9 +88,9 @@ pub(crate) enum SignedReadError {
 /// Admit original signed JSON before any upstream conversion or callback.
 #[cfg(any(feature = "nip17", feature = "private_ingress"))]
 pub(crate) fn signed_json(raw: &str) -> Result<EventEnvelope, SignedReadError> {
-    use radroots_event::wire::{EventWireError, EventWireLimits, Nip01EventWire};
+    use radroots_event::wire::EventWireLimits;
     const LIMIT: usize = 65_536;
-    let wire = Nip01EventWire::parse_json_exact_with_limits(
+    signed_json_with_limits(
         raw,
         EventWireLimits {
             max_raw_json_bytes: LIMIT,
@@ -94,19 +98,51 @@ pub(crate) fn signed_json(raw: &str) -> Result<EventEnvelope, SignedReadError> {
             ..Default::default()
         },
     )
-    .map_err(|error| match error {
-        EventWireError::EventIdMismatch { .. } => SignedReadError::Unauthenticated,
-        EventWireError::RawJsonTooLarge { .. }
-        | EventWireError::ContentTooLarge { .. }
-        | EventWireError::TooManyTags { .. }
-        | EventWireError::TooManyTagElements { .. }
-        | EventWireError::TagElementTooLarge { .. }
-        | EventWireError::TagsTooLarge { .. } => SignedReadError::LimitExceeded,
-        _ => SignedReadError::InvalidInput,
-    })?;
-    let event = wire
-        .into_envelope()
-        .map_err(|_| SignedReadError::InvalidInput)?;
+}
+
+#[cfg(any(
+    feature = "nip17",
+    feature = "private_ingress",
+    feature = "public_ingress"
+))]
+pub(crate) fn signed_json_with_limits(
+    raw: &str,
+    limits: radroots_event::wire::EventWireLimits,
+) -> Result<EventEnvelope, SignedReadError> {
+    use radroots_event::{
+        envelope::{EventEnvelopeLimits, EventEnvelopeParts},
+        wire::{EventWireError, Nip01EventWire},
+    };
+    let wire =
+        Nip01EventWire::parse_json_exact_with_limits(raw, limits).map_err(|error| match error {
+            EventWireError::EventIdMismatch { .. } => SignedReadError::Unauthenticated,
+            EventWireError::RawJsonTooLarge { .. }
+            | EventWireError::ContentTooLarge { .. }
+            | EventWireError::TooManyTags { .. }
+            | EventWireError::TooManyTagElements { .. }
+            | EventWireError::TagElementTooLarge { .. }
+            | EventWireError::TagsTooLarge { .. } => SignedReadError::LimitExceeded,
+            _ => SignedReadError::InvalidInput,
+        })?;
+    let event = EventEnvelope::new_with_limits(
+        EventEnvelopeParts {
+            id: wire.id,
+            author: wire.pubkey,
+            created_at: wire.created_at,
+            kind: wire.kind,
+            tags: wire.tags,
+            content: wire.content,
+            sig: wire.sig,
+        },
+        EventEnvelopeLimits {
+            max_content_bytes: limits.max_content_bytes,
+            max_tag_count: limits.max_tag_count,
+            max_total_tag_elements: limits.max_total_tag_elements,
+            max_tag_element_bytes: limits.max_tag_element_bytes,
+            max_total_tag_bytes: limits.max_total_tag_bytes,
+        },
+    )
+    .map_err(|_| SignedReadError::InvalidInput)?;
     match verify_event(&event) {
         Verification::Verified => Ok(event),
         Verification::MalformedEnvelope => Err(SignedReadError::InvalidInput),

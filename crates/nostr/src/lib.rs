@@ -44,6 +44,10 @@ pub mod private_ingress;
 #[cfg(feature = "commerce")]
 pub mod commerce;
 
+/// Original authenticated public heads, distinct from action readiness.
+#[cfg(feature = "public_ingress")]
+pub mod public_ingress;
+
 #[cfg(feature = "events")]
 mod event_convert;
 #[cfg(feature = "events")]

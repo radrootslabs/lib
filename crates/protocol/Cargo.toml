@@ -25,7 +25,7 @@ include = [
 ]
 
 [package.metadata.docs.rs]
-features = ["std", "serde", "commands", "terms", "commerce"]
+features = ["std", "serde", "commands", "terms", "commerce", "listing", "advertisement"]
 
 [lib]
 name = "radroots_protocol"
@@ -39,6 +39,7 @@ intent = ["dep:radroots_domain", "dep:sha2"]
 nip01 = ["dep:radroots_identity", "dep:sha2", "dep:zeroize"]
 chat = ["commands", "nip01", "intent"]
 listing = ["commands", "nip01", "intent"]
+advertisement = ["commands"]
 terms = ["commands"]
 private_rumor = ["commands", "nip01"]
 commerce = ["terms", "private_rumor"]
@@ -60,6 +61,10 @@ serde_json = { workspace = true, features = ["std"] }
 [[example]]
 name = "inspect_contract"
 required-features = ["std"]
+
+[[test]]
+name = "public_profiles"
+required-features = ["listing", "advertisement"]
 
 [lints]
 workspace = true

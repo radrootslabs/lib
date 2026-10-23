@@ -12,6 +12,17 @@ pub mod command;
 #[cfg(any(feature = "terms", feature = "private_rumor"))]
 mod private_json;
 
+#[cfg(any(
+    feature = "terms",
+    feature = "private_rumor",
+    feature = "advertisement"
+))]
+mod json_array;
+
+/// Bounded participant capability claims, without software or permission proof.
+#[cfg(feature = "advertisement")]
+pub mod advertisement;
+
 /// Bounded private NIP-01 rumor data, without cryptographic admission.
 #[cfg(feature = "private_rumor")]
 pub mod private_rumor;

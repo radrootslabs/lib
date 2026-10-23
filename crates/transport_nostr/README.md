@@ -261,6 +261,12 @@ a finite fetch's cumulative work budget. Original data remains untrusted until
 its owning signature/profile/participant checks. The owning contract is
 [`source_original.v1.json`](../../contracts/protocol/source_original.v1.json).
 
+Successor fetch/live decoding applies the same64KiB original-event cap to
+content, individual tag fields and total tag bytes using explicit wire limits.
+This permits complete listing profiles above the legacy4KiB tag ceiling while
+retaining exact originals and separate signature/profile admission. Historical
+general decoder defaults remain unchanged.
+
 Live subscriptions use the same explicit readable targets and selector
 translation. A caller checkpoint is scoped to one exact target and selector;
 the adapter reconnects with Nostr's inclusive `since` timestamp, suppresses

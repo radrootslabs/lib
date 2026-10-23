@@ -2,6 +2,27 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-055"
+date = "2026-10-23"
+status = "active"
+approval = "The user authorizes the approved complete decision-package refactor, required shared-library breaking changes, verified commits and master source publication."
+affected_steps = ["050", "070", "120", "130"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_protocol", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_nostr", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_event_codec", "contracts/crates/release_v1/radroots_crates_release_v1.toml#package.radroots_transport_nostr"]
+source_evidence = [
+  "The assigned shared_sdk_protocol.v1 decision requires raw authenticated listing and capability head selection before supported-profile, expiry or clock filtering. The frozen Event head comparator already supplies the required NIP01 ordering; current Protocol listing owns production values and encoding but no incoming profile decoder.",
+  "The historical Nostr feature vocabulary omits this authenticated public ingress boundary. The current exact signed reader is private and enabled only for private admission. Adding a narrowly scoped public_ingress feature reuses that reader without introducing a second signature verifier or transport.",
+  "Actual independent admission1 rejects a valid larger listing profile with LimitExceeded because the legacy tag ceiling is4KiB. Existing Event wire/envelope/SignedEvent APIs already support explicit limits; new public ingress and transport observations must apply the64KiB successor profile coherently without rewriting legacy defaults.",
+]
+replacement_action = "Implement bounded pure public-profile decoding in Protocol and explicit-scope authenticated head retention in Nostr under public_ingress.v1.json. Reuse Domain listing constructors, exact original signed admission and the frozen raw Event comparator. Preserve future, expired, unsupported and invalid-profile selected heads with no older fallback; no automatic publication or business authority. Update current feature/API/package guards prospectively and preserve frozen Release V1 artifacts."
+verification = [
+  "Execute independently signed listing/capability vectors, arbitrary valid tag order, same-time identity ties, invalid signatures, newer unsupported and invalid heads, duplicate coordinate/projection tags, expiry and injected future observations.",
+  "Run strict native and portable feature checks/tests, actual public API generation, source/package/contracts/architecture/dependency guards and unchanged complete owning coverage profiles and thresholds. Keep durable discovery/recovery and coherent consumer adoption distinct."
+]
+unresolved_risk = "Implementation and qualification pending. This boundary does not qualify durable discovery persistence/recovery, structured authoring, stock or consent, supported-consumer adoption or final acceptance."
+normative_architecture_change = true
+adr_required = true
+
+[[deviation]]
 id = "RCRV1-DEV-054"
 date = "2026-10-23"
 status = "active"

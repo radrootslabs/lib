@@ -34,6 +34,17 @@ mod paging_tests;
 mod original_tests;
 
 const UPSTREAM_FETCH_LIMIT: usize = 1_000;
+
+pub(crate) fn observed_limits() -> radroots_event_codec::decode::EventWireLimits {
+    let maximum = radroots_protocol::profile::SIGNED_EVENT_MAX_BYTES;
+    radroots_event_codec::decode::EventWireLimits {
+        max_raw_json_bytes: maximum,
+        max_content_bytes: maximum,
+        max_tag_element_bytes: maximum,
+        max_total_tag_bytes: maximum,
+        ..Default::default()
+    }
+}
 const CURSOR_PREFIX: &str = "nostr-v2";
 const CURSOR_SCOPE_DOMAIN: &[u8] = b"radroots.transport-nostr.fetch-cursor.v2\0";
 
@@ -615,7 +626,10 @@ impl EventSource for NostrTransport {
                         }
                         break;
                     }
-                    match radroots_event_codec::decode::signed_event(raw.as_str()) {
+                    match radroots_event_codec::decode::signed_event_with_limits(
+                        raw.as_str(),
+                        observed_limits(),
+                    ) {
                         Ok(event)
                             if request.selector().matches(&event)
                                 && effective_until
@@ -721,8 +735,11 @@ impl EventSource for NostrTransport {
                 if let Some(request_cursor) = request.cursor().cloned() {
                     provenance = provenance.with_cursor(request_cursor);
                 }
-                let event = radroots_event_codec::decode::signed_event(candidate.raw.as_str())
-                    .map_err(|_| radroots_transport::Error::UnexpectedFetchProvenance)?;
+                let event = radroots_event_codec::decode::signed_event_with_limits(
+                    candidate.raw.as_str(),
+                    observed_limits(),
+                )
+                .map_err(|_| radroots_transport::Error::UnexpectedFetchProvenance)?;
                 events.push(ObservedEvent::new(event, provenance));
             }
             FetchPage::for_request(&request, events, outcomes, next_page)

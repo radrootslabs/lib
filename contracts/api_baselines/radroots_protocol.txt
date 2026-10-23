@@ -1,4 +1,25 @@
 pub mod radroots_protocol
+pub mod radroots_protocol::advertisement
+pub use radroots_protocol::advertisement::UnixSeconds
+pub enum radroots_protocol::advertisement::Feature
+pub radroots_protocol::advertisement::Feature::BaseOrder
+pub radroots_protocol::advertisement::Feature::BoundedVariableWeight
+pub radroots_protocol::advertisement::Feature::ListingOptions
+pub radroots_protocol::advertisement::Feature::PlaintextInquiry
+pub enum radroots_protocol::advertisement::Profile
+pub radroots_protocol::advertisement::Profile::Chat
+pub radroots_protocol::advertisement::Profile::Commerce
+pub radroots_protocol::advertisement::Profile::Listing
+pub struct radroots_protocol::advertisement::Advertisement
+impl radroots_protocol::advertisement::Advertisement
+pub fn radroots_protocol::advertisement::Advertisement::claims(&self) -> &[radroots_protocol::advertisement::Claim]
+pub const fn radroots_protocol::advertisement::Advertisement::valid_until(&self) -> radroots_domain::context::UnixSeconds
+pub struct radroots_protocol::advertisement::Claim
+impl radroots_protocol::advertisement::Claim
+pub fn radroots_protocol::advertisement::Claim::features(&self) -> &[radroots_protocol::advertisement::Feature]
+pub const fn radroots_protocol::advertisement::Claim::profile(&self) -> radroots_protocol::advertisement::Profile
+pub fn radroots_protocol::advertisement::Claim::versions(&self) -> &[u16]
+pub fn radroots_protocol::advertisement::decode(&[u8], u64) -> core::result::Result<radroots_protocol::advertisement::Advertisement, radroots_protocol::command::CommandError>
 pub mod radroots_protocol::capability
 pub mod radroots_protocol::capability::v1
 pub enum radroots_protocol::capability::v1::Availability
@@ -543,6 +564,9 @@ impl core::convert::From<radroots_protocol::listing::CapturedListingCommand> for
 pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::listing::CapturedListingCommand) -> Self
 impl core::fmt::Debug for radroots_protocol::listing::CapturedListingCommand
 pub fn radroots_protocol::listing::CapturedListingCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::listing::DecodedListing(_)
+impl radroots_protocol::listing::DecodedListing
+pub const fn radroots_protocol::listing::DecodedListing::listing(&self) -> &radroots_domain::listing::view::Listing
 pub struct radroots_protocol::listing::ListingEvent
 impl radroots_protocol::listing::ListingEvent
 pub const fn radroots_protocol::listing::ListingEvent::event_id(&self) -> &[u8; 32]
@@ -581,6 +605,8 @@ pub const radroots_protocol::listing::LISTING_EVENT_MAX_BYTES: usize
 pub const radroots_protocol::listing::LISTING_KIND: u32
 pub const radroots_protocol::listing::LISTING_TAG_MAX_COUNT: usize
 pub const radroots_protocol::listing::LISTING_TAG_TOTAL_ELEMENT_MAX_COUNT: usize
+pub fn radroots_protocol::listing::decode_observed(&radroots_protocol::nip01::EventFields<'_>, [u8; 32]) -> core::result::Result<radroots_protocol::listing::DecodedListing, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::listing::decode_profile(&[u8]) -> core::result::Result<radroots_domain::listing::ListingTerms, radroots_protocol::command::CommandError>
 pub mod radroots_protocol::nip01
 pub enum radroots_protocol::nip01::WireError
 pub radroots_protocol::nip01::WireError::InvalidInput

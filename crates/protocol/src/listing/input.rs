@@ -65,7 +65,21 @@ fn invalid<T, E>(value: Result<T, E>) -> Result<T, CommandError> {
 }
 impl Input {
     fn validate(self) -> Result<PublishInput, CommandError> {
-        let profile = self.profile;
+        let terms = self.profile.terms()?;
+        PublishInput::new(
+            self.id,
+            &self.title,
+            &self.summary,
+            &self.description_markdown,
+            self.published_at,
+            terms,
+        )
+        .map_err(|_| CommandError::InvalidInput)
+    }
+}
+impl Profile {
+    fn terms(self) -> Result<ListingTerms, CommandError> {
+        let profile = self;
         if profile.profile != "radroots.listing" || profile.version != 1 {
             return Err(CommandError::UnsupportedProfile);
         }
@@ -90,7 +104,7 @@ impl Input {
             &profile.fulfillment.area,
             profile.fulfillment.lead_seconds,
         ))?;
-        let terms = invalid(ListingTerms::new(
+        invalid(ListingTerms::new(
             match profile.state {
                 State::Active => ListingState::Active,
                 State::Paused => ListingState::Paused,
@@ -113,16 +127,7 @@ impl Input {
                     ))
                 })
                 .collect::<Result<Vec<_>, _>>()?,
-        ))?;
-        PublishInput::new(
-            self.id,
-            &self.title,
-            &self.summary,
-            &self.description_markdown,
-            self.published_at,
-            terms,
-        )
-        .map_err(|_| CommandError::InvalidInput)
+        ))
     }
 }
 impl PublishInput {
@@ -137,34 +142,7 @@ impl PublishInput {
             serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
         object_shapes(&value)?;
         if let Some(profile) = value.get("profile") {
-            if profile
-                .get("profile")
-                .is_some_and(|v| v != "radroots.listing")
-                || profile.get("version").is_some_and(|v| v != 1)
-            {
-                return Err(CommandError::UnsupportedProfile);
-            }
-            if let Some(options) = profile.get("options").and_then(serde_json::Value::as_array) {
-                for option in options {
-                    if option
-                        .pointer("/price/type")
-                        .and_then(serde_json::Value::as_str)
-                        .is_some_and(|v| {
-                            !matches!(v, "quote_required" | "fixed" | "variable_weight")
-                        })
-                        || option
-                            .pointer("/supply/type")
-                            .and_then(serde_json::Value::as_str)
-                            .is_some_and(|v| !matches!(v, "unknown" | "available" | "estimated"))
-                        || option
-                            .pointer("/unit/contents/type")
-                            .and_then(serde_json::Value::as_str)
-                            .is_some_and(|v| !matches!(v, "unspecified" | "fixed" | "estimated"))
-                    {
-                        return Err(CommandError::UnsupportedProfile);
-                    }
-                }
-            }
+            supported(profile)?;
         }
         let input: Input = serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
         input.validate()
@@ -209,4 +187,57 @@ fn object_shapes(value: &serde_json::Value) -> Result<(), CommandError> {
         crate::listing_values::option_shape(option)?;
     }
     Ok(())
+}
+
+fn supported(profile: &serde_json::Value) -> Result<(), CommandError> {
+    if profile
+        .get("profile")
+        .is_some_and(|v| v != "radroots.listing")
+        || profile.get("version").is_some_and(|v| v != 1)
+    {
+        return Err(CommandError::UnsupportedProfile);
+    }
+    if let Some(options) = profile.get("options").and_then(serde_json::Value::as_array) {
+        for option in options {
+            if option
+                .pointer("/price/type")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|v| !matches!(v, "quote_required" | "fixed" | "variable_weight"))
+                || option
+                    .pointer("/supply/type")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|v| !matches!(v, "unknown" | "available" | "estimated"))
+                || option
+                    .pointer("/unit/contents/type")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|v| !matches!(v, "unspecified" | "fixed" | "estimated"))
+            {
+                return Err(CommandError::UnsupportedProfile);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Decodes the canonical complete public profile without authenticating an event.
+/// Original tag order and signature admission belong to the concrete adapter.
+pub fn decode_profile(raw: &[u8]) -> Result<ListingTerms, CommandError> {
+    check_frame(raw)?;
+    let value: serde_json::Value =
+        serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
+    let wrapper = serde_json::json!({"profile": value});
+    supported(&wrapper["profile"])?;
+    object_shapes(&wrapper)?;
+    let profile: Profile = serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
+    let terms = profile.terms()?;
+    let mut canonical = String::new();
+    super::canonical(
+        &super::profile_value(&terms).map_err(|_| CommandError::InvalidInput)?,
+        &mut canonical,
+    )
+    .map_err(|_| CommandError::InvalidInput)?;
+    if canonical.as_bytes() != raw {
+        return Err(CommandError::InvalidInput);
+    }
+    Ok(terms)
 }

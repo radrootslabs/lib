@@ -120,6 +120,7 @@ fn manifest_has_final_identity_features_and_radroots_dependencies() {
             "events",
             "nip17",
             "private_ingress",
+            "public_ingress",
             "signing",
             "std"
         ]),
@@ -155,6 +156,7 @@ fn crate_root_establishes_the_final_public_module_skeleton() {
         "key",
         "nip17",
         "private_ingress",
+        "public_ingress",
         "signing",
         "tag",
     ] {
@@ -667,6 +669,7 @@ fn superseded_surface_retirement_is_explicit_and_release_bounded() {
             "key",
             "nip17",
             "private_ingress",
+            "public_ingress",
             "signing",
             "signing::gift_wrap",
             "tag"

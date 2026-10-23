@@ -401,8 +401,11 @@ impl RelayEventSubscription {
             .targets
             .get(relay)
             .ok_or(radroots_transport::Error::UnexpectedSubscriptionEvent)?;
-        let event = radroots_event_codec::decode::signed_event(raw)
-            .map_err(|_| radroots_transport::Error::UnexpectedSubscriptionEvent)?;
+        let event = radroots_event_codec::decode::signed_event_with_limits(
+            raw,
+            crate::source::observed_limits(),
+        )
+        .map_err(|_| radroots_transport::Error::UnexpectedSubscriptionEvent)?;
         if !self.request.selector().matches(&event) {
             return Err(radroots_transport::Error::UnexpectedSubscriptionEvent);
         }

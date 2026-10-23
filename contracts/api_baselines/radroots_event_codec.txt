@@ -313,6 +313,7 @@ pub fn radroots_event_codec::canonical::id(&radroots_event::envelope::EventEnvel
 pub fn radroots_event_codec::canonical::id_preimage(&radroots_event::envelope::EventEnvelope) -> core::result::Result<alloc::string::String, radroots_event_codec::canonical::CanonicalError>
 pub type radroots_event_codec::canonical::CanonicalError = radroots_event::wire::v1::CanonicalEventIdError
 pub mod radroots_event_codec::decode
+pub use radroots_event_codec::decode::EventWireLimits
 pub mod radroots_event_codec::decode::app_data
 pub fn radroots_event_codec::decode::app_data::app_data_from_tags(u32, &[alloc::vec::Vec<alloc::string::String>], &str) -> core::result::Result<radroots_event::social::app_data::AppData, radroots_event_codec::decode::EventParseError>
 pub fn radroots_event_codec::decode::app_data::data_from_event(alloc::string::String, alloc::string::String, u64, u32, alloc::string::String, alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>) -> core::result::Result<radroots_event_codec::decode::parsed::RadrootsParsedData<radroots_event::social::app_data::AppData>, radroots_event_codec::decode::EventParseError>
@@ -768,6 +769,7 @@ pub fn radroots_event_codec::decode::parsed::RadrootsParsedEvent<T>::new(radroot
 pub const radroots_event_codec::decode::MAX_EVENT_JSON_BYTES: usize
 pub fn radroots_event_codec::decode::event(&str) -> core::result::Result<radroots_event::verification::RawEvent, radroots_event_codec::decode::DecodeError>
 pub fn radroots_event_codec::decode::signed_event(&str) -> core::result::Result<radroots_event::draft::SignedEvent, radroots_event_codec::decode::DecodeError>
+pub fn radroots_event_codec::decode::signed_event_with_limits(&str, radroots_event::wire::v1::EventWireLimits) -> core::result::Result<radroots_event::draft::SignedEvent, radroots_event_codec::decode::DecodeError>
 pub mod radroots_event_codec::encode
 pub mod radroots_event_codec::encode::app_data
 pub fn radroots_event_codec::encode::app_data::app_data_build_tags(&radroots_event::social::app_data::AppData) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>, radroots_event_codec::encode::EventEncodeError>

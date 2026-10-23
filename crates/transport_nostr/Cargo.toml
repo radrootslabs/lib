@@ -60,7 +60,7 @@ wasm-bindgen-futures = { workspace = true }
 web-time = { workspace = true }
 
 [dev-dependencies]
-radroots_nostr = { workspace = true, default-features = false, features = ["commerce"] }
+radroots_nostr = { workspace = true, default-features = false, features = ["commerce", "public_ingress"] }
 radroots_signing = { workspace = true, default-features = false, features = ["std"] }
 tokio-tungstenite = { workspace = true }
 tokio = { workspace = true, features = [
