@@ -2,6 +2,27 @@ schema_version = 1
 architecture_id = "radroots.crates.release.v1"
 
 [[deviation]]
+id = "RCRV1-DEV-057"
+date = "2026-10-23"
+status = "active"
+approval = "The user authorizes the complete approved refactor and all supported dependency/proving inputs, verified owning commits and source publication."
+affected_steps = ["050", "120", "130", "140"]
+spec_anchors = ["contracts/crates/release_v1/radroots_crates_release_v1.toml#repository_policy"]
+source_evidence = [
+  "The root Tokio1.53.3 repair leaves four active standalone fixture locks at1.47.1. Actual locked offline metadata for the ordinary browser fixture fails because its lock must update.",
+  "The four fixtures exercise ordinary browser, native bindings, transport time and browser socket boundaries. Their current manifests must resolve the actual production graph; completed historical qualification inputs remain separate.",
+]
+replacement_action = "Before further consumer publication, update the four current standalone fixture locks and direct native fixture Tokio lower bound. Review every necessary graph delta, preserve unrelated package identities and frozen historical inputs, execute locked target checks and meaningful actual browser/native calls, then publish the owning correction before exact successor adoption."
+verification = [
+  "Compare every parsed package/checksum/dependency entry and require patched Tokio with necessary companions plus only required current local-manifest edges.",
+  "Run exact locked native/WASM fixture checks, strict lint and actual current native/browser fixture calls; retain root production/API identity and reuse valid exact scoped evidence.",
+  "Run current owning architecture/contracts and affected source/dependency policy without adding an advisory exception; preserve the preceding failed locked-resolution probe and interrupted consumer attempt.",
+]
+unresolved_risk = "Standalone fixture qualification and exact successor consumer/artifact adoption remain pending. No current browser/native-device/final acceptance is inferred from root-workspace qualification."
+normative_architecture_change = false
+adr_required = false
+
+[[deviation]]
 id = "RCRV1-DEV-056"
 date = "2026-10-23"
 status = "active"
