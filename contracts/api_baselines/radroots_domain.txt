@@ -468,6 +468,8 @@ impl radroots_domain::AuthorityRef
 pub const fn radroots_domain::AuthorityRef::executor_id(self) -> radroots_domain::ExecutorId
 pub const fn radroots_domain::AuthorityRef::generation(self) -> radroots_domain::Generation
 pub const fn radroots_domain::AuthorityRef::new(radroots_domain::ExecutorId, radroots_domain::Generation) -> Self
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::AuthorityRef
+pub fn radroots_domain::AuthorityRef::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::CancellationProposal
 impl radroots_domain::CancellationProposal
 pub const fn radroots_domain::CancellationProposal::agreement(&self) -> radroots_domain::RecordId

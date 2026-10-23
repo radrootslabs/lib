@@ -185,8 +185,7 @@ impl ActorRef {
 }
 /// Exact selected executor and authority epoch, without an authority certificate.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct AuthorityRef {
     executor_id: ExecutorId,
     generation: Generation,
@@ -473,6 +472,21 @@ impl fmt::Debug for CommandContextData {
 mod serialization {
     use super::*;
     use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    fn object<'de, D: Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<T, D::Error> {
+        struct ObjectVisitor<T>(core::marker::PhantomData<T>);
+        impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for ObjectVisitor<T> {
+            type Value = T;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("an object")
+            }
+            fn visit_map<M: serde::de::MapAccess<'de>>(self, map: M) -> Result<T, M::Error> {
+                T::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+            }
+        }
+        d.deserialize_map(ObjectVisitor::<T>(core::marker::PhantomData))
+    }
+
     fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
         d: D,
     ) -> Result<Option<T>, D::Error> {
@@ -488,6 +502,18 @@ mod serialization {
             Self::new(String::deserialize(d)?).map_err(D::Error::custom)
         }
     }
+    impl<'de> Deserialize<'de> for AuthorityRef {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Raw {
+                executor_id: ExecutorId,
+                generation: Generation,
+            }
+            let raw: Raw = object(d)?;
+            Ok(Self::new(raw.executor_id, raw.generation))
+        }
+    }
     impl<'de> Deserialize<'de> for ActorRef {
         fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
             #[derive(Deserialize)]
@@ -500,7 +526,7 @@ mod serialization {
                 #[serde(deserialize_with = "nullable")]
                 grant_id: Option<GrantId>,
             }
-            let raw = Raw::deserialize(d)?;
+            let raw: Raw = object(d)?;
             Ok(Self::new(
                 raw.participant,
                 raw.role,
@@ -519,7 +545,7 @@ mod serialization {
                 coverage: Coverage,
                 missing: Vec<SourceId>,
             }
-            let raw = Raw::deserialize(d)?;
+            let raw: Raw = object(d)?;
             Self::new(raw.digest, raw.sequence, raw.coverage, raw.missing).map_err(D::Error::custom)
         }
     }
@@ -532,7 +558,7 @@ mod serialization {
                 scope: String,
                 expires_at: UnixSeconds,
             }
-            let raw = Raw::deserialize(d)?;
+            let raw: Raw = object(d)?;
             Self::new(raw.intent_digest, raw.scope, raw.expires_at).map_err(D::Error::custom)
         }
     }
@@ -549,7 +575,7 @@ mod serialization {
                 buyer_head: Option<RecordId>,
                 checkpoint: CheckpointRef,
             }
-            let raw = Raw::deserialize(d)?;
+            let raw: Raw = object(d)?;
             Ok(Self::new(
                 raw.order_id,
                 raw.agreement,
@@ -577,7 +603,7 @@ mod serialization {
                 #[serde(deserialize_with = "nullable")]
                 correlation_id: Option<CorrelationId>,
             }
-            let raw = Raw::deserialize(d)?;
+            let raw: Raw = object(d)?;
             Self::new(
                 raw.operation_id,
                 raw.actor,

@@ -40,6 +40,10 @@ numbers embedded in wire and schema contracts.
 Versioned DTOs live below an explicit generation module. The command codec
 implements its fixed v1 profile without exposing automatic serialization of
 captured private commands. Parsed command data supplies no authority or consent.
+Command roots, inquiry/reply inputs, source references and all shared context
+descriptors require objects; positional arrays are refused. The map-only typed
+decoder preserves borrowed input and existing duplicate, unknown-field, explicit
+null, byte/depth and exact canonical command/hash checks.
 The crate root
 does not reexport individual DTOs, so consumers must name the contract version
 they use.

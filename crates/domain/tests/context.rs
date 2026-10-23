@@ -40,6 +40,65 @@ fn context() -> CommandContextData {
     .unwrap()
 }
 
+#[cfg(feature = "serde")]
+#[test]
+fn context_descriptors_require_objects_when_decoded_directly() {
+    fn check<T>(value: T, fields: &[&str])
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
+    {
+        let object = serde_json::to_value(&value).unwrap();
+        assert_eq!(serde_json::from_value::<T>(object.clone()).unwrap(), value);
+        let array = Value::Array(fields.iter().map(|field| object[field].clone()).collect());
+        assert!(serde_json::from_value::<T>(array).is_err());
+    }
+    check(
+        actor(),
+        &["participant", "role", "organization", "grant_id"],
+    );
+    check(context().authority(), &["executor_id", "generation"]);
+    check(checkpoint(), &["digest", "sequence", "coverage", "missing"]);
+    check(
+        Approval::new(
+            ApprovalIntentDigest::from_bytes([6; 32]),
+            "inbox.inquire",
+            UnixSeconds::new(190).unwrap(),
+        )
+        .unwrap(),
+        &["intent_digest", "scope", "expires_at"],
+    );
+    check(
+        ExpectedOrder::new(
+            OrderId::from_bytes([7; 32]),
+            None,
+            Sequence::new(4).unwrap(),
+            None,
+            checkpoint(),
+        ),
+        &[
+            "order_id",
+            "agreement",
+            "seller_sequence",
+            "buyer_head",
+            "checkpoint",
+        ],
+    );
+    check(
+        context(),
+        &[
+            "operation_id",
+            "actor",
+            "workspace_id",
+            "authority",
+            "route_digest",
+            "approval",
+            "expected",
+            "not_after",
+            "correlation_id",
+        ],
+    );
+}
+
 #[test]
 fn exact_integers_never_round_or_accept_numeric_json_coercions() {
     for value in [0, 1, 9_007_199_254_740_993, i64::MAX as u64] {

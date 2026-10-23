@@ -51,6 +51,129 @@ fn inquiry(
     )
     .unwrap()
 }
+
+#[test]
+fn closed_commands_require_objects_at_every_context_and_inquiry_boundary() {
+    use radroots_protocol::command::CapturedCommand;
+
+    let mut base: Value =
+        serde_json::from_slice(inquiry(None, None, "private").protected_wire()).unwrap();
+    base["context"]["approval"] = json!({
+        "intent_digest":"08".repeat(32),"scope":"inbox.inquire","expires_at":"190"
+    });
+    base["context"]["expected"] = json!({
+        "order_id":"09".repeat(32),"agreement":"0a".repeat(32),
+        "seller_sequence":"4","buyer_head":"0b".repeat(32),
+        "checkpoint":{"digest":"0c".repeat(32),"sequence":"4",
+            "coverage":"partial","missing":["0d".repeat(32)]}
+    });
+    base["input"]["source"] = json!({
+        "coordinate":{"kind":30402,"author":bob().to_hex(),"d":"55".repeat(16)},
+        "event_id":"0e".repeat(32)
+    });
+    let wire = serde_json::to_vec(&base).unwrap();
+    CapturedChatCommand::parse(&wire).unwrap();
+    CapturedCommand::parse(&wire).unwrap();
+    let mut accepted = Vec::new();
+    for (pointer, keys) in [
+        ("", &["type", "context", "input"][..]),
+        (
+            "/context",
+            &[
+                "operation_id",
+                "actor",
+                "workspace_id",
+                "authority",
+                "route_digest",
+                "approval",
+                "expected",
+                "not_after",
+                "correlation_id",
+            ][..],
+        ),
+        (
+            "/context/actor",
+            &["participant", "role", "organization", "grant_id"][..],
+        ),
+        ("/context/authority", &["executor_id", "generation"][..]),
+        (
+            "/context/approval",
+            &["intent_digest", "scope", "expires_at"][..],
+        ),
+        (
+            "/context/expected",
+            &[
+                "order_id",
+                "agreement",
+                "seller_sequence",
+                "buyer_head",
+                "checkpoint",
+            ][..],
+        ),
+        (
+            "/context/expected/checkpoint",
+            &["digest", "sequence", "coverage", "missing"][..],
+        ),
+        ("/input", &["thread_id", "peer", "source", "text"][..]),
+        ("/input/source", &["coordinate", "event_id"][..]),
+        ("/input/source/coordinate", &["kind", "author", "d"][..]),
+    ] {
+        let mut value = base.clone();
+        let array = Value::Array(
+            keys.iter()
+                .map(|key| value.pointer(pointer).unwrap()[key].clone())
+                .collect(),
+        );
+        *value.pointer_mut(pointer).unwrap() = array;
+        let raw = serde_json::to_vec(&value).unwrap();
+        if CapturedChatCommand::parse(&raw).is_ok() {
+            accepted.push(format!("chat:{pointer}"));
+        }
+        if CapturedCommand::parse(&raw).is_ok() {
+            accepted.push(format!("dispatch:{pointer}"));
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "object fields accepted positional arrays: {accepted:?}"
+    );
+}
+
+#[test]
+fn closed_reply_input_requires_an_object_without_changing_its_canonical_bytes() {
+    use radroots_protocol::command::CapturedCommand;
+
+    let reply = CapturedChatCommand::reply(
+        context(None, None),
+        ReplyInput::new(
+            ThreadId::from_bytes([6; 32]),
+            bob(),
+            MessageId::from_bytes([11; 32]),
+            "reply",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let mut value: Value = serde_json::from_slice(reply.protected_wire()).unwrap();
+    let parsed = CapturedChatCommand::parse(reply.protected_wire()).unwrap();
+    assert_eq!(parsed.protected_wire(), reply.protected_wire());
+    assert_eq!(parsed.digest(), reply.digest());
+    value["input"] = Value::Array(
+        ["thread_id", "peer", "parent", "text"]
+            .iter()
+            .map(|key| value["input"][key].clone())
+            .collect(),
+    );
+    let raw = serde_json::to_vec(&value).unwrap();
+    assert!(matches!(
+        CapturedChatCommand::parse(&raw),
+        Err(CommandError::InvalidInput)
+    ));
+    assert!(matches!(
+        CapturedCommand::parse(&raw),
+        Err(CommandError::InvalidInput)
+    ));
+}
 #[derive(Deserialize)]
 struct Vectors {
     vectors: Vec<Vector>,

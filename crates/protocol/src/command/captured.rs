@@ -47,7 +47,7 @@ impl CapturedCommand {
             #[serde(rename = "type")]
             kind: String,
         }
-        let header: Header = serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
+        let header: Header = super::parse_object(raw)?;
         if header.kind.len() > 80 {
             return Err(CommandError::LimitExceeded);
         }

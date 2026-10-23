@@ -74,7 +74,7 @@ impl CapturedListingCommand {
             #[serde(borrow)]
             input: &'a serde_json::value::RawValue,
         }
-        let root: Root<'_> = serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
+        let root: Root<'_> = crate::command::parse_object(raw)?;
         if root.kind != "listing.publish" {
             return Err(CommandError::UnsupportedCommand);
         }

@@ -263,19 +263,17 @@ impl CapturedChatCommand {
     /// Parses a bounded closed profile. JSON syntax supplies no grant or consent.
     pub fn parse(raw: &[u8]) -> Result<Self, CommandError> {
         check_frame(raw)?;
-        let root: RawRoot<'_> =
-            serde_json::from_slice(raw).map_err(|_| CommandError::InvalidInput)?;
+        let root: RawRoot<'_> = parse_object(raw)?;
         if root.kind.len() > 80 {
             return Err(CommandError::LimitExceeded);
         }
         match root.kind.as_str() {
             "inbox.inquire" => {
-                let raw: RawInquiry = serde_json::from_str(root.input.get())
-                    .map_err(|_| CommandError::InvalidInput)?;
+                let raw: RawInquiry = parse_object(root.input.get().as_bytes())?;
                 if raw.text.len() > CHAT_MAX_BYTES {
                     return Err(CommandError::LimitExceeded);
                 }
-                let source = raw.source.map(RawSource::validate).transpose()?;
+                let source = raw.source.map(|source| source.0.validate()).transpose()?;
                 Self::new(
                     root.context,
                     Input::Inquire(InquireInput {
@@ -287,8 +285,7 @@ impl CapturedChatCommand {
                 )
             }
             "inbox.reply" => {
-                let raw: RawReply = serde_json::from_str(root.input.get())
-                    .map_err(|_| CommandError::InvalidInput)?;
+                let raw: RawReply = parse_object(root.input.get().as_bytes())?;
                 if raw.text.len() > CHAT_MAX_BYTES {
                     return Err(CommandError::LimitExceeded);
                 }
@@ -411,6 +408,35 @@ pub(crate) fn check_frame(raw: &[u8]) -> Result<(), CommandError> {
     }
     Ok(())
 }
+
+// Require maps without materializing a second JSON tree. The typed decoder
+// still owns duplicate, required-field and unknown-field checks, and borrowed
+// RawValue fields continue to refer to the bounded original frame.
+fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<T, D::Error> {
+    struct ObjectVisitor<T>(core::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for ObjectVisitor<T> {
+        type Value = T;
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("an object")
+        }
+        fn visit_map<M: serde::de::MapAccess<'de>>(self, map: M) -> Result<T, M::Error> {
+            T::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+        }
+    }
+    d.deserialize_map(ObjectVisitor::<T>(core::marker::PhantomData))
+}
+struct MapOnly<T>(T);
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for MapOnly<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        object(d).map(Self)
+    }
+}
+pub(crate) fn parse_object<'de, T: Deserialize<'de>>(raw: &'de [u8]) -> Result<T, CommandError> {
+    serde_json::from_slice::<MapOnly<T>>(raw)
+        .map(|value| value.0)
+        .map_err(|_| CommandError::InvalidInput)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRoot<'a> {
@@ -434,7 +460,7 @@ struct RawInquiry {
     thread_id: ThreadId,
     peer: PublicKey,
     #[serde(deserialize_with = "required_nullable")]
-    source: Option<RawSource>,
+    source: Option<MapOnly<RawSource>>,
     #[serde(deserialize_with = "private_text")]
     text: Zeroizing<String>,
 }
@@ -450,6 +476,7 @@ struct RawReply {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawSource {
+    #[serde(deserialize_with = "object")]
     coordinate: RawCoordinate,
     event_id: SourceId,
 }

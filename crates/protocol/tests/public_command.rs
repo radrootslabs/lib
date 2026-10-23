@@ -35,6 +35,58 @@ fn input() -> Value {
 }
 
 #[test]
+fn public_command_root_and_context_reject_positional_arrays() {
+    let command = CapturedListingCommand::capture(
+        context(),
+        PublishInput::parse(&serde_json::to_vec(&input()).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let base: Value = serde_json::from_slice(command.protected_wire()).unwrap();
+    let mut accepted = Vec::new();
+    for (pointer, keys) in [
+        ("", &["type", "context", "input"][..]),
+        (
+            "/context",
+            &[
+                "operation_id",
+                "actor",
+                "workspace_id",
+                "authority",
+                "route_digest",
+                "approval",
+                "expected",
+                "not_after",
+                "correlation_id",
+            ][..],
+        ),
+        (
+            "/context/actor",
+            &["participant", "role", "organization", "grant_id"][..],
+        ),
+        ("/context/authority", &["executor_id", "generation"][..]),
+    ] {
+        let mut value = base.clone();
+        let array = Value::Array(
+            keys.iter()
+                .map(|key| value.pointer(pointer).unwrap()[key].clone())
+                .collect(),
+        );
+        *value.pointer_mut(pointer).unwrap() = array;
+        let raw = serde_json::to_vec(&value).unwrap();
+        if CapturedListingCommand::parse(&raw).is_ok() {
+            accepted.push(format!("listing:{pointer}"));
+        }
+        if CapturedCommand::parse(&raw).is_ok() {
+            accepted.push(format!("dispatch:{pointer}"));
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "object fields accepted positional arrays: {accepted:?}"
+    );
+}
+
+#[test]
 fn listing_objects_reject_positional_arrays_at_every_struct_boundary() {
     let mut accepted = Vec::new();
     for (pointer, fields) in [
