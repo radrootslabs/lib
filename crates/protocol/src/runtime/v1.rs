@@ -1182,6 +1182,7 @@ impl std::error::Error for Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::borrow::ToOwned;
 
     #[test]
     fn catalog_is_unique_and_preserves_every_v1_operation() {

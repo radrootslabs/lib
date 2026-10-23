@@ -1164,6 +1164,7 @@ pub fn schema_registry() -> Result<Registry, crate::schema::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::string::ToString;
 
     fn request() -> EventRequest {
         EventRequest {

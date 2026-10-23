@@ -372,6 +372,7 @@ impl std::error::Error for Error {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::borrow::ToOwned;
 
     #[test]
     fn catalog_and_schema_registry_validate() {

@@ -412,7 +412,9 @@ pub(crate) fn check_frame(raw: &[u8]) -> Result<(), CommandError> {
 // Require maps without materializing a second JSON tree. The typed decoder
 // still owns duplicate, required-field and unknown-field checks, and borrowed
 // RawValue fields continue to refer to the bounded original frame.
-fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<T, D::Error> {
+pub(crate) fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    d: D,
+) -> Result<T, D::Error> {
     struct ObjectVisitor<T>(core::marker::PhantomData<T>);
     impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for ObjectVisitor<T> {
         type Value = T;

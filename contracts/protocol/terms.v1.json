@@ -1,8 +1,8 @@
 {
   "schema": "radroots.terms.codec.v1",
   "contract_version": 1,
-  "state": "canonical_encoder_contract",
-  "owner": "radroots_protocol::terms::EncodedTerms",
+  "state": "closed_bounded_terms_codec_contract",
+  "owner": "radroots_protocol::terms::{decode, EncodedTerms}",
   "feature": "terms",
   "input": "Validated complete radroots_domain::Terms; all source snapshots and supply commitments remain unauthenticated claims.",
   "content_max_utf8_bytes": 16384,
@@ -33,9 +33,22 @@
     "public_snapshot_serialization": "Only explicitly public product, option and listing-revision snapshots may enter a temporary serde_json Value. Private fulfillment, selected/agreed prices, lot labels and supply risk use the protected writer directly.",
     "retained_bytes": "EncodedTerms fixed object plus retained output buffer capacity; caller input and outer record/rumor allocations remain separate."
   },
+  "decoding": {
+    "entry_point": "radroots_protocol::terms::decode",
+    "max_json_depth": 16,
+    "max_lines": 32,
+    "max_fulfillment_groups": 8,
+    "objects_only": true,
+    "unknown_duplicate_and_missing_fields_rejected": true,
+    "nullable_fields_must_be_present": true,
+    "private_fields_borrow_original_raw_json_until_protected_decoding": true,
+    "private_text_decoded_scratch": "Two-pass count then zeroizing UTF-8 output; explicit JSON escapes and paired UTF-16 surrogates, with no normalization.",
+    "domain_validation": "Every complete line, group, money, price, window, supply commitment and Terms constructor runs; no missing field or snapshot is synthesized.",
+    "caller_input_ownership": "The caller owns original private bytes and their protection; successful structural/domain decoding is not authenticated evidence."
+  },
   "limits": {
     "record_header_cost_included": false,
-    "decoder_or_authenticated_admission_implemented_by_this_contract": false,
+    "authenticated_admission_implemented_by_this_contract": false,
     "structured_record_authoring_enabled": false,
     "consent_or_stock_authority_created": false,
     "runtime_clock_entropy_signer_or_network_allowed": false,

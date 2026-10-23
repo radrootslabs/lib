@@ -13,6 +13,9 @@ pub mod command;
 #[cfg(feature = "terms")]
 pub mod terms;
 
+#[cfg(any(feature = "listing", feature = "terms"))]
+mod listing_values;
+
 /// Pure exact v1 signing-commitment data, without execution authority.
 #[cfg(feature = "intent")]
 pub mod intent;

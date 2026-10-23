@@ -19,6 +19,8 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/profile.rs"),
     include_str!("../src/terms.rs"),
     include_str!("../src/terms/writer.rs"),
+    include_str!("../src/terms/decode.rs"),
+    include_str!("../src/terms/text.rs"),
     include_str!("../src/command.rs"),
     include_str!("../src/nip01.rs"),
     include_str!("../src/intent.rs"),
@@ -27,6 +29,7 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/chat/plan.rs"),
     include_str!("../src/listing.rs"),
     include_str!("../src/listing/input.rs"),
+    include_str!("../src/listing_values.rs"),
     include_str!("../src/listing/command.rs"),
     include_str!("../src/listing/plan.rs"),
     include_str!("../src/plan.rs"),
@@ -38,6 +41,14 @@ fn terms_contract_binds_limits_hash_domain_and_packaged_independent_fixtures() {
     use sha2::{Digest as _, Sha256};
     let contract: serde_json::Value = serde_json::from_str(TERMS_CONTRACT).unwrap();
     assert_eq!(contract["schema"], "radroots.terms.codec.v1");
+    assert_eq!(contract["decoding"]["objects_only"], true);
+    assert_eq!(contract["decoding"]["max_json_depth"], 16);
+    assert_eq!(contract["decoding"]["max_lines"], 32);
+    assert_eq!(contract["decoding"]["max_fulfillment_groups"], 8);
+    assert_eq!(
+        contract["limits"]["authenticated_admission_implemented_by_this_contract"],
+        false
+    );
     assert_eq!(
         contract["content_max_utf8_bytes"],
         radroots_protocol::terms::TERMS_MAX_BYTES

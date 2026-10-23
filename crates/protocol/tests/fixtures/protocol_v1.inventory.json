@@ -7,7 +7,7 @@
     {
       "module": "capability::v1",
       "path": "crates/protocol/src/capability/v1.rs",
-      "sha256": "db2ac595ff4e45652791df49d3e0129afcac57fb568f71c6b7355e083b359ad6",
+      "sha256": "0907e7b4fc9b8d9c38825518c6f6878ae2fd43f9882373efb6f603b88f4f2631",
       "types": [
         {
           "rust_path": "radroots_protocol::capability::v1::Availability",
@@ -104,7 +104,7 @@
     {
       "module": "radrootsd::transport_publish::v5",
       "path": "crates/protocol/src/radrootsd/transport_publish/v5.rs",
-      "sha256": "a562ce9af3fd0e65a31c121c0c73c44a895d45872546c9290c193643b9df8b5b",
+      "sha256": "1ad9ab4b3de960b8a1c02d68f50028419821143dc94a031ccad421b7b65556b6",
       "types": [
         {
           "rust_path": "radroots_protocol::radrootsd::transport_publish::v5::AuthCapabilities",
@@ -203,7 +203,7 @@
     {
       "module": "runtime::v1",
       "path": "crates/protocol/src/runtime/v1.rs",
-      "sha256": "d25db1e8b5beaa017bbed549ccc0ce1a54c34f58de4c636b8a33e6a22b66c17f",
+      "sha256": "e408748d4be7ef7f50dc02f13e1a20c649154d30a970b4cf4df8ce77c26887e4",
       "types": [
         {
           "rust_path": "radroots_protocol::runtime::v1::ApprovalRequirement",

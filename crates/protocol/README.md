@@ -31,7 +31,7 @@ numbers embedded in wire and schema contracts.
 | `radrootsd::transport_publish::v5` | daemon transport-publish request, job, outcome, and capability DTOs |
 | `schema` | schema IDs, module generations, descriptors, and aggregate registries |
 | `profile` | assigned regular commerce kind8890 and replaceable capability kind18890, with closed profile identities; authoring qualification remains pending |
-| `terms` (`terms` feature) | explicit bounded private Terms v1 disclosure and its domain-separated digest; no parser, authenticated consent, stock or signing authority |
+| `terms` (`terms` feature) | bounded closed Terms v1 decoding, explicit protected encoding and domain-separated digest; no authenticated consent, stock or signing authority |
 | `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
 | `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |
@@ -77,7 +77,7 @@ with at most nine tags and19 fields shared by signer and storage admission.
 | `intent` | no | enables pure domain-separated v1 signing commitment data |
 | `chat` | no | enables commands, NIP-01 and the bounded known-kind chat/plan data profile |
 | `listing` | no | enables portable complete listing input and exact public profile/event production |
-| `terms` | no | enables the private canonical Terms encoder over validated domain data, without record authoring |
+| `terms` | no | enables the closed private Terms codec over validated domain data, without record authoring |
 
 Terms encoding preserves complete source snapshots, resolved prices, private
 fulfillment and explicit supply commitments. It counts the escaped UTF-8 output
@@ -88,6 +88,14 @@ record; fitting Terms alone supplies no complete-record or nested-wrap proof.
 `EncodedTerms::protected_wire` is an explicit private disclosure. Its digest and
 redacted diagnostics provide no participant approval, authenticated source,
 reservation or installed agreement.
+
+`terms::decode` admits at most16KiB and depth16, requiring closed objects,
+explicit nullable fields and bounded line/group arrays. It checks duplicates
+before acceptance and runs the shared domain constructors for every value.
+Private text is borrowed from the caller's original frame until explicitly
+decoded into zeroizing buffers; only public snapshots enter temporary JSON
+trees. Decoding a claim establishes no signature, consent or current source
+availability. Callers retain responsibility for protecting original bytes.
 
 The listing producer emits one canonical `radroots.listing` version-1 profile,
 explicit default units and no fabricated price. Paused/withdrawn projections

@@ -11,6 +11,9 @@ use zeroize::Zeroizing;
 
 mod writer;
 use writer::Writer;
+mod decode;
+mod text;
+pub use decode::decode;
 
 /// Private content budget. A complete record additionally includes its header;
 /// fitting this Terms object alone does not prove that a record or rumor fits.

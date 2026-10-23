@@ -1167,3 +1167,4 @@ pub fn radroots_protocol::terms::EncodedTerms::retained_bytes(&self) -> usize
 impl core::fmt::Debug for radroots_protocol::terms::EncodedTerms
 pub fn radroots_protocol::terms::EncodedTerms::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_protocol::terms::TERMS_MAX_BYTES: usize
+pub fn radroots_protocol::terms::decode(&[u8]) -> core::result::Result<radroots_domain::agreement::Terms, radroots_protocol::terms::TermsWireError>
