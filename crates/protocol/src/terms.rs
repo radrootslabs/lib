@@ -9,10 +9,10 @@ use radroots_domain::{
 use sha2::{Digest as _, Sha256};
 use zeroize::Zeroizing;
 
-mod writer;
+pub(crate) mod writer;
 use writer::Writer;
-mod decode;
-mod text;
+pub(crate) mod decode;
+pub(crate) mod text;
 pub use decode::decode;
 
 /// Private content budget. A complete record additionally includes its header;
@@ -99,7 +99,7 @@ impl fmt::Debug for EncodedTerms {
     }
 }
 
-fn money(value: Money, out: &mut Writer) -> Result<(), TermsWireError> {
+pub(crate) fn money(value: Money, out: &mut Writer) -> Result<(), TermsWireError> {
     out.raw("{\"currency\":")?;
     out.string(value.currency().code())?;
     out.raw(",\"exponent\":")?;
@@ -108,7 +108,7 @@ fn money(value: Money, out: &mut Writer) -> Result<(), TermsWireError> {
     out.exact_string(value.minor())?;
     out.raw("}")
 }
-fn window(value: Window, out: &mut Writer) -> Result<(), TermsWireError> {
+pub(crate) fn window(value: Window, out: &mut Writer) -> Result<(), TermsWireError> {
     out.raw("{\"end\":")?;
     out.exact_string(value.end())?;
     out.raw(",\"start\":")?;
@@ -117,7 +117,7 @@ fn window(value: Window, out: &mut Writer) -> Result<(), TermsWireError> {
     out.string(value.timezone().name())?;
     out.raw("}")
 }
-fn encode(value: &Terms, out: &mut Writer) -> Result<(), TermsWireError> {
+pub(crate) fn encode(value: &Terms, out: &mut Writer) -> Result<(), TermsWireError> {
     out.raw("{\"buyer\":")?;
     out.string(&value.buyer().to_hex())?;
     out.raw(",\"cancellation\":")?;

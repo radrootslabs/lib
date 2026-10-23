@@ -9,6 +9,8 @@ const RADROOTSD: &str = include_str!("../src/radrootsd.rs");
 const RUNTIME: &str = include_str!("../src/runtime.rs");
 #[cfg(feature = "terms")]
 const TERMS_CONTRACT: &str = include_str!("../../../contracts/protocol/terms.v1.json");
+#[cfg(feature = "commerce")]
+const COMMERCE_CONTRACT: &str = include_str!("../../../contracts/protocol/commerce.v1.json");
 const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/capability/v1.rs"),
     include_str!("../src/error/v1.rs"),
@@ -21,6 +23,9 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/terms/writer.rs"),
     include_str!("../src/terms/decode.rs"),
     include_str!("../src/terms/text.rs"),
+    include_str!("../src/commerce.rs"),
+    include_str!("../src/commerce/decode.rs"),
+    include_str!("../src/commerce/payload.rs"),
     include_str!("../src/command.rs"),
     include_str!("../src/nip01.rs"),
     include_str!("../src/intent.rs"),
@@ -34,6 +39,96 @@ const VERSIONED_SOURCES: &[&str] = &[
     include_str!("../src/listing/plan.rs"),
     include_str!("../src/plan.rs"),
 ];
+
+#[cfg(feature = "commerce")]
+#[test]
+fn complete_record_contract_binds_closed_families_limits_and_independent_fixtures() {
+    use sha2::{Digest as _, Sha256};
+    let contract: serde_json::Value = serde_json::from_str(COMMERCE_CONTRACT).unwrap();
+    assert_eq!(contract["schema"], "radroots.commerce.codec.v1");
+    assert_eq!(
+        contract["content_max_utf8_bytes"],
+        radroots_protocol::commerce::RECORD_MAX_BYTES
+    );
+    assert_eq!(
+        contract["carrier_kind"],
+        radroots_protocol::profile::COMMERCE_KIND
+    );
+    assert_eq!(
+        contract["record_id"]["domain_utf8_with_terminal_nul"],
+        "radroots.record.v1\0"
+    );
+    assert_eq!(
+        contract["limits"]["structured_rumor_authoring_enabled"],
+        false
+    );
+    assert_eq!(
+        contract["carrier_matching"]["creates_authenticated_capability"],
+        false
+    );
+    let fixture_bytes = include_bytes!("fixtures/commerce_wire.v1.json");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(fixture_bytes)),
+        contract["independent_vectors"]["sha256"]
+    );
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(include_bytes!("support/commerce_wire_oracle.mjs"))
+        ),
+        contract["independent_vectors"]["producer_sha256"]
+    );
+    assert_eq!(
+        format!(
+            "{:x}",
+            Sha256::digest(include_bytes!("fixtures/terms_wire.v1.json"))
+        ),
+        contract["independent_vectors"]["source_terms_fixture_sha256"]
+    );
+    let fixture: serde_json::Value = serde_json::from_slice(fixture_bytes).unwrap();
+    let required: BTreeSet<_> = contract["header_required_fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(required.len(), 14);
+    assert_eq!(
+        contract["payload_required_fields"]
+            .as_object()
+            .unwrap()
+            .len(),
+        19
+    );
+    for row in fixture["vectors"].as_array().unwrap() {
+        let value: serde_json::Value = serde_json::from_str(row["wire"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            value
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            required
+        );
+        let fields: BTreeSet<_> = contract["payload_required_fields"]
+            [row["type"].as_str().unwrap()]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+        assert_eq!(
+            value["payload"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            fields
+        );
+    }
+}
 
 #[cfg(feature = "terms")]
 #[test]
@@ -112,7 +207,8 @@ fn manifest_has_approved_data_only_features_and_dependencies() {
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
         BTreeSet::from([
-            "chat", "commands", "default", "intent", "listing", "nip01", "serde", "std", "terms"
+            "chat", "commands", "commerce", "default", "intent", "listing", "nip01", "serde",
+            "std", "terms"
         ])
     );
     assert_eq!(
@@ -141,6 +237,7 @@ fn crate_root_exposes_only_the_approved_versioned_skeleton() {
             "capability",
             "chat",
             "command",
+            "commerce",
             "error",
             "event",
             "nip01",

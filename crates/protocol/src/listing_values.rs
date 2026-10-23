@@ -82,7 +82,7 @@ impl RawQuantity {
 enum Contents {
     Fixed { quantity: RawQuantity },
     Estimated { quantity: RawQuantity },
-    Unspecified,
+    Unspecified {},
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -93,7 +93,7 @@ enum RawPrice {
         discount_bps: u16,
         tiers: Vec<RawTier>,
     },
-    QuoteRequired,
+    QuoteRequired {},
     VariableWeight {
         measurement_unit: Measure,
         minimum_per_sale_unit: PositiveDecimal,
@@ -112,7 +112,7 @@ struct RawTier {
 impl RawPrice {
     fn domain(self) -> Result<Price, CommandError> {
         match self {
-            Self::QuoteRequired => Ok(Price::QuoteRequired),
+            Self::QuoteRequired {} => Ok(Price::QuoteRequired),
             Self::Fixed {
                 rate,
                 basis,
@@ -148,7 +148,7 @@ impl RawPrice {
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 enum RawSupply {
-    Unknown,
+    Unknown {},
     Available {
         amount: Decimal,
     },
@@ -196,7 +196,7 @@ impl OptionInput {
                     Contents::Estimated { quantity } => ContentMeasure::Estimated {
                         quantity: quantity.domain()?,
                     },
-                    Contents::Unspecified => ContentMeasure::Unspecified,
+                    Contents::Unspecified {} => ContentMeasure::Unspecified,
                 };
                 invalid(SaleUnit::package(&label, contents))?
             }
@@ -209,7 +209,7 @@ impl OptionInput {
             self.minimum,
             self.price.domain()?,
             match self.supply {
-                RawSupply::Unknown => Supply::Unknown,
+                RawSupply::Unknown {} => Supply::Unknown,
                 RawSupply::Available { amount } => Supply::Available { amount },
                 RawSupply::Estimated { amount, window } => Supply::Estimated {
                     amount,

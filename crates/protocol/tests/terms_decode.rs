@@ -33,6 +33,32 @@ fn profile_keys_require_the_approved_lowercase_spelling() {
         "noncanonical profile keys accepted: {accepted:?}"
     );
 }
+
+#[test]
+fn empty_tagged_snapshot_alternatives_reject_extra_fields() {
+    let original = example(2);
+    let mut accepted = Vec::new();
+    for path in [
+        "/lines/0/option/price",
+        "/lines/0/option/supply",
+        "/lines/0/option/unit/contents",
+    ] {
+        let mut value = original.clone();
+        value
+            .pointer_mut(path)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert("unexpected".into(), Value::Null);
+        if decode(&bytes(&value)).is_ok() {
+            accepted.push(path);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "unknown fields accepted by empty tagged alternatives: {accepted:?}"
+    );
+}
 fn example(index: usize) -> Value {
     serde_json::from_str(fixtures()["vectors"][index]["wire"].as_str().unwrap()).unwrap()
 }

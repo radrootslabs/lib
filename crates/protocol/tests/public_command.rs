@@ -58,6 +58,43 @@ fn profile_keys_require_canonical_spelling_in_public_input_and_command_dispatch(
 }
 
 #[test]
+fn empty_tagged_public_snapshot_alternatives_never_discard_unknown_fields() {
+    let mut base = input();
+    base["profile"]["options"][0]["supply"] = json!({"type":"unknown"});
+    let command = CapturedListingCommand::capture(
+        context(),
+        PublishInput::parse(&serde_json::to_vec(&base).unwrap()).unwrap(),
+    )
+    .unwrap();
+    let wire: Value = serde_json::from_slice(command.protected_wire()).unwrap();
+    for path in [
+        "/profile/options/0/price",
+        "/profile/options/0/supply",
+        "/profile/options/0/unit/contents",
+    ] {
+        let mut altered = base.clone();
+        altered
+            .pointer_mut(path)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert("unexpected".into(), Value::Null);
+        assert!(
+            PublishInput::parse(&serde_json::to_vec(&altered).unwrap()).is_err(),
+            "{path}"
+        );
+        let mut changed = wire.clone();
+        changed["input"] = altered;
+        let raw = serde_json::to_vec(&changed).unwrap();
+        assert!(
+            CapturedListingCommand::parse(&raw).is_err(),
+            "command {path}"
+        );
+        assert!(CapturedCommand::parse(&raw).is_err(), "dispatcher {path}");
+    }
+}
+
+#[test]
 fn public_command_root_and_context_reject_positional_arrays() {
     let command = CapturedListingCommand::capture(
         context(),

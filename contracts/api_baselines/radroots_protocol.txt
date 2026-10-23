@@ -223,6 +223,36 @@ pub const fn radroots_protocol::command::ReplyInput::thread_id(&self) -> radroot
 impl core::fmt::Debug for radroots_protocol::command::ReplyInput
 pub fn radroots_protocol::command::ReplyInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_protocol::command::COMMAND_MAX_BYTES: usize
+pub mod radroots_protocol::commerce
+#[non_exhaustive] pub enum radroots_protocol::commerce::RecordWireError
+pub radroots_protocol::commerce::RecordWireError::CarrierMismatch
+pub radroots_protocol::commerce::RecordWireError::IdentityMismatch
+pub radroots_protocol::commerce::RecordWireError::InvalidInput
+pub radroots_protocol::commerce::RecordWireError::LimitExceeded
+pub radroots_protocol::commerce::RecordWireError::UnsupportedProfile
+impl core::convert::From<radroots_protocol::terms::TermsWireError> for radroots_protocol::commerce::RecordWireError
+pub fn radroots_protocol::commerce::RecordWireError::from(radroots_protocol::terms::TermsWireError) -> Self
+impl core::error::Error for radroots_protocol::commerce::RecordWireError
+impl core::fmt::Display for radroots_protocol::commerce::RecordWireError
+pub fn radroots_protocol::commerce::RecordWireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::commerce::DecodedRecord
+impl radroots_protocol::commerce::DecodedRecord
+pub fn radroots_protocol::commerce::DecodedRecord::check_rumor_fields(&self, radroots_identity::key::PublicKey, u64, u16) -> core::result::Result<(), radroots_protocol::commerce::RecordWireError>
+pub const fn radroots_protocol::commerce::DecodedRecord::content(&self) -> &radroots_domain::commerce::CommerceContent
+pub const fn radroots_protocol::commerce::DecodedRecord::record_id(&self) -> radroots_domain::identifier::RecordId
+impl core::fmt::Debug for radroots_protocol::commerce::DecodedRecord
+pub fn radroots_protocol::commerce::DecodedRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::commerce::EncodedRecord
+impl radroots_protocol::commerce::EncodedRecord
+pub fn radroots_protocol::commerce::EncodedRecord::capture(&radroots_domain::commerce::CommerceContent) -> core::result::Result<Self, radroots_protocol::commerce::RecordWireError>
+pub fn radroots_protocol::commerce::EncodedRecord::check_rumor_fields(&self, radroots_identity::key::PublicKey, u64, u16) -> core::result::Result<(), radroots_protocol::commerce::RecordWireError>
+pub fn radroots_protocol::commerce::EncodedRecord::protected_wire(&self) -> &[u8]
+pub const fn radroots_protocol::commerce::EncodedRecord::record_id(&self) -> radroots_domain::identifier::RecordId
+pub fn radroots_protocol::commerce::EncodedRecord::retained_bytes(&self) -> usize
+impl core::fmt::Debug for radroots_protocol::commerce::EncodedRecord
+pub fn radroots_protocol::commerce::EncodedRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_protocol::commerce::RECORD_MAX_BYTES: usize
+pub fn radroots_protocol::commerce::decode(&[u8]) -> core::result::Result<radroots_protocol::commerce::DecodedRecord, radroots_protocol::commerce::RecordWireError>
 pub mod radroots_protocol::error
 pub mod radroots_protocol::error::v1
 pub enum radroots_protocol::error::v1::Class
@@ -1155,6 +1185,8 @@ pub mod radroots_protocol::terms
 pub radroots_protocol::terms::TermsWireError::InvalidInput
 pub radroots_protocol::terms::TermsWireError::LimitExceeded
 pub radroots_protocol::terms::TermsWireError::UnsupportedProfile
+impl core::convert::From<radroots_protocol::terms::TermsWireError> for radroots_protocol::commerce::RecordWireError
+pub fn radroots_protocol::commerce::RecordWireError::from(radroots_protocol::terms::TermsWireError) -> Self
 impl core::error::Error for radroots_protocol::terms::TermsWireError
 impl core::fmt::Display for radroots_protocol::terms::TermsWireError
 pub fn radroots_protocol::terms::TermsWireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

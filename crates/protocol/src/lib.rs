@@ -13,6 +13,10 @@ pub mod command;
 #[cfg(feature = "terms")]
 pub mod terms;
 
+/// Complete private record data, canonical identity and explicit carrier matching.
+#[cfg(feature = "commerce")]
+pub mod commerce;
+
 #[cfg(any(feature = "listing", feature = "terms"))]
 mod listing_values;
 

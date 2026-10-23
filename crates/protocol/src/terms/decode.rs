@@ -69,7 +69,7 @@ fn parse<'a, T: Deserialize<'a>>(raw: &'a RawValue) -> Result<T, TermsWireError>
 
 // Retain only bounded references into the caller's already byte/depth-bounded
 // frame. An excessive element is ignored without constructing its value.
-struct RawArray<'a, const N: usize>(Vec<&'a RawValue>);
+pub(crate) struct RawArray<'a, const N: usize>(pub(crate) Vec<&'a RawValue>);
 impl<'de: 'a, 'a, const N: usize> Deserialize<'de> for RawArray<'a, N> {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         struct ArrayVisitor<'a, const N: usize>(PhantomData<&'a ()>);
@@ -191,7 +191,7 @@ struct RawMoney<'a> {
     minor: &'a RawValue,
     exponent: u8,
 }
-fn money(raw: &RawValue) -> Result<Money, TermsWireError> {
+pub(crate) fn money(raw: &RawValue) -> Result<Money, TermsWireError> {
     let value: RawMoney<'_> = parse(raw)?;
     let code = text::decode(value.currency.get(), 3)?;
     let minor = text::decode(value.minor.get(), 15)?;
@@ -324,7 +324,7 @@ struct RawWindow<'a> {
     #[serde(borrow)]
     timezone: &'a RawValue,
 }
-fn window(raw: &RawValue) -> Result<Window, TermsWireError> {
+pub(crate) fn window(raw: &RawValue) -> Result<Window, TermsWireError> {
     let value: RawWindow<'_> = parse(raw)?;
     let zone = text::decode(value.timezone.get(), 80)?;
     invalid(Window::new(

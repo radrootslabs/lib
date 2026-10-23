@@ -32,6 +32,7 @@ numbers embedded in wire and schema contracts.
 | `schema` | schema IDs, module generations, descriptors, and aggregate registries |
 | `profile` | assigned regular commerce kind8890 and replaceable capability kind18890, with closed profile identities; authoring qualification remains pending |
 | `terms` (`terms` feature) | bounded closed Terms v1 decoding, explicit protected encoding and domain-separated digest; no authenticated consent, stock or signing authority |
+| `commerce` (`commerce` feature) | complete closed record data, canonical RecordId and exact final carrier-field matching; no authenticated ingress or issuing authority |
 | `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
 | `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |
@@ -78,6 +79,7 @@ with at most nine tags and19 fields shared by signer and storage admission.
 | `chat` | no | enables commands, NIP-01 and the bounded known-kind chat/plan data profile |
 | `listing` | no | enables portable complete listing input and exact public profile/event production |
 | `terms` | no | enables the closed private Terms codec over validated domain data, without record authoring |
+| `commerce` | no | enables all nineteen complete record families, their closed codec and canonical identity over Terms data |
 
 Terms encoding preserves complete source snapshots, resolved prices, private
 fulfillment and explicit supply commitments. It counts the escaped UTF-8 output
@@ -100,6 +102,18 @@ Profile public keys must match the identity library's canonical lowercase
 spelling. The general identity parser remains case insensitive; profile input
 does not silently normalize an uppercase participant, organization, peer,
 listing author or product producer.
+
+The commerce codec counts the complete header, record ID and payload against
+the16KiB private content limit. Its record identity is
+`SHA256("radroots.record.v1\0" || JCS(complete content without record_id))`.
+The temporary protected hash preimage is dropped before final wire allocation.
+All nineteen families retain complete data and exact causal references; parsing
+checks every domain constructor and recomputes the content identity. Unknown
+profile/version/type is classified before interpreting a known payload.
+`check_rumor_fields` compares the final kind, author and time claims. Callers
+must separately authenticate the complete wrap/seal/rumor and recipient, prove
+history/authority/consent and check enclosing byte budgets before issuing or
+installing anything. These data APIs enable no structured send or stock effect.
 
 The listing producer emits one canonical `radroots.listing` version-1 profile,
 explicit default units and no fabricated price. Paused/withdrawn projections

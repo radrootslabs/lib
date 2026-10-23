@@ -5,30 +5,30 @@ use serde::Serialize;
 use serde_json::Value;
 use zeroize::{Zeroize as _, Zeroizing};
 
-pub(super) struct Writer {
+pub(crate) struct Writer {
     length: usize,
     output: Option<Zeroizing<String>>,
 }
 impl Writer {
-    pub(super) const fn counting() -> Self {
+    pub(crate) const fn counting() -> Self {
         Self {
             length: 0,
             output: None,
         }
     }
-    pub(super) fn emitting(length: usize) -> Self {
+    pub(crate) fn emitting(length: usize) -> Self {
         Self {
             length: 0,
             output: Some(Zeroizing::new(String::with_capacity(length))),
         }
     }
-    pub(super) const fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.length
     }
-    pub(super) fn finish(self) -> Result<Zeroizing<String>, TermsWireError> {
+    pub(crate) fn finish(self) -> Result<Zeroizing<String>, TermsWireError> {
         self.output.ok_or(TermsWireError::InvalidInput)
     }
-    pub(super) fn raw(&mut self, value: &str) -> Result<(), TermsWireError> {
+    pub(crate) fn raw(&mut self, value: &str) -> Result<(), TermsWireError> {
         let length = self
             .length
             .checked_add(value.len())
@@ -40,7 +40,7 @@ impl Writer {
         self.length = length;
         Ok(())
     }
-    pub(super) fn string(&mut self, value: &str) -> Result<(), TermsWireError> {
+    pub(crate) fn string(&mut self, value: &str) -> Result<(), TermsWireError> {
         self.raw("\"")?;
         const HEX: &[u8; 16] = b"0123456789abcdef";
         for ch in value.chars() {
@@ -78,15 +78,15 @@ impl Writer {
         }
         self.raw("\"")
     }
-    pub(super) fn exact_string(&mut self, value: impl fmt::Display) -> Result<(), TermsWireError> {
+    pub(crate) fn exact_string(&mut self, value: impl fmt::Display) -> Result<(), TermsWireError> {
         self.raw("\"")?;
         write!(self, "{value}").map_err(|_| TermsWireError::LimitExceeded)?;
         self.raw("\"")
     }
-    pub(super) fn integer(&mut self, value: u16) -> Result<(), TermsWireError> {
+    pub(crate) fn integer(&mut self, value: u16) -> Result<(), TermsWireError> {
         write!(self, "{value}").map_err(|_| TermsWireError::LimitExceeded)
     }
-    pub(super) fn optional_string(&mut self, value: Option<&str>) -> Result<(), TermsWireError> {
+    pub(crate) fn optional_string(&mut self, value: Option<&str>) -> Result<(), TermsWireError> {
         match value {
             Some(value) => self.string(value),
             None => self.raw("null"),
@@ -95,7 +95,7 @@ impl Writer {
     // Only explicitly public listing snapshots enter this temporary JSON tree.
     // Private fulfillment, lot labels, agreed prices and risk disclosures use
     // the bounded zeroizing writer directly.
-    pub(super) fn public_snapshot<T: Serialize>(
+    pub(crate) fn public_snapshot<T: Serialize>(
         &mut self,
         value: &T,
     ) -> Result<(), TermsWireError> {

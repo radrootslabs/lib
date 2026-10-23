@@ -1,0 +1,188 @@
+{
+  "schema": "radroots.commerce.codec.v1",
+  "contract_version": 1,
+  "state": "closed_canonical_data_codec_contract",
+  "feature": "commerce",
+  "profile": "radroots.commerce",
+  "profile_version": 1,
+  "carrier_kind": 8890,
+  "content_max_utf8_bytes": 16384,
+  "json_max_depth": 16,
+  "header_required_fields": [
+    "profile",
+    "version",
+    "type",
+    "record_id",
+    "thread_id",
+    "order_id",
+    "author",
+    "buyer",
+    "seller",
+    "created_at",
+    "author_sequence",
+    "author_previous",
+    "parents",
+    "payload"
+  ],
+  "payload_required_fields": {
+    "quote": [
+      "terms",
+      "expires_at",
+      "in_reply_to"
+    ],
+    "request": [
+      "terms",
+      "expires_at",
+      "quote"
+    ],
+    "decline": [
+      "request",
+      "reason"
+    ],
+    "terms_proposed": [
+      "base_agreement",
+      "terms",
+      "expires_at",
+      "reason"
+    ],
+    "terms_authorized": [
+      "proposal",
+      "terms_digest",
+      "expires_at"
+    ],
+    "terms_rejected": [
+      "proposal",
+      "reason"
+    ],
+    "agreement_committed": [
+      "base_agreement",
+      "authorization",
+      "terms_digest",
+      "authority",
+      "seller_sequence"
+    ],
+    "withdrawal_requested": [
+      "authorization",
+      "reason"
+    ],
+    "withdrawal_acknowledged": [
+      "withdrawal",
+      "seller_sequence"
+    ],
+    "cancellation_proposed": [
+      "agreement",
+      "residual",
+      "reason",
+      "expires_at"
+    ],
+    "cancellation_authorized": [
+      "proposal",
+      "expires_at"
+    ],
+    "residual_released": [
+      "proposal",
+      "authorization",
+      "agreement",
+      "residual",
+      "authority",
+      "seller_sequence"
+    ],
+    "ready": [
+      "agreement",
+      "fulfillment_group",
+      "lines",
+      "window"
+    ],
+    "handover": [
+      "agreement",
+      "fulfillment_group",
+      "lines",
+      "measurements",
+      "occurred_at",
+      "authority",
+      "seller_sequence"
+    ],
+    "receipt": [
+      "handover",
+      "lines",
+      "supersedes",
+      "occurred_at",
+      "note"
+    ],
+    "issue": [
+      "code",
+      "description",
+      "lines",
+      "source_records"
+    ],
+    "resolution_proposed": [
+      "agreement",
+      "resolution",
+      "expires_at"
+    ],
+    "resolution_authorized": [
+      "proposal",
+      "expires_at"
+    ],
+    "resolution_committed": [
+      "proposal",
+      "authorization",
+      "authority",
+      "seller_sequence"
+    ]
+  },
+  "canonicalization": "RFC8785 subset over complete closed data; ASCII schema keys, exact scalar strings, safe unsigned numeric schema fields, unchanged Unicode and semantic array order.",
+  "record_id": {
+    "algorithm": "SHA-256",
+    "domain_utf8_with_terminal_nul": "radroots.record.v1\u0000",
+    "preimage": "domain || canonical complete content excluding record_id",
+    "is_rumor_or_envelope_id": false
+  },
+  "decoding": {
+    "objects_only": true,
+    "duplicate_unknown_and_missing_fields_rejected": true,
+    "nullable_fields_must_be_present": true,
+    "max_parents": 8,
+    "profile_identified_before_known_payload_interpretation": true,
+    "unknown_profile_version_or_type": "UnsupportedProfile; caller retains bounded original protected bytes.",
+    "value_validation": "Every header, complete family payload and CommerceContent constructor executes; this checks self-contained claims, not authenticated history or installed state.",
+    "empty_tagged_snapshots": "quote_required price, unknown supply and unspecified contents use closed empty wire arms; extra fields are rejected."
+  },
+  "retention": {
+    "count_complete_header_id_and_payload_before_private_allocation": true,
+    "preimage_and_final_wire_zeroizing": true,
+    "drop_hash_preimage_before_final_output_allocation": true,
+    "automatic_private_serialize_or_clone": false,
+    "caller_owns_original_private_bytes": true,
+    "private_payload_in_temporary_json_trees": false,
+    "public_snapshot_exception": "Only explicitly public listing product/option/revision snapshots use temporary JSON trees.",
+    "retained_bytes": "EncodedRecord fixed object plus retained private buffer capacity; caller domain input and enclosing rumor/seal/wrap allocations are separate."
+  },
+  "carrier_matching": {
+    "fields": [
+      "kind",
+      "author",
+      "created_at"
+    ],
+    "exact": true,
+    "is_signature_or_recipient_verification": false,
+    "creates_authenticated_capability": false
+  },
+  "independent_vectors": {
+    "path": "crates/protocol/tests/fixtures/commerce_wire.v1.json",
+    "sha256": "0d0342f2de38a7f5b31f9d650d91940a3423b0e10a80eec923fdeb1e7b8aac07",
+    "producer_path": "crates/protocol/tests/support/commerce_wire_oracle.mjs",
+    "producer_sha256": "f375040af69b78bee5176c04fc8f134dba0af63c90b3b6f8328a05a50576bf03",
+    "source_terms_fixture": "crates/protocol/tests/fixtures/terms_wire.v1.json",
+    "source_terms_fixture_sha256": "f9a73f25cdb590d5e2edb1a960f449fa0d4dc85959369616d88f776ef0a5e0c7",
+    "scope": "39 independently produced complete record byte/hash vectors for all19 families, nullable/previous/line-and-measurement-order/unit/issue alternatives and exact16KiB, plus valid-shape16385-byte rejection."
+  },
+  "limits": {
+    "structured_rumor_authoring_enabled": false,
+    "authenticated_ingress_implemented": false,
+    "nested_crypto_or_recipient_binding_qualified": false,
+    "consent_stock_history_or_physical_truth_established": false,
+    "complete_rumor_seal_wrap_cost_included": false,
+    "runtime_clock_entropy_signer_network_or_storage_allowed": false
+  }
+}

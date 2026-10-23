@@ -3,7 +3,7 @@ use super::TermsWireError;
 use alloc::string::String;
 use zeroize::Zeroizing;
 
-pub(super) fn decode(raw: &str, maximum_chars: usize) -> Result<Zeroizing<String>, TermsWireError> {
+pub(crate) fn decode(raw: &str, maximum_chars: usize) -> Result<Zeroizing<String>, TermsWireError> {
     let mut bytes = 0usize;
     let mut count = 0usize;
     visit(raw, |ch| {
