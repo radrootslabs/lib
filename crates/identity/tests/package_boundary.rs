@@ -26,7 +26,7 @@ fn manifest_has_exact_features_and_dependencies() {
     assert!(MANIFEST.contains("std = [\"thiserror/std\"]"));
     assert!(MANIFEST.contains("serde = [\"dep:serde\"]"));
     assert!(MANIFEST.contains(
-        "k256 = { version = \"0.13\", default-features = false, features = [\"arithmetic\"] }"
+        "k256 = { version = \"0.14\", default-features = false, features = [\"arithmetic\"] }"
     ));
     assert!(MANIFEST.contains("serde = { workspace = true, optional = true }"));
     assert!(MANIFEST.contains("thiserror = { version = \"2\", default-features = false }"));

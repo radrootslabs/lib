@@ -37,7 +37,7 @@ std = ["thiserror/std"]
 serde = ["dep:serde"]
 
 [dependencies]
-k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
+k256 = { version = "0.14", default-features = false, features = ["arithmetic"] }
 serde = { workspace = true, optional = true }
 thiserror = { version = "2", default-features = false }
 

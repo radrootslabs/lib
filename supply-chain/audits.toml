@@ -40,10 +40,22 @@ version = "0.17.0"
 notes = "Reviewed the complete native production modules, message/socket conversions, manifest and selected SDK WebSocket SPI, plus browser actor/stream ownership. Native errors and sink/stream polling delegate to Tokio/Tungstenite; no new unsafe Send wrapper is introduced. The Radroots adapter supplies its own DNS/address/TLS policy, exact wire-identifier admission, configured connection deadline, fixed frame bounds and metered ingress, so default proxy/SOCKS dialing is not admitted. Both native loopback suites exercise the actual composition. The new browser actor uses unbounded channels; it is not admitted as the bounded Radroots browser implementation. This focused automated native-use review does not qualify those browser queues or unrestricted default dialing."
 
 [[audits.autocfg]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "1.5.1"
+notes = "Reviewed the existing source-review record, dependency-free manifest and num-traits build.rs call site. The build-only probe compiles a fixed total_cmp expression with the governed compiler; no runtime algorithm, randomness or key material is introduced. This same-version criterion extension inherits the recorded probing review and existing baseline exemption. It does not authorize attacker-supplied compiler snippets. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.autocfg]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 version = "1.5.1"
 notes = "Reviewed the complete production sources and the published 1.5.0 -> 1.5.1 delta. This build-only helper accepts trusted build-script snippets and compiler/wrapper/flag inputs, invokes Command without a shell, checks the output directory, writes compiler IR there and removes only its generated probe path. Version/IO/process failures remain errors; it has no runtime network parser. The release changes the wrapper test harness, not production probing. Current Rust 1.99 compilation executes the selected build dependency. This automated review assumes governed compiler/build inputs and is not an independent audit or permission to compile untrusted network text."
+
+[[audits.base16ct]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "1.0.0"
+notes = "Reviewed the no_std feature boundary, decoded-length and decode_inner implementations. Decoding requires even input length and a sufficiently large destination, accumulates invalid-nibble errors and returns a bounded slice. Identity uses its own exact-size public hexadecimal admission and calls k256 with bytes, not this package's text API. No key generation or entropy source is selected by that call. Constant-time descriptions remain best effort, with public input length observable. This is automated single-owner source review, not an independent full-crate audit."
 
 [[audits.bech32]]
 who = "Codex (automated single-owner source review)"
@@ -93,11 +105,47 @@ criteria = "network-parser-reviewed"
 version = "0.10.2"
 notes = "Reviewed manifest and feature selection, fixed-size state/seed and RNG entry points and CPU-dispatch boundaries. This optional rand software-generator dependency is absent from both selected native graphs: the SDK selects SysRng, not StdRng/ThreadRng or this package's cipher/RNG APIs. The package owns no network parser; its internal cipher constructors require trusted fixed key/nonce sizes. This automated review admits the inactive dependency in the current macOS/Linux composition only, and does not independently certify a new stream-cipher algorithm, optional RNG state serialization, architecture backend or secret lifecycle."
 
+[[audits.cmov]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.5.4"
+notes = "Reviewed backend selection and the aarch64 CSEL, x86 CMOV and portable mask-selection implementations. Native inline assembly uses register operands with nomem/nostack; the portable backend explicitly documents compiler-dependent branch limitations. This supports fixed-width selection in the selected public-key parser. It is not proof of compiler output, a universal side-channel guarantee, or qualification of secret operations on every architecture. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.const-oid]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.10.2"
+notes = "Reviewed the no_std/deny-unsafe boundary and bounded ObjectIdentifier construction, fallible byte admission and default 39-byte storage. Its new inherited criterion belongs to the SEC1/DER type graph; identity supplies a fixed 33-byte compressed point and never parses an OID or private-key document. No randomness or secret owner is introduced. General ASN.1/BER admission is outside this public-key use review. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.cpubits]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.1.1"
+notes = "Reviewed the macro selector and target overrides. It chooses fixed 32/64-bit arithmetic backends at compile time, including the explicit wasm32 promotion to 64-bit arithmetic; no runtime feature input, entropy or key material is involved. Governed builds do not supply a cpubits override. Native and wasm32 identity checks exercise the selected configurations. This does not qualify unsupported 16-bit or arbitrary overridden configurations. This is automated single-owner source review, not an independent full-crate audit."
+
 [[audits.cpufeatures]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 delta = "0.2.17 -> 0.3.0"
 notes = "Reviewed the complete production release delta and manifest: trusted CPU detection tokens gain initialization helpers; Apple sysctl reads retain fixed-size outputs and null write arguments; x86 adds CPUID leaf 7 subleaf 1 feature bits; LoongArch feature detection combines CPUCFG and OS capability bits. No network text, collection lengths, parser or writable system setting is introduced. The 0.3 dependency belongs to an optional software RNG edge absent from the current native feature graphs. This automated delta review inherits the existing 0.2.17 exemption and does not qualify cryptographic algorithms or execute the changed optional architecture paths."
+
+[[audits.crypto-bigint]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.7.6"
+notes = "Reviewed the selected fixed-width comparison, limb subtraction/word primitives, fixed safegcd inversion and its constant-time versus explicitly variable-time entry points, plus the 0.7.6 correction scope. Comparison scans the public limb count; subtraction delegates to ctutils borrow primitives; fixed inversion runs a precision-derived iteration count and returns invertibility through CtOption. The release removes the affected 0.5.5/0.7.5 selections identified by RUSTSEC-2026-0387. Identity admits public points only; retained X448 remains behind its existing adapter and independent RFC7748 vectors. This focused use review is not a complete review of the 0.5-to-0.7 rewrite, arbitrary dynamic integers, all arithmetic methods or generated-code timing proof. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.crypto-common]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.2.2"
+notes = "Reviewed the no_std/forbid-unsafe boundary, fixed-size key/IV traits and Generate implementations. Generation requires a caller-supplied TryCryptoRng, propagates failure and only enables ambient SysRng behind getrandom. Identity's arithmetic-only parser invokes neither generation nor key/IV initialization and adds no entropy source. This same-version inherited criterion does not certify arbitrary caller-provided RNGs or optional encryption implementations. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.ctutils]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.4.5"
+notes = "Reviewed the complete 0.4.4 -> 0.4.5 Rust/manifest delta. Comparison helpers preserve bitwise predicates, borrow subtraction uses a full-width black_box barrier, and leading/trailing-zero operations use advertised native instructions or a fixed-stage fallback. Architecture workarounds are explicitly gated; addition and subtraction return Choice carry/borrow predicates. Boundary and differential regressions are present upstream. The selected identity path processes public values; no compiler-output constant-time proof or unexecuted architecture/runtime claim is made. This is automated single-owner source review, not an independent full-crate audit."
 
 [[audits.defmt]]
 who = "Codex (automated single-owner source review)"
@@ -123,17 +171,53 @@ criteria = "network-parser-reviewed"
 version = "1.1.0"
 notes = "Reviewed all production parsing modules: format fragments, type names, display hints, array/range integers, brace admission and argument consistency. Parsing follows UTF-8 character boundaries and reports malformed types/ranges/braces. Argument indices control vector resizing and index-plus-one arithmetic, so this parser is unsuitable for untrusted network input without separate input/index bounds. The only relevant dependency route is optional compile-time defmt macros with trusted literals, and both selected native graphs exclude it. This automated inactive-use review supplies no runtime parser/resource qualification or permission to route network strings through this API."
 
+[[audits.der]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.8.2"
+notes = "Reviewed the feature boundary, Reader completion and SliceReader construction, nested limits, checked cursor advancement and failed-state handling. These bounds reject incomplete/trailing input rather than returning partial documents. Identity passes SEC1 point bytes and invokes no DER/private-key decoder; this same-version dependency criterion is scoped to that inactive decoding surface in the identity composition. It does not qualify arbitrary recursive documents, BER mode, encrypted keys or all workspace consumers. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.ed448-goldilocks]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "safe-to-deploy"
+version = "0.14.0-pre.15"
+notes = "Reviewed the complete pre.13 -> pre.15 Rust/manifest delta and the selected Montgomery ladder entry. The compatibility update explicitly preserves Ed448 little-endian field encoding and adapts batch normalization to in-place zero-skipping inversion. Montgomery multiplication retains its fixed 448-step conditional-swap ladder. Radroots selects X448 through the existing adapter; the independent RFC7748 section 5.2 vectors and retained Simplex cases pass. Unused Decaf encoding, Edwards signing and Montgomery-to-Edwards conversion are not qualified by this focused update review; the latter remains an upstream todo outside the admitted path. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.elliptic-curve]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.14.1"
+notes = "Reviewed the complete rc.35 -> 0.14.1 delta, checked public-key SEC1 admission and curve byte-order helpers. PublicKey construction decodes the point and rejects the identity; the selected compressed representation has a fixed size. The stable API uses explicit curve endianness rather than the former encoding trait, and distinguishes variable-time arithmetic entry points. Identity enables arithmetic/SEC1 only and invokes no secret generation, signing or PKCS8 decoder. This is a focused selected-use review, not blanket certification of every optional algorithm or secret lifecycle. This is automated single-owner source review, not an independent full-crate audit."
+
 [[audits.faster-hex]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 version = "0.10.1"
 notes = "Reviewed all production encoder, decoder, dispatch, error, serde and build-probe source and the actual Nostr fixed-array call sites. CPU dispatch checks x86 processor/OS state or aarch64 NEON support; vector reads and writes require complete source and destination chunks, with scalar tails. Encoding returns only its initialized ASCII prefix. Checked decoding rejects odd/nonhex input but permits a longer even source than the destination: it is not an exact-identifier validator. The bounded native adapter therefore checks canonical exact-length EVENT and OK identifiers before upstream normalization; real socket regressions retain the previously observed failures. Allocating helpers assume caller-sized inputs, and the admitted messages retain the adapter's frame/ingress limits. This automated native-use review does not claim general constant-time behavior, unrestricted allocation safety, optional embedded logging or browser qualification."
 
+[[audits.ff]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.14.0"
+notes = "Reviewed the no_std/forbid-unsafe feature boundary and field trait definitions, random generation/error propagation, CtOption inversion/square-root contracts and constant-time versus variable-time method distinctions. Concrete curve implementations own arithmetic; identity's checked parser selects the reviewed k256 field implementation and calls no random sampler. This same-version dependency review does not certify arbitrary third-party Field implementations, derive-generated fields or every exponentiation caller. This is automated single-owner source review, not an independent full-crate audit."
+
 [[audits.getrandom]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 version = "0.4.2"
 notes = "Reviewed feature/backend selection, the public fill/u32/u64 and SysRng interfaces, initialization helpers and the native macOS and Linux implementations, including the Linux file fallback. macOS uses at most 256-byte getentropy chunks; Linux handles partial reads and EINTR, rejects zero/invalid progress and selects the fixed OS source rather than network-supplied paths. Initialized slice conversion follows successful complete fill. Native SDK callers request fixed-size values for ping/jitter and protocol contexts, and no packet selects a backend or buffer length. System entropy can block or fail, and the upstream UnwrapErr adapter can panic on that failure. This focused automated native-use review does not claim nonblocking entropy, panic freedom, cryptographic implementation audit or qualification of alternate Windows/UEFI/WASI/browser backends."
+
+[[audits.group]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.14.0"
+notes = "Reviewed the no_std feature boundary, group/curve/scalar traits, random-generation propagation and fixed input/output length requirement for batch normalization. The package supplies interfaces, with arithmetic delegated to concrete curve implementations. Identity's public-point parser neither samples a random group element nor invokes its scalar-multiplication/wNAF helpers. This same-version inherited criterion is limited to that composition; it does not qualify arbitrary group implementations or secret scalar algorithms. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.hash2curve]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "safe-to-deploy"
+version = "0.14.0"
+notes = "Reviewed the no_std/forbid-unsafe manifest and public module boundary plus hash_to_field's fixed-size output, compile-time u16 expansion bound and error propagation. The stable release aligns its elliptic-curve dependency with the retained X448 arithmetic graph. The Radroots X448 adapter invokes Montgomery key agreement, not hash-to-curve, OPRF or domain expansion APIs. This focused inactive-use review does not certify those optional protocol constructions or change their domain-separation contract. This is automated single-owner source review, not an independent full-crate audit."
 
 [[audits.hash32]]
 who = "Codex (automated single-owner source review)"
@@ -152,6 +236,24 @@ who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 version = "1.3.0"
 notes = "Reviewed manifest/feature boundaries, fixed/variable decoding entries, complete hex iterators and their initialized-output handling, Char representation/table conversion and the bounded buffer encoder. Fixed-array decoding checks exactly N*2 bytes before writing; invalid/odd/nonhex input returns typed errors, and decoded Vec length is published only after initialization succeeds. Unchecked ASCII conversions originate from the closed ASCII Char variants. Allocating helpers scale with caller input, so they are not standalone network size limits. The native graph supplies bounded frames and fixed-size public hash values. This focused automated source review does not qualify unbounded formatting/collection by arbitrary callers or every optional feature."
+
+[[audits.hybrid-array]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.4.15"
+notes = "Reviewed the complete 0.4.12 -> 0.4.15 production/manifest delta and fixed-size array feature boundary. The delta adds supported type-level sizes, including retained SNTRUP buffers, without changing arithmetic, allocation or reference-conversion bodies. Arrays remain statically sized and the existing zeroize forwarding is preserved. The newly inherited crypto criterion covers these fixed buffers in the identity composition, not every unsafe reference conversion, optional serialization implementation or arbitrary array-size implementation. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.k256]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.14.0"
+notes = "Reviewed the arithmetic-only manifest selection, checked SEC1/public-key route, affine decompression and the selected field parsing, normalization, fixed square-root addition chain and 5x52 multiplication/reduction. Decoding rejects noncanonical field elements, verifies the square root, chooses the encoded parity and rejects the identity through PublicKey. Identity supplies only 32 public x-coordinate bytes with a fixed even compressed prefix; no private scalar, signer, ECDSA, Schnorr, entropy acquisition or PKCS8 API is introduced. Native/no_std/wasm checks and independent valid/invalid field-boundary vectors pass. This focused review does not certify all of k256 0.14, secret scalar multiplication or every architecture backend. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.libm]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.2.16"
+notes = "Reviewed the no_std feature/module boundary and num-traits' optional libm edge. This already selected same-version floating-point helper is absent from the identity normal/build graph; the admitted crypto path uses fixed-width integer/field operations and calls no floating-point approximation. It owns neither keys nor entropy in that composition. This criterion extension is limited to that inactive edge, and does not assert constant-time floating-point math or review every libm algorithm. This is automated single-owner source review, not an independent full-crate audit."
 
 [[audits.lru]]
 who = "Codex (automated single-owner source review)"
@@ -213,11 +315,35 @@ criteria = "network-parser-reviewed"
 delta = "0.45.4 -> 0.45.4@git:de3031aa99986eb29b3f34580355f9a099e4c927"
 notes = "Reviewed the affected native connection driver and ownership, notification stream, persistent subscription/queued-REQ and admission changes against the registry source. Connection attempts retain identity and completion notification; stale generations cannot take current frames, queued request counters decrement on drop, and explicit disconnect revokes reconnect authority. The added with_gaps stream preserves each receiver's repeated loss and continuation instead of silently filtering it. Real Radroots socket controls cover repeated local gaps, single REQ after reconnect, configured deadlines, wire identity, explicit AUTH and retained receive limits; native source publication requires their executed results. This focused automated delta review is not an independent full-SDK audit or qualification of unused optional APIs, browser actors or diagnostic redaction."
 
+[[audits.num-traits]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.2.19"
+notes = "Reviewed the no_std trait/export boundary, optional std/libm selection and complete build.rs probe. The fixed-width crypto-bigint edge uses integer numeric traits with default features disabled; float helpers and arbitrary-radix text admission are not called by identity. Trait implementations delegate arithmetic to the concrete integer types and provide no entropy source or key storage. This same-version inherited criterion covers the selected integer composition, not arbitrary numeric casts, floating-point semantics or untrusted radix parsing. This is automated single-owner source review, not an independent full-crate audit."
+
 [[audits.opaquerr]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 version = "0.2.0"
 notes = "Reviewed both complete production modules and the manifest. The no_std error container and declarative macros construct typed kinds and optional boxed sources; they do not decode network input, invoke processes, access files or use unsafe code. Allocating construction caches the source Display text and Debug exposes the source, so this dependency supplies neither redaction nor an independent allocation limit. The native adapter maps upstream causes into its existing typed public errors, with ingress bounded before parsing. This is automated source review for that use, not a secret-handling or unrestricted-error-formatting claim."
+
+[[audits.pkcs8]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.11.0"
+notes = "Reviewed the no_std/forbid-unsafe feature boundary and optional encryption, randomness and legacy DES gates. The identity arithmetic-only dependency graph excludes PKCS8; its API admits fixed SEC1 public points and no private-key document. This same-version inherited criterion covers that inactive edge only. It does not authorize legacy encryption, review arbitrary PKCS8 parsing, or qualify separately selected X448/other consumers' secret-document handling. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.primefield]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.14.0"
+notes = "Reviewed the no_std/forbid-unsafe exports, fixed-size Montgomery field admission and explicit endian conversion traits. Canonical bytes are copied into a fixed integer representation according to trusted field parameters; concrete arithmetic delegates to the selected crypto-bigint implementation. K256 identity decompression uses its own concrete base-field implementation and introduces no generic-field random generation. This selected-use review does not certify arbitrary field parameters, every Montgomery operation or a new secret-key protocol. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.primeorder]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.14.0"
+notes = "Reviewed the generic curve-parameter boundary and affine-point implementation, including checked coordinate construction, curve-equation verification, identity state and conditional selection. K256 uses its own affine/field implementation for identity decompression; its new generic arithmetic support is not a new Radroots secret-key or signer boundary. Optional precomputed tables, arbitrary curves and variable-time multiplication are outside this focused public-parser use review. This is automated single-owner source review, not an independent full-crate audit."
 
 [[audits.r-efi]]
 who = "Codex (automated single-owner source review)"
@@ -232,16 +358,34 @@ version = "0.10.1"
 notes = "Reviewed the feature manifest, RNG extension interface and integer uniform sampling used by the selected SDK. Its actual features select std/alloc/sys_rng and the getrandom SysRng reexport; software StdRng/ThreadRng and their optional ChaCha generator are not selected. The SDK uses fixed ping bytes and a constant nonempty bounded reconnect-jitter range, with no network-controlled sampling range or collection allocation. Infallible wrappers can panic on OS entropy failure and invalid caller ranges; this review does not claim those are impossible. This focused automated native-use review is not a full distribution/cryptographic algorithm audit or another platform's runtime qualification."
 
 [[audits.rand_core]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.10.1"
+notes = "Reviewed the dependency-free no_std RNG/try-RNG trait boundary, fallible-to-infallible adapters and CryptoRng marker composition. It implements no ambient entropy acquisition for the selected identity parser, which calls no generation method. Error propagation remains explicit for fallible sources. This same-version inherited criterion does not certify a caller-supplied generator, permit predictable seeds for production secrets, or qualify optional RNG algorithms elsewhere. This is automated single-owner source review, not an independent full-crate audit."
+
+[[audits.rand_core]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 version = "0.10.1"
 notes = "Reviewed the TryRng/Rng and crypto-marker trait interfaces, dereference forwarding, complete UnwrapErr adapter and integer/byte conversion helpers used by SysRng. These interfaces own no network decoder or variable-length packet queue; they forward bounded caller buffers and propagate fallible completion. The explicit UnwrapErr conversion panics on provider errors, and a crypto marker alone proves no algorithm properties. The selected native SDK supplies fixed-size arrays and trusted sampling bounds. This focused automated source review does not qualify optional block/seed generators, arbitrary provider implementations or secret generation policy."
+
+[[audits.sec1]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.8.1"
+notes = "Reviewed fixed-size point representation and from_bytes admission: a valid tag determines one exact length before copying into the statically sized buffer. The identity path always supplies 33 bytes with compressed-even tag; the concrete curve then checks field membership and curve validity. DER/private-key and optional serde paths are not called by identity. This same-version selected-use review does not treat SEC1 syntax alone as curve validation or certify unrelated key-document APIs. This is automated single-owner source review, not an independent full-crate audit."
 
 [[audits.secp256k1]]
 who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 delta = "0.29.1 -> 0.30.0"
 notes = "Reviewed the complete published Rust release delta and manifest. Fixed-array key/signature constructors reject incorrect slice lengths before FFI; recovery IDs become a closed checked enum. Schnorr signing and verification now pass an explicit message slice length through the existing C backend, and the admitted Nostr path supplies a fixed 32-byte event digest. Secret Debug output remains hidden or an explicit feature-gated fingerprint, and removed no-context parsing paths no longer panic unconditionally. The resolved secp256k1-sys 0.10.1 source is unchanged. This automated delta review inherits the existing 0.29.1 network-parser exemption and does not claim a fresh C/cryptographic algorithm audit, arbitrary-message signing policy, or another platform's runtime qualification."
+
+[[audits.spki]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.8.0"
+notes = "Reviewed the no_std/forbid-unsafe feature boundary, DER reexports and optional digest/PEM gates. The identity arithmetic-only graph excludes this package and never parses algorithm identifiers or SPKI documents. Its new inherited crypto criterion is limited to that inactive edge; separately selected workspace document consumers remain subject to their existing controls. This review does not certify arbitrary ASN.1 input, fingerprint algorithms or secret handling. This is automated single-owner source review, not an independent full-crate audit."
 
 [[audits.syn]]
 who = "Codex (automated single-owner source review)"
@@ -350,3 +494,9 @@ who = "Codex (automated single-owner source review)"
 criteria = "network-parser-reviewed"
 version = "0.53.1"
 notes = "Reviewed the complete Rust source and build script, package metadata and target selection. Both Rust bodies are identical to 0.52.6: an empty no_std library and a build script that emits only a package-local lib search path; there are no dependencies or network parsers. Checksum-verified packaged import archives and their actual member lists were inventoried separately. The selected macOS/Linux public graphs exclude this target. This automated review admits the inactive package for that native composition, not a binary-code audit or Windows linking/runtime qualification."
+
+[[audits.wnaf]]
+who = "Codex (automated single-owner RDP050 crypto dependency review)"
+criteria = "crypto-reviewed"
+version = "0.14.1"
+notes = "Reviewed the no_std/forbid-unsafe feature boundary and bounded-window representation constructor. Representation generation has value-dependent control flow and must not be treated as a general constant-time secret-scalar primitive. Identity only invokes checked public-point decompression, which does not use wNAF generation or scalar multiplication. The package's inherited criterion is scoped to that unused arithmetic surface in the identity composition, with no new signer or private scalar API admitted. This is automated single-owner source review, not an independent full-crate audit."

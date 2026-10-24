@@ -55,6 +55,40 @@ fn public_key_rejects_noncanonical_lengths_characters_and_points() {
 }
 
 #[test]
+fn public_identifiers_enforce_secp256k1_field_and_point_boundaries() {
+    // The standard generator and x=1 lift to curve points. Zero does not;
+    // the field modulus and larger encodings are not field elements.
+    for encoded in [
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        "0000000000000000000000000000000000000000000000000000000000000001",
+    ] {
+        assert_eq!(PublicKey::from_hex(encoded).unwrap().to_hex(), encoded);
+        assert_eq!(IdentityId::from_hex(encoded).unwrap().to_hex(), encoded);
+        assert_eq!(AccountId::from_hex(encoded).unwrap().to_hex(), encoded);
+    }
+
+    for encoded in [
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
+        "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    ] {
+        assert!(matches!(
+            PublicKey::from_hex(encoded),
+            Err(Error::InvalidPublicKeyBytes)
+        ));
+        assert!(matches!(
+            IdentityId::from_hex(encoded),
+            Err(Error::InvalidPublicKeyBytes)
+        ));
+        assert!(matches!(
+            AccountId::from_hex(encoded),
+            Err(Error::InvalidPublicKeyBytes)
+        ));
+    }
+}
+
+#[test]
 fn identity_and_account_identifiers_preserve_semantics_and_ordering() {
     let alice_key = PublicKey::from_hex(ALICE_PUBLIC_KEY).unwrap();
     let bob_key = PublicKey::from_hex(BOB_PUBLIC_KEY).unwrap();
