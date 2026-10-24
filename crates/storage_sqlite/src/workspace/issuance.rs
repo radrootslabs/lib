@@ -357,7 +357,7 @@ impl Journal<'_> {
                 &protected,
             )
             .await?;
-        let record = plaintext.expose_secret(GrantRecord::decode)?;
+        let record = plaintext.expose_secret(GrantRecord::decode_outbox)?;
         record.authenticate_retained_capture(input, proof)?;
         self.namespace.validate()?;
         Ok((record, protected))

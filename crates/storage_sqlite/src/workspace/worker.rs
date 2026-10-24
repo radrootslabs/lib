@@ -1009,7 +1009,7 @@ pub(super) async fn initialize(
     let plaintext = crypto
         .open(expected.workspace_id(), expected.grant_id(), &protected)
         .await?;
-    plaintext.expose_secret(GrantRecord::decode)?;
+    plaintext.expose_secret(GrantRecord::decode_outbox)?;
     namespace.validate()
 }
 pub(super) async fn read(
@@ -1052,7 +1052,7 @@ async fn authenticate(
     let plaintext = crypto
         .open(expected.workspace_id(), expected.grant_id(), &protected)
         .await?;
-    let record = plaintext.expose_secret(GrantRecord::decode)?;
+    let record = plaintext.expose_secret(GrantRecord::decode_outbox)?;
     let binding = record.authenticate(selected, proof, clock.now()?)?;
     namespace.validate()?;
     Ok((record, binding))

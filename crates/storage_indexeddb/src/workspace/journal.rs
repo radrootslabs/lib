@@ -13,7 +13,7 @@ use radroots_storage::{
         AdmissionOutcome, AdmissionRequest, CommitAttempt, OperationError, PreparedOperation,
         protected,
     },
-    workspace::{AttachmentProof, WorkspaceBinding, local_outbox::LocalOutboxGrant},
+    workspace::{AttachmentProof, WorkspaceBinding, grant::WorkspaceGrant},
 };
 use sha2::{Digest, Sha256};
 use std::{cell::Cell, rc::Rc};
@@ -234,7 +234,7 @@ pub(super) fn storage_error(error: Error) -> OperationError {
     }
 }
 pub(super) struct Access {
-    grant: LocalOutboxGrant,
+    grant: WorkspaceGrant,
     protected: Vec<u8>,
     pub binding: WorkspaceBinding,
     proof: AttachmentProof,
@@ -271,7 +271,7 @@ impl State {
         // The current authenticated buyer grant cannot admit public work, and
         // preparation decoding refuses any such stored command. Preserve the
         // original private path without another decryption of every T0 part.
-        if access.binding.scope() != radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+        if access.binding.scope() != radroots_storage::workspace::WorkspaceScope::NewBuyerOutbox
             && let Some(prepared) = self.preparation(operation, &before).await?
         {
             extra.extend(self.coordinate_guard(&prepared).await?);

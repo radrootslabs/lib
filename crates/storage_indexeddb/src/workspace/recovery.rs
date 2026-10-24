@@ -4,9 +4,7 @@ use radroots_domain::OperationId;
 use radroots_storage::command::{
     ArtifactEvidence, DeliveryObservation, DeliveryObservationKind, PublicationArtifact,
 };
-use radroots_storage::workspace::{
-    AttachmentInput, AttachmentProof, local_outbox::LocalOutboxGrant,
-};
+use radroots_storage::workspace::{AttachmentInput, AttachmentProof, grant::WorkspaceGrant};
 use radroots_transport::{sink::DeliveryRequestId, target::TargetFingerprint};
 
 #[derive(Clone, Eq, PartialEq)]
@@ -40,7 +38,7 @@ impl CaptureIdentity {
 }
 
 pub(super) struct Authorization {
-    grant: LocalOutboxGrant,
+    grant: WorkspaceGrant,
     close_confirmed: bool,
 }
 impl State {
@@ -56,7 +54,7 @@ impl State {
         &self,
         input: &AttachmentInput,
         proof: &AttachmentProof,
-    ) -> Result<(LocalOutboxGrant, Vec<u8>), WorkspaceError> {
+    ) -> Result<(WorkspaceGrant, Vec<u8>), WorkspaceError> {
         self.active()?;
         if input != &self.selected {
             return Err(WorkspaceError::Unauthorized);

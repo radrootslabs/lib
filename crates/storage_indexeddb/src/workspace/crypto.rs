@@ -7,8 +7,8 @@ use radroots_secrets::{
     provider::SecretProvider,
     wrapping::SecretMaterial,
 };
-use radroots_storage::workspace::local_outbox::grant_envelope_subject;
-use radroots_storage::workspace::{WorkspaceError, local_outbox::GRANT_BYTES_MAX};
+use radroots_storage::workspace::grant::grant_envelope_subject;
+use radroots_storage::workspace::{WorkspaceError, grant::GRANT_BYTES_MAX};
 use wasm_bindgen::{JsCast, JsValue};
 use zeroize::Zeroizing;
 

@@ -28,8 +28,8 @@ mod tests;
 
 pub use crypto::WorkspaceCrypto;
 pub use radroots_storage::workspace::{
-    AttachmentInput, AttachmentProof, LocalOutboxScope, WorkspaceBinding, WorkspaceClock,
-    WorkspaceError,
+    AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceError,
+    WorkspaceScope,
 };
 
 use radroots_domain::{ExecutorId, GrantId, WorkspaceId};

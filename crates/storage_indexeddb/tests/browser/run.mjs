@@ -671,6 +671,16 @@ try {
       await navigator.locks.request(workspaceReceipt.namespace,()=>{});
       const recoveredWorkspace=await openReceipt(workspaceReceipt);same(await recoveredWorkspace.authenticate(),1);await recoveredWorkspace.close();
       passed('actual worker termination releases writer ownership and the same protected outbox reopens');
+      const scopeOwner=await WorkspaceFixture.create_seller(247);
+      const scopeReceipt={n:247,fingerprint:Array.from(scopeOwner.fingerprint()),selection:Array.from(scopeOwner.selection()),proof:Array.from(scopeOwner.proof()),namespace:scopeOwner.data_namespace()};
+      const scopeRows=await workspaceBytes(scopeReceipt);same(scopeRows.keys.length,1);
+      const stockClaim=await scopeOwner.stock_scope_bytes(crypto.getRandomValues(new Uint8Array(56)));
+      await changeWorkspace(scopeReceipt,store=>store.put(stockClaim,scopeRows.keys[0]));
+      const retainedStockClaim=await workspaceBytes(scopeReceipt);
+      await rejects(()=>scopeOwner.authenticate(),'recovery_required');await scopeOwner.close();
+      await rejects(()=>openReceipt(scopeReceipt),'recovery_required');
+      sameRows(await workspaceBytes(scopeReceipt),retainedStockClaim);
+      passed('ordinary browser outbox refuses a valid protected stock-owner claim without repair');
       const source=await WorkspaceFixture.create(164);const target=await source.sibling();
       const sourceReceipt={namespace:source.data_namespace()},targetReceipt={namespace:target.data_namespace()};
       const sourceBytes=await workspaceBytes(sourceReceipt),targetBytes=await workspaceBytes(targetReceipt);

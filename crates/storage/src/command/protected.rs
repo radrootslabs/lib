@@ -1,7 +1,7 @@
 //! Bounded protected Prepared representation and pure scope checks shared by
 //! concrete transaction hosts. Decoding supplies no current access or commit.
 use super::{AdmissionRequest, OperationError, PreparedOperation};
-use crate::workspace::{AttachmentInput, LocalOutboxScope, WorkspaceBinding};
+use crate::workspace::{AttachmentInput, WorkspaceBinding, WorkspaceScope};
 use radroots_domain::{
     CommandDigest, IssuanceWindow, OperationId, Sequence, TransactionId, UnixSeconds,
 };
@@ -18,7 +18,7 @@ pub const PREPARED_BYTES_MAX: usize = 65_536;
 struct Encoded<'a> {
     version: u8,
     selection: &'a AttachmentInput,
-    scope: LocalOutboxScope,
+    scope: WorkspaceScope,
     principal: &'a str,
     grant_revision: Sequence,
     grant_expires_at: UnixSeconds,
@@ -35,7 +35,7 @@ struct Decoded<'a> {
     version: u8,
     selection: AttachmentInput,
     #[serde(default, deserialize_with = "present_scope")]
-    scope: Option<LocalOutboxScope>,
+    scope: Option<WorkspaceScope>,
     principal: String,
     grant_revision: Sequence,
     grant_expires_at: UnixSeconds,
@@ -50,8 +50,8 @@ struct Decoded<'a> {
 
 fn present_scope<'de, D: serde::Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<LocalOutboxScope>, D::Error> {
-    LocalOutboxScope::deserialize(deserializer).map(Some)
+) -> Result<Option<WorkspaceScope>, D::Error> {
+    WorkspaceScope::deserialize(deserializer).map(Some)
 }
 
 /// Encodes the original immutable preparation before encryption. A host must
@@ -100,7 +100,7 @@ pub fn decode(
     let scope = match (decoded.version, decoded.scope) {
         // The historical profile could only enroll buyer outboxes. It must
         // never infer seller authority from a substituted retained actor.
-        (2, None) => LocalOutboxScope::NewBuyerOutbox,
+        (2, None) => WorkspaceScope::NewBuyerOutbox,
         (3, Some(scope)) => scope,
         _ => return Err(OperationError::RecoveryRequired),
     };
@@ -251,7 +251,7 @@ mod tests {
         legacy.as_object_mut().unwrap().remove("scope");
         assert_eq!(
             read(&legacy).unwrap().request().binding().scope(),
-            LocalOutboxScope::NewBuyerOutbox
+            WorkspaceScope::NewBuyerOutbox
         );
         legacy["command"]["context"]["actor"]["role"] = json!("seller");
         assert!(read(&legacy).is_err());
@@ -271,7 +271,7 @@ mod tests {
         let decoded = read(&mismatched).unwrap();
         assert_eq!(
             decoded.request().binding().scope(),
-            LocalOutboxScope::NewSellerOutbox
+            WorkspaceScope::NewSellerOutbox
         );
         assert!(same_binding(request.binding(), decoded.request().binding()).is_err());
     }

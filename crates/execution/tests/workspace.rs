@@ -82,9 +82,9 @@ fn binding(change: u8, observed: u64) -> WorkspaceBinding {
     WorkspaceBinding::from_authenticated_host(
         input.clone(),
         if change == 2 {
-            radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
+            radroots_storage::workspace::WorkspaceScope::NewSellerOutbox
         } else {
-            radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+            radroots_storage::workspace::WorkspaceScope::NewBuyerOutbox
         },
         ActorRef::new(
             key(),

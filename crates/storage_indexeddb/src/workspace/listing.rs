@@ -139,7 +139,7 @@ impl State {
             return Ok(Vec::new());
         }
         if prepared.request().binding().scope()
-            != radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
+            != radroots_storage::workspace::WorkspaceScope::NewSellerOutbox
         {
             return Err(OperationError::RecoveryRequired);
         }

@@ -83,7 +83,7 @@ fn host_observations_validate_internal_binding_without_authenticating_metadata()
     let binding = |actor, principal: &str, revision, expiry, observed| {
         WorkspaceBinding::from_authenticated_host(
             input(),
-            radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox,
+            radroots_storage::workspace::WorkspaceScope::NewBuyerOutbox,
             actor,
             principal,
             Sequence::new(revision).unwrap(),
@@ -95,7 +95,7 @@ fn host_observations_validate_internal_binding_without_authenticating_metadata()
     assert_eq!(observed.input(), &input());
     assert_eq!(
         observed.scope(),
-        radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+        radroots_storage::workspace::WorkspaceScope::NewBuyerOutbox
     );
     assert_eq!(observed.actor(), actor());
     assert_eq!(observed.principal_id(), "device");

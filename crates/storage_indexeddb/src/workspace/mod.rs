@@ -27,7 +27,7 @@ use radroots_storage::{
     event::SourceGeneration,
     workspace::{
         AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceError,
-        WorkspaceStore, local_outbox::LocalOutboxGrant,
+        WorkspaceStore, grant::WorkspaceGrant,
     },
 };
 use radroots_transport::BoxFuture;
@@ -246,7 +246,7 @@ impl State {
         &self,
         input: &AttachmentInput,
         proof: &AttachmentProof,
-    ) -> Result<(LocalOutboxGrant, Vec<u8>, WorkspaceBinding), WorkspaceError> {
+    ) -> Result<(WorkspaceGrant, Vec<u8>, WorkspaceBinding), WorkspaceError> {
         if self.mode != AccessMode::Current {
             return Err(WorkspaceError::Unauthorized);
         }
@@ -259,7 +259,7 @@ impl State {
         &self,
         input: &AttachmentInput,
         proof: &AttachmentProof,
-    ) -> Result<(LocalOutboxGrant, Vec<u8>), WorkspaceError> {
+    ) -> Result<(WorkspaceGrant, Vec<u8>), WorkspaceError> {
         self.active()?;
         if input != &self.selected {
             return Err(WorkspaceError::Unauthorized);
@@ -278,7 +278,7 @@ impl State {
             &protected,
         )
         .await?;
-        let record = plaintext.expose_secret(LocalOutboxGrant::decode)?;
+        let record = plaintext.expose_secret(WorkspaceGrant::decode_outbox)?;
         record.authenticate_retained_capture(input, proof)?;
         self.active()?;
         Ok((record, protected))

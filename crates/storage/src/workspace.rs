@@ -9,6 +9,9 @@ use radroots_domain::{
 use radroots_transport::{BoxFuture, host::HostBound};
 use zeroize::Zeroizing;
 
+/// Bounded grant metadata shared by qualified workspace hosts.
+#[cfg(feature = "protected_outbox")]
+pub mod grant;
 #[cfg(feature = "protected_outbox")]
 pub mod local_outbox;
 
@@ -208,22 +211,25 @@ impl<'de> serde::Deserialize<'de> for AttachmentInput {
     }
 }
 
-/// The bounded authority of a fresh local outbox. Neither scope grants stock,
-/// organization, delegation, restored history or remote executor authority.
+/// A declared workspace permission scope. Metadata alone authenticates none
+/// of these permissions; the concrete selected host must qualify its grant.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
-pub enum LocalOutboxScope {
+pub enum WorkspaceScope {
     /// New buyer inquiry and request outbox; no existing order history.
     NewBuyerOutbox,
     /// New seller public authoring and private communication outbox; no stock.
     NewSellerOutbox,
+    /// Owner scope requiring the separate qualified seller stock namespace.
+    /// Ordinary local outbox enrollment and opening must refuse this scope.
+    SellerStockOwner,
 }
-impl LocalOutboxScope {
+impl WorkspaceScope {
     pub(crate) const fn actor_role(self) -> radroots_domain::ActorRole {
         match self {
             Self::NewBuyerOutbox => radroots_domain::ActorRole::Buyer,
-            Self::NewSellerOutbox => radroots_domain::ActorRole::Seller,
+            Self::NewSellerOutbox | Self::SellerStockOwner => radroots_domain::ActorRole::Seller,
         }
     }
 }
@@ -233,7 +239,7 @@ impl LocalOutboxScope {
 #[derive(Clone, Eq, PartialEq)]
 pub struct WorkspaceBinding {
     input: AttachmentInput,
-    scope: LocalOutboxScope,
+    scope: WorkspaceScope,
     actor: ActorRef,
     principal_id: Box<str>,
     grant_revision: Sequence,
@@ -246,7 +252,7 @@ impl WorkspaceBinding {
     /// constructor does not turn public metadata into an authenticated context.
     pub fn from_authenticated_host(
         input: AttachmentInput,
-        scope: LocalOutboxScope,
+        scope: WorkspaceScope,
         actor: ActorRef,
         principal_id: impl Into<String>,
         grant_revision: Sequence,
@@ -282,8 +288,8 @@ impl WorkspaceBinding {
     pub const fn input(&self) -> &AttachmentInput {
         &self.input
     }
-    /// Returns the authenticated outbox authority; signing custody adds none.
-    pub const fn scope(&self) -> LocalOutboxScope {
+    /// Returns the observed scope; signing custody adds no workspace permission.
+    pub const fn scope(&self) -> WorkspaceScope {
         self.scope
     }
     /// Returns actor data from the persisted authenticated grant.

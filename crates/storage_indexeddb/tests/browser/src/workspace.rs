@@ -370,8 +370,11 @@ impl WorkspaceFixture {
         assert_eq!(
             bound.actor().role(),
             match bound.scope() {
-                radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox => ActorRole::Buyer,
-                radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox => ActorRole::Seller,
+                radroots_storage::workspace::WorkspaceScope::NewBuyerOutbox => ActorRole::Buyer,
+                radroots_storage::workspace::WorkspaceScope::NewSellerOutbox => ActorRole::Seller,
+                radroots_storage::workspace::WorkspaceScope::SellerStockOwner => {
+                    panic!("ordinary browser outbox admitted a stock-owner scope")
+                }
             }
         );
         assert_eq!(bound.actor().organization(), None);
@@ -387,9 +390,106 @@ impl WorkspaceFixture {
             .await
             .map_err(fail)?;
         Ok(
-            bound.scope() == radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
+            bound.scope() == radroots_storage::workspace::WorkspaceScope::NewSellerOutbox
                 && bound.actor().role() == ActorRole::Seller,
         )
+    }
+    /// Synthetic fault bytes for ordinary-outbox scope admission tests.
+    pub async fn stock_scope_bytes(&self, material: Vec<u8>) -> Result<Vec<u8>, JsValue> {
+        use radroots_secrets::{
+            EncryptedEnvelope,
+            context::{EnvelopeContext, EnvelopePurpose, EnvelopeSubject, PayloadSchemaId},
+            envelope::{Nonce, SealMaterial, SealRequest},
+            wrapping::SecretMaterial,
+        };
+        use radroots_storage::workspace::{WorkspaceScope, grant::WorkspaceGrant};
+        if material.len() != 56 {
+            return Err(JsValue::from_str("invalid_fixture_material"));
+        }
+        let binding = self
+            .owner
+            .authenticate(self.input.clone(), copied(&self.proof))
+            .await
+            .map_err(fail)?;
+        if binding.scope() != WorkspaceScope::NewSellerOutbox {
+            return Err(JsValue::from_str("seller_fixture_required"));
+        }
+        let (input, _, grant) = LocalOutboxConfig::seller(
+            self.input.participant(),
+            self.input.endpoint_identity(),
+            binding.principal_id(),
+            binding.expires_at(),
+        )
+        .map_err(fail)?
+        .enroll(
+            binding.observed_at(),
+            self.input.workspace_id(),
+            self.input.authority().executor_id(),
+            self.input.grant_id(),
+            copied(&self.proof),
+        )
+        .map_err(fail)?;
+        assert_eq!(input, self.input);
+        let mut wire: serde_json::Value =
+            serde_json::from_slice(&grant.encode().map_err(fail)?).unwrap();
+        wire["scope"] = serde_json::json!("seller_stock_owner");
+        let mut verifier = Sha256::new();
+        verifier.update(b"radroots.seller_stock.credential.v1\0");
+        verifier.update(self.input.workspace_id().as_bytes());
+        verifier.update(self.input.grant_id().as_bytes());
+        self.proof.with_secret(|secret| verifier.update(secret));
+        wire["verifier"] = serde_json::json!(<[u8; 32]>::from(verifier.finalize()));
+        let encoded = serde_json::to_vec(&wire).unwrap();
+        let claim = WorkspaceGrant::decode(&encoded).map_err(fail)?;
+        assert_eq!(
+            claim
+                .authenticate(&self.input, &self.proof, binding.observed_at())
+                .map_err(fail)?
+                .scope(),
+            WorkspaceScope::SellerStockOwner
+        );
+        let context = EnvelopeContext::new(
+            EnvelopePurpose::parse("radroots.browser.workspace.grant").unwrap(),
+            EnvelopeSubject::parse(
+                "workspace_grant",
+                format!("{}{}", self.input.workspace_id(), self.input.grant_id()),
+            )
+            .unwrap(),
+            PayloadSchemaId::parse("radroots.browser.workspace.grant.v2").unwrap(),
+        );
+        let plaintext = SecretMaterial::from_slice(&encoded).unwrap();
+        let expected = context.clone();
+        let envelope = EncryptedEnvelope::seal(
+            self.provider.as_ref(),
+            SealRequest::new(
+                reference(),
+                context,
+                &plaintext,
+                SealMaterial::new(
+                    SecretMaterial::from_slice(&material[..32]).unwrap(),
+                    Nonce::new(material[32..].try_into().unwrap()),
+                ),
+            ),
+        )
+        .await
+        .map_err(|_| JsValue::from_str("fixture_seal_failed"))?;
+        let verified = envelope
+            .open(self.provider.as_ref(), &expected)
+            .await
+            .map_err(|_| JsValue::from_str("fixture_open_failed"))?;
+        let verified_claim = verified
+            .expose_secret(WorkspaceGrant::decode)
+            .map_err(fail)?;
+        assert_eq!(
+            verified_claim
+                .authenticate(&self.input, &self.proof, binding.observed_at())
+                .map_err(fail)?
+                .scope(),
+            WorkspaceScope::SellerStockOwner
+        );
+        envelope
+            .encode()
+            .map_err(|_| JsValue::from_str("fixture_encode_failed"))
     }
     pub async fn wrong_proof(&self) -> Result<(), JsValue> {
         self.owner

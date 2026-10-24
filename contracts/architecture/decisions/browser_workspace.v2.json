@@ -5,7 +5,7 @@
   "owner": "radroots_storage_indexeddb",
   "feature": "workspace",
   "target": "wasm32-unknown-unknown",
-  "shared_policy": "radroots_storage::workspace::local_outbox",
+  "shared_policy": "radroots_storage::workspace::grant",
   "native_policy_consumer": "radroots_storage_sqlite::workspace",
   "shared_grant_wire_private": true,
   "default_import_side_effects": false,

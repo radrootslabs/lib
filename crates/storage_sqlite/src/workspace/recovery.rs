@@ -60,7 +60,7 @@ impl RecoveryTurn<'_> {
                     &protected,
                 )
                 .await?;
-            let record = plaintext.expose_secret(GrantRecord::decode)?;
+            let record = plaintext.expose_secret(GrantRecord::decode_outbox)?;
             record.authenticate_retained_capture(&input, &proof)?;
             *self.cached_grant = Some(RecoveryAuthorization {
                 grant: record,

@@ -37,7 +37,7 @@ impl Journal<'_> {
                 &protected,
             )
             .await?;
-        let record = plaintext.expose_secret(GrantRecord::decode)?;
+        let record = plaintext.expose_secret(GrantRecord::decode_outbox)?;
         let current = record.authenticate(binding.input(), proof, self.clock.now()?)?;
         same_binding(binding, &current)?;
         self.namespace.validate()?;

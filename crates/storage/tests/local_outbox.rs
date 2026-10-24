@@ -3,8 +3,8 @@ use radroots_domain::{
     ActorRef, ActorRole, ExecutorId, GrantId, PublicKey, UnixSeconds, WorkspaceId,
 };
 use radroots_storage::workspace::{
-    AttachmentProof, LocalOutboxScope, WorkspaceError,
-    local_outbox::{LocalOutboxConfig, LocalOutboxGrant},
+    AttachmentProof, WorkspaceError, WorkspaceScope, grant::WorkspaceGrant,
+    local_outbox::LocalOutboxConfig,
 };
 
 fn key() -> PublicKey {
@@ -15,7 +15,7 @@ fn enrolled(
 ) -> (
     radroots_storage::workspace::AttachmentInput,
     AttachmentProof,
-    LocalOutboxGrant,
+    WorkspaceGrant,
 ) {
     let constructor = if seller {
         LocalOutboxConfig::seller
@@ -54,13 +54,28 @@ fn enrollment_separates_scope_routes_genesis_and_credential_commitments() {
 }
 
 #[test]
+fn ordinary_outbox_admission_refuses_structurally_valid_stock_owner_metadata() {
+    let (_, _, grant) = enrolled(true);
+    let original = grant.encode().unwrap();
+    let mut wire: serde_json::Value = serde_json::from_slice(&original).unwrap();
+    wire["scope"] = serde_json::json!("seller_stock_owner");
+    let encoded = serde_json::to_vec(&wire).unwrap();
+    assert!(WorkspaceGrant::decode(&encoded).is_ok());
+    assert!(matches!(
+        WorkspaceGrant::decode_outbox(&encoded),
+        Err(WorkspaceError::RecoveryRequired)
+    ));
+    assert!(WorkspaceGrant::decode_outbox(&original).is_ok());
+}
+
+#[test]
 fn both_scopes_retain_protected_access_expiry_revocation_and_exact_role() {
     for (seller, scope, role) in [
-        (false, LocalOutboxScope::NewBuyerOutbox, ActorRole::Buyer),
-        (true, LocalOutboxScope::NewSellerOutbox, ActorRole::Seller),
+        (false, WorkspaceScope::NewBuyerOutbox, ActorRole::Buyer),
+        (true, WorkspaceScope::NewSellerOutbox, ActorRole::Seller),
     ] {
         let (input, proof, grant) = enrolled(seller);
-        let mut grant = LocalOutboxGrant::decode(&grant.encode().unwrap()).unwrap();
+        let mut grant = WorkspaceGrant::decode(&grant.encode().unwrap()).unwrap();
         let bound = grant
             .authenticate(&input, &proof, UnixSeconds::new(100).unwrap())
             .unwrap();
@@ -91,7 +106,7 @@ fn both_scopes_retain_protected_access_expiry_revocation_and_exact_role() {
             WorkspaceError::GrantExpired
         );
         grant.revoke().unwrap();
-        let grant = LocalOutboxGrant::decode(&grant.encode().unwrap()).unwrap();
+        let grant = WorkspaceGrant::decode(&grant.encode().unwrap()).unwrap();
         assert_eq!(
             grant
                 .authenticate(&input, &proof, UnixSeconds::new(100).unwrap())
@@ -111,7 +126,7 @@ fn changing_scope_and_role_cannot_upgrade_an_existing_protected_credential() {
         let mut changed = original.clone();
         changed["actor"]["role"] = serde_json::json!(if seller { "buyer" } else { "seller" });
         assert!(matches!(
-            LocalOutboxGrant::decode(&serde_json::to_vec(&changed).unwrap()),
+            WorkspaceGrant::decode(&serde_json::to_vec(&changed).unwrap()),
             Err(WorkspaceError::RecoveryRequired)
         ));
         changed["scope"] = serde_json::json!(if seller {
@@ -119,7 +134,7 @@ fn changing_scope_and_role_cannot_upgrade_an_existing_protected_credential() {
         } else {
             "new_seller_outbox"
         });
-        let changed = LocalOutboxGrant::decode(&serde_json::to_vec(&changed).unwrap()).unwrap();
+        let changed = WorkspaceGrant::decode(&serde_json::to_vec(&changed).unwrap()).unwrap();
         assert_eq!(
             changed
                 .authenticate(&input, &proof, UnixSeconds::new(100).unwrap())
@@ -129,11 +144,11 @@ fn changing_scope_and_role_cannot_upgrade_an_existing_protected_credential() {
         for scope in ["seller_stock", "remote_executor", "organization", "unknown"] {
             let mut changed = original.clone();
             changed["scope"] = serde_json::json!(scope);
-            assert!(LocalOutboxGrant::decode(&serde_json::to_vec(&changed).unwrap()).is_err());
+            assert!(WorkspaceGrant::decode(&serde_json::to_vec(&changed).unwrap()).is_err());
         }
         // The original buyer constructor never accepts a seller actor.
         assert!(
-            LocalOutboxGrant::new(
+            WorkspaceGrant::new(
                 input.clone(),
                 ActorRef::new(key(), ActorRole::Seller, None, Some(input.grant_id())),
                 "device".into(),

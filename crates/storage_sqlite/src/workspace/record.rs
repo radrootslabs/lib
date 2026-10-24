@@ -1,1 +1,1 @@
-pub(super) use radroots_storage::workspace::local_outbox::LocalOutboxGrant as GrantRecord;
+pub(super) use radroots_storage::workspace::grant::WorkspaceGrant as GrantRecord;

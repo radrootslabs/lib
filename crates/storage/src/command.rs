@@ -166,7 +166,7 @@ impl AdmissionRequest {
             return Err(OperationError::UnverifiedApproval);
         }
         if let Some(listing) = self.command.listing() {
-            if self.binding.scope() != crate::workspace::LocalOutboxScope::NewSellerOutbox {
+            if self.binding.scope() != crate::workspace::WorkspaceScope::NewSellerOutbox {
                 return Err(OperationError::Unauthorized);
             }
             radroots_protocol::listing::ListingEvent::new(

@@ -2289,33 +2289,32 @@ pub fn radroots_storage::status::StorageStatusProvider::storage_status(&self) ->
 impl radroots_storage::status::StorageStatusProvider for radroots_storage::memory::MemoryStorage
 pub fn radroots_storage::memory::MemoryStorage::storage_status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::StorageStatus, radroots_storage::Error>>
 pub mod radroots_storage::workspace
+pub mod radroots_storage::workspace::grant
+pub struct radroots_storage::workspace::grant::WorkspaceGrant
+impl radroots_storage::workspace::grant::WorkspaceGrant
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::authenticate(&self, &radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::authenticate_retained_capture(&self, &radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::decode(&[u8]) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::decode_outbox(&[u8]) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::new(radroots_storage::workspace::AttachmentInput, radroots_domain::context::ActorRef, alloc::string::String, radroots_domain::context::UnixSeconds, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::revoke(&mut self) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+impl core::ops::drop::Drop for radroots_storage::workspace::grant::WorkspaceGrant
+pub fn radroots_storage::workspace::grant::WorkspaceGrant::drop(&mut self)
+pub const radroots_storage::workspace::grant::GRANT_BYTES_MAX: usize
+pub const radroots_storage::workspace::grant::GRANT_ENVELOPE_PURPOSE: &str
+pub const radroots_storage::workspace::grant::GRANT_PAYLOAD_SCHEMA: &str
+pub fn radroots_storage::workspace::grant::grant_envelope_subject(radroots_domain::identifier::WorkspaceId, radroots_domain::identifier::GrantId) -> alloc::string::String
 pub mod radroots_storage::workspace::local_outbox
 pub struct radroots_storage::workspace::local_outbox::LocalOutboxConfig
 impl radroots_storage::workspace::local_outbox::LocalOutboxConfig
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::enroll(self, radroots_domain::context::UnixSeconds, radroots_domain::identifier::WorkspaceId, radroots_domain::identifier::ExecutorId, radroots_domain::identifier::GrantId, radroots_storage::workspace::AttachmentProof) -> core::result::Result<(radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof, radroots_storage::workspace::local_outbox::LocalOutboxGrant), radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::enroll(self, radroots_domain::context::UnixSeconds, radroots_domain::identifier::WorkspaceId, radroots_domain::identifier::ExecutorId, radroots_domain::identifier::GrantId, radroots_storage::workspace::AttachmentProof) -> core::result::Result<(radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof, radroots_storage::workspace::grant::WorkspaceGrant), radroots_storage::workspace::WorkspaceError>
 pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::validate_at(&self, radroots_domain::context::UnixSeconds) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
 impl radroots_storage::workspace::local_outbox::LocalOutboxConfig
 pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::new(radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, impl core::convert::AsRef<str>, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::seller(radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, impl core::convert::AsRef<str>, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 impl core::fmt::Debug for radroots_storage::workspace::local_outbox::LocalOutboxConfig
 pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct radroots_storage::workspace::local_outbox::LocalOutboxGrant
-impl radroots_storage::workspace::local_outbox::LocalOutboxGrant
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxGrant::authenticate(&self, &radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::WorkspaceError>
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxGrant::authenticate_retained_capture(&self, &radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxGrant::decode(&[u8]) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxGrant::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::workspace::WorkspaceError>
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxGrant::new(radroots_storage::workspace::AttachmentInput, radroots_domain::context::ActorRef, alloc::string::String, radroots_domain::context::UnixSeconds, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxGrant::revoke(&mut self) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
-impl core::ops::drop::Drop for radroots_storage::workspace::local_outbox::LocalOutboxGrant
-pub fn radroots_storage::workspace::local_outbox::LocalOutboxGrant::drop(&mut self)
-pub const radroots_storage::workspace::local_outbox::GRANT_BYTES_MAX: usize
-pub const radroots_storage::workspace::local_outbox::GRANT_ENVELOPE_PURPOSE: &str
-pub const radroots_storage::workspace::local_outbox::GRANT_PAYLOAD_SCHEMA: &str
-pub fn radroots_storage::workspace::local_outbox::grant_envelope_subject(radroots_domain::identifier::WorkspaceId, radroots_domain::identifier::GrantId) -> alloc::string::String
-pub enum radroots_storage::workspace::LocalOutboxScope
-pub radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
-pub radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
 #[non_exhaustive] pub enum radroots_storage::workspace::WorkspaceError
 pub radroots_storage::workspace::WorkspaceError::Capacity
 pub radroots_storage::workspace::WorkspaceError::Closed
@@ -2339,6 +2338,10 @@ pub fn radroots_storage::command::OperationError::from(radroots_storage::workspa
 impl core::error::Error for radroots_storage::workspace::WorkspaceError
 impl core::fmt::Display for radroots_storage::workspace::WorkspaceError
 pub fn radroots_storage::workspace::WorkspaceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_storage::workspace::WorkspaceScope
+pub radroots_storage::workspace::WorkspaceScope::NewBuyerOutbox
+pub radroots_storage::workspace::WorkspaceScope::NewSellerOutbox
+pub radroots_storage::workspace::WorkspaceScope::SellerStockOwner
 pub struct radroots_storage::workspace::AttachmentInput
 impl radroots_storage::workspace::AttachmentInput
 pub const fn radroots_storage::workspace::AttachmentInput::authority(&self) -> radroots_domain::context::AuthorityRef
@@ -2364,12 +2367,12 @@ pub struct radroots_storage::workspace::WorkspaceBinding
 impl radroots_storage::workspace::WorkspaceBinding
 pub const fn radroots_storage::workspace::WorkspaceBinding::actor(&self) -> radroots_domain::context::ActorRef
 pub const fn radroots_storage::workspace::WorkspaceBinding::expires_at(&self) -> radroots_domain::context::UnixSeconds
-pub fn radroots_storage::workspace::WorkspaceBinding::from_authenticated_host(radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::LocalOutboxScope, radroots_domain::context::ActorRef, impl core::convert::Into<alloc::string::String>, radroots_domain::context::Sequence, radroots_domain::context::UnixSeconds, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::WorkspaceBinding::from_authenticated_host(radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::WorkspaceScope, radroots_domain::context::ActorRef, impl core::convert::Into<alloc::string::String>, radroots_domain::context::Sequence, radroots_domain::context::UnixSeconds, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub const fn radroots_storage::workspace::WorkspaceBinding::grant_revision(&self) -> radroots_domain::context::Sequence
 pub const fn radroots_storage::workspace::WorkspaceBinding::input(&self) -> &radroots_storage::workspace::AttachmentInput
 pub const fn radroots_storage::workspace::WorkspaceBinding::observed_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage::workspace::WorkspaceBinding::principal_id(&self) -> &str
-pub const fn radroots_storage::workspace::WorkspaceBinding::scope(&self) -> radroots_storage::workspace::LocalOutboxScope
+pub const fn radroots_storage::workspace::WorkspaceBinding::scope(&self) -> radroots_storage::workspace::WorkspaceScope
 impl core::fmt::Debug for radroots_storage::workspace::WorkspaceBinding
 pub fn radroots_storage::workspace::WorkspaceBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait radroots_storage::workspace::WorkspaceClock: radroots_transport::host::HostBound

@@ -674,7 +674,7 @@ async fn unqualified_history_and_approval_descriptors_never_become_admitted_comm
         let substituted = WorkspaceBinding::from_authenticated_host(
             binding.input().clone(),
             if actor.role() == radroots_domain::ActorRole::Seller {
-                radroots_storage::workspace::LocalOutboxScope::NewSellerOutbox
+                radroots_storage::workspace::WorkspaceScope::NewSellerOutbox
             } else {
                 binding.scope()
             },

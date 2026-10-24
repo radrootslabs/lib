@@ -7,7 +7,7 @@ use radroots_secrets::{
     provider::{AccessPolicy, ResidencySupport, SecretProvider, SelectionPolicy},
     wrapping::SecretMaterial,
 };
-use radroots_storage::workspace::local_outbox::{
+use radroots_storage::workspace::grant::{
     GRANT_ENVELOPE_PURPOSE, GRANT_PAYLOAD_SCHEMA, grant_envelope_subject,
 };
 use std::{fmt, sync::Arc};

@@ -99,7 +99,7 @@ async fn protected_operation_read_refuses_each_inconsistent_payload_and_sql_proj
     assert_eq!(recovered.identity(), retained.identity());
     assert_eq!(
         recovered.request().binding().scope(),
-        radroots_storage::workspace::LocalOutboxScope::NewBuyerOutbox
+        radroots_storage::workspace::WorkspaceScope::NewBuyerOutbox
     );
     assert_eq!(legacy_retained.bytes, legacy);
     assert_eq!(

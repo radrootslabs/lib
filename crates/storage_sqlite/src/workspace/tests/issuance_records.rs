@@ -141,14 +141,14 @@ pub(in crate::workspace) async fn public_delivery_data() -> DeliveryData {
             DeliveryAttempt, DeliveryIntent, EvidenceReceipt, ListingInstallation,
             PreparedOperation, PublicPublicationWork, SigningTarget,
         },
-        workspace::{LocalOutboxScope, WorkspaceBinding},
+        workspace::{WorkspaceBinding, WorkspaceScope},
     };
     let mut data = delivery_data().await;
     let selected = data.selection();
     let time = UnixSeconds::new(100).unwrap();
     let binding = WorkspaceBinding::from_authenticated_host(
         selected.clone(),
-        LocalOutboxScope::NewSellerOutbox,
+        WorkspaceScope::NewSellerOutbox,
         ActorRef::new(
             participant(),
             ActorRole::Seller,

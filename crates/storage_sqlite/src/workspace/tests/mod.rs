@@ -314,6 +314,83 @@ impl WorkspaceClock for FixedClock {
     }
 }
 #[tokio::test]
+async fn outbox_open_refuses_valid_protected_stock_scope_without_repair() {
+    use sha2::{Digest, Sha256};
+    use sqlx::Connection;
+
+    let fixture = CryptoFixture::new();
+    let path = fixture
+        ._temp
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("wrong-stock-scope");
+    let (owner, input, proof) = NativeWorkspace::initialize_local_outbox(
+        &path,
+        LocalOutboxConfig::seller(
+            participant(),
+            participant(),
+            "synthetic-device",
+            UnixSeconds::new(200).unwrap(),
+        )
+        .unwrap(),
+        fixture.crypto(),
+        Arc::new(FixedClock(100)),
+    )
+    .await
+    .unwrap();
+    owner.close().await.unwrap();
+    let database = path.join("execution_v1.sqlite");
+    let options = sqlx::sqlite::SqliteConnectOptions::new().filename(&database);
+    let mut connection = sqlx::SqliteConnection::connect_with(&options)
+        .await
+        .unwrap();
+    let original: Vec<u8> = sqlx::query_scalar("SELECT protected FROM workspace_grant")
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+    let crypto = fixture.crypto();
+    let clear = crypto
+        .open(input.workspace_id(), input.grant_id(), &original)
+        .await
+        .unwrap();
+    let mut wire: serde_json::Value =
+        clear.expose_secret(|bytes| serde_json::from_slice(bytes).unwrap());
+    wire["scope"] = serde_json::json!("seller_stock_owner");
+    let mut verifier = Sha256::new();
+    verifier.update(b"radroots.seller_stock.credential.v1\0");
+    verifier.update(input.workspace_id().as_bytes());
+    verifier.update(input.grant_id().as_bytes());
+    proof.with_secret(|secret| verifier.update(secret));
+    wire["verifier"] = serde_json::json!(<[u8; 32]>::from(verifier.finalize()));
+    let encoded = zeroize::Zeroizing::new(serde_json::to_vec(&wire).unwrap());
+    let metadata = record::GrantRecord::decode(&encoded).unwrap();
+    assert_eq!(
+        metadata
+            .authenticate(&input, &proof, UnixSeconds::new(100).unwrap())
+            .unwrap()
+            .scope(),
+        WorkspaceScope::SellerStockOwner
+    );
+    let sealed = crypto
+        .seal(input.workspace_id(), input.grant_id(), &encoded)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE workspace_grant SET protected=?")
+        .bind(sealed)
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    connection.close().await.unwrap();
+    let retained = host_fs::read(&database).unwrap();
+    assert!(matches!(
+        NativeWorkspace::open_existing(&path, input, fixture.crypto(), Arc::new(FixedClock(100)))
+            .await,
+        Err(WorkspaceError::RecoveryRequired)
+    ));
+    assert_eq!(host_fs::read(&database).unwrap(), retained);
+}
+#[tokio::test]
 async fn seller_scope_survives_protected_close_reopen_without_stock_or_buyer_upgrade() {
     let fixture = CryptoFixture::new();
     let path = fixture
@@ -337,7 +414,7 @@ async fn seller_scope_survives_protected_close_reopen_without_stock_or_buyer_upg
     .await
     .unwrap();
     let binding = owner.authenticate(input.clone(), &proof).await.unwrap();
-    assert_eq!(binding.scope(), LocalOutboxScope::NewSellerOutbox);
+    assert_eq!(binding.scope(), WorkspaceScope::NewSellerOutbox);
     assert_eq!(binding.actor().role(), ActorRole::Seller);
     assert_eq!(binding.actor().organization(), None);
     assert_eq!(input.checkpoint().coverage(), Coverage::Partial);
