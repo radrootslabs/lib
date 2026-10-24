@@ -14,6 +14,8 @@ use zeroize::Zeroizing;
 pub mod grant;
 #[cfg(feature = "protected_outbox")]
 pub mod local_outbox;
+#[cfg(feature = "protected_outbox")]
+pub mod seller_stock;
 
 /// A fixed workspace boundary error; no path, credential, SQL or caller prose.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

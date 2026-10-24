@@ -1,6 +1,6 @@
-//! Explicit protected local buyer/seller-outbox attachment.
+//! Explicit protected native outbox and fresh seller stock attachment.
 //!
-//! This host cannot acquire seller stock authority, attach a remote endpoint,
+//! Fresh stock enrollment is separate from outboxes. Neither can attach a remote endpoint,
 //! continue an existing order or restore state from a participant key. Its
 //! single connection and persistent writer lock belong to one bounded worker.
 //! Losing an observer never drops that lock ahead of the SQLite connection.
@@ -21,6 +21,8 @@ mod record;
 mod recovery;
 mod schema;
 mod snapshot;
+mod stock;
+pub use stock::{SellerStockConfig, StockAuthorityReceipt, StockEnrollment};
 mod worker;
 
 #[cfg(test)]

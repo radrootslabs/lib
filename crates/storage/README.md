@@ -79,7 +79,10 @@ install an executor, spawn hidden
 workers, read a clock, generate identities, or perform implicit retries.
 
 The opt-in `protected_outbox` feature supplies pure local buyer/seller-outbox
-enrollment and validated protected-grant codec at `workspace::local_outbox`.
+enrollment at `workspace::local_outbox` and the validated shared protected-grant
+codec at `workspace::grant`. The separate `workspace::seller_stock` policy
+selects fresh stock-owner enrollment for a qualified native host; pure policy
+values confer no durable authority.
 `LocalOutboxConfig::new` selects a fresh buyer outbox; `seller` explicitly
 selects a fresh seller public-authoring/communication outbox. Authenticated
 bindings retain that exact scope. Neither scope grants firm stock, delegation,

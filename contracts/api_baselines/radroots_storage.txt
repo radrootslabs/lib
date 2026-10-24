@@ -2299,6 +2299,7 @@ pub fn radroots_storage::workspace::grant::WorkspaceGrant::decode_outbox(&[u8]) 
 pub fn radroots_storage::workspace::grant::WorkspaceGrant::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::workspace::WorkspaceError>
 pub fn radroots_storage::workspace::grant::WorkspaceGrant::new(radroots_storage::workspace::AttachmentInput, radroots_domain::context::ActorRef, alloc::string::String, radroots_domain::context::UnixSeconds, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub fn radroots_storage::workspace::grant::WorkspaceGrant::revoke(&mut self) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+pub const fn radroots_storage::workspace::grant::WorkspaceGrant::scope(&self) -> radroots_storage::workspace::WorkspaceScope
 impl core::ops::drop::Drop for radroots_storage::workspace::grant::WorkspaceGrant
 pub fn radroots_storage::workspace::grant::WorkspaceGrant::drop(&mut self)
 pub const radroots_storage::workspace::grant::GRANT_BYTES_MAX: usize
@@ -2315,6 +2316,15 @@ pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::new(radroot
 pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::seller(radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, impl core::convert::AsRef<str>, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 impl core::fmt::Debug for radroots_storage::workspace::local_outbox::LocalOutboxConfig
 pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod radroots_storage::workspace::seller_stock
+pub struct radroots_storage::workspace::seller_stock::SellerStockConfig
+impl radroots_storage::workspace::seller_stock::SellerStockConfig
+pub fn radroots_storage::workspace::seller_stock::SellerStockConfig::enroll(self, radroots_domain::context::UnixSeconds, radroots_domain::identifier::WorkspaceId, radroots_domain::identifier::ExecutorId, radroots_domain::identifier::GrantId, radroots_storage::workspace::AttachmentProof) -> core::result::Result<(radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof, radroots_storage::workspace::grant::WorkspaceGrant), radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::SellerStockConfig::validate_at(&self, radroots_domain::context::UnixSeconds) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+impl radroots_storage::workspace::seller_stock::SellerStockConfig
+pub fn radroots_storage::workspace::seller_stock::SellerStockConfig::new(radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, impl core::convert::AsRef<str>, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+impl core::fmt::Debug for radroots_storage::workspace::seller_stock::SellerStockConfig
+pub fn radroots_storage::workspace::seller_stock::SellerStockConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_storage::workspace::WorkspaceError
 pub radroots_storage::workspace::WorkspaceError::Capacity
 pub radroots_storage::workspace::WorkspaceError::Closed

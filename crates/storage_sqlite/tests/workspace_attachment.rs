@@ -539,3 +539,6 @@ async fn unsafe_links_permissions_and_schema_are_refused_without_repair() {
         Err(WorkspaceError::RecoveryRequired)
     ));
 }
+
+#[path = "support/stock_authority.rs"]
+mod stock_authority;

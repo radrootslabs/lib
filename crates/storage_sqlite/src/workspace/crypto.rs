@@ -143,6 +143,32 @@ impl WorkspaceCrypto {
         )
         .await
     }
+    pub(super) async fn seal_stock(
+        &self,
+        input: &super::AttachmentInput,
+        authority: bool,
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            stock_context(input, authority)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            plaintext,
+        )
+        .await
+    }
+    pub(super) async fn open_stock(
+        &self,
+        input: &super::AttachmentInput,
+        authority: bool,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            stock_context(input, authority)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
     pub(super) async fn seal_operation(
         &self,
         workspace: WorkspaceId,
@@ -559,6 +585,37 @@ fn listing_context(scope: ListingScope) -> Result<EnvelopeContext, WorkspaceErro
     Ok(EnvelopeContext::new(
         EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,
         EnvelopeSubject::parse("workspace_listing", digest.to_string())
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+fn stock_context(
+    input: &super::AttachmentInput,
+    authority: bool,
+) -> Result<EnvelopeContext, WorkspaceError> {
+    let (purpose, schema) = if authority {
+        (
+            "radroots.seller_stock.authority",
+            "radroots.seller_stock.authority.v1",
+        )
+    } else {
+        (
+            "radroots.seller_stock.grant",
+            "radroots.seller_stock.grant.v1",
+        )
+    };
+    use sha2::{Digest, Sha256};
+    let mut subject = Sha256::new();
+    subject.update(b"radroots.seller_stock.context.v1\0");
+    subject.update(input.workspace_id().as_bytes());
+    subject.update(input.authority().executor_id().as_bytes());
+    subject.update(input.authority().generation().get().to_be_bytes());
+    subject.update(input.grant_id().as_bytes());
+    let subject = radroots_domain::CommandDigest::from_bytes(subject.finalize().into());
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("seller_stock", subject.to_string())
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
     ))

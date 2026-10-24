@@ -26,6 +26,7 @@ struct Policy {
     retained_capability_families: Vec<String>,
     independence: Independence,
     local_outbox_authority: LocalOutboxAuthority,
+    native_seller_stock_authority: NativeSellerStockAuthority,
     provenance: Provenance,
     targets: Targets,
     portability: Portability,
@@ -90,6 +91,22 @@ struct LocalOutboxAuthority {
     stock_authority: bool,
     organization_or_delegation_authority: bool,
     existing_order_or_history_recovery: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeSellerStockAuthority {
+    scope: String,
+    database: String,
+    lock: String,
+    schema_version: u16,
+    enrollment_prepared_before_durable_creation: bool,
+    prepared_enrollment_single_use: bool,
+    same_connection_owner_as_outbox: bool,
+    protected_authority_and_grants_separate: bool,
+    automatic_outbox_migration: bool,
+    historical_obligations_recovered: bool,
+    business_effects_qualified: bool,
 }
 
 #[derive(Deserialize)]
@@ -259,6 +276,21 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !local.organization_or_delegation_authority
             && !local.existing_order_or_history_recovery,
         "local outbox authority drift",
+    )?;
+    let stock = &p.native_seller_stock_authority;
+    require(
+        stock.scope == "seller_stock_owner"
+            && stock.database == "stock_execution_v1.sqlite"
+            && stock.lock == ".stock_execution_v1.lock"
+            && stock.schema_version == 1
+            && stock.enrollment_prepared_before_durable_creation
+            && stock.prepared_enrollment_single_use
+            && stock.same_connection_owner_as_outbox
+            && stock.protected_authority_and_grants_separate
+            && !stock.automatic_outbox_migration
+            && !stock.historical_obligations_recovered
+            && !stock.business_effects_qualified,
+        "native seller stock enrollment boundary drift",
     )?;
     validate_targets(&p.targets, &p.portability)?;
     validate_packages(&p.packages)?;

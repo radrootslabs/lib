@@ -68,6 +68,19 @@
     "organization_or_delegation_authority": false,
     "existing_order_or_history_recovery": false
   },
+  "native_seller_stock_authority": {
+    "scope": "seller_stock_owner",
+    "database": "stock_execution_v1.sqlite",
+    "lock": ".stock_execution_v1.lock",
+    "schema_version": 1,
+    "enrollment_prepared_before_durable_creation": true,
+    "prepared_enrollment_single_use": true,
+    "same_connection_owner_as_outbox": true,
+    "protected_authority_and_grants_separate": true,
+    "automatic_outbox_migration": false,
+    "historical_obligations_recovered": false,
+    "business_effects_qualified": false
+  },
   "provenance": {
     "app_behavior_implementation": "independent_reimplementation",
     "retain_source_provenance": true,

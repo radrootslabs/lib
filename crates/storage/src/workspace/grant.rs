@@ -103,6 +103,10 @@ impl WorkspaceGrant {
         }
         Ok(record)
     }
+    /// Declared authenticated metadata; the concrete host still qualifies its scope.
+    pub const fn scope(&self) -> WorkspaceScope {
+        self.wire.scope
+    }
     pub fn encode(&self) -> Result<Zeroizing<Vec<u8>>, WorkspaceError> {
         self.validate()?;
         let bytes = Zeroizing::new(

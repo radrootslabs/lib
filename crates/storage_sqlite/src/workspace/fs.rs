@@ -9,19 +9,45 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-const DATABASE: &str = "execution_v1.sqlite";
-const LOCK: &str = ".execution_v1.lock";
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum Kind {
+    Outbox,
+    SellerStock,
+}
+impl Kind {
+    fn database(self) -> &'static str {
+        match self {
+            Self::Outbox => "execution_v1.sqlite",
+            Self::SellerStock => "stock_execution_v1.sqlite",
+        }
+    }
+    fn lock(self) -> &'static str {
+        match self {
+            Self::Outbox => ".execution_v1.lock",
+            Self::SellerStock => ".stock_execution_v1.lock",
+        }
+    }
+}
 
 /// Retained identities and writer authority. The persistent lock inode is never
 /// unlinked on close, so another opener cannot lock a replacement inode.
 pub(super) struct Namespace {
     root: PathBuf,
+    kind: Kind,
     directory: File,
     lock: File,
     database: File,
 }
 impl Namespace {
+    #[cfg(test)]
     pub(super) fn acquire(root: &Path, create: bool) -> Result<Self, WorkspaceError> {
+        Self::acquire_kind(root, create, Kind::Outbox)
+    }
+    pub(super) fn acquire_kind(
+        root: &Path,
+        create: bool,
+        kind: Kind,
+    ) -> Result<Self, WorkspaceError> {
         validate_absolute(root)?;
         if create {
             std::fs::DirBuilder::new()
@@ -49,7 +75,7 @@ impl Namespace {
             } else {
                 OFlags::empty()
             };
-        let lock: File = openat(&directory, LOCK, flags, Mode::RUSR | Mode::WUSR)
+        let lock: File = openat(&directory, kind.lock(), flags, Mode::RUSR | Mode::WUSR)
             .map_err(|_| WorkspaceError::NamespaceUnavailable)?
             .into();
         validate_file(&lock)?;
@@ -68,7 +94,7 @@ impl Namespace {
                 WorkspaceError::NamespaceUnavailable
             }
         })?;
-        let database: File = openat(&directory, DATABASE, flags, Mode::RUSR | Mode::WUSR)
+        let database: File = openat(&directory, kind.database(), flags, Mode::RUSR | Mode::WUSR)
             .map_err(|_| WorkspaceError::NamespaceUnavailable)?
             .into();
         validate_file(&database)?;
@@ -93,6 +119,7 @@ impl Namespace {
         }
         let namespace = Self {
             root: root.to_path_buf(),
+            kind,
             directory,
             lock,
             database,
@@ -100,8 +127,11 @@ impl Namespace {
         namespace.validate()?;
         Ok(namespace)
     }
+    pub(super) fn kind(&self) -> Kind {
+        self.kind
+    }
     pub(super) fn database_path(&self) -> PathBuf {
-        self.root.join(DATABASE)
+        self.root.join(self.kind.database())
     }
     pub(super) fn validate(&self) -> Result<(), WorkspaceError> {
         validate_ancestors(&self.root)?;
@@ -110,16 +140,15 @@ impl Namespace {
         for (index, entry) in entries.enumerate() {
             let entry = entry.map_err(|_| WorkspaceError::NamespaceUnavailable)?;
             if index >= 5
-                || !matches!(
-                    entry.file_name().to_str(),
-                    Some(
-                        "execution_v1.sqlite"
-                            | ".execution_v1.lock"
-                            | "execution_v1.sqlite-wal"
-                            | "execution_v1.sqlite-shm"
-                            | "execution_v1.sqlite-journal"
-                    )
-                )
+                || ![
+                    self.kind.database().to_owned(),
+                    self.kind.lock().to_owned(),
+                    format!("{}-wal", self.kind.database()),
+                    format!("{}-shm", self.kind.database()),
+                    format!("{}-journal", self.kind.database()),
+                ]
+                .iter()
+                .any(|name| entry.file_name() == name.as_str())
             {
                 return Err(WorkspaceError::RecoveryRequired);
             }
@@ -134,7 +163,10 @@ impl Namespace {
         if !root.is_dir() || root.file_type().is_symlink() || !same(&root, &retained) {
             return Err(WorkspaceError::NamespaceUnavailable);
         }
-        for (name, file) in [(DATABASE, &self.database), (LOCK, &self.lock)] {
+        for (name, file) in [
+            (self.kind.database(), &self.database),
+            (self.kind.lock(), &self.lock),
+        ] {
             validate_file(file)?;
             let current = std::fs::symlink_metadata(self.root.join(name))
                 .map_err(|_| WorkspaceError::NamespaceUnavailable)?;
@@ -146,7 +178,9 @@ impl Namespace {
             }
         }
         for suffix in ["-wal", "-shm", "-journal"] {
-            match std::fs::symlink_metadata(self.root.join(format!("{DATABASE}{suffix}"))) {
+            match std::fs::symlink_metadata(
+                self.root.join(format!("{}{suffix}", self.kind.database())),
+            ) {
                 Ok(metadata) => validate_metadata(&metadata)?,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(_) => return Err(WorkspaceError::NamespaceUnavailable),

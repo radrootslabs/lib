@@ -1,6 +1,10 @@
 use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
-    WorkspaceError, admission::Journal, fs::Namespace, record::GrantRecord, schema,
+    WorkspaceError,
+    admission::Journal,
+    fs::{Kind, Namespace},
+    record::GrantRecord,
+    schema, stock,
 };
 use radroots_domain::{CommandDigest, OperationId};
 use radroots_storage::command::{
@@ -34,6 +38,11 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    StockAuthority(
+        AttachmentInput,
+        AttachmentProof,
+        Reply<super::StockAuthorityReceipt>,
+    ),
     CaptureDeliveryObservation(
         Box<WorkspaceBinding>,
         AttachmentProof,
@@ -134,6 +143,9 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::StockAuthority(_, _, reply) => {
+                let _ = reply.send(Err(WorkspaceError::RecoveryRequired));
+            }
             Self::CaptureDeliveryObservation(_, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -212,6 +224,37 @@ impl Handle {
         crypto: WorkspaceCrypto,
         clock: Arc<dyn WorkspaceClock>,
     ) -> Result<Self, WorkspaceError> {
+        Self::launch_kind(path, input, initial, None, Kind::Outbox, crypto, clock).await
+    }
+    pub(super) async fn launch_stock(
+        path: PathBuf,
+        input: AttachmentInput,
+        initial: Option<(
+            GrantRecord,
+            radroots_domain::TransactionId,
+            radroots_domain::UnixSeconds,
+        )>,
+        crypto: WorkspaceCrypto,
+        clock: Arc<dyn WorkspaceClock>,
+    ) -> Result<Self, WorkspaceError> {
+        let initial = initial.map(|(grant, transaction, expires_at)| stock::Initial {
+            grant,
+            transaction,
+            expires_at,
+            clock: clock.clone(),
+        });
+        Self::launch_kind(path, input, None, initial, Kind::SellerStock, crypto, clock).await
+    }
+    async fn launch_kind(
+        path: PathBuf,
+        input: AttachmentInput,
+        initial: Option<GrantRecord>,
+        stock_initial: Option<stock::Initial>,
+        kind: Kind,
+        crypto: WorkspaceCrypto,
+        clock: Arc<dyn WorkspaceClock>,
+    ) -> Result<Self, WorkspaceError> {
+        let creating = initial.is_some() || stock_initial.is_some();
         let (sender, requests) = mpsc::sync_channel::<Queued>(QUEUE_CAPACITY);
         let queued_bytes = Arc::new(AtomicUsize::new(0));
         let (ready, started) = oneshot::channel();
@@ -232,7 +275,7 @@ impl Handle {
                 };
                 // Construction, every request and explicit close complete on this
                 // owner even when an async observer disappears between await points.
-                let namespace = match Namespace::acquire(&path, initial.is_some()) {
+                let namespace = match Namespace::acquire_kind(&path, creating, kind) {
                     Ok(namespace) => namespace,
                     Err(error) => {
                         let _ = ready.send(Err(error));
@@ -241,7 +284,7 @@ impl Handle {
                     }
                 };
                 let result = runtime.block_on(async {
-                    if initial.is_none() {
+                    if !creating {
                         let preflight = preflight_existing(&namespace, &input, &crypto).await;
                         if let Err(error) = preflight {
                             let _ = ready.send(Err(error));
@@ -262,8 +305,21 @@ impl Handle {
                             return Err(WorkspaceError::StorageFailure);
                         }
                     };
-                    let initialized =
-                        initialize(&mut connection, &namespace, &input, initial, &crypto).await;
+                    let initialized = match kind {
+                        Kind::Outbox => {
+                            initialize(&mut connection, &namespace, &input, initial, &crypto).await
+                        }
+                        Kind::SellerStock => {
+                            stock::initialize(
+                                &mut connection,
+                                &namespace,
+                                &input,
+                                stock_initial,
+                                &crypto,
+                            )
+                            .await
+                        }
+                    };
                     if let Err(error) = initialized {
                         let _ = ready.send(Err(error));
                         // Do not release namespace authority at the first failure;
@@ -276,6 +332,17 @@ impl Handle {
                     let mut connection = Some(connection);
                     if ready.send(Ok(())).is_ok() {
                         while let Ok(Queued { job, _budget }) = requests.recv() {
+                            if kind == Kind::SellerStock
+                                && !matches!(
+                                    &job,
+                                    Job::Authenticate(..)
+                                        | Job::Revoke(..)
+                                        | Job::StockAuthority(..)
+                                )
+                            {
+                                job.reject_recovery();
+                                continue;
+                            }
                             let job = match job {
                                 Job::RecoverCapture(selected, proof, evidence, reply) => {
                                     let result = super::recovery::RecoveryTurn {
@@ -300,6 +367,27 @@ impl Handle {
                                 continue;
                             };
                             match job {
+                                Job::StockAuthority(selected, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock && !uncertain {
+                                        stock::authenticate(
+                                            connection,
+                                            &namespace,
+                                            &input,
+                                            &crypto,
+                                            clock.as_ref(),
+                                            &selected,
+                                            &proof,
+                                        )
+                                        .await
+                                        .map(|(receipt, _)| receipt)
+                                    } else {
+                                        Err(WorkspaceError::RecoveryRequired)
+                                    };
+                                    if result == Err(WorkspaceError::CommitUnknown) {
+                                        uncertain = true;
+                                    }
+                                    let _ = reply.send(result);
+                                }
                                 job @ Job::RecoverCapture(..) => job.reject_recovery(),
                                 Job::CaptureDeliveryObservation(
                                     binding,
@@ -487,30 +575,67 @@ impl Handle {
                                     let _ = reply.send(result);
                                 }
                                 Job::Authenticate(selected, proof, reply) => {
-                                    let result = authenticate(
-                                        connection,
-                                        &namespace,
-                                        &input,
-                                        &crypto,
-                                        clock.as_ref(),
-                                        &selected,
-                                        &proof,
-                                    )
-                                    .await
-                                    .map(|(_, binding)| binding);
+                                    let result = if uncertain {
+                                        Err(WorkspaceError::RecoveryRequired)
+                                    } else if kind == Kind::SellerStock {
+                                        stock::authenticate(
+                                            connection,
+                                            &namespace,
+                                            &input,
+                                            &crypto,
+                                            clock.as_ref(),
+                                            &selected,
+                                            &proof,
+                                        )
+                                        .await
+                                        .map(|(_, binding)| binding)
+                                    } else {
+                                        authenticate(
+                                            connection,
+                                            &namespace,
+                                            &input,
+                                            &crypto,
+                                            clock.as_ref(),
+                                            &selected,
+                                            &proof,
+                                        )
+                                        .await
+                                        .map(|(_, binding)| binding)
+                                    };
+                                    if result == Err(WorkspaceError::CommitUnknown) {
+                                        uncertain = true;
+                                    }
                                     let _ = reply.send(result);
                                 }
                                 Job::Revoke(selected, proof, reply) => {
-                                    let result = revoke(
-                                        connection,
-                                        &namespace,
-                                        &input,
-                                        &crypto,
-                                        clock.as_ref(),
-                                        &selected,
-                                        &proof,
-                                    )
-                                    .await;
+                                    let result = if uncertain {
+                                        Err(WorkspaceError::RecoveryRequired)
+                                    } else if kind == Kind::SellerStock {
+                                        stock::revoke(
+                                            connection,
+                                            &namespace,
+                                            &input,
+                                            &crypto,
+                                            clock.as_ref(),
+                                            &selected,
+                                            &proof,
+                                        )
+                                        .await
+                                    } else {
+                                        revoke(
+                                            connection,
+                                            &namespace,
+                                            &input,
+                                            &crypto,
+                                            clock.as_ref(),
+                                            &selected,
+                                            &proof,
+                                        )
+                                        .await
+                                    };
+                                    if result == Err(WorkspaceError::CommitUnknown) {
+                                        uncertain = true;
+                                    }
                                     let _ = reply.send(result);
                                 }
                                 Job::Admit(request, proof, reply) => {
@@ -580,6 +705,15 @@ impl Handle {
                 Err(WorkspaceError::Unavailable)
             }
         }
+    }
+    pub(super) async fn stock_authority(
+        &self,
+        input: AttachmentInput,
+        proof: AttachmentProof,
+    ) -> Result<super::StockAuthorityReceipt, WorkspaceError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockAuthority(input, proof, reply))?;
+        result.await.map_err(|_| WorkspaceError::RecoveryRequired)?
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
@@ -944,7 +1078,12 @@ pub(super) async fn preflight_existing(
     let mut connection = SqliteConnection::connect_with(&options)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    let inspected = initialize(&mut connection, namespace, expected, None, crypto).await;
+    let inspected = match namespace.kind() {
+        Kind::Outbox => initialize(&mut connection, namespace, expected, None, crypto).await,
+        Kind::SellerStock => {
+            stock::initialize(&mut connection, namespace, expected, None, crypto).await
+        }
+    };
     let closed = connection
         .close()
         .await

@@ -1,6 +1,6 @@
 # radroots_storage_sqlite
 
-The separate execution-workspace database creates exact schema generation 10.
+The separate execution-workspace database creates exact outbox schema generation 11.
 Chat and initial `listing.publish` share the operation journal, protected
 preparation and owned bounded worker. Seller authentication and a retained T0
 coordinate decision precede public issuance. A conflicting initial publish
@@ -308,3 +308,32 @@ including null, remains immutable. Current-access snapshots fence the complete
 T0/T1/S/T2/D graph and all target observations before projecting bounded summaries.
 Reopen performs no publication. Ordinary library-owned inbox orchestration,
 browser/bindings, consumer adoption and final qualification remain separate work.
+
+## Fresh native seller stock authority
+
+`StockEnrollment::prepare` creates a one-shot unrelated fresh seller workspace selection,
+protected credential and original creation transaction ID without touching the
+namespace. Retain those values through protected host handling before awaiting
+`NativeWorkspace::initialize_seller_stock`. This explicit factory uses
+`stock_execution_v1.sqlite` and `.stock_execution_v1.lock` in a new owner-only
+directory. Its exact version-1 catalog has separate protected authority and
+grant records. Grant scope, route, genesis, credential and AEAD context are
+separate from ordinary outboxes. The same bounded native worker owns the
+connection, admitted work, close completion and persistent writer lock.
+
+Creation uses WAL, FULL synchronization, foreign keys and `BEGIN IMMEDIATE`.
+Provider work completes outside the transaction. Use a local filesystem that
+honors SQLite locking and synchronization; network filesystems and copied live
+WAL sets are not qualified. Missing or malformed namespaces are never reset or
+adopted. A failed or cancelled constructor is not evidence of absence: reopen
+with `open_seller_stock` and query `stock_authority` with the original retained
+selection and credential. The confirmed receipt preserves the original
+transaction ID. Creation consumes the sole prepared grant before IO; that enrollment cannot
+create a second authority namespace, including after caller cancellation.
+
+Authentication rechecks the protected current authority and grant. Revocation
+atomically compares and replaces both protected snapshots and advances the
+revocation generation. An uncertain commit fences further access on that
+worker until close and explicit reopen. This enrollment boundary provides no
+pool allocation, old-order recovery, transfer, signing or business confirmation;
+ordinary outbox journal jobs are refused on the stock namespace.
