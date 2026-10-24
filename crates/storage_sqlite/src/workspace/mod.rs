@@ -19,6 +19,7 @@ mod operation;
 mod plan;
 mod record;
 mod recovery;
+mod schema;
 mod snapshot;
 mod worker;
 

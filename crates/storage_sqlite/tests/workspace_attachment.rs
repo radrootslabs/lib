@@ -109,6 +109,43 @@ impl Fixture {
 fn key() -> PublicKey {
     PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").unwrap()
 }
+
+#[tokio::test]
+async fn same_size_schema_substitution_is_refused_without_repair() {
+    use sqlx::Connection;
+
+    for statement in [
+        "DROP INDEX operation_transaction_identity; CREATE UNIQUE INDEX operation_transaction_identity ON operations(workspace,operation_id)",
+        "DROP INDEX operation_transaction_identity; CREATE INDEX foreign_index ON operations(workspace,transaction_id)",
+        "CREATE TRIGGER foreign_trigger BEFORE INSERT ON operations BEGIN SELECT RAISE(ABORT,'synthetic catalog fault'); END",
+    ] {
+        let fixture = Fixture::new();
+        let (store, input, _) = fixture.create().await;
+        store.close().await.unwrap();
+        let database = fixture.path.join("execution_v1.sqlite");
+        let options = sqlx::sqlite::SqliteConnectOptions::new().filename(&database);
+        let mut connection = sqlx::SqliteConnection::connect_with(&options)
+            .await
+            .unwrap();
+        sqlx::raw_sql(statement)
+            .execute(&mut connection)
+            .await
+            .unwrap();
+        connection.close().await.unwrap();
+        let retained = std::fs::read(&database).unwrap();
+        assert!(matches!(
+            NativeWorkspace::open_existing(
+                &fixture.path,
+                input,
+                fixture.crypto(),
+                fixture.clock.clone(),
+            )
+            .await,
+            Err(WorkspaceError::RecoveryRequired)
+        ));
+        assert_eq!(std::fs::read(&database).unwrap(), retained);
+    }
+}
 fn second_key() -> PublicKey {
     PublicKey::from_hex("c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5").unwrap()
 }
