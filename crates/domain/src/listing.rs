@@ -198,6 +198,30 @@ impl MeasurementUnit {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for MeasurementUnit {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = MeasurementUnit;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("one exact measurement unit symbol")
+            }
+            fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<MeasurementUnit, E> {
+                match value {
+                    "g" => Ok(MeasurementUnit::Gram),
+                    "kg" => Ok(MeasurementUnit::Kilogram),
+                    "mL" => Ok(MeasurementUnit::Millilitre),
+                    "L" => Ok(MeasurementUnit::Litre),
+                    "each" => Ok(MeasurementUnit::Each),
+                    _ => Err(E::custom("invalid measurement unit")),
+                }
+            }
+        }
+        deserializer.deserialize_str(Visitor)
+    }
+}
+
 #[derive(Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type", rename_all = "snake_case"))]

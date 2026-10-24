@@ -1,0 +1,36 @@
+{
+  "provenance": "Synthetic complete pool creation case; independently encoded with Python json sorted ASCII keys, UTF-8 strings, compact separators, no numeric JSON values. SHA-256 uses the specified command/approval domain plus NUL. This is the applicable RFC8785 subset, not a general Python JCS implementation.",
+  "oracle_python": "3.14.7 (main, Sep 29 2026, 14:50:11) [Clang 22.1.3 ]",
+  "wire": {
+    "type": "stock.create_pool",
+    "context": {
+      "actor": {
+        "grant_id": "0303030303030303030303030303030303030303030303030303030303030303",
+        "organization": null,
+        "participant": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        "role": "seller"
+      },
+      "approval": null,
+      "authority": {
+        "executor_id": "0202020202020202020202020202020202020202020202020202020202020202",
+        "generation": "1"
+      },
+      "correlation_id": null,
+      "expected": null,
+      "not_after": "200",
+      "operation_id": "0707070707070707070707070707070707070707070707070707070707070707",
+      "route_digest": "0606060606060606060606060606060606060606060606060606060606060606",
+      "workspace_id": "0101010101010101010101010101010101010101010101010101010101010101"
+    },
+    "input": {
+      "id": "0808080808080808080808080808080808080808080808080808080808080808",
+      "initial_quantity": "0.25",
+      "label": "Carrots",
+      "tick_scale": "3",
+      "unit": "kg"
+    }
+  },
+  "semantic_canonical_utf8": "{\"context\":{\"actor\":{\"grant_id\":\"0303030303030303030303030303030303030303030303030303030303030303\",\"organization\":null,\"participant\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"role\":\"seller\"},\"approval\":null,\"authority\":{\"executor_id\":\"0202020202020202020202020202020202020202020202020202020202020202\",\"generation\":\"1\"},\"expected\":null,\"not_after\":\"200\",\"operation_id\":\"0707070707070707070707070707070707070707070707070707070707070707\",\"route_digest\":\"0606060606060606060606060606060606060606060606060606060606060606\",\"workspace_id\":\"0101010101010101010101010101010101010101010101010101010101010101\"},\"input\":{\"id\":\"0808080808080808080808080808080808080808080808080808080808080808\",\"initial_quantity\":\"0.25\",\"label\":\"Carrots\",\"tick_scale\":\"3\",\"unit\":\"kg\"},\"type\":\"stock.create_pool\"}",
+  "command_digest": "a3642eaff89d48ca90b7cfe664a6da5b18976bb0307dbb7428676e73513712a1",
+  "approval_intent_digest": "63cf866a25c886ea9dc914f074dc0962c4cee5bc228d1fb02f81b7dfb5a335b5"
+}

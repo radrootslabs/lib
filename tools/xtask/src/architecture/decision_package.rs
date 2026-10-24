@@ -100,6 +100,12 @@ struct NativeSellerStockAuthority {
     database: String,
     lock: String,
     schema_version: u16,
+    retained_enrollment_versions: Vec<u16>,
+    authority_payload_schema: String,
+    pool_tick_scale_explicit: bool,
+    pool_tick_scale_encoding: String,
+    inventory_checkpoint_minimum_required: bool,
+    empty_pool_has_physical_movement: bool,
     enrollment_prepared_before_durable_creation: bool,
     prepared_enrollment_single_use: bool,
     same_connection_owner_as_outbox: bool,
@@ -282,7 +288,13 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
         stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 1
+            && stock.schema_version == 2
+            && stock.retained_enrollment_versions == [1]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v2"
+            && stock.pool_tick_scale_explicit
+            && stock.pool_tick_scale_encoding == "canonical_integer_string"
+            && stock.inventory_checkpoint_minimum_required
+            && !stock.empty_pool_has_physical_movement
             && stock.enrollment_prepared_before_durable_creation
             && stock.prepared_enrollment_single_use
             && stock.same_connection_owner_as_outbox

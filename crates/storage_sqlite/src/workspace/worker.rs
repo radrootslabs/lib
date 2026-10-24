@@ -38,6 +38,26 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    CreatePool(
+        Box<radroots_storage::inventory::CreatePoolRequest>,
+        AttachmentProof,
+        Reply<radroots_storage::inventory::PoolCreationOutcome, OperationError>,
+    ),
+    PoolCreation(
+        Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
+        OperationId,
+        Option<CommandDigest>,
+        AttachmentProof,
+        Reply<Option<radroots_storage::inventory::PoolCreationReceipt>, OperationError>,
+    ),
+    Pool(
+        Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
+        radroots_domain::PoolId,
+        AttachmentProof,
+        Reply<Option<radroots_domain::stock::PoolView>, OperationError>,
+    ),
     StockAuthority(
         AttachmentInput,
         AttachmentProof,
@@ -143,6 +163,15 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::CreatePool(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::PoolCreation(_, _, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::Pool(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::StockAuthority(_, _, reply) => {
                 let _ = reply.send(Err(WorkspaceError::RecoveryRequired));
             }
@@ -336,6 +365,9 @@ impl Handle {
                                 && !matches!(
                                     &job,
                                     Job::Authenticate(..)
+                                        | Job::CreatePool(..)
+                                        | Job::PoolCreation(..)
+                                        | Job::Pool(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -367,6 +399,64 @@ impl Handle {
                                 continue;
                             };
                             match job {
+                                Job::CreatePool(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::inventory::Turn {
+                                            connection,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                        }
+                                        .create(*request, proof)
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::PoolCreation(
+                                    binding,
+                                    minimum,
+                                    operation,
+                                    digest,
+                                    proof,
+                                    reply,
+                                ) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::inventory::Turn {
+                                            connection,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                        }
+                                        .creation(*binding, minimum, operation, digest, proof)
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::Pool(binding, minimum, id, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::inventory::Turn {
+                                            connection,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                        }
+                                        .pool(*binding, minimum, id, proof)
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
                                 Job::StockAuthority(selected, proof, reply) => {
                                     let result = if kind == Kind::SellerStock && !uncertain {
                                         stock::authenticate(
@@ -715,8 +805,57 @@ impl Handle {
         self.send(Job::StockAuthority(input, proof, reply))?;
         result.await.map_err(|_| WorkspaceError::RecoveryRequired)?
     }
+    pub(super) async fn create_pool(
+        &self,
+        request: radroots_storage::inventory::CreatePoolRequest,
+        proof: AttachmentProof,
+    ) -> Result<radroots_storage::inventory::PoolCreationOutcome, OperationError> {
+        let c = request.command().context();
+        let anchor = CommitAttempt::new(
+            c.workspace_id(),
+            c.operation_id(),
+            request.command().digest(),
+            None,
+        );
+        let (reply, result) = oneshot::channel();
+        self.send(Job::CreatePool(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(
+            radroots_storage::inventory::PoolCreationOutcome::Unknown(anchor),
+        ))
+    }
+    pub(super) async fn pool_creation(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        operation: OperationId,
+        digest: Option<CommandDigest>,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_storage::inventory::PoolCreationReceipt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::PoolCreation(
+            Box::new(binding),
+            minimum,
+            operation,
+            digest,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn pool(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        id: radroots_domain::PoolId,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_domain::stock::PoolView>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::Pool(Box::new(binding), minimum, id, proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
+            Job::CreatePool(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,
             Job::PrepareDelivery(..) => 1024 * 1024,
             Job::BindPlan(..) => 1024 * 1024,

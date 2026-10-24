@@ -252,3 +252,109 @@ fn foreign_tick_serialization_uses_exact_strings_and_rejects_json_numbers() {
         );
     }
 }
+
+#[cfg(feature = "serde")]
+#[test]
+fn protected_projection_value_codec_is_lossless_and_checks_conservation() {
+    use serde_json::{Value, json};
+    let amount = StockTicks::MAX;
+    let snapshot = PoolSnapshot::new(
+        PoolId::from_bytes([9; 32]),
+        PoolUnit::new(Kilogram, 6).unwrap(),
+        PoolBalances::new(
+            amount,
+            PhysicalBalances {
+                available: amount,
+                ..PhysicalBalances::ZERO
+            },
+        )
+        .unwrap(),
+        Sequence::new(i64::MAX as u64).unwrap(),
+    );
+    let value = serde_json::to_value(snapshot).unwrap();
+    assert_eq!(value["unit"], json!({"unit":"kg","scale":"6"}));
+    assert_eq!(
+        value["balances"]["introduced"],
+        json!("1000000000000000000")
+    );
+    assert_eq!(value["version"], json!("9223372036854775807"));
+    assert_eq!(
+        serde_json::from_value::<PoolSnapshot>(value.clone()).unwrap(),
+        snapshot
+    );
+    for (path, bad) in [
+        ("/balances/physical/available", json!("999999999999999999")),
+        ("/balances/physical/available", json!("1000000000000000001")),
+        ("/balances/physical/available", json!(100)),
+        ("/balances/introduced", json!("-1")),
+        ("/version", json!("01")),
+        ("/unit/scale", json!(6)),
+        ("/unit/scale", json!("06")),
+        ("/unit/scale", json!("7")),
+        ("/unit/unit", json!("each")),
+        ("/unit", json!(["kg", "6"])),
+        ("/balances", json!(["1000000000000000000", {}])),
+        (
+            "/balances/physical",
+            json!(["1000000000000000000", "0", "0", "0", "0", "0", "0"]),
+        ),
+    ] {
+        let mut changed = value.clone();
+        *changed.pointer_mut(path).unwrap() = bad;
+        assert!(
+            serde_json::from_value::<PoolSnapshot>(changed).is_err(),
+            "{path}"
+        );
+    }
+    for path in ["", "/unit", "/balances", "/balances/physical"] {
+        let mut changed = value.clone();
+        changed
+            .pointer_mut(path)
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert("extra".into(), Value::Null);
+        assert!(
+            serde_json::from_value::<PoolSnapshot>(changed).is_err(),
+            "{path}"
+        );
+    }
+    assert!(
+        serde_json::from_value::<PoolSnapshot>(json!([
+            value["id"],
+            value["unit"],
+            value["balances"],
+            value["version"]
+        ]))
+        .is_err()
+    );
+}
+#[cfg(feature = "serde")]
+#[test]
+fn unit_codecs_accept_only_exact_symbols_and_canonical_precision_strings() {
+    use serde_json::json;
+    for unit in [Gram, Kilogram, Millilitre, Litre, Each] {
+        for scale in 0..=6 {
+            if unit == Each && scale != 0 {
+                continue;
+            }
+            let value = PoolUnit::new(unit, scale).unwrap();
+            assert_eq!(
+                serde_json::from_str::<PoolUnit>(&serde_json::to_string(&value).unwrap()).unwrap(),
+                value
+            );
+        }
+    }
+    for symbol in [
+        json!("ml"),
+        json!("l"),
+        json!("KG"),
+        json!("piece"),
+        json!({"g":null}),
+        json!(["g"]),
+    ] {
+        assert!(
+            serde_json::from_value::<radroots_domain::listing::MeasurementUnit>(symbol).is_err()
+        );
+    }
+}

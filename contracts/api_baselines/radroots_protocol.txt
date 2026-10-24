@@ -215,6 +215,27 @@ impl core::convert::From<radroots_protocol::command::CapturedChatCommand> for ra
 pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::command::CapturedChatCommand) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedChatCommand
 pub fn radroots_protocol::command::CapturedChatCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::CapturedPoolCreation
+impl radroots_protocol::command::CapturedPoolCreation
+pub const fn radroots_protocol::command::CapturedPoolCreation::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedPoolCreation::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedPoolCreation::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::command::CapturedPoolCreation::input(&self) -> &radroots_protocol::command::CreatePoolInput
+pub fn radroots_protocol::command::CapturedPoolCreation::new(radroots_domain::context::CommandContextData, radroots_protocol::command::CreatePoolInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedPoolCreation::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedPoolCreation::protected_wire(&self) -> &[u8]
+impl core::fmt::Debug for radroots_protocol::command::CapturedPoolCreation
+pub fn radroots_protocol::command::CapturedPoolCreation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::CreatePoolInput
+impl radroots_protocol::command::CreatePoolInput
+pub const fn radroots_protocol::command::CreatePoolInput::id(&self) -> radroots_domain::identifier::PoolId
+pub const fn radroots_protocol::command::CreatePoolInput::initial_ticks(&self) -> radroots_domain::stock::StockTicks
+pub fn radroots_protocol::command::CreatePoolInput::label(&self) -> &str
+pub fn radroots_protocol::command::CreatePoolInput::new(radroots_domain::identifier::PoolId, &str, radroots_domain::stock::PoolUnit, radroots_domain::quantity::Quantity) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::CreatePoolInput::quantity(&self) -> radroots_domain::quantity::Quantity
+pub const fn radroots_protocol::command::CreatePoolInput::unit(&self) -> radroots_domain::stock::PoolUnit
+impl core::fmt::Debug for radroots_protocol::command::CreatePoolInput
+pub fn radroots_protocol::command::CreatePoolInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::InquireInput
 impl radroots_protocol::command::InquireInput
 pub fn radroots_protocol::command::InquireInput::new(radroots_domain::identifier::ThreadId, radroots_identity::key::PublicKey, core::option::Option<radroots_protocol::command::ListingRevisionRef>, &str) -> core::result::Result<Self, radroots_protocol::command::CommandError>

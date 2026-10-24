@@ -22,7 +22,7 @@ use std::{
     os::unix::fs::{DirBuilderExt, PermissionsExt, symlink},
 };
 
-fn participant() -> PublicKey {
+pub(super) fn participant() -> PublicKey {
     PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").unwrap()
 }
 fn selection() -> AttachmentInput {
@@ -51,12 +51,15 @@ fn reference(id: &str, backend: BackendKind, version: u32) -> SecretRef {
         KeyVersion::new(version).unwrap(),
     )
 }
-struct CryptoFixture {
+pub(super) struct CryptoFixture {
     _temp: tempfile::TempDir,
     provider: Arc<FileProvider>,
 }
 impl CryptoFixture {
-    fn new() -> Self {
+    pub(super) fn root(&self) -> std::path::PathBuf {
+        self._temp.path().canonicalize().unwrap()
+    }
+    pub(super) fn new() -> Self {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let provider = Arc::new(
@@ -83,7 +86,7 @@ impl CryptoFixture {
             )
             .unwrap();
     }
-    fn crypto(&self) -> WorkspaceCrypto {
+    pub(super) fn crypto(&self) -> WorkspaceCrypto {
         WorkspaceCrypto::new(
             self.provider.clone(),
             reference("grant-key", BackendKind::File, 1),

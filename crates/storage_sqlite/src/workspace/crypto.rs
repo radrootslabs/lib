@@ -143,6 +143,60 @@ impl WorkspaceCrypto {
         )
         .await
     }
+    pub(super) async fn seal_stock_root(
+        &self,
+        input: &super::AttachmentInput,
+        version: i64,
+        clear: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            stock_root_context(input, version)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            clear,
+        )
+        .await
+    }
+    pub(super) async fn open_stock_root(
+        &self,
+        input: &super::AttachmentInput,
+        version: i64,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            stock_root_context(input, version)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
+    pub(super) async fn seal_stock_record(
+        &self,
+        input: &super::AttachmentInput,
+        kind: &str,
+        id: &[u8; 32],
+        clear: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            stock_record_context(input, kind, id)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            clear,
+        )
+        .await
+    }
+    pub(super) async fn open_stock_record(
+        &self,
+        input: &super::AttachmentInput,
+        kind: &str,
+        id: &[u8; 32],
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            stock_record_context(input, kind, id)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
     pub(super) async fn seal_stock(
         &self,
         input: &super::AttachmentInput,
@@ -616,6 +670,58 @@ fn stock_context(
     Ok(EnvelopeContext::new(
         EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,
         EnvelopeSubject::parse("seller_stock", subject.to_string())
+            .map_err(|_| WorkspaceError::InvalidInput)?,
+        PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+fn stock_root_context(
+    input: &super::AttachmentInput,
+    version: i64,
+) -> Result<EnvelopeContext, WorkspaceError> {
+    let schema = match version {
+        1 => "radroots.seller_stock.authority.v1",
+        2 => "radroots.seller_stock.authority.v2",
+        _ => return Err(WorkspaceError::RecoveryRequired),
+    };
+    let original = stock_context(input, true)?;
+    Ok(EnvelopeContext::new(
+        original.purpose().clone(),
+        original.subject().clone(),
+        PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+fn stock_record_context(
+    input: &super::AttachmentInput,
+    kind: &str,
+    id: &[u8; 32],
+) -> Result<EnvelopeContext, WorkspaceError> {
+    use sha2::{Digest, Sha256};
+    let (purpose, schema) = match kind {
+        "pool" => (
+            "radroots.seller_stock.pool",
+            "radroots.seller_stock.pool.v1",
+        ),
+        "operation" => (
+            "radroots.seller_stock.operation",
+            "radroots.seller_stock.operation.v1",
+        ),
+        "movement" => (
+            "radroots.seller_stock.movement",
+            "radroots.seller_stock.movement.v1",
+        ),
+        _ => return Err(WorkspaceError::InvalidInput),
+    };
+    let mut h = Sha256::new();
+    h.update(b"radroots.seller_stock.record_context.v1\0");
+    h.update(input.workspace_id().as_bytes());
+    h.update(input.authority().executor_id().as_bytes());
+    h.update(input.authority().generation().get().to_be_bytes());
+    h.update(id);
+    let id = radroots_domain::CommandDigest::from_bytes(h.finalize().into());
+    Ok(EnvelopeContext::new(
+        EnvelopePurpose::parse(purpose).map_err(|_| WorkspaceError::InvalidInput)?,
+        EnvelopeSubject::parse("stock_record", id.to_string())
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
     ))

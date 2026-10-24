@@ -32,6 +32,8 @@ pub radroots_domain::listing::MeasurementUnit::Litre
 pub radroots_domain::listing::MeasurementUnit::Millilitre
 impl radroots_domain::listing::MeasurementUnit
 pub const fn radroots_domain::listing::MeasurementUnit::symbol(self) -> &'static str
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::listing::MeasurementUnit
+pub fn radroots_domain::listing::MeasurementUnit::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 #[non_exhaustive] pub enum radroots_domain::listing::Price
 pub radroots_domain::listing::Price::Fixed(radroots_domain::FixedPrice)
 pub radroots_domain::listing::Price::QuoteRequired
@@ -183,6 +185,10 @@ impl radroots_domain::stock::PhysicalBalances
 pub const radroots_domain::stock::PhysicalBalances::ZERO: Self
 impl core::fmt::Debug for radroots_domain::stock::PhysicalBalances
 pub fn radroots_domain::stock::PhysicalBalances::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_domain::stock::PhysicalBalances
+pub fn radroots_domain::stock::PhysicalBalances::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PhysicalBalances
+pub fn radroots_domain::stock::PhysicalBalances::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::PoolBalances
 impl radroots_domain::stock::PoolBalances
 pub const fn radroots_domain::stock::PoolBalances::introduced(self) -> radroots_domain::stock::StockTicks
@@ -190,6 +196,10 @@ pub fn radroots_domain::stock::PoolBalances::new(radroots_domain::stock::StockTi
 pub const fn radroots_domain::stock::PoolBalances::physical(self) -> radroots_domain::stock::PhysicalBalances
 impl core::fmt::Debug for radroots_domain::stock::PoolBalances
 pub fn radroots_domain::stock::PoolBalances::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_domain::stock::PoolBalances
+pub fn radroots_domain::stock::PoolBalances::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PoolBalances
+pub fn radroots_domain::stock::PoolBalances::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::PoolSnapshot
 impl radroots_domain::stock::PoolSnapshot
 pub const fn radroots_domain::stock::PoolSnapshot::balances(self) -> radroots_domain::stock::PoolBalances
@@ -199,12 +209,27 @@ pub const fn radroots_domain::stock::PoolSnapshot::unit(self) -> radroots_domain
 pub const fn radroots_domain::stock::PoolSnapshot::version(self) -> radroots_domain::Sequence
 impl core::fmt::Debug for radroots_domain::stock::PoolSnapshot
 pub fn radroots_domain::stock::PoolSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_domain::stock::PoolSnapshot
+pub fn radroots_domain::stock::PoolSnapshot::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PoolSnapshot
+pub fn radroots_domain::stock::PoolSnapshot::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::PoolUnit
 impl radroots_domain::stock::PoolUnit
 pub const fn radroots_domain::stock::PoolUnit::new(radroots_domain::listing::MeasurementUnit, u8) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub const fn radroots_domain::stock::PoolUnit::scale(self) -> u8
 pub fn radroots_domain::stock::PoolUnit::ticks_for(self, radroots_domain::Quantity) -> core::result::Result<radroots_domain::stock::StockTicks, radroots_domain::stock::StockError>
 pub const fn radroots_domain::stock::PoolUnit::unit(self) -> radroots_domain::listing::MeasurementUnit
+impl serde_core::ser::Serialize for radroots_domain::stock::PoolUnit
+pub fn radroots_domain::stock::PoolUnit::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PoolUnit
+pub fn radroots_domain::stock::PoolUnit::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::stock::PoolView
+impl radroots_domain::stock::PoolView
+pub fn radroots_domain::stock::PoolView::label(&self) -> &str
+pub fn radroots_domain::stock::PoolView::new(&str, radroots_domain::stock::PoolSnapshot) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub const fn radroots_domain::stock::PoolView::snapshot(&self) -> radroots_domain::stock::PoolSnapshot
+impl core::fmt::Debug for radroots_domain::stock::PoolView
+pub fn radroots_domain::stock::PoolView::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::stock::StockTicks(_)
 impl radroots_domain::stock::StockTicks
 pub const radroots_domain::stock::StockTicks::MAX: Self

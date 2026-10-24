@@ -291,3 +291,39 @@ impl fmt::Debug for PoolSnapshot {
         f.write_str("PoolSnapshot(<redacted>)")
     }
 }
+
+#[cfg(feature = "serde")]
+mod serialization;
+
+/// Bounded owner-private pool metadata and its physical snapshot claim.
+/// This view grants no authority and is not independent proof of availability.
+#[derive(Clone, Eq, PartialEq)]
+pub struct PoolView {
+    label: zeroize::Zeroizing<alloc::string::String>,
+    snapshot: PoolSnapshot,
+}
+impl PoolView {
+    /// Preserves a plain bounded label without normalization or hidden defaults.
+    pub fn new(label: &str, snapshot: PoolSnapshot) -> Result<Self, StockError> {
+        if label.len() > 160 || label.chars().any(char::is_control) {
+            return Err(StockError::InvalidFormat);
+        }
+        Ok(Self {
+            label: zeroize::Zeroizing::new(alloc::string::String::from(label)),
+            snapshot,
+        })
+    }
+    /// Borrows the exact owner-private label.
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+    /// Returns the associated validated physical snapshot claim.
+    pub const fn snapshot(&self) -> PoolSnapshot {
+        self.snapshot
+    }
+}
+impl fmt::Debug for PoolView {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("PoolView(<redacted>)")
+    }
+}

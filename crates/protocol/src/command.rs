@@ -49,7 +49,9 @@ impl fmt::Display for CommandError {
 impl core::error::Error for CommandError {}
 
 mod captured;
+mod stock;
 pub use captured::{CapturedCommand, CommandKind};
+pub use stock::{CapturedPoolCreation, CreatePoolInput};
 
 /// A captured public listing reference. This descriptor verifies neither its
 /// source event nor its availability, terms or stock backing.

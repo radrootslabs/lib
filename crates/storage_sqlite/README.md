@@ -337,3 +337,39 @@ revocation generation. An uncertain commit fences further access on that
 worker until close and explicit reopen. This enrollment boundary provides no
 pool allocation, old-order recovery, transfer, signing or business confirmation;
 ordinary outbox journal jobs are refused on the stock namespace.
+
+## Owner-private pool creation
+
+The current stock factory creates exact catalog version2 and protected authority
+payload version2. Retained enrollment-only version1 still authenticates and
+revokes with its original codec; its inventory ports refuse unsupported work.
+No namespace is automatically migrated. Ordinary outbox catalogs are separate.
+
+`InventoryStore` admits `CreatePoolRequest` with the exact captured command,
+current stock-owner binding, credential and independently retained minimum
+inventory checkpoint. The backend verifies that minimum against its protected
+root and authenticated retained history before reads, replay or new writes.
+Protected operation links must connect that minimum to the current root; SQL
+index fields alone cannot establish ancestry. A constant-memory fingerprint
+rechecks the exact validated rows inside the transaction after provider IO.
+The trusted host
+must preserve acknowledged checkpoints through protected custody; metadata
+construction alone does not establish checkpoint provenance. Bootstrap and
+transfer qualification remain separate requirements.
+
+`stock.create_pool` captures an explicit `tick_scale` canonical integer string
+from0 through6 alongside its unit and exact `initial_quantity`. Each counts
+require scale0. The command digest includes precision and every semantic context
+field; correlation remains diagnostic. No implicit conversion or rounding occurs.
+A confirmed owner-private receipt identifies the original transaction, initial
+pool effect and acknowledged checkpoint. Its pool snapshot describes that
+original effect; use the current pool query for a later projection.
+
+One `BEGIN IMMEDIATE` transaction CAS-checks protected authority and grant,
+current clock, minimum checkpoint, idempotency and pool identity, then writes
+protected pool/operation/movement records and advances the protected root.
+No signer or network work occurs. An empty pool has zero stock and no physical
+movement. Replay returns the original effect before fresh deadline checks.
+Known failures confirm rollback; unknown completion fences the owner until
+reopen and reconciliation by its original operation and digest. Firm holds,
+allocation, correction/deficit policy, commerce and transfer are still pending.

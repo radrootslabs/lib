@@ -14,6 +14,8 @@ pub mod backup;
 pub mod command;
 mod error;
 pub mod event;
+#[cfg(feature = "protected_outbox")]
+pub mod inventory;
 pub mod journal;
 #[cfg(feature = "memory")]
 pub mod memory;

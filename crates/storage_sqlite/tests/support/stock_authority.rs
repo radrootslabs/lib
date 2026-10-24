@@ -170,7 +170,7 @@ async fn protected_key_and_every_selection_field_refuse_without_writes() {
 #[tokio::test]
 async fn stock_catalog_and_protected_record_corruption_are_never_repaired() {
     for sql in [
-        "PRAGMA user_version=2",
+        "PRAGMA user_version=99",
         "CREATE TABLE unexpected(value INTEGER)",
         "CREATE TRIGGER foreign_trigger BEFORE INSERT ON stock_grants BEGIN SELECT RAISE(ABORT,'fault'); END",
         "UPDATE stock_authority SET protected=zeroblob(64)",

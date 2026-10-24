@@ -65,6 +65,7 @@ pub struct StockAuthorityReceipt {
     pub(super) input: AttachmentInput,
     pub(super) transaction: TransactionId,
     pub(super) revocation: Sequence,
+    pub(super) inventory: Option<radroots_storage::inventory::InventoryCheckpointRef>,
 }
 impl StockAuthorityReceipt {
     pub fn input(&self) -> &AttachmentInput {
@@ -72,6 +73,12 @@ impl StockAuthorityReceipt {
     }
     pub const fn transaction_id(&self) -> TransactionId {
         self.transaction
+    }
+    /// Current protected inventory checkpoint, absent for enrollment-only catalogs.
+    pub const fn inventory_checkpoint(
+        &self,
+    ) -> Option<radroots_storage::inventory::InventoryCheckpointRef> {
+        self.inventory
     }
     pub const fn revocation_generation(&self) -> Sequence {
         self.revocation
@@ -130,13 +137,100 @@ impl NativeWorkspace {
         self.worker.stock_authority(input, proof).await
     }
 }
+struct Authority {
+    input: AttachmentInput,
+    transaction: TransactionId,
+    revocation: Sequence,
+    inventory: Option<InventoryCheckpoint>,
+}
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InventoryCheckpoint {
+    revision: Sequence,
+    pools: Sequence,
+    movements: Sequence,
+    #[serde(deserialize_with = "required_nullable")]
+    head: Option<radroots_domain::CheckpointDigest>,
+}
+fn required_nullable<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    d: D,
+) -> Result<Option<T>, D::Error> {
+    Option::deserialize(d)
+}
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Authority {
+struct AuthorityV1 {
     version: u8,
     input: AttachmentInput,
     transaction: TransactionId,
     revocation: Sequence,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityV2 {
+    version: u8,
+    input: AttachmentInput,
+    transaction: TransactionId,
+    revocation: Sequence,
+    inventory: InventoryCheckpoint,
+}
+impl Authority {
+    fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
+        let bytes = match self.inventory {
+            None => serde_json::to_vec(&AuthorityV1 {
+                version: 1,
+                input: self.input.clone(),
+                transaction: self.transaction,
+                revocation: self.revocation,
+            }),
+            Some(inventory) => serde_json::to_vec(&AuthorityV2 {
+                version: 2,
+                input: self.input.clone(),
+                transaction: self.transaction,
+                revocation: self.revocation,
+                inventory,
+            }),
+        }
+        .map_err(|_| WorkspaceError::StorageFailure)?;
+        Ok(zeroize::Zeroizing::new(bytes))
+    }
+    fn decode(bytes: &[u8], catalog: i64) -> Result<Self, WorkspaceError> {
+        let value = match catalog {
+            1 => {
+                let v: AuthorityV1 = closed_record(bytes)?;
+                if v.version != 1 {
+                    return Err(WorkspaceError::RecoveryRequired);
+                }
+                Self {
+                    input: v.input,
+                    transaction: v.transaction,
+                    revocation: v.revocation,
+                    inventory: None,
+                }
+            }
+            2 => {
+                let v: AuthorityV2 = closed_record(bytes)?;
+                if v.version != 2 || (v.inventory.revision.get() == 0) != v.inventory.head.is_none()
+                {
+                    return Err(WorkspaceError::RecoveryRequired);
+                }
+                Self {
+                    input: v.input,
+                    transaction: v.transaction,
+                    revocation: v.revocation,
+                    inventory: Some(v.inventory),
+                }
+            }
+            _ => return Err(WorkspaceError::RecoveryRequired),
+        };
+        if value.revocation.get() == 0 {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+        Ok(value)
+    }
+    fn version(&self) -> i64 {
+        if self.inventory.is_some() { 2 } else { 1 }
+    }
 }
 pub(super) struct Initial {
     pub grant: GrantRecord,
@@ -144,27 +238,8 @@ pub(super) struct Initial {
     pub expires_at: radroots_domain::UnixSeconds,
     pub clock: Arc<dyn WorkspaceClock>,
 }
-const AUTHORITY: &str = "CREATE TABLE stock_authority (singleton INTEGER PRIMARY KEY CHECK(singleton=1), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
-const GRANTS: &str = "CREATE TABLE stock_grants (grant_id BLOB PRIMARY KEY CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
-const CATALOG: [&str; 2] = [AUTHORITY, GRANTS];
-async fn catalog(connection: &mut SqliteConnection) -> Result<(), WorkspaceError> {
-    let valid: i64 = sqlx::query_scalar("SELECT CASE WHEN count(*)=2 AND sum(CASE WHEN type='table' AND name='stock_authority' AND tbl_name='stock_authority' AND sql=? THEN 1 WHEN type='table' AND name='stock_grants' AND tbl_name='stock_grants' AND sql=? THEN 1 ELSE 0 END)=2 THEN 1 ELSE 0 END FROM sqlite_schema").bind(AUTHORITY).bind(GRANTS).fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
-    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
-        .fetch_one(&mut *connection)
-        .await
-        .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if valid != 1 || version != 1 {
-        return Err(WorkspaceError::RecoveryRequired);
-    }
-    let integrity: String = sqlx::query_scalar("PRAGMA quick_check(1)")
-        .fetch_one(connection)
-        .await
-        .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if integrity != "ok" {
-        return Err(WorkspaceError::RecoveryRequired);
-    }
-    Ok(())
-}
+pub(super) mod inventory;
+mod schema;
 pub(super) async fn initialize(
     connection: &mut SqliteConnection,
     namespace: &Namespace,
@@ -175,15 +250,20 @@ pub(super) async fn initialize(
     namespace.validate()?;
     if let Some(initial) = initial {
         let authority = Authority {
-            version: 1,
             input: input.clone(),
             transaction: initial.transaction,
             revocation: Sequence::new(1).map_err(|_| WorkspaceError::InvalidInput)?,
+            inventory: Some(InventoryCheckpoint {
+                revision: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                head: None,
+                pools: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                movements: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+            }),
         };
-        let clear = zeroize::Zeroizing::new(
-            serde_json::to_vec(&authority).map_err(|_| WorkspaceError::StorageFailure)?,
-        );
-        let root = crypto.seal_stock(input, true, &clear).await?;
+        let clear = authority.encode()?;
+        let root = crypto
+            .seal_stock_root(input, authority.version(), &clear)
+            .await?;
         let grant = crypto
             .seal_stock(input, false, &initial.grant.encode()?)
             .await?;
@@ -207,13 +287,13 @@ pub(super) async fn initialize(
             if now >= initial.expires_at {
                 return Err(WorkspaceError::GrantExpired);
             }
-            for sql in CATALOG {
+            for (_, _, _, sql) in schema::objects(schema::CURRENT)? {
                 sqlx::raw_sql(sql)
                     .execute(&mut *tx)
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=1")
+            sqlx::query("PRAGMA user_version=2")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -241,7 +321,8 @@ pub(super) async fn initialize(
             .await
             .map_err(|_| WorkspaceError::CommitUnknown)?;
     }
-    catalog(connection).await?;
+    schema::admit(connection).await?;
+    schema::integrity(connection).await?;
     read(connection, input, crypto).await?;
     namespace.validate()
 }
@@ -253,11 +334,13 @@ async fn read(
     // Bound in SQL before materializing attacker-controlled protected payloads.
     let root: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_authority WHERE singleton=1 AND length(protected) BETWEEN 1 AND 262144").fetch_optional(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?.ok_or(WorkspaceError::RecoveryRequired)?;
     let grant: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_grants WHERE grant_id=? AND length(protected) BETWEEN 1 AND 262144").bind(input.grant_id().as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?.ok_or(WorkspaceError::WrongNamespace)?;
-    let clear = crypto.open_stock(input, true, &root).await?;
-    let authority: Authority = clear
-        .expose_secret(|bytes| serde_json::from_slice(bytes))
+    let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut *connection)
+        .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if authority.version != 1 || authority.input != *input || authority.revocation.get() == 0 {
+    let clear = crypto.open_stock_root(input, catalog, &root).await?;
+    let authority = clear.expose_secret(|bytes| Authority::decode(bytes, catalog))?;
+    if authority.input != *input || authority.revocation.get() == 0 {
         return Err(WorkspaceError::WrongNamespace);
     }
     let clear = crypto.open_stock(input, false, &grant).await?;
@@ -265,6 +348,9 @@ async fn read(
     // Validate the protected scope without inventing possession of its credential.
     if record.scope() != WorkspaceScope::SellerStockOwner {
         return Err(WorkspaceError::RecoveryRequired);
+    }
+    if let Some(checkpoint) = authority.inventory {
+        inventory::check_head(connection, checkpoint).await?;
     }
     Ok((authority, record, root, grant))
 }
@@ -303,6 +389,16 @@ pub(super) async fn authenticate(
             input: authority.input,
             transaction: authority.transaction,
             revocation: authority.revocation,
+            inventory: authority
+                .inventory
+                .map(|v| {
+                    radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
+                        expected.authority(),
+                        v.revision,
+                        v.head,
+                    )
+                })
+                .transpose()?,
         },
         binding,
     ))
@@ -331,10 +427,10 @@ pub(super) async fn revoke(
             .ok_or(WorkspaceError::Capacity)?,
     )
     .map_err(|_| WorkspaceError::Capacity)?;
-    let clear = zeroize::Zeroizing::new(
-        serde_json::to_vec(&authority).map_err(|_| WorkspaceError::StorageFailure)?,
-    );
-    let root = crypto.seal_stock(expected, true, &clear).await?;
+    let clear = authority.encode()?;
+    let root = crypto
+        .seal_stock_root(expected, authority.version(), &clear)
+        .await?;
     let grant = crypto
         .seal_stock(expected, false, &record.encode()?)
         .await?;
@@ -395,4 +491,63 @@ async fn unchanged(
         return Err(WorkspaceError::RecoveryRequired);
     }
     Ok(())
+}
+
+impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
+    fn create_pool(
+        &self,
+        request: radroots_storage::inventory::CreatePoolRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::inventory::PoolCreationOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.create_pool(request, proof))
+    }
+    fn pool_creation(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        operation: radroots_domain::OperationId,
+        digest: Option<radroots_domain::CommandDigest>,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::inventory::PoolCreationReceipt>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .pool_creation(binding, minimum, operation, digest, proof),
+        )
+    }
+    fn pool(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        id: radroots_domain::PoolId,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<radroots_domain::stock::PoolView>, radroots_storage::command::OperationError>,
+    > {
+        Box::pin(self.worker.pool(binding, minimum, id, proof))
+    }
+}
+
+#[cfg(test)]
+mod tests;
+
+fn closed_record<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> Result<T, WorkspaceError> {
+    if bytes.len() > 16 * 1024
+        || bytes.iter().copied().find(|b| !b.is_ascii_whitespace()) != Some(b'{')
+    {
+        return Err(WorkspaceError::RecoveryRequired);
+    }
+    serde_json::from_slice(bytes).map_err(|_| WorkspaceError::RecoveryRequired)
 }
