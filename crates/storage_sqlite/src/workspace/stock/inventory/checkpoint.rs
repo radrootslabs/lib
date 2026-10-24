@@ -83,21 +83,7 @@ pub(super) async fn authenticate_minimum(
         if revision == minimum.revision().get() && expected != minimum.head() {
             return Err(WorkspaceError::StaleCheckpoint.into());
         }
-        hash.update(revision.to_be_bytes());
-        hash.update(binding.actor().participant().as_bytes());
-        hash.update(retained.original_grant.as_bytes());
-        hash.update(operation.as_bytes());
-        hash.update(retained.digest.as_bytes());
-        hash.update(
-            receipt
-                .transaction_id()
-                .ok_or(OperationError::RecoveryRequired)?
-                .as_bytes(),
-        );
-        hash.update(receipt.pool().id().as_bytes());
-        hash.update(expected.ok_or(OperationError::RecoveryRequired)?.as_bytes());
-        hash.update((retained.protected.len() as u64).to_be_bytes());
-        hash.update(&retained.protected);
+        hash_retained(&mut hash, revision, binding, operation, &retained)?;
         expected = retained.previous_head;
     }
     if minimum.revision().get() == 0 && expected.is_some() {
@@ -105,6 +91,90 @@ pub(super) async fn authenticate_minimum(
     }
     Ok(MinimumProof {
         lower,
+        upper,
+        digest: hash.finalize().into(),
+    })
+}
+
+fn hash_retained(
+    hash: &mut Sha256,
+    revision: u64,
+    binding: &WorkspaceBinding,
+    operation: OperationId,
+    retained: &Retained,
+) -> Result<(), OperationError> {
+    let receipt = &retained.receipt;
+    hash.update(revision.to_be_bytes());
+    hash.update(binding.actor().participant().as_bytes());
+    hash.update(retained.original_grant.as_bytes());
+    hash.update(operation.as_bytes());
+    hash.update(retained.digest.as_bytes());
+    hash.update(
+        receipt
+            .transaction_id()
+            .ok_or(OperationError::RecoveryRequired)?
+            .as_bytes(),
+    );
+    hash.update(receipt.pool().id().as_bytes());
+    hash.update(
+        receipt
+            .checkpoint()
+            .head()
+            .ok_or(OperationError::RecoveryRequired)?
+            .as_bytes(),
+    );
+    hash.update((retained.protected.len() as u64).to_be_bytes());
+    hash.update(&retained.protected);
+    Ok(())
+}
+
+/// Proves the current pool projection against the latest actual protected
+/// effect, including every intervening link from the current root. A mutable
+/// SQL pool index alone cannot prove the absence of a more recent effect.
+pub(super) async fn authenticate_projection(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    current: InventoryCheckpoint,
+    pool: PoolId,
+    projected: Option<PoolSnapshot>,
+) -> Result<MinimumProof, OperationError> {
+    let upper = current.revision.get();
+    let mut expected = current.head;
+    let mut hash = history_hash();
+    for revision in (1..=upper).rev() {
+        let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32").bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
+        let operation = OperationId::from_bytes(
+            id.try_into()
+                .map_err(|_| OperationError::RecoveryRequired)?,
+        );
+        let retained = read_operation(connection, input, crypto, binding, operation)
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?;
+        if retained.receipt.checkpoint().revision().get() != revision
+            || retained.receipt.checkpoint().head() != expected
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        hash_retained(&mut hash, revision, binding, operation, &retained)?;
+        if retained.receipt.pool().id() == pool {
+            if projected != Some(retained.receipt.pool()) {
+                return Err(OperationError::RecoveryRequired);
+            }
+            return Ok(MinimumProof {
+                lower: revision,
+                upper,
+                digest: hash.finalize().into(),
+            });
+        }
+        expected = retained.previous_head;
+    }
+    if expected.is_some() || projected.is_some() {
+        return Err(OperationError::RecoveryRequired);
+    }
+    Ok(MinimumProof {
+        lower: 1,
         upper,
         digest: hash.finalize().into(),
     })

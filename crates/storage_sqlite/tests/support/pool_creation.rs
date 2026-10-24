@@ -972,5 +972,145 @@ async fn acknowledged_branch_cannot_be_satisfied_by_unprotected_history_index_fi
 #[path = "pool_correction.rs"]
 mod correction;
 
+#[tokio::test]
+async fn acknowledged_history_refuses_an_older_individual_pool_projection() {
+    let f = Fixture::new();
+    let (store, e, binding) = create(&f).await;
+    let initial = committed(
+        store
+            .execute_inventory(request(&binding, 1, 2, "projection"), proof(e.proof()))
+            .await
+            .unwrap(),
+    );
+    let mut connection = database(&f).await;
+    let original: (i64, Vec<u8>) =
+        sqlx::query_as("SELECT revision,protected FROM stock_pools WHERE pool_id=?")
+            .bind(PoolId::from_bytes([2; 32]).as_bytes().as_slice())
+            .fetch_one(&mut connection)
+            .await
+            .unwrap();
+    let capture = request(&binding, 3, 2, "projection");
+    let wire = serde_json::json!({"type":"stock.adjust","context":capture.command().context(),"input":{"pool_id":PoolId::from_bytes([2;32]),"expected_version":"1","direction":"add","amount":"0.125","reason":"projection continuity"}});
+    let changed = committed(
+        store
+            .execute_inventory(
+                InventoryRequest::from_protected_wire(
+                    binding.clone(),
+                    initial.checkpoint(),
+                    &serde_json::to_vec(&wire).unwrap(),
+                )
+                .unwrap(),
+                proof(e.proof()),
+            )
+            .await
+            .unwrap(),
+    );
+    assert_eq!(changed.pool().balances().physical().available.get(), 375);
+    sqlx::query("UPDATE stock_pools SET revision=?,protected=? WHERE pool_id=?")
+        .bind(original.0)
+        .bind(original.1)
+        .bind(PoolId::from_bytes([2; 32]).as_bytes().as_slice())
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .pool(
+                binding.clone(),
+                changed.checkpoint(),
+                PoolId::from_bytes([2; 32]),
+                proof(e.proof())
+            )
+            .await,
+        Err(OperationError::RecoveryRequired)
+    );
+    let mut retry = wire;
+    retry["context"]["operation_id"] = serde_json::json!(OperationId::from_bytes([4; 32]));
+    let retry = InventoryRequest::from_protected_wire(
+        binding,
+        changed.checkpoint(),
+        &serde_json::to_vec(&retry).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        store.execute_inventory(retry, proof(e.proof())).await,
+        Err(OperationError::RecoveryRequired)
+    );
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_operations")
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+    assert_eq!(count, 2);
+    connection.close().await.unwrap();
+    store.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_mutable_pool_index_cannot_hide_a_more_recent_protected_pool_effect() {
+    let f = Fixture::new();
+    let (store, e, binding) = create(&f).await;
+    let initial = committed(
+        store
+            .execute_inventory(request(&binding, 1, 2, "projection"), proof(e.proof()))
+            .await
+            .unwrap(),
+    );
+    let mut connection = database(&f).await;
+    let original: (i64, Vec<u8>) =
+        sqlx::query_as("SELECT revision,protected FROM stock_pools WHERE pool_id=?")
+            .bind(PoolId::from_bytes([2; 32]).as_bytes().as_slice())
+            .fetch_one(&mut connection)
+            .await
+            .unwrap();
+    let capture = request(&binding, 3, 2, "projection");
+    let wire = serde_json::json!({"type":"stock.adjust","context":capture.command().context(),"input":{"pool_id":PoolId::from_bytes([2;32]),"expected_version":"1","direction":"add","amount":"0.125","reason":"projection continuity"}});
+    committed(
+        store
+            .execute_inventory(
+                InventoryRequest::from_protected_wire(
+                    binding.clone(),
+                    initial.checkpoint(),
+                    &serde_json::to_vec(&wire).unwrap(),
+                )
+                .unwrap(),
+                proof(e.proof()),
+            )
+            .await
+            .unwrap(),
+    );
+    let newest = committed(
+        store
+            .execute_inventory(request(&binding, 4, 5, "other pool"), proof(e.proof()))
+            .await
+            .unwrap(),
+    );
+    sqlx::query("UPDATE stock_pools SET revision=?,protected=? WHERE pool_id=?")
+        .bind(original.0)
+        .bind(original.1)
+        .bind(PoolId::from_bytes([2; 32]).as_bytes().as_slice())
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE stock_operations SET pool_id=? WHERE operation_id=?")
+        .bind(PoolId::from_bytes([5; 32]).as_bytes().as_slice())
+        .bind(OperationId::from_bytes([3; 32]).as_bytes().as_slice())
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    assert_eq!(
+        store
+            .pool(
+                binding,
+                newest.checkpoint(),
+                PoolId::from_bytes([2; 32]),
+                proof(e.proof())
+            )
+            .await,
+        Err(OperationError::RecoveryRequired)
+    );
+    connection.close().await.unwrap();
+    store.close().await.unwrap();
+}
+
 #[path = "stock_grants.rs"]
 mod grants;

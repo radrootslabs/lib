@@ -3,7 +3,7 @@ mod checkpoint;
 mod codec;
 mod plan;
 use super::*;
-use checkpoint::{MinimumProof, authenticate_minimum};
+use checkpoint::{MinimumProof, authenticate_minimum, authenticate_projection};
 pub(super) async fn grant_minimum(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
@@ -71,6 +71,7 @@ struct Access {
     grant: Vec<u8>,
     current: WorkspaceBinding,
     minimum_proof: MinimumProof,
+    projection_proof: Option<MinimumProof>,
 }
 pub(in crate::workspace) struct Turn<'a> {
     pub connection: &'a mut SqliteConnection,
@@ -134,6 +135,7 @@ impl Turn<'_> {
             grant,
             current,
             minimum_proof,
+            projection_proof: None,
         })
     }
     pub async fn create(
@@ -210,6 +212,21 @@ impl Turn<'_> {
         )
         .await?;
         let before = existing.as_ref().map(|v| v.pool);
+        access.projection_proof = Some(
+            authenticate_projection(
+                self.connection,
+                self.selected,
+                self.crypto,
+                &access.current,
+                access
+                    .authority
+                    .inventory
+                    .ok_or(OperationError::UnsupportedOperation)?,
+                request.command().pool_id(),
+                before,
+            )
+            .await?,
+        );
         let (pool, quantity, movement_kind) = plan_effect(request.command(), before)?;
         let label = if let Some(input) = request.command().creation_input() {
             input.label()
@@ -369,6 +386,7 @@ impl Turn<'_> {
             if let Some(state)=access.authority.authorization { grants::check_state(&mut tx,state).await?; }
             check_head(&mut tx,checkpoint).await?;
             access.minimum_proof.confirm(&mut tx).await?;
+            if let Some(proof)=&access.projection_proof {proof.confirm(&mut tx).await?;}
             let current=access.record.authenticate(request.binding().input(),&proof,self.clock.now()?)?;
             same_binding(request.binding(),&current)?;
             if current.observed_at()<access.current.observed_at() {return Err(WorkspaceError::Unavailable.into());}
@@ -427,6 +445,7 @@ impl Turn<'_> {
             if let Some(state)=access.authority.authorization { grants::check_state(&mut tx,state).await?; }
             check_head(&mut tx,access.authority.inventory.ok_or(OperationError::UnsupportedOperation)?).await?;
             access.minimum_proof.confirm(&mut tx).await?;
+            if let Some(proof)=&access.projection_proof {proof.confirm(&mut tx).await?;}
             let current=access.record.authenticate(access.current.input(),proof,self.clock.now()?)?;
             same_binding(&access.current,&current)?;
             if let Some(operation)=absent_operation {let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND operation_id=?").bind(current.actor().participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;if count!=0 {return Err(OperationError::RecoveryRequired);}}
@@ -499,9 +518,24 @@ impl Turn<'_> {
         id: PoolId,
         proof: AttachmentProof,
     ) -> Result<Option<radroots_domain::stock::PoolView>, OperationError> {
-        let access = self.access(&binding, minimum, &proof).await?;
+        let mut access = self.access(&binding, minimum, &proof).await?;
         access.record.require(StockAction::ReadPools, id)?;
         let result = read_pool(self.connection, self.selected, self.crypto, id).await?;
+        access.projection_proof = Some(
+            authenticate_projection(
+                self.connection,
+                self.selected,
+                self.crypto,
+                &access.current,
+                access
+                    .authority
+                    .inventory
+                    .ok_or(OperationError::UnsupportedOperation)?,
+                id,
+                result.as_ref().map(|v| v.pool),
+            )
+            .await?,
+        );
         self.confirm(
             &access,
             &proof,
