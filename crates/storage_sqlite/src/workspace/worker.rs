@@ -38,6 +38,11 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    ChangeStockGrant(
+        Box<stock::grants::Change>,
+        AttachmentProof,
+        Reply<stock::StockGrantOutcome>,
+    ),
     ExecuteInventory(
         Box<radroots_storage::inventory::InventoryRequest>,
         AttachmentProof,
@@ -163,6 +168,9 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::ChangeStockGrant(_, _, reply) => {
+                let _ = reply.send(Err(WorkspaceError::RecoveryRequired));
+            }
             Self::ExecuteInventory(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -365,6 +373,7 @@ impl Handle {
                                 && !matches!(
                                     &job,
                                     Job::Authenticate(..)
+                                        | Job::ChangeStockGrant(..)
                                         | Job::ExecuteInventory(..)
                                         | Job::InventoryOperation(..)
                                         | Job::Pool(..)
@@ -399,6 +408,26 @@ impl Handle {
                                 continue;
                             };
                             match job {
+                                Job::ChangeStockGrant(change, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock && !uncertain {
+                                        stock::grants::change(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *change,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(WorkspaceError::RecoveryRequired)
+                                    };
+                                    let _ = reply.send(result);
+                                }
                                 Job::ExecuteInventory(request, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
                                         stock::inventory::Turn {
@@ -796,6 +825,18 @@ impl Handle {
             }
         }
     }
+    pub(super) async fn change_stock_grant(
+        &self,
+        change: stock::grants::Change,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockGrantOutcome, WorkspaceError> {
+        let transaction = change.transaction;
+        let (reply, receive) = oneshot::channel();
+        self.send(Job::ChangeStockGrant(Box::new(change), proof, reply))?;
+        receive
+            .await
+            .unwrap_or(Ok(stock::StockGrantOutcome::Unknown(transaction)))
+    }
     pub(super) async fn stock_authority(
         &self,
         input: AttachmentInput,
@@ -857,7 +898,7 @@ impl Handle {
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
-            Job::ExecuteInventory(..) => 64 * 1024,
+            Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,
             Job::PrepareDelivery(..) => 1024 * 1024,
             Job::BindPlan(..) => 1024 * 1024,

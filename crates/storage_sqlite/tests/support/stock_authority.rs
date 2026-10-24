@@ -25,6 +25,51 @@ async fn reopen(f: &Fixture, e: &StockEnrollment) -> NativeWorkspace {
         .await
         .unwrap()
 }
+// Prepared outside the future under test so observer loss cannot discard a
+// not-yet-submitted revocation. Production callers retain its actual receipt.
+struct PreparedRevocation {
+    binding: radroots_storage::workspace::WorkspaceBinding,
+    minimum: radroots_storage::inventory::InventoryCheckpointRef,
+    transaction: radroots_domain::TransactionId,
+}
+impl PreparedRevocation {
+    async fn new(store: &NativeWorkspace, e: &StockEnrollment) -> Self {
+        Self {
+            binding: store
+                .authenticate(e.input().clone(), e.proof())
+                .await
+                .unwrap(),
+            minimum: store
+                .stock_authority(e.input().clone(), e.proof())
+                .await
+                .unwrap()
+                .inventory_checkpoint()
+                .unwrap(),
+            transaction: radroots_domain::TransactionId::from_bytes([0xAD; 32]),
+        }
+    }
+    async fn run(
+        &self,
+        store: &NativeWorkspace,
+        e: &StockEnrollment,
+    ) -> Result<(), WorkspaceError> {
+        match store
+            .revoke_stock_grant(
+                self.binding.clone(),
+                self.minimum,
+                e.proof(),
+                self.transaction,
+                e.input().grant_id(),
+            )
+            .await?
+        {
+            radroots_storage_sqlite::workspace::StockGrantOutcome::Committed(_) => Ok(()),
+            radroots_storage_sqlite::workspace::StockGrantOutcome::Unknown(_) => {
+                Err(WorkspaceError::CommitUnknown)
+            }
+        }
+    }
+}
 #[tokio::test]
 async fn explicit_stock_creation_has_retained_receipt_and_reopens() {
     let f = Fixture::new();
@@ -62,6 +107,7 @@ async fn proof_expiry_revocation_and_wrong_selection_are_current() {
     let f = Fixture::new();
     let e = enrollment(&f);
     let store = create(&f, &e).await;
+    let prepared_revocation = PreparedRevocation::new(&store, &e).await;
     let wrong = AttachmentProof::from_protected_input(&[0xAB; 32]).unwrap();
     assert_eq!(
         store.authenticate(e.input().clone(), &wrong).await,
@@ -81,7 +127,7 @@ async fn proof_expiry_revocation_and_wrong_selection_are_current() {
         Err(WorkspaceError::GrantExpired)
     );
     f.clock.0.store(100, Ordering::SeqCst);
-    store.revoke(e.input().clone(), e.proof()).await.unwrap();
+    prepared_revocation.run(&store, &e).await.unwrap();
     assert_eq!(
         store.authenticate(e.input().clone(), e.proof()).await,
         Err(WorkspaceError::GrantRevoked)
@@ -215,8 +261,9 @@ async fn cancelled_stock_revocation_drains_then_remains_revoked() {
     let store = NativeWorkspace::initialize_seller_stock(&f.path, &e, f.crypto(), clock.clone())
         .await
         .unwrap();
+    let prepared_revocation = PreparedRevocation::new(&store, &e).await;
     clock.arm();
-    let mut revoked = Box::pin(store.revoke(e.input().clone(), e.proof()));
+    let mut revoked = Box::pin(prepared_revocation.run(&store, &e));
     assert!(futures::poll!(revoked.as_mut()).is_pending());
     clock.entered();
     drop(revoked);
@@ -243,6 +290,7 @@ async fn actual_commit_error_fences_the_owner_until_original_state_reopens() {
     let f = Fixture::new();
     let e = enrollment(&f);
     let store = create(&f, &e).await;
+    let prepared_revocation = PreparedRevocation::new(&store, &e).await;
     let database = f.path.join("stock_execution_v1.sqlite");
     let mut connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&database),
@@ -251,7 +299,7 @@ async fn actual_commit_error_fences_the_owner_until_original_state_reopens() {
     .unwrap();
     sqlx::raw_sql("CREATE TABLE deferred_fault(value INTEGER REFERENCES stock_authority(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER fail_commit AFTER UPDATE ON stock_grants BEGIN INSERT INTO deferred_fault VALUES(2); END").execute(&mut connection).await.unwrap();
     assert_eq!(
-        store.revoke(e.input().clone(), e.proof()).await,
+        prepared_revocation.run(&store, &e).await,
         Err(WorkspaceError::CommitUnknown)
     );
     assert_eq!(
@@ -406,6 +454,7 @@ async fn statement_failure_rolls_back_both_revocation_records() {
     let f = Fixture::new();
     let e = enrollment(&f);
     let store = create(&f, &e).await;
+    let prepared_revocation = PreparedRevocation::new(&store, &e).await;
     let mut connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
             .filename(f.path.join("stock_execution_v1.sqlite")),
@@ -414,7 +463,7 @@ async fn statement_failure_rolls_back_both_revocation_records() {
     .unwrap();
     sqlx::raw_sql("CREATE TRIGGER fail_revocation BEFORE UPDATE ON stock_grants BEGIN SELECT RAISE(ABORT,'fault'); END").execute(&mut connection).await.unwrap();
     assert_eq!(
-        store.revoke(e.input().clone(), e.proof()).await,
+        prepared_revocation.run(&store, &e).await,
         Err(WorkspaceError::StorageFailure)
     );
     let receipt = store
@@ -524,11 +573,12 @@ async fn changed_catalog_after_protected_reads_is_refused_before_authenticated_c
             NativeWorkspace::initialize_seller_stock(&f.path, &e, f.crypto(), clock.clone())
                 .await
                 .unwrap();
+        let prepared_revocation = PreparedRevocation::new(&store, &e).await;
         clock.arm();
         let mut operation: std::pin::Pin<
             Box<dyn std::future::Future<Output = Result<(), WorkspaceError>> + '_>,
         > = if revocation {
-            Box::pin(store.revoke(e.input().clone(), e.proof()))
+            Box::pin(prepared_revocation.run(&store, &e))
         } else {
             Box::pin(async {
                 store
@@ -552,7 +602,7 @@ async fn changed_catalog_after_protected_reads_is_refused_before_authenticated_c
         clock.release();
         assert_eq!(operation.await, Err(WorkspaceError::RecoveryRequired));
         store.close().await.unwrap();
-        sqlx::query("PRAGMA user_version=3")
+        sqlx::query("PRAGMA user_version=4")
             .execute(&mut connection)
             .await
             .unwrap();

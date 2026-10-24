@@ -25,6 +25,7 @@ fn minimum(binding: &radroots_storage::workspace::WorkspaceBinding) -> Inventory
         None,
     )
     .unwrap()
+    .with_optional_authorization(binding.stock_authorization())
 }
 fn request(
     binding: &radroots_storage::workspace::WorkspaceBinding,
@@ -741,7 +742,20 @@ async fn current_credentials_guard_pool_reads_replay_and_new_effects_after_revoc
             .await,
         Err(OperationError::Workspace(WorkspaceError::Unauthorized))
     ));
-    store.revoke(e.input().clone(), e.proof()).await.unwrap();
+    let revoked = store
+        .revoke_stock_grant(
+            binding.clone(),
+            receipt.checkpoint(),
+            e.proof(),
+            radroots_domain::TransactionId::from_bytes([0xAE; 32]),
+            e.input().grant_id(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        revoked,
+        radroots_storage_sqlite::workspace::StockGrantOutcome::Committed(_)
+    ));
     assert!(matches!(
         store
             .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
@@ -957,3 +971,6 @@ async fn acknowledged_branch_cannot_be_satisfied_by_unprotected_history_index_fi
 
 #[path = "pool_correction.rs"]
 mod correction;
+
+#[path = "stock_grants.rs"]
+mod grants;

@@ -8,6 +8,12 @@ use radroots_domain::{
     GrantId, PublicKey, RouteDigest, Sequence, UnixSeconds, WorkspaceId,
 };
 use sha2::{Digest, Sha256};
+mod authorization;
+pub use authorization::{StockAuthorizationRef, StockGrantRecord};
+mod selection;
+pub use selection::{SellerAuthoritySelection, StockCapabilityContract};
+mod permissions;
+pub use permissions::{StockAction, StockGrantScope, StockResources};
 /// Explicit local enrollment inputs, supplied by a trusted host interaction.
 /// Only a qualified stock host may persist the resulting authority.
 pub struct SellerStockConfig {

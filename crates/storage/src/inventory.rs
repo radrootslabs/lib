@@ -13,6 +13,7 @@ pub struct InventoryRequest {
     binding: WorkspaceBinding,
     minimum: InventoryCheckpointRef,
     command: CapturedInventoryCommand,
+    replay_only: bool,
 }
 impl InventoryRequest {
     pub fn new(
@@ -20,16 +21,40 @@ impl InventoryRequest {
         minimum: InventoryCheckpointRef,
         command: impl Into<CapturedInventoryCommand>,
     ) -> Result<Self, OperationError> {
-        let command = command.into();
+        Self::build(binding, minimum, command.into(), false)
+    }
+    /// An explicitly retained original command under a current grant. A missing
+    /// original operation requires recovery and can never create a fresh effect.
+    pub fn replay_from_protected_wire(
+        binding: WorkspaceBinding,
+        minimum: InventoryCheckpointRef,
+        wire: &[u8],
+    ) -> Result<Self, OperationError> {
+        Self::build(
+            binding,
+            minimum,
+            CapturedInventoryCommand::parse(wire).map_err(|_| OperationError::RecoveryRequired)?,
+            true,
+        )
+    }
+    fn build(
+        binding: WorkspaceBinding,
+        minimum: InventoryCheckpointRef,
+        command: CapturedInventoryCommand,
+        replay_only: bool,
+    ) -> Result<Self, OperationError> {
         let context = command.context();
         let selection = binding.input();
         if binding.scope() != WorkspaceScope::SellerStockOwner {
             return Err(OperationError::Unauthorized);
         }
-        if context.workspace_id() != selection.workspace_id()
+        if (!replay_only && context.actor() != binding.actor())
+            || context.workspace_id() != selection.workspace_id()
             || context.authority() != selection.authority()
             || context.route_digest() != selection.route_digest()
-            || context.actor() != binding.actor()
+            || context.actor().participant() != binding.actor().participant()
+            || context.actor().role() != binding.actor().role()
+            || context.actor().organization() != binding.actor().organization()
         {
             return Err(OperationError::InvalidCommand);
         }
@@ -49,6 +74,7 @@ impl InventoryRequest {
             binding,
             minimum,
             command,
+            replay_only,
         })
     }
     /// Reconstructs captured data only; the concrete host must reauthenticate it.
@@ -73,12 +99,16 @@ impl InventoryRequest {
     pub const fn command(&self) -> &CapturedInventoryCommand {
         &self.command
     }
+    pub const fn replay_only(&self) -> bool {
+        self.replay_only
+    }
     pub fn retained_copy(&self) -> Result<Self, OperationError> {
-        Self::new(
+        Self::build(
             self.binding.clone(),
             self.minimum,
             CapturedInventoryCommand::parse(self.command.protected_wire())
                 .map_err(|_| OperationError::RecoveryRequired)?,
+            self.replay_only,
         )
     }
 }
@@ -94,6 +124,7 @@ pub struct InventoryCheckpointRef {
     authority: radroots_domain::AuthorityRef,
     revision: radroots_domain::Sequence,
     head: Option<radroots_domain::CheckpointDigest>,
+    authorization: Option<crate::workspace::seller_stock::StockAuthorizationRef>,
 }
 impl InventoryCheckpointRef {
     pub fn from_host_metadata(
@@ -108,7 +139,29 @@ impl InventoryCheckpointRef {
             authority,
             revision,
             head,
+            authorization: None,
         })
+    }
+    /// Binds an independently retained authorization-state observation. Metadata
+    /// alone supplies neither credential possession nor checkpoint provenance.
+    pub const fn with_authorization(
+        mut self,
+        value: crate::workspace::seller_stock::StockAuthorizationRef,
+    ) -> Self {
+        self.authorization = Some(value);
+        self
+    }
+    pub const fn with_optional_authorization(
+        mut self,
+        value: Option<crate::workspace::seller_stock::StockAuthorizationRef>,
+    ) -> Self {
+        self.authorization = value;
+        self
+    }
+    pub const fn authorization(
+        self,
+    ) -> Option<crate::workspace::seller_stock::StockAuthorizationRef> {
+        self.authorization
     }
     pub const fn authority(self) -> radroots_domain::AuthorityRef {
         self.authority

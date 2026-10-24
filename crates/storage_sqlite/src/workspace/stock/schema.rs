@@ -1,7 +1,7 @@
 //! Exact stock catalogs. Enrollment-only version1 is retained without upgrade.
 use super::WorkspaceError;
 use sqlx::SqliteConnection;
-pub(super) const CURRENT: i64 = 3;
+pub(super) const CURRENT: i64 = 4;
 const AUTHORITY: &str = "CREATE TABLE stock_authority (singleton INTEGER PRIMARY KEY CHECK(singleton=1), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 const GRANTS: &str = "CREATE TABLE stock_grants (grant_id BLOB PRIMARY KEY CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
 const POOLS: &str = "CREATE TABLE stock_pools (pool_id BLOB PRIMARY KEY CHECK(length(pool_id)=32), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
@@ -22,7 +22,7 @@ pub(super) fn objects(
     ];
     match version {
         1 => {}
-        2 | 3 => objects.extend([
+        2..=4 => objects.extend([
             ("table", "stock_pools", "stock_pools", POOLS),
             ("table", "stock_operations", "stock_operations", OPERATIONS),
             (
@@ -46,6 +46,16 @@ pub(super) fn objects(
             ("table", "stock_movements", "stock_movements", MOVEMENTS),
         ]),
         _ => return Err(WorkspaceError::RecoveryRequired),
+    }
+    if version == 4 {
+        objects.push(("table", "stock_grant_changes", "stock_grant_changes", "CREATE TABLE stock_grant_changes (transaction_id BLOB PRIMARY KEY CHECK(length(transaction_id)=32), revision INTEGER NOT NULL CHECK(revision>1), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
+        objects.push((
+            "index",
+            "stock_grant_change_revision",
+            "stock_grant_changes",
+            "CREATE UNIQUE INDEX stock_grant_change_revision ON stock_grant_changes(revision)",
+        ));
+        objects.push(("index", "stock_actor_operation_identity", "stock_operations", "CREATE UNIQUE INDEX stock_actor_operation_identity ON stock_operations(actor,operation_id)"));
     }
     Ok(objects)
 }

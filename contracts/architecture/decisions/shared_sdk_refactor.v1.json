@@ -58,7 +58,10 @@
     "seller_owner_executor_optional_to_single_device": true
   },
   "local_outbox_authority": {
-    "scopes": ["new_buyer_outbox", "new_seller_outbox"],
+    "scopes": [
+      "new_buyer_outbox",
+      "new_seller_outbox"
+    ],
     "seller_enrollment_explicit": true,
     "scope_retained_in_authenticated_binding_and_preparation": true,
     "legacy_preparation_v2_scope": "new_buyer_outbox",
@@ -72,11 +75,16 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 3,
-    "retained_enrollment_versions": [1],
-    "retained_inventory_versions": [2],
-    "authority_payload_schema": "radroots.seller_stock.authority.v3",
-    "inventory_operation_payload_schema": "radroots.seller_stock.operation.v2",
+    "schema_version": 4,
+    "retained_enrollment_versions": [
+      1
+    ],
+    "retained_inventory_versions": [
+      2,
+      3
+    ],
+    "authority_payload_schema": "radroots.seller_stock.authority.v4",
+    "inventory_operation_payload_schema": "radroots.seller_stock.operation.v3",
     "inventory_movement_payload_schema": "radroots.seller_stock.movement.v2",
     "pool_tick_scale_explicit": true,
     "pool_tick_scale_encoding": "canonical_integer_string",
@@ -88,7 +96,33 @@
     "protected_authority_and_grants_separate": true,
     "automatic_outbox_migration": false,
     "historical_obligations_recovered": false,
-    "business_effects_qualified": false
+    "business_effects_qualified": false,
+    "grant_payload_schema": "radroots.seller_stock.grant.v2",
+    "grant_change_payload_schema": "radroots.seller_stock.grant_change.v1",
+    "namespace_excludes_caller_grant": true,
+    "actor_operation_unique_across_grants": true,
+    "grant_checkpoint_minimum_required": true,
+    "grant_checkpoint_policy": "exact_current_for_fresh_work_original_prior_for_exact_admin_recovery",
+    "grant_set_max": 64,
+    "grant_pool_scope_max": 64,
+    "grant_action_max": 6,
+    "grant_scope_actions": [
+      "read_pools",
+      "read_operations",
+      "create_pool",
+      "add_stock",
+      "remove_stock",
+      "spoil_stock"
+    ],
+    "grant_write_requires_receipt_and_recovery_read": true,
+    "inventory_scope_grants_administration": false,
+    "grant_admin_prepared_transaction_required": true,
+    "retained_grants_automatically_evicted": false,
+    "old_self_revoke_api_supported": false,
+    "capability_contract": {
+      "id": "radroots.seller_stock.native_inventory",
+      "version": "1"
+    }
   },
   "provenance": {
     "app_behavior_implementation": "independent_reimplementation",

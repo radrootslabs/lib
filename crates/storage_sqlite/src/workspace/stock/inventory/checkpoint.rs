@@ -3,13 +3,13 @@ use super::*;
 /// Constant-memory witness of the exact protected ancestry checked before IO
 /// enters the write transaction. The transaction rereads every bound SQL row;
 /// no key-provider callback or decryption runs while it owns the SQL lock.
-pub(super) struct MinimumProof {
+pub(in crate::workspace::stock) struct MinimumProof {
     lower: u64,
     upper: u64,
     digest: [u8; 32],
 }
 impl MinimumProof {
-    pub(super) async fn confirm(
+    pub(in crate::workspace::stock) async fn confirm(
         &self,
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {
@@ -85,7 +85,7 @@ pub(super) async fn authenticate_minimum(
         }
         hash.update(revision.to_be_bytes());
         hash.update(binding.actor().participant().as_bytes());
-        hash.update(binding.input().grant_id().as_bytes());
+        hash.update(retained.original_grant.as_bytes());
         hash.update(operation.as_bytes());
         hash.update(retained.digest.as_bytes());
         hash.update(

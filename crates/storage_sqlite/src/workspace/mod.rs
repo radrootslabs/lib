@@ -22,7 +22,10 @@ mod recovery;
 mod schema;
 mod snapshot;
 mod stock;
-pub use stock::{SellerStockConfig, StockAuthorityReceipt, StockEnrollment};
+pub use stock::{
+    SellerStockConfig, StockAuthorityReceipt, StockEnrollment, StockGrantEnrollment,
+    StockGrantOutcome, StockGrantReceipt,
+};
 mod worker;
 
 #[cfg(test)]

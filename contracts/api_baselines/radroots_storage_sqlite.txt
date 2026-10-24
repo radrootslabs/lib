@@ -368,6 +368,9 @@ pub use radroots_storage_sqlite::workspace::WorkspaceBinding
 pub use radroots_storage_sqlite::workspace::WorkspaceClock
 pub use radroots_storage_sqlite::workspace::WorkspaceError
 pub use radroots_storage_sqlite::workspace::WorkspaceScope
+pub enum radroots_storage_sqlite::workspace::StockGrantOutcome
+pub radroots_storage_sqlite::workspace::StockGrantOutcome::Committed(radroots_storage_sqlite::workspace::StockGrantReceipt)
+pub radroots_storage_sqlite::workspace::StockGrantOutcome::Unknown(radroots_domain::identifier::TransactionId)
 pub struct radroots_storage_sqlite::workspace::NativeWorkspace
 impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::authenticate(&self, radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::WorkspaceError>
@@ -375,6 +378,9 @@ pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::close(&self) -
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::initialize_local_outbox(&std::path::Path, radroots_storage::workspace::local_outbox::LocalOutboxConfig, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<(Self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof), radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::open_existing(&std::path::Path, radroots_storage::workspace::AttachmentInput, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::revoke(&self, radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+impl radroots_storage_sqlite::workspace::NativeWorkspace
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::enroll_stock_grant(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &radroots_storage::workspace::AttachmentProof, &radroots_storage_sqlite::workspace::StockGrantEnrollment) -> core::result::Result<radroots_storage_sqlite::workspace::StockGrantOutcome, radroots_storage::workspace::WorkspaceError>
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::revoke_stock_grant(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &radroots_storage::workspace::AttachmentProof, radroots_domain::identifier::TransactionId, radroots_domain::identifier::GrantId) -> core::result::Result<radroots_storage_sqlite::workspace::StockGrantOutcome, radroots_storage::workspace::WorkspaceError>
 impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::initialize_seller_stock(&std::path::Path, &radroots_storage_sqlite::workspace::StockEnrollment, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::open_seller_stock(&std::path::Path, radroots_storage::workspace::AttachmentInput, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
@@ -418,6 +424,19 @@ pub fn radroots_storage_sqlite::workspace::StockEnrollment::proof(&self) -> &rad
 pub const fn radroots_storage_sqlite::workspace::StockEnrollment::transaction_id(&self) -> radroots_domain::identifier::TransactionId
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockEnrollment
 pub fn radroots_storage_sqlite::workspace::StockEnrollment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_sqlite::workspace::StockGrantEnrollment
+impl radroots_storage_sqlite::workspace::StockGrantEnrollment
+pub fn radroots_storage_sqlite::workspace::StockGrantEnrollment::input(&self) -> &radroots_storage::workspace::AttachmentInput
+pub fn radroots_storage_sqlite::workspace::StockGrantEnrollment::prepare(&radroots_storage::workspace::seller_stock::selection::SellerAuthoritySelection, alloc::string::String, radroots_domain::context::UnixSeconds, radroots_storage::workspace::seller_stock::permissions::StockGrantScope) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage_sqlite::workspace::StockGrantEnrollment::proof(&self) -> &radroots_storage::workspace::AttachmentProof
+pub const fn radroots_storage_sqlite::workspace::StockGrantEnrollment::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockGrantEnrollment
+pub fn radroots_storage_sqlite::workspace::StockGrantEnrollment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_sqlite::workspace::StockGrantReceipt
+impl radroots_storage_sqlite::workspace::StockGrantReceipt
+pub const fn radroots_storage_sqlite::workspace::StockGrantReceipt::authorization(&self) -> radroots_storage::workspace::seller_stock::authorization::StockAuthorizationRef
+pub const fn radroots_storage_sqlite::workspace::StockGrantReceipt::grant_id(&self) -> radroots_domain::identifier::GrantId
+pub const fn radroots_storage_sqlite::workspace::StockGrantReceipt::transaction_id(&self) -> radroots_domain::identifier::TransactionId
 pub struct radroots_storage_sqlite::workspace::WorkspaceCrypto
 impl radroots_storage_sqlite::workspace::WorkspaceCrypto
 pub fn radroots_storage_sqlite::workspace::WorkspaceCrypto::new(alloc::sync::Arc<dyn radroots_secrets::provider::SecretProvider>, radroots_secrets::id::SecretRef, radroots_secrets::wrapping::SecretMaterial, radroots_secrets::provider::AccessPolicy) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>

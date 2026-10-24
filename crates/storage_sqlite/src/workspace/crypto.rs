@@ -709,6 +709,31 @@ fn stock_root_context(
     input: &super::AttachmentInput,
     version: i64,
 ) -> Result<EnvelopeContext, WorkspaceError> {
+    if version == 4 {
+        use sha2::{Digest, Sha256};
+        let namespace =
+            radroots_storage::workspace::seller_stock::SellerAuthoritySelection::from_attachment(
+                input,
+            );
+        let wire = zeroize::Zeroizing::new(
+            serde_json::to_vec(&namespace).map_err(|_| WorkspaceError::InvalidInput)?,
+        );
+        if wire.len() > PRIVATE_PAYLOAD_MAX_BYTES {
+            return Err(WorkspaceError::InvalidInput);
+        }
+        let mut hash = Sha256::new();
+        hash.update(b"radroots.seller_stock.authority_context.v4\0");
+        hash.update(wire.as_slice());
+        let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
+        return Ok(EnvelopeContext::new(
+            EnvelopePurpose::parse("radroots.seller_stock.authority")
+                .map_err(|_| WorkspaceError::InvalidInput)?,
+            EnvelopeSubject::parse("seller_stock", subject.to_string())
+                .map_err(|_| WorkspaceError::InvalidInput)?,
+            PayloadSchemaId::parse("radroots.seller_stock.authority.v4")
+                .map_err(|_| WorkspaceError::InvalidInput)?,
+        ));
+    }
     let schema = match version {
         1 => "radroots.seller_stock.authority.v1",
         2 => "radroots.seller_stock.authority.v2",
@@ -729,6 +754,14 @@ fn stock_record_context(
 ) -> Result<EnvelopeContext, WorkspaceError> {
     use sha2::{Digest, Sha256};
     let (purpose, schema) = match kind {
+        "grant_change" => (
+            "radroots.seller_stock.grant_change",
+            "radroots.seller_stock.grant_change.v1",
+        ),
+        "grant" => (
+            "radroots.seller_stock.grant",
+            "radroots.seller_stock.grant.v2",
+        ),
         "pool" => (
             "radroots.seller_stock.pool",
             "radroots.seller_stock.pool.v1",
@@ -766,9 +799,10 @@ fn stock_record_context_for_catalog(
 ) -> Result<EnvelopeContext, WorkspaceError> {
     let original = stock_record_context(input, kind, id)?;
     let schema = match (catalog, kind) {
-        (2, _) | (3, "pool") => return Ok(original),
+        (2, _) | (3 | 4, "pool") => return Ok(original),
         (3, "operation") => "radroots.seller_stock.operation.v2",
-        (3, "movement") => "radroots.seller_stock.movement.v2",
+        (4, "operation") => "radroots.seller_stock.operation.v3",
+        (3 | 4, "movement") => "radroots.seller_stock.movement.v2",
         _ => return Err(WorkspaceError::RecoveryRequired),
     };
     Ok(EnvelopeContext::new(

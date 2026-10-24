@@ -4,7 +4,19 @@ mod codec;
 mod plan;
 use super::*;
 use checkpoint::{MinimumProof, authenticate_minimum};
-use codec::{Movement, MovementKind, OperationWire, decode_operation};
+pub(super) async fn grant_minimum(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    current: InventoryCheckpoint,
+    minimum: radroots_storage::inventory::InventoryCheckpointRef,
+) -> Result<MinimumProof, WorkspaceError> {
+    authenticate_minimum(connection, input, crypto, binding, current, minimum)
+        .await
+        .map_err(|_| WorkspaceError::RecoveryRequired)
+}
+use codec::{Movement, MovementKind, OperationWire, decode_operation, encode_operation};
 use plan::{plan_effect, record_version};
 use radroots_domain::{
     CheckpointDigest, CommandDigest, OperationId, PoolId, UnixSeconds,
@@ -54,7 +66,7 @@ pub(super) async fn check_head(
 }
 struct Access {
     authority: Authority,
-    record: GrantRecord,
+    record: StockRecord,
     root: Vec<u8>,
     grant: Vec<u8>,
     current: WorkspaceBinding,
@@ -79,13 +91,26 @@ impl Turn<'_> {
             return Err(OperationError::RecoveryRequired);
         }
         self.namespace.validate()?;
+        if !SellerAuthoritySelection::from_attachment(self.selected)
+            .matches_attachment(binding.input())
+        {
+            return Err(OperationError::Unauthorized);
+        }
         let (authority, record, root, grant) =
-            super::read(self.connection, self.selected, self.crypto).await?;
+            super::read(self.connection, binding.input(), self.crypto).await?;
         let current = record.authenticate(binding.input(), proof, self.clock.now()?)?;
         if current.scope() != WorkspaceScope::SellerStockOwner {
             return Err(OperationError::Unauthorized);
         }
         same_binding(binding, &current)?;
+        if authority.authorization != minimum.authorization() {
+            return Err(WorkspaceError::StaleCheckpoint.into());
+        }
+        let current = if let Some(state) = authority.authorization {
+            current.with_stock_authorization(state)?
+        } else {
+            current
+        };
         if authority.inventory.is_none() {
             return Err(OperationError::UnsupportedOperation);
         }
@@ -119,6 +144,9 @@ impl Turn<'_> {
         let mut access = self
             .access(request.binding(), request.minimum_checkpoint(), &proof)
             .await?;
+        access
+            .record
+            .require(StockAction::ReadOperations, request.command().pool_id())?;
         let context = request.command().context();
         let operation = context.operation_id();
         let digest = request.command().digest();
@@ -138,6 +166,31 @@ impl Turn<'_> {
             self.confirm(&access, &proof, Some(&retained), None, None, None)
                 .await?;
             return Ok(InventoryOutcome::Committed(Box::new(retained.receipt)));
+        }
+        if request.replay_only() {
+            return Err(OperationError::RecoveryRequired);
+        }
+        access.record.require(
+            match request.command().kind() {
+                radroots_storage::inventory::InventoryCommandKind::CreatePool => {
+                    StockAction::CreatePool
+                }
+                radroots_storage::inventory::InventoryCommandKind::AddStock => {
+                    StockAction::AddStock
+                }
+                radroots_storage::inventory::InventoryCommandKind::RemoveStock => {
+                    StockAction::RemoveStock
+                }
+                radroots_storage::inventory::InventoryCommandKind::SpoilStock => {
+                    StockAction::SpoilStock
+                }
+            },
+            request.command().pool_id(),
+        )?;
+        // An original captured command may be replayed under a replacement grant,
+        // but a new effect must have been captured under this current grant.
+        if request.command().context().actor() != access.current.actor() {
+            return Err(OperationError::Unauthorized);
         }
         if access.current.observed_at() < request.binding().observed_at() {
             return Err(WorkspaceError::Unavailable.into());
@@ -209,7 +262,8 @@ impl Turn<'_> {
                 self.selected.authority(),
                 revision,
                 Some(head),
-            )?,
+            )?
+            .with_optional_authorization(access.authority.authorization),
         )?;
         let protected_pool = self
             .crypto
@@ -255,25 +309,29 @@ impl Turn<'_> {
                 "operation",
                 operation.as_bytes(),
                 catalog,
-                &encode(&OperationWire {
-                    version: record_version(catalog)?,
-                    before: if catalog == 3 { Some(before) } else { None },
-                    selection: request.binding().input(),
-                    scope: request.binding().scope(),
-                    principal: request.binding().principal_id(),
-                    grant_revision: request.binding().grant_revision(),
-                    grant_expires_at: request.binding().expires_at(),
-                    observed_at: request.binding().observed_at(),
-                    minimum_revision: request.minimum_checkpoint().revision(),
-                    minimum_head: request.minimum_checkpoint().head(),
-                    transaction,
-                    revision,
-                    previous_head: checkpoint.head,
-                    head,
-                    command,
-                    pool,
-                    movement,
-                })?,
+                &encode_operation(
+                    &OperationWire {
+                        version: record_version(catalog)?,
+                        before: if catalog >= 3 { Some(before) } else { None },
+                        selection: request.binding().input(),
+                        scope: request.binding().scope(),
+                        principal: request.binding().principal_id(),
+                        grant_revision: request.binding().grant_revision(),
+                        grant_expires_at: request.binding().expires_at(),
+                        observed_at: request.binding().observed_at(),
+                        minimum_revision: request.minimum_checkpoint().revision(),
+                        minimum_head: request.minimum_checkpoint().head(),
+                        transaction,
+                        revision,
+                        previous_head: checkpoint.head,
+                        head,
+                        command,
+                        pool,
+                        movement,
+                    },
+                    catalog,
+                    access.authority.authorization,
+                )?,
             )
             .await?;
         access.authority.inventory = Some(InventoryCheckpoint {
@@ -307,7 +365,8 @@ impl Turn<'_> {
             .await
             .map_err(|_| OperationError::StorageFailure)?;
         let changed:Result<(),OperationError>=async {
-            super::unchanged(&mut tx,self.selected,access.authority.version(),&access.root,&access.grant).await?;
+            super::unchanged(&mut tx,access.current.input(),access.authority.version(),&access.root,&access.grant).await?;
+            if let Some(state)=access.authority.authorization { grants::check_state(&mut tx,state).await?; }
             check_head(&mut tx,checkpoint).await?;
             access.minimum_proof.confirm(&mut tx).await?;
             let current=access.record.authenticate(request.binding().input(),&proof,self.clock.now()?)?;
@@ -315,7 +374,7 @@ impl Turn<'_> {
             if current.observed_at()<access.current.observed_at() {return Err(WorkspaceError::Unavailable.into());}
             if current.observed_at()>=context.not_after() {return Err(OperationError::DeadlineExceeded);}
             self.namespace.validate()?;
-            let absent:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND grant_id=? AND operation_id=?").bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+            let absent:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND operation_id=?").bind(request.binding().actor().participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             if absent!=0 {return Err(OperationError::StaleState);}
             if let Some(before)=before {
                 let original=existing.as_ref().ok_or(OperationError::RecoveryRequired)?;
@@ -364,17 +423,18 @@ impl Turn<'_> {
             .map_err(|_| OperationError::StorageFailure)?;
         let checked:Result<(),OperationError>=async {
             self.namespace.validate()?;
-            super::unchanged(&mut tx,self.selected,access.authority.version(),&access.root,&access.grant).await?;
+            super::unchanged(&mut tx,access.current.input(),access.authority.version(),&access.root,&access.grant).await?;
+            if let Some(state)=access.authority.authorization { grants::check_state(&mut tx,state).await?; }
             check_head(&mut tx,access.authority.inventory.ok_or(OperationError::UnsupportedOperation)?).await?;
             access.minimum_proof.confirm(&mut tx).await?;
             let current=access.record.authenticate(access.current.input(),proof,self.clock.now()?)?;
             same_binding(&access.current,&current)?;
-            if let Some(operation)=absent_operation {let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND grant_id=? AND operation_id=?").bind(current.actor().participant().as_bytes().as_slice()).bind(current.input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;if count!=0 {return Err(OperationError::RecoveryRequired);}}
+            if let Some(operation)=absent_operation {let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND operation_id=?").bind(current.actor().participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;if count!=0 {return Err(OperationError::RecoveryRequired);}}
             if let Some(id)=absent_pool {let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_pools WHERE pool_id=?").bind(id.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;if count!=0 {return Err(OperationError::RecoveryRequired);}}
             if let Some(retained)=operation {
-                let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND grant_id=? AND operation_id=? AND protected=?").bind(current.actor().participant().as_bytes().as_slice()).bind(current.input().grant_id().as_bytes().as_slice()).bind(retained.receipt.attempt().operation_id().as_bytes().as_slice()).bind(&retained.protected).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+                let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND operation_id=? AND protected=?").bind(current.actor().participant().as_bytes().as_slice()).bind(retained.receipt.attempt().operation_id().as_bytes().as_slice()).bind(&retained.protected).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
                 if count!=1 {return Err(OperationError::RecoveryRequired);}
-                let movement_count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_movements WHERE actor=? AND grant_id=? AND operation_id=?").bind(current.actor().participant().as_bytes().as_slice()).bind(current.input().grant_id().as_bytes().as_slice()).bind(retained.receipt.attempt().operation_id().as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+                let movement_count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_movements WHERE actor=? AND operation_id=?").bind(current.actor().participant().as_bytes().as_slice()).bind(retained.receipt.attempt().operation_id().as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
                 if movement_count!=i64::from(retained.movement.is_some()) {return Err(OperationError::RecoveryRequired);}
                 if let (Some(id),Some(protected))=(retained.movement,retained.movement_protected.as_ref()) {
                     let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_movements WHERE movement_id=? AND protected=?").bind(id.as_slice()).bind(protected).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
@@ -408,6 +468,14 @@ impl Turn<'_> {
             operation,
         )
         .await?;
+        if !access.record.allows_action(StockAction::ReadOperations) {
+            return Err(OperationError::Unauthorized);
+        }
+        if let Some(retained) = &result {
+            access
+                .record
+                .require(StockAction::ReadOperations, retained.receipt.pool().id())?;
+        }
         if let Some(retained) = &result
             && digest.is_some_and(|d| d != retained.digest)
         {
@@ -432,6 +500,7 @@ impl Turn<'_> {
         proof: AttachmentProof,
     ) -> Result<Option<radroots_domain::stock::PoolView>, OperationError> {
         let access = self.access(&binding, minimum, &proof).await?;
+        access.record.require(StockAction::ReadPools, id)?;
         let result = read_pool(self.connection, self.selected, self.crypto, id).await?;
         self.confirm(
             &access,
@@ -502,6 +571,7 @@ async fn read_pool(
     }))
 }
 struct Retained {
+    original_grant: GrantId,
     previous_head: Option<CheckpointDigest>,
     movement: Option<[u8; 32]>,
     movement_protected: Option<Vec<u8>>,
@@ -516,8 +586,8 @@ async fn read_operation(
     binding: &WorkspaceBinding,
     operation: OperationId,
 ) -> Result<Option<Retained>, OperationError> {
-    let row=sqlx::query("SELECT CASE WHEN length(command_digest)=32 THEN command_digest END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,CASE WHEN length(pool_id)=32 THEN pool_id END,revision,CASE WHEN length(chain_head)=32 THEN chain_head END,CASE WHEN length(protected) BETWEEN 1 AND 262144 THEN protected END FROM stock_operations WHERE actor=? AND grant_id=? AND operation_id=?")
-        .bind(binding.actor().participant().as_bytes().as_slice()).bind(binding.input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
+    let row=sqlx::query("SELECT CASE WHEN length(command_digest)=32 THEN command_digest END,CASE WHEN length(transaction_id)=32 THEN transaction_id END,CASE WHEN length(pool_id)=32 THEN pool_id END,revision,CASE WHEN length(chain_head)=32 THEN chain_head END,CASE WHEN length(protected) BETWEEN 1 AND 262144 THEN protected END,grant_id FROM stock_operations WHERE actor=? AND operation_id=?")
+        .bind(binding.actor().participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
     let Some(row) = row else { return Ok(None) };
     let protected: Vec<u8> = row
         .try_get::<Option<Vec<u8>>, _>(5)
@@ -538,8 +608,19 @@ async fn read_operation(
         .await?;
     let (request, decoded) =
         clear.expose_secret(|bytes| decode_operation(bytes, catalog, binding))?;
-    same_binding(request.binding(), binding)?;
+    if !SellerAuthoritySelection::from_attachment(request.binding().input())
+        .matches_attachment(binding.input())
+        || request.binding().actor().participant() != binding.actor().participant()
+    {
+        return Err(OperationError::RecoveryRequired);
+    }
     let digest = request.command().digest();
+    let original_grant: Vec<u8> = row
+        .try_get(6)
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    if original_grant != request.binding().input().grant_id().as_bytes() {
+        return Err(OperationError::RecoveryRequired);
+    }
     let (planned, quantity, movement_kind) = plan_effect(request.command(), decoded.before)
         .map_err(|_| OperationError::RecoveryRequired)?;
     if decoded.version != record_version(catalog)?
@@ -581,20 +662,18 @@ async fn read_operation(
     if revision <= 0 || revision as u64 != decoded.revision.get() || head != decoded.head {
         return Err(OperationError::RecoveryRequired);
     }
-    let count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM stock_movements WHERE actor=? AND grant_id=? AND operation_id=?",
-    )
-    .bind(binding.actor().participant().as_bytes().as_slice())
-    .bind(binding.input().grant_id().as_bytes().as_slice())
-    .bind(operation.as_bytes().as_slice())
-    .fetch_one(&mut *connection)
-    .await
-    .map_err(|_| OperationError::RecoveryRequired)?;
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM stock_movements WHERE actor=? AND operation_id=?")
+            .bind(binding.actor().participant().as_bytes().as_slice())
+            .bind(operation.as_bytes().as_slice())
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|_| OperationError::RecoveryRequired)?;
     if count != i64::from(decoded.movement.is_some()) {
         return Err(OperationError::RecoveryRequired);
     }
     let movement_protected = if let Some(id) = decoded.movement {
-        let protected:Vec<u8>=sqlx::query_scalar("SELECT protected FROM stock_movements WHERE movement_id=? AND actor=? AND grant_id=? AND operation_id=? AND pool_id=? AND length(protected) BETWEEN 1 AND 262144").bind(id.as_slice()).bind(binding.actor().participant().as_bytes().as_slice()).bind(binding.input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(decoded.pool.id().as_bytes().as_slice()).fetch_optional(connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
+        let protected:Vec<u8>=sqlx::query_scalar("SELECT protected FROM stock_movements WHERE movement_id=? AND actor=? AND grant_id=? AND operation_id=? AND pool_id=? AND length(protected) BETWEEN 1 AND 262144").bind(id.as_slice()).bind(binding.actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(decoded.pool.id().as_bytes().as_slice()).fetch_optional(connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
         let clear = crypto
             .open_stock_record_for_catalog(input, "movement", &id, catalog, &protected)
             .await?;
@@ -631,9 +710,11 @@ async fn read_operation(
             request.command().context().authority(),
             decoded.revision,
             Some(decoded.head),
-        )?,
+        )?
+        .with_optional_authorization(decoded.authorization),
     )?;
     Ok(Some(Retained {
+        original_grant: request.binding().input().grant_id(),
         previous_head: decoded.previous_head,
         movement: decoded.movement,
         movement_protected,

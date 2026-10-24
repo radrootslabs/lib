@@ -247,6 +247,8 @@ pub struct WorkspaceBinding {
     grant_revision: Sequence,
     expires_at: UnixSeconds,
     observed_at: UnixSeconds,
+    #[cfg(feature = "protected_outbox")]
+    stock_authorization: Option<seller_stock::StockAuthorizationRef>,
 }
 impl WorkspaceBinding {
     /// Checks the internal binding of a trusted storage adapter's observation.
@@ -284,7 +286,25 @@ impl WorkspaceBinding {
             grant_revision,
             expires_at,
             observed_at,
+            #[cfg(feature = "protected_outbox")]
+            stock_authorization: None,
         })
+    }
+    /// Adds qualified stock-host observation metadata, never credential authority.
+    #[cfg(feature = "protected_outbox")]
+    pub fn with_stock_authorization(
+        mut self,
+        value: seller_stock::StockAuthorizationRef,
+    ) -> Result<Self, WorkspaceError> {
+        if self.scope != WorkspaceScope::SellerStockOwner {
+            return Err(WorkspaceError::InvalidInput);
+        }
+        self.stock_authorization = Some(value);
+        Ok(self)
+    }
+    #[cfg(feature = "protected_outbox")]
+    pub const fn stock_authorization(&self) -> Option<seller_stock::StockAuthorizationRef> {
+        self.stock_authorization
     }
     /// Borrows the exact authenticated selection.
     pub const fn input(&self) -> &AttachmentInput {

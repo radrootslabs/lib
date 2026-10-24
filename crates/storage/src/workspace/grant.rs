@@ -39,6 +39,12 @@ impl Drop for WorkspaceGrant {
     }
 }
 impl WorkspaceGrant {
+    pub(super) fn expires_at(&self) -> UnixSeconds {
+        self.wire.expires_at
+    }
+    pub(super) fn input(&self) -> &AttachmentInput {
+        &self.wire.input
+    }
     pub fn new(
         input: AttachmentInput,
         actor: ActorRef,

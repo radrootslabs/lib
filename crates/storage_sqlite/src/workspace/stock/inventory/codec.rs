@@ -88,7 +88,35 @@ pub(super) struct OperationDecodeV2<'a> {
     #[serde(deserialize_with = "super::required_nullable")]
     pub(super) movement: Option<[u8; 32]>,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OperationV3<'a> {
+    version: u8,
+    authorization: StockAuthorizationRef,
+    #[serde(borrow)]
+    operation: &'a RawValue,
+}
+pub(super) fn encode_operation(
+    value: &OperationWire<'_>,
+    catalog: i64,
+    authorization: Option<StockAuthorizationRef>,
+) -> Result<zeroize::Zeroizing<Vec<u8>>, OperationError> {
+    let clear = super::encode(value)?;
+    if catalog != 4 {
+        return Ok(clear);
+    }
+    let raw = RawValue::from_string(
+        String::from_utf8(clear.to_vec()).map_err(|_| OperationError::StorageFailure)?,
+    )
+    .map_err(|_| OperationError::StorageFailure)?;
+    super::encode(&OperationV3 {
+        version: 3,
+        authorization: authorization.ok_or(OperationError::RecoveryRequired)?,
+        operation: &raw,
+    })
+}
 pub(super) struct OperationData {
+    pub(super) authorization: Option<StockAuthorizationRef>,
     pub(super) version: u8,
     pub(super) before: Option<PoolSnapshot>,
     pub(super) transaction: TransactionId,
@@ -102,8 +130,19 @@ pub(super) struct OperationData {
 pub(super) fn decode_operation(
     bytes: &[u8],
     catalog: i64,
-    binding: &WorkspaceBinding,
+    _binding: &WorkspaceBinding,
 ) -> Result<(InventoryRequest, OperationData), OperationError> {
+    if catalog == 4 {
+        let decoded: OperationV3<'_> =
+            super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
+        if decoded.version != 3 {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let (request, mut data) =
+            decode_operation(decoded.operation.get().as_bytes(), 3, _binding)?;
+        data.authorization = Some(decoded.authorization);
+        return Ok((request, data));
+    }
     macro_rules! captured {
         ($decoded:expr,$prior:expr) => {{
             let decoded = $decoded;
@@ -111,7 +150,12 @@ pub(super) fn decode_operation(
             let captured = WorkspaceBinding::from_authenticated_host(
                 decoded.selection,
                 decoded.scope,
-                binding.actor(),
+                radroots_storage::inventory::CapturedInventoryCommand::parse(
+                    decoded.command.get().as_bytes(),
+                )
+                .map_err(|_| OperationError::RecoveryRequired)?
+                .context()
+                .actor(),
                 decoded.principal,
                 decoded.grant_revision,
                 decoded.grant_expires_at,
@@ -130,6 +174,7 @@ pub(super) fn decode_operation(
             Ok((
                 request,
                 OperationData {
+                    authorization: None,
                     version: decoded.version,
                     before: prior,
                     transaction: decoded.transaction,

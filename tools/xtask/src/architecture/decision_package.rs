@@ -95,7 +95,15 @@ struct LocalOutboxAuthority {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct StockCapabilityContract {
+    id: String,
+    version: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NativeSellerStockAuthority {
+    capability_contract: StockCapabilityContract,
     scope: String,
     database: String,
     lock: String,
@@ -105,6 +113,21 @@ struct NativeSellerStockAuthority {
     authority_payload_schema: String,
     inventory_operation_payload_schema: String,
     inventory_movement_payload_schema: String,
+    grant_payload_schema: String,
+    grant_change_payload_schema: String,
+    namespace_excludes_caller_grant: bool,
+    actor_operation_unique_across_grants: bool,
+    grant_checkpoint_minimum_required: bool,
+    grant_checkpoint_policy: String,
+    grant_set_max: u16,
+    grant_pool_scope_max: u16,
+    grant_action_max: u16,
+    grant_scope_actions: Vec<String>,
+    grant_write_requires_receipt_and_recovery_read: bool,
+    inventory_scope_grants_administration: bool,
+    grant_admin_prepared_transaction_required: bool,
+    retained_grants_automatically_evicted: bool,
+    old_self_revoke_api_supported: bool,
     pool_tick_scale_explicit: bool,
     pool_tick_scale_encoding: String,
     inventory_checkpoint_minimum_required: bool,
@@ -288,15 +311,41 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     )?;
     let stock = &p.native_seller_stock_authority;
     require(
-        stock.scope == "seller_stock_owner"
+        stock.capability_contract.id == "radroots.seller_stock.native_inventory"
+            && stock.capability_contract.version == "1"
+            && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 3
+            && stock.schema_version == 4
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v3"
-            && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v2"
+            && stock.retained_inventory_versions == [2, 3]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v4"
+            && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v3"
             && stock.inventory_movement_payload_schema == "radroots.seller_stock.movement.v2"
+            && stock.grant_payload_schema == "radroots.seller_stock.grant.v2"
+            && stock.grant_change_payload_schema == "radroots.seller_stock.grant_change.v1"
+            && stock.namespace_excludes_caller_grant
+            && stock.actor_operation_unique_across_grants
+            && stock.grant_checkpoint_minimum_required
+            && stock.grant_checkpoint_policy
+                == "exact_current_for_fresh_work_original_prior_for_exact_admin_recovery"
+            && stock.grant_set_max == 64
+            && stock.grant_pool_scope_max == 64
+            && stock.grant_action_max == 6
+            && stock.grant_scope_actions
+                == [
+                    "read_pools",
+                    "read_operations",
+                    "create_pool",
+                    "add_stock",
+                    "remove_stock",
+                    "spoil_stock",
+                ]
+            && stock.grant_write_requires_receipt_and_recovery_read
+            && !stock.inventory_scope_grants_administration
+            && stock.grant_admin_prepared_transaction_required
+            && !stock.retained_grants_automatically_evicted
+            && !stock.old_self_revoke_api_supported
             && stock.pool_tick_scale_explicit
             && stock.pool_tick_scale_encoding == "canonical_integer_string"
             && stock.inventory_checkpoint_minimum_required

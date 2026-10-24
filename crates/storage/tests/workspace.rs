@@ -27,6 +27,221 @@ fn input() -> AttachmentInput {
     )
     .unwrap()
 }
+
+#[cfg(feature = "protected_outbox")]
+#[test]
+fn declared_stock_grants_are_explicit_bounded_and_never_expand_empty_or_reordered_scopes() {
+    use radroots_domain::PoolId;
+    use radroots_storage::workspace::seller_stock::{
+        StockAction::*, StockGrantScope, StockResources,
+    };
+    let first = PoolId::from_bytes([1; 32]);
+    let second = PoolId::from_bytes([2; 32]);
+    assert!(StockResources::pools(vec![]).is_err());
+    assert!(StockResources::pools(vec![first, first]).is_err());
+    assert!(StockResources::pools(vec![second, first]).is_err());
+    assert!(StockResources::pools((0..65).map(|n| PoolId::from_bytes([n; 32])).collect()).is_err());
+    assert!(StockGrantScope::new(StockResources::all_pools(), vec![]).is_err());
+    for actions in [
+        vec![AddStock],
+        vec![ReadPools, AddStock],
+        vec![ReadOperations, AddStock],
+        vec![ReadOperations, ReadPools],
+        vec![ReadPools, ReadPools],
+    ] {
+        assert!(StockGrantScope::new(StockResources::all_pools(), actions).is_err());
+    }
+    let scope = StockGrantScope::new(
+        StockResources::pools(vec![first]).unwrap(),
+        vec![ReadPools, ReadOperations, AddStock],
+    )
+    .unwrap();
+    assert!(scope.allows(AddStock, first));
+    assert!(!scope.allows(AddStock, second));
+    assert!(!scope.allows(RemoveStock, first));
+    assert!(!scope.allows(SpoilStock, first));
+    assert_eq!(scope.actions(), vec![ReadPools, ReadOperations, AddStock]);
+    assert_eq!(scope.resources().selected_pools(), Some(&[first][..]));
+    let readonly =
+        StockGrantScope::new(StockResources::pools(vec![first]).unwrap(), vec![ReadPools]).unwrap();
+    assert!(readonly.allows(ReadPools, first));
+    assert!(!readonly.allows(ReadOperations, first));
+    assert!(!readonly.allows(AddStock, first));
+    let full = StockGrantScope::full_inventory();
+    assert_eq!(
+        full.actions(),
+        vec![
+            ReadPools,
+            ReadOperations,
+            CreatePool,
+            AddStock,
+            RemoveStock,
+            SpoilStock
+        ]
+    );
+    assert!(full.allows(SpoilStock, second));
+    assert_eq!(
+        format!("{scope:?}"),
+        "StockGrantScope(<untrusted descriptor>)"
+    );
+    assert_eq!(
+        format!("{:?}", scope.resources()),
+        "StockResources(<redacted>)"
+    );
+}
+
+#[cfg(all(feature = "protected_outbox", feature = "serde"))]
+#[test]
+fn closed_stock_scope_codecs_reject_aliases_extras_and_implicit_wildcards() {
+    use radroots_storage::workspace::seller_stock::StockGrantScope;
+    use serde_json::json;
+    let valid = json!({"actions":["read_pools","read_operations","add_stock"],"resources":{"type":"pools","ids":["01".repeat(32)]}});
+    let scope: StockGrantScope = serde_json::from_value(valid.clone()).unwrap();
+    assert_eq!(serde_json::to_value(scope).unwrap(), valid);
+    for invalid in [
+        json!({"actions":[],"resources":{"type":"all_pools"}}),
+        json!({"actions":["add_stock"],"resources":{"type":"all_pools"}}),
+        json!({"actions":["read_pools"],"resources":{"type":"pools","ids":[]}}),
+        json!({"actions":["read_pools"],"resources":{"type":"all_pools","ids":null}}),
+        json!({"actions":["read_pools"],"resources":{"type":"all_pools","ids":[]}}),
+        json!({"actions":["read_pools"],"resources":{"type":"all_pools","ignored":true}}),
+        json!({"actions":[{"read_pools":null}],"resources":{"type":"all_pools"}}),
+        json!({"actions":["admin"],"resources":{"type":"all_pools"}}),
+        json!({"actions":["read_pools"],"resources":{"type":"all_pools"},"admin":true}),
+        json!([{"type":"all_pools"},["read_pools"]]),
+        json!({"actions":vec!["read_pools";7],"resources":{"type":"all_pools"}}),
+    ] {
+        assert!(serde_json::from_value::<StockGrantScope>(invalid).is_err());
+    }
+    let mut excessive = valid;
+    excessive["resources"]["ids"] = json!(
+        (0..65)
+            .map(|n| format!("{n:02x}").repeat(32))
+            .collect::<Vec<_>>()
+    );
+    assert!(serde_json::from_value::<StockGrantScope>(excessive).is_err());
+}
+
+#[cfg(feature = "protected_outbox")]
+#[test]
+fn seller_namespace_selection_excludes_only_the_caller_grant_without_minting_permission() {
+    use radroots_storage::workspace::seller_stock::{SellerAuthoritySelection, SellerStockConfig};
+    let (original, proof, record) = SellerStockConfig::new(
+        key(),
+        key(),
+        "namespace-owner",
+        UnixSeconds::new(200).unwrap(),
+    )
+    .unwrap()
+    .enroll(
+        UnixSeconds::new(100).unwrap(),
+        WorkspaceId::from_bytes([1; 32]),
+        ExecutorId::from_bytes([2; 32]),
+        GrantId::from_bytes([3; 32]),
+        AttachmentProof::from_protected_input(&[7; 32]).unwrap(),
+    )
+    .unwrap();
+    let selected = SellerAuthoritySelection::from_attachment(&original);
+    let caller = selected.attachment(GrantId::from_bytes([9; 32])).unwrap();
+    assert_ne!(caller.grant_id(), original.grant_id());
+    assert_eq!(SellerAuthoritySelection::from_attachment(&caller), selected);
+    assert!(selected.matches_attachment(&original));
+    assert!(selected.matches_attachment(&caller));
+    assert!(
+        record
+            .authenticate(&original, &proof, UnixSeconds::new(100).unwrap())
+            .is_ok()
+    );
+    assert!(
+        record
+            .authenticate(&caller, &proof, UnixSeconds::new(100).unwrap())
+            .is_err()
+    );
+    assert_eq!(selected.workspace_id(), original.workspace_id());
+    assert_eq!(selected.authority(), original.authority());
+    assert_eq!(selected.participant(), original.participant());
+    assert_eq!(selected.endpoint(), original.endpoint());
+    assert_eq!(selected.endpoint_identity(), original.endpoint_identity());
+    assert_eq!(selected.checkpoint(), original.checkpoint());
+    assert_eq!(selected.route_digest(), original.route_digest());
+    assert_eq!(
+        format!("{selected:?}"),
+        "SellerAuthoritySelection(<untrusted descriptor>)"
+    );
+}
+
+#[cfg(all(feature = "protected_outbox", feature = "serde"))]
+#[test]
+fn seller_namespace_selection_is_a_closed_object_and_retains_every_namespace_binding() {
+    use radroots_storage::workspace::seller_stock::SellerAuthoritySelection;
+    use serde_json::json;
+    let original = input();
+    let selection = SellerAuthoritySelection::from_attachment(&original);
+    let value = serde_json::to_value(&selection).unwrap();
+    assert!(value.get("grant_id").is_none());
+    assert_eq!(
+        serde_json::from_value::<SellerAuthoritySelection>(value.clone()).unwrap(),
+        selection
+    );
+    for field in [
+        "workspace_id",
+        "authority",
+        "participant",
+        "endpoint",
+        "endpoint_identity",
+        "checkpoint",
+        "route_digest",
+    ] {
+        let mut changed = value.clone();
+        changed.as_object_mut().unwrap().remove(field);
+        assert!(
+            serde_json::from_value::<SellerAuthoritySelection>(changed).is_err(),
+            "{field}"
+        );
+    }
+    let other_key = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
+    for (path, bad) in [
+        ("/workspace_id", json!("0b".repeat(32))),
+        ("/authority/executor_id", json!("0b".repeat(32))),
+        ("/authority/generation", json!("2")),
+        ("/participant", json!(other_key)),
+        ("/endpoint", json!("local://another-namespace")),
+        ("/endpoint_identity", json!(other_key)),
+        ("/checkpoint/digest", json!("0b".repeat(32))),
+        ("/route_digest", json!("0b".repeat(32))),
+    ] {
+        let mut changed = value.clone();
+        *changed.pointer_mut(path).unwrap() = bad;
+        let changed: SellerAuthoritySelection = serde_json::from_value(changed).unwrap();
+        assert!(!changed.matches_attachment(&original), "{path}");
+    }
+    for bad in [json!(""), json!("x".repeat(2049)), json!("local://bad\n")] {
+        let mut changed = value.clone();
+        changed["endpoint"] = bad;
+        assert!(serde_json::from_value::<SellerAuthoritySelection>(changed).is_err());
+    }
+    let mut changed = value.clone();
+    changed["grant_id"] = json!(null);
+    for bad in [
+        json!(null),
+        json!({"id":"radroots.seller_stock.native_inventory","version":"2"}),
+        json!({"id":"radroots.seller_stock.native_inventory","version":1}),
+        json!(["radroots.seller_stock.native_inventory", "1"]),
+    ] {
+        let mut invalid = value.clone();
+        invalid["capability_contract"] = bad;
+        assert!(serde_json::from_value::<SellerAuthoritySelection>(invalid).is_err());
+    }
+
+    assert!(serde_json::from_value::<SellerAuthoritySelection>(changed).is_err());
+    assert!(
+        serde_json::from_value::<SellerAuthoritySelection>(json!([
+            value["workspace_id"],
+            value["authority"]
+        ]))
+        .is_err()
+    );
+}
 fn actor() -> ActorRef {
     ActorRef::new(key(), ActorRole::Buyer, None, Some(input().grant_id()))
 }

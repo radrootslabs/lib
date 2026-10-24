@@ -1372,9 +1372,12 @@ pub radroots_storage::inventory::InventoryOutcome::Unknown(radroots_storage::com
 pub struct radroots_storage::inventory::InventoryCheckpointRef
 impl radroots_storage::inventory::InventoryCheckpointRef
 pub const fn radroots_storage::inventory::InventoryCheckpointRef::authority(self) -> radroots_domain::context::AuthorityRef
+pub const fn radroots_storage::inventory::InventoryCheckpointRef::authorization(self) -> core::option::Option<radroots_storage::workspace::seller_stock::StockAuthorizationRef>
 pub fn radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(radroots_domain::context::AuthorityRef, radroots_domain::context::Sequence, core::option::Option<radroots_domain::identifier::CheckpointDigest>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub const fn radroots_storage::inventory::InventoryCheckpointRef::head(self) -> core::option::Option<radroots_domain::identifier::CheckpointDigest>
 pub const fn radroots_storage::inventory::InventoryCheckpointRef::revision(self) -> radroots_domain::context::Sequence
+pub const fn radroots_storage::inventory::InventoryCheckpointRef::with_authorization(self, radroots_storage::workspace::seller_stock::StockAuthorizationRef) -> Self
+pub const fn radroots_storage::inventory::InventoryCheckpointRef::with_optional_authorization(self, core::option::Option<radroots_storage::workspace::seller_stock::StockAuthorizationRef>) -> Self
 pub struct radroots_storage::inventory::InventoryReceipt
 impl radroots_storage::inventory::InventoryReceipt
 pub const fn radroots_storage::inventory::InventoryReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
@@ -1390,6 +1393,8 @@ pub const fn radroots_storage::inventory::InventoryRequest::command(&self) -> &r
 pub fn radroots_storage::inventory::InventoryRequest::from_protected_wire(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &[u8]) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub const fn radroots_storage::inventory::InventoryRequest::minimum_checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
 pub fn radroots_storage::inventory::InventoryRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, impl core::convert::Into<radroots_protocol::command::inventory::CapturedInventoryCommand>) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::inventory::InventoryRequest::replay_from_protected_wire(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &[u8]) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::InventoryRequest::replay_only(&self) -> bool
 pub fn radroots_storage::inventory::InventoryRequest::retained_copy(&self) -> core::result::Result<Self, radroots_storage::command::OperationError>
 impl core::fmt::Debug for radroots_storage::inventory::InventoryRequest
 pub fn radroots_storage::inventory::InventoryRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -2351,6 +2356,32 @@ pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::seller(radr
 impl core::fmt::Debug for radroots_storage::workspace::local_outbox::LocalOutboxConfig
 pub fn radroots_storage::workspace::local_outbox::LocalOutboxConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_storage::workspace::seller_stock
+pub enum radroots_storage::workspace::seller_stock::StockAction
+pub radroots_storage::workspace::seller_stock::StockAction::AddStock
+pub radroots_storage::workspace::seller_stock::StockAction::CreatePool
+pub radroots_storage::workspace::seller_stock::StockAction::ReadOperations
+pub radroots_storage::workspace::seller_stock::StockAction::ReadPools
+pub radroots_storage::workspace::seller_stock::StockAction::RemoveStock
+pub radroots_storage::workspace::seller_stock::StockAction::SpoilStock
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::StockAction
+pub fn radroots_storage::workspace::seller_stock::StockAction::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_storage::workspace::seller_stock::SellerAuthoritySelection
+impl radroots_storage::workspace::seller_stock::SellerAuthoritySelection
+pub fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::attachment(&self, radroots_domain::identifier::GrantId) -> core::result::Result<radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::WorkspaceError>
+pub const fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::authority(&self) -> radroots_domain::context::AuthorityRef
+pub const fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::capability_contract(&self) -> radroots_storage::workspace::seller_stock::StockCapabilityContract
+pub const fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::checkpoint(&self) -> &radroots_domain::context::CheckpointRef
+pub fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::endpoint(&self) -> &str
+pub const fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::endpoint_identity(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::from_attachment(&radroots_storage::workspace::AttachmentInput) -> Self
+pub fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::matches_attachment(&self, &radroots_storage::workspace::AttachmentInput) -> bool
+pub const fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::participant(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::route_digest(&self) -> radroots_domain::identifier::RouteDigest
+pub const fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::workspace_id(&self) -> radroots_domain::identifier::WorkspaceId
+impl core::fmt::Debug for radroots_storage::workspace::seller_stock::SellerAuthoritySelection
+pub fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::SellerAuthoritySelection
+pub fn radroots_storage::workspace::seller_stock::SellerAuthoritySelection::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_storage::workspace::seller_stock::SellerStockConfig
 impl radroots_storage::workspace::seller_stock::SellerStockConfig
 pub fn radroots_storage::workspace::seller_stock::SellerStockConfig::enroll(self, radroots_domain::context::UnixSeconds, radroots_domain::identifier::WorkspaceId, radroots_domain::identifier::ExecutorId, radroots_domain::identifier::GrantId, radroots_storage::workspace::AttachmentProof) -> core::result::Result<(radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof, radroots_storage::workspace::grant::WorkspaceGrant), radroots_storage::workspace::WorkspaceError>
@@ -2359,6 +2390,63 @@ impl radroots_storage::workspace::seller_stock::SellerStockConfig
 pub fn radroots_storage::workspace::seller_stock::SellerStockConfig::new(radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, impl core::convert::AsRef<str>, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 impl core::fmt::Debug for radroots_storage::workspace::seller_stock::SellerStockConfig
 pub fn radroots_storage::workspace::seller_stock::SellerStockConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::workspace::seller_stock::StockAuthorizationRef
+impl radroots_storage::workspace::seller_stock::StockAuthorizationRef
+pub const fn radroots_storage::workspace::seller_stock::StockAuthorizationRef::digest(self) -> radroots_domain::identifier::CheckpointDigest
+pub fn radroots_storage::workspace::seller_stock::StockAuthorizationRef::from_host_metadata(radroots_domain::context::Sequence, radroots_domain::identifier::CheckpointDigest) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub const fn radroots_storage::workspace::seller_stock::StockAuthorizationRef::generation(self) -> radroots_domain::context::Sequence
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::StockAuthorizationRef
+pub fn radroots_storage::workspace::seller_stock::StockAuthorizationRef::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_storage::workspace::seller_stock::StockCapabilityContract
+impl radroots_storage::workspace::seller_stock::StockCapabilityContract
+pub const fn radroots_storage::workspace::seller_stock::StockCapabilityContract::id(self) -> &'static str
+pub const fn radroots_storage::workspace::seller_stock::StockCapabilityContract::version(self) -> u16
+impl serde_core::ser::Serialize for radroots_storage::workspace::seller_stock::StockCapabilityContract
+pub fn radroots_storage::workspace::seller_stock::StockCapabilityContract::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::StockCapabilityContract
+pub fn radroots_storage::workspace::seller_stock::StockCapabilityContract::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_storage::workspace::seller_stock::StockGrantRecord
+impl radroots_storage::workspace::seller_stock::StockGrantRecord
+pub const fn radroots_storage::workspace::seller_stock::StockGrantRecord::administrator(&self) -> bool
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::authenticate(&self, &radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::authenticate_retained_capture(&self, &radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::belongs_to(&self, &radroots_storage::workspace::seller_stock::SellerAuthoritySelection) -> core::result::Result<bool, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::decode(&[u8]) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::encode(&self) -> core::result::Result<zeroize::Zeroizing<alloc::vec::Vec<u8>>, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::expires_at(&self) -> radroots_domain::context::UnixSeconds
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::from_enrollment(radroots_storage::workspace::grant::WorkspaceGrant) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::input(&self) -> &radroots_storage::workspace::AttachmentInput
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::new(radroots_storage::workspace::AttachmentInput, alloc::string::String, radroots_domain::context::UnixSeconds, radroots_storage::workspace::seller_stock::StockGrantScope, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::permissions(&self) -> &radroots_storage::workspace::seller_stock::StockGrantScope
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::revoke(&mut self) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+impl core::fmt::Debug for radroots_storage::workspace::seller_stock::StockGrantRecord
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::workspace::seller_stock::StockGrantScope
+impl radroots_storage::workspace::seller_stock::StockGrantScope
+pub fn radroots_storage::workspace::seller_stock::StockGrantScope::actions(&self) -> alloc::vec::Vec<radroots_storage::workspace::seller_stock::StockAction>
+pub fn radroots_storage::workspace::seller_stock::StockGrantScope::allows(&self, radroots_storage::workspace::seller_stock::StockAction, radroots_domain::identifier::PoolId) -> bool
+pub const fn radroots_storage::workspace::seller_stock::StockGrantScope::allows_action(&self, radroots_storage::workspace::seller_stock::StockAction) -> bool
+pub const fn radroots_storage::workspace::seller_stock::StockGrantScope::full_inventory() -> Self
+pub fn radroots_storage::workspace::seller_stock::StockGrantScope::new(radroots_storage::workspace::seller_stock::StockResources, alloc::vec::Vec<radroots_storage::workspace::seller_stock::StockAction>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockGrantScope::resources(&self) -> &radroots_storage::workspace::seller_stock::StockResources
+impl core::fmt::Debug for radroots_storage::workspace::seller_stock::StockGrantScope
+pub fn radroots_storage::workspace::seller_stock::StockGrantScope::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_storage::workspace::seller_stock::StockGrantScope
+pub fn radroots_storage::workspace::seller_stock::StockGrantScope::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::StockGrantScope
+pub fn radroots_storage::workspace::seller_stock::StockGrantScope::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_storage::workspace::seller_stock::StockResources(_)
+impl radroots_storage::workspace::seller_stock::StockResources
+pub const fn radroots_storage::workspace::seller_stock::StockResources::all_pools() -> Self
+pub fn radroots_storage::workspace::seller_stock::StockResources::contains(&self, radroots_domain::identifier::PoolId) -> bool
+pub fn radroots_storage::workspace::seller_stock::StockResources::pools(alloc::vec::Vec<radroots_domain::identifier::PoolId>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub fn radroots_storage::workspace::seller_stock::StockResources::selected_pools(&self) -> core::option::Option<&[radroots_domain::identifier::PoolId]>
+impl core::fmt::Debug for radroots_storage::workspace::seller_stock::StockResources
+pub fn radroots_storage::workspace::seller_stock::StockResources::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_storage::workspace::seller_stock::StockResources
+pub fn radroots_storage::workspace::seller_stock::StockResources::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::StockResources
+pub fn radroots_storage::workspace::seller_stock::StockResources::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 #[non_exhaustive] pub enum radroots_storage::workspace::WorkspaceError
 pub radroots_storage::workspace::WorkspaceError::Capacity
 pub radroots_storage::workspace::WorkspaceError::Closed
@@ -2417,6 +2505,8 @@ pub const fn radroots_storage::workspace::WorkspaceBinding::input(&self) -> &rad
 pub const fn radroots_storage::workspace::WorkspaceBinding::observed_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage::workspace::WorkspaceBinding::principal_id(&self) -> &str
 pub const fn radroots_storage::workspace::WorkspaceBinding::scope(&self) -> radroots_storage::workspace::WorkspaceScope
+pub const fn radroots_storage::workspace::WorkspaceBinding::stock_authorization(&self) -> core::option::Option<radroots_storage::workspace::seller_stock::StockAuthorizationRef>
+pub fn radroots_storage::workspace::WorkspaceBinding::with_stock_authorization(self, radroots_storage::workspace::seller_stock::StockAuthorizationRef) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 impl core::fmt::Debug for radroots_storage::workspace::WorkspaceBinding
 pub fn radroots_storage::workspace::WorkspaceBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait radroots_storage::workspace::WorkspaceClock: radroots_transport::host::HostBound

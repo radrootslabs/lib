@@ -5,6 +5,12 @@ use super::{
 };
 use radroots_domain::{ExecutorId, GrantId, Sequence, TransactionId, WorkspaceId};
 pub use radroots_storage::workspace::seller_stock::SellerStockConfig;
+use radroots_storage::workspace::seller_stock::{
+    SellerAuthoritySelection, StockAction, StockAuthorizationRef, StockGrantRecord, StockGrantScope,
+};
+pub(in crate::workspace) mod grants;
+use grants::StockRecord;
+pub use grants::{StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt};
 use serde::{Deserialize, Serialize};
 use sqlx::{Connection, SqliteConnection};
 use std::{
@@ -143,6 +149,7 @@ struct Authority {
     transaction: TransactionId,
     revocation: Sequence,
     inventory: Option<InventoryCheckpoint>,
+    authorization: Option<StockAuthorizationRef>,
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -175,8 +182,35 @@ struct InventoryAuthorityWire {
     revocation: Sequence,
     inventory: InventoryCheckpoint,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityV4 {
+    version: u8,
+    namespace: SellerAuthoritySelection,
+    administrator: GrantId,
+    transaction: TransactionId,
+    revocation: Sequence,
+    inventory: InventoryCheckpoint,
+    authorization: StockAuthorizationRef,
+}
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
+        if self.catalog == 4 {
+            let bytes = serde_json::to_vec(&AuthorityV4 {
+                version: 4,
+                namespace: SellerAuthoritySelection::from_attachment(&self.input),
+                administrator: self.input.grant_id(),
+                transaction: self.transaction,
+                revocation: self.revocation,
+                inventory: self.inventory.ok_or(WorkspaceError::RecoveryRequired)?,
+                authorization: self.authorization.ok_or(WorkspaceError::RecoveryRequired)?,
+            })
+            .map_err(|_| WorkspaceError::StorageFailure)?;
+            if bytes.len() > 16 * 1024 {
+                return Err(WorkspaceError::Capacity);
+            }
+            return Ok(zeroize::Zeroizing::new(bytes));
+        }
         let bytes = match self.inventory {
             None => serde_json::to_vec(&AuthorityV1 {
                 version: 1,
@@ -208,6 +242,7 @@ impl Authority {
                     transaction: v.transaction,
                     revocation: v.revocation,
                     inventory: None,
+                    authorization: None,
                 }
             }
             2 | 3 => {
@@ -223,6 +258,24 @@ impl Authority {
                     transaction: v.transaction,
                     revocation: v.revocation,
                     inventory: Some(v.inventory),
+                    authorization: None,
+                }
+            }
+            4 => {
+                let v: AuthorityV4 = closed_record(bytes)?;
+                if v.version != 4
+                    || v.authorization.generation() != v.revocation
+                    || (v.inventory.revision.get() == 0) != v.inventory.head.is_none()
+                {
+                    return Err(WorkspaceError::RecoveryRequired);
+                }
+                Self {
+                    catalog,
+                    input: v.namespace.attachment(v.administrator)?,
+                    transaction: v.transaction,
+                    revocation: v.revocation,
+                    inventory: Some(v.inventory),
+                    authorization: Some(v.authorization),
                 }
             }
             _ => return Err(WorkspaceError::RecoveryRequired),
@@ -253,8 +306,9 @@ pub(super) async fn initialize(
 ) -> Result<(), WorkspaceError> {
     namespace.validate()?;
     if let Some(initial) = initial {
-        let authority = Authority {
+        let mut authority = Authority {
             catalog: schema::CURRENT,
+            authorization: None,
             input: input.clone(),
             transaction: initial.transaction,
             revocation: Sequence::new(1).map_err(|_| WorkspaceError::InvalidInput)?,
@@ -265,12 +319,19 @@ pub(super) async fn initialize(
                 movements: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
             }),
         };
+        let initial_record = StockGrantRecord::from_enrollment(initial.grant)?;
+        let grant = crypto
+            .seal_stock_record(
+                input,
+                "grant",
+                input.grant_id().as_bytes(),
+                &initial_record.encode()?,
+            )
+            .await?;
+        authority.authorization = Some(grants::single_state(input.grant_id(), &grant)?);
         let clear = authority.encode()?;
         let root = crypto
             .seal_stock_root(input, authority.version(), &clear)
-            .await?;
-        let grant = crypto
-            .seal_stock(input, false, &initial.grant.encode()?)
             .await?;
         let now = initial.clock.now()?;
         if now.get() == 0 {
@@ -298,7 +359,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=3")
+            sqlx::query("PRAGMA user_version=4")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -335,7 +396,7 @@ async fn read(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,
-) -> Result<(Authority, GrantRecord, Vec<u8>, Vec<u8>), WorkspaceError> {
+) -> Result<(Authority, StockRecord, Vec<u8>, Vec<u8>), WorkspaceError> {
     // Bound in SQL before materializing attacker-controlled protected payloads.
     let root: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_authority WHERE singleton=1 AND length(protected) BETWEEN 1 AND 262144").fetch_optional(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?.ok_or(WorkspaceError::RecoveryRequired)?;
     let grant: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_grants WHERE grant_id=? AND length(protected) BETWEEN 1 AND 262144").bind(input.grant_id().as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?.ok_or(WorkspaceError::WrongNamespace)?;
@@ -345,15 +406,40 @@ async fn read(
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
     let clear = crypto.open_stock_root(input, catalog, &root).await?;
     let authority = clear.expose_secret(|bytes| Authority::decode(bytes, catalog))?;
-    if authority.input != *input || authority.revocation.get() == 0 {
+    if (if catalog == 4 {
+        !SellerAuthoritySelection::from_attachment(&authority.input).matches_attachment(input)
+    } else {
+        authority.input != *input
+    }) || authority.revocation.get() == 0
+    {
         return Err(WorkspaceError::WrongNamespace);
     }
-    let clear = crypto.open_stock(input, false, &grant).await?;
-    let record = clear.expose_secret(GrantRecord::decode)?;
-    // Validate the protected scope without inventing possession of its credential.
-    if record.scope() != WorkspaceScope::SellerStockOwner {
-        return Err(WorkspaceError::RecoveryRequired);
-    }
+    let record = if catalog == 4 {
+        grants::check_state(
+            connection,
+            authority
+                .authorization
+                .ok_or(WorkspaceError::RecoveryRequired)?,
+        )
+        .await?;
+        let clear = crypto
+            .open_stock_record(input, "grant", input.grant_id().as_bytes(), &grant)
+            .await?;
+        let record = clear.expose_secret(StockGrantRecord::decode)?;
+        if !record.belongs_to(&SellerAuthoritySelection::from_attachment(input))?
+            || record.administrator() != (input.grant_id() == authority.input.grant_id())
+        {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+        StockRecord::Scoped(record)
+    } else {
+        let clear = crypto.open_stock(input, false, &grant).await?;
+        let record = clear.expose_secret(GrantRecord::decode)?;
+        if record.scope() != WorkspaceScope::SellerStockOwner {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+        StockRecord::Legacy(record)
+    };
     if let Some(checkpoint) = authority.inventory {
         inventory::check_head(connection, checkpoint).await?;
     }
@@ -369,7 +455,10 @@ pub(super) async fn authenticate(
     proof: &AttachmentProof,
 ) -> Result<(StockAuthorityReceipt, WorkspaceBinding), WorkspaceError> {
     namespace.validate()?;
-    let (authority, record, root, grant) = read(connection, expected, crypto).await?;
+    if !SellerAuthoritySelection::from_attachment(expected).matches_attachment(selected) {
+        return Err(WorkspaceError::WrongNamespace);
+    }
+    let (authority, record, root, grant) = read(connection, selected, crypto).await?;
     record.authenticate(selected, proof, clock.now()?)?;
     let mut tx = connection
         .begin_with("BEGIN IMMEDIATE")
@@ -377,7 +466,10 @@ pub(super) async fn authenticate(
         .map_err(|_| WorkspaceError::StorageFailure)?;
     let checked = async {
         namespace.validate()?;
-        unchanged(&mut tx, expected, authority.version(), &root, &grant).await?;
+        unchanged(&mut tx, selected, authority.version(), &root, &grant).await?;
+        if let Some(state) = authority.authorization {
+            grants::check_state(&mut tx, state).await?;
+        }
         record.authenticate(selected, proof, clock.now()?)
     }
     .await;
@@ -385,6 +477,11 @@ pub(super) async fn authenticate(
         .await
         .map_err(|_| WorkspaceError::CommitUnknown)?;
     let binding = checked?;
+    let binding = if let Some(state) = authority.authorization {
+        binding.with_stock_authorization(state)?
+    } else {
+        binding
+    };
     if binding.scope() != WorkspaceScope::SellerStockOwner {
         return Err(WorkspaceError::RecoveryRequired);
     }
@@ -402,6 +499,13 @@ pub(super) async fn authenticate(
                         v.revision,
                         v.head,
                     )
+                    .map(|checkpoint| {
+                        if let Some(state) = authority.authorization {
+                            checkpoint.with_authorization(state)
+                        } else {
+                            checkpoint
+                        }
+                    })
                 })
                 .transpose()?,
         },
@@ -418,8 +522,14 @@ pub(super) async fn revoke(
     proof: &AttachmentProof,
 ) -> Result<(), WorkspaceError> {
     namespace.validate()?;
+    if !SellerAuthoritySelection::from_attachment(expected).matches_attachment(selected) {
+        return Err(WorkspaceError::WrongNamespace);
+    }
     let (mut authority, mut record, old_root, old_grant) =
-        read(connection, expected, crypto).await?;
+        read(connection, selected, crypto).await?;
+    if authority.catalog == 4 {
+        return Err(WorkspaceError::Unauthorized);
+    }
     let expiry = record
         .authenticate(selected, proof, clock.now()?)?
         .expires_at();
