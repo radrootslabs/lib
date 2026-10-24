@@ -24,6 +24,8 @@ pub enum StockError {
     PrecisionLoss,
     /// The seven physical categories do not sum to introduced stock.
     ConservationViolation,
+    /// An audited physical movement cannot have zero quantity.
+    ZeroMovement,
 }
 impl fmt::Display for StockError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -38,6 +40,7 @@ impl fmt::Display for StockError {
             Self::ConservationViolation => {
                 "physical stock categories do not conserve introduced stock"
             }
+            Self::ZeroMovement => "physical movement quantity must be positive",
         })
     }
 }
@@ -206,6 +209,17 @@ pub struct PoolBalances {
     introduced: StockTicks,
     physical: PhysicalBalances,
 }
+/// Claimed owner-private correction of available stock. Permission, current
+/// versions and any held-stock obligation policy belong to the executor.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AvailableStockCorrection {
+    /// Increase cumulative introduced stock and currently available backing.
+    Add,
+    /// Move currently available physical backing to cumulative removed stock.
+    Remove,
+    /// Move currently available physical backing to cumulative waste.
+    Spoil,
+}
 impl PoolBalances {
     /// Admits only an exact sum of the seven disjoint physical categories.
     /// Future promises and obligation deficits cannot be counted as stock.
@@ -237,6 +251,38 @@ impl PoolBalances {
     /// Returns the seven conservation-checked balances.
     pub const fn physical(self) -> PhysicalBalances {
         self.physical
+    }
+    /// Proposes a nonzero, exact correction against available backing only.
+    /// Held or quarantined stock is never silently substituted for available
+    /// stock. Depleting it needs a separate obligation/deficit transition.
+    /// Failure returns no changed value and preserves the original snapshot.
+    pub fn correct_available(
+        self,
+        kind: AvailableStockCorrection,
+        quantity: StockTicks,
+    ) -> Result<Self, StockError> {
+        if quantity == StockTicks::ZERO {
+            return Err(StockError::ZeroMovement);
+        }
+        let mut physical = self.physical;
+        let introduced = match kind {
+            AvailableStockCorrection::Add => {
+                let introduced = self.introduced.checked_add(quantity)?;
+                physical.available = physical.available.checked_add(quantity)?;
+                introduced
+            }
+            AvailableStockCorrection::Remove | AvailableStockCorrection::Spoil => {
+                physical.available = physical.available.checked_sub(quantity)?;
+                let cumulative = if kind == AvailableStockCorrection::Remove {
+                    &mut physical.removed
+                } else {
+                    &mut physical.waste
+                };
+                *cumulative = cumulative.checked_add(quantity)?;
+                self.introduced
+            }
+        };
+        Self::new(introduced, physical)
     }
 }
 impl fmt::Debug for PoolBalances {

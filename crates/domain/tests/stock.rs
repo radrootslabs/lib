@@ -8,6 +8,97 @@ fn ticks(value: u64) -> StockTicks {
 }
 
 #[test]
+fn available_corrections_conserve_audited_totals_without_touching_backed_claims() {
+    use radroots_domain::stock::AvailableStockCorrection::{Add, Remove, Spoil};
+    let original = PoolBalances::new(
+        ticks(100),
+        PhysicalBalances {
+            available: ticks(30),
+            preparatory_hold: ticks(10),
+            committed_hold: ticks(20),
+            physical_quarantine: ticks(5),
+            consumed: ticks(15),
+            waste: ticks(10),
+            removed: ticks(10),
+        },
+    )
+    .unwrap();
+    let added = original.correct_available(Add, ticks(7)).unwrap();
+    assert_eq!(added.introduced(), ticks(107));
+    assert_eq!(
+        added.physical(),
+        PhysicalBalances {
+            available: ticks(37),
+            ..original.physical()
+        }
+    );
+    let removed = added.correct_available(Remove, ticks(11)).unwrap();
+    assert_eq!(removed.introduced(), ticks(107));
+    assert_eq!(
+        removed.physical(),
+        PhysicalBalances {
+            available: ticks(26),
+            removed: ticks(21),
+            ..original.physical()
+        }
+    );
+    let wasted = removed.correct_available(Spoil, ticks(26)).unwrap();
+    assert_eq!(wasted.introduced(), ticks(107));
+    assert_eq!(
+        wasted.physical(),
+        PhysicalBalances {
+            available: StockTicks::ZERO,
+            removed: ticks(21),
+            waste: ticks(36),
+            ..original.physical()
+        }
+    );
+    for kind in [Remove, Spoil] {
+        assert_eq!(
+            original.correct_available(kind, ticks(31)),
+            Err(StockError::Underflow)
+        );
+        assert_eq!(
+            wasted.correct_available(kind, ticks(1)),
+            Err(StockError::Underflow)
+        );
+    }
+    for kind in [Add, Remove, Spoil] {
+        assert_eq!(
+            original.correct_available(kind, StockTicks::ZERO),
+            Err(StockError::ZeroMovement)
+        );
+    }
+    assert_eq!(original.physical().available, ticks(30));
+}
+
+#[test]
+fn introduced_capacity_is_not_reused_after_removal_or_spoilage() {
+    use radroots_domain::stock::AvailableStockCorrection::{Add, Remove, Spoil};
+    let full = PoolBalances::new(
+        StockTicks::MAX,
+        PhysicalBalances {
+            available: StockTicks::MAX,
+            ..PhysicalBalances::ZERO
+        },
+    )
+    .unwrap();
+    for kind in [Remove, Spoil] {
+        let depleted = full.correct_available(kind, StockTicks::MAX).unwrap();
+        assert_eq!(depleted.physical().available, StockTicks::ZERO);
+        assert_eq!(depleted.introduced(), StockTicks::MAX);
+        assert_eq!(
+            depleted.correct_available(Add, ticks(1)),
+            Err(StockError::OutOfRange)
+        );
+    }
+    assert_eq!(
+        full.correct_available(Add, ticks(1)),
+        Err(StockError::OutOfRange)
+    );
+}
+
+#[test]
 fn tick_bounds_and_canonical_integer_strings_never_round_or_wrap() {
     for value in [
         0,

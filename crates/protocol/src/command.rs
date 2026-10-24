@@ -49,9 +49,13 @@ impl fmt::Display for CommandError {
 impl core::error::Error for CommandError {}
 
 mod captured;
+mod inventory;
 mod stock;
+mod stock_correction;
 pub use captured::{CapturedCommand, CommandKind};
+pub use inventory::{CapturedInventoryCommand, InventoryCommandKind};
 pub use stock::{CapturedPoolCreation, CreatePoolInput};
+pub use stock_correction::{CapturedPoolCorrection, PoolCorrectionInput};
 
 /// A captured public listing reference. This descriptor verifies neither its
 /// source event nor its availability, terms or stock backing.

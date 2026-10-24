@@ -510,3 +510,63 @@ async fn prepared_enrollment_cannot_create_a_second_authority_namespace() {
     );
     store.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn changed_catalog_after_protected_reads_is_refused_before_authenticated_completion() {
+    for revocation in [false, true] {
+        let f = Fixture::new();
+        let e = enrollment(&f);
+        let clock = Arc::new(PausedClock {
+            state: std::sync::Mutex::new((false, false, false)),
+            changed: std::sync::Condvar::new(),
+        });
+        let store =
+            NativeWorkspace::initialize_seller_stock(&f.path, &e, f.crypto(), clock.clone())
+                .await
+                .unwrap();
+        clock.arm();
+        let mut operation: std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<(), WorkspaceError>> + '_>,
+        > = if revocation {
+            Box::pin(store.revoke(e.input().clone(), e.proof()))
+        } else {
+            Box::pin(async {
+                store
+                    .authenticate(e.input().clone(), e.proof())
+                    .await
+                    .map(|_| ())
+            })
+        };
+        assert!(futures::poll!(operation.as_mut()).is_pending());
+        clock.entered();
+        let mut connection = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(f.path.join("stock_execution_v1.sqlite")),
+        )
+        .await
+        .unwrap();
+        sqlx::query("PRAGMA user_version=2")
+            .execute(&mut connection)
+            .await
+            .unwrap();
+        clock.release();
+        assert_eq!(operation.await, Err(WorkspaceError::RecoveryRequired));
+        store.close().await.unwrap();
+        sqlx::query("PRAGMA user_version=3")
+            .execute(&mut connection)
+            .await
+            .unwrap();
+        connection.close().await.unwrap();
+        let reopened = reopen(&f, &e).await;
+        assert_eq!(
+            reopened
+                .stock_authority(e.input().clone(), e.proof())
+                .await
+                .unwrap()
+                .revocation_generation()
+                .get(),
+            1
+        );
+        reopened.close().await.unwrap();
+    }
+}

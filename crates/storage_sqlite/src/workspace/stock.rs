@@ -138,6 +138,7 @@ impl NativeWorkspace {
     }
 }
 struct Authority {
+    catalog: i64,
     input: AttachmentInput,
     transaction: TransactionId,
     revocation: Sequence,
@@ -167,7 +168,7 @@ struct AuthorityV1 {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct AuthorityV2 {
+struct InventoryAuthorityWire {
     version: u8,
     input: AttachmentInput,
     transaction: TransactionId,
@@ -183,8 +184,8 @@ impl Authority {
                 transaction: self.transaction,
                 revocation: self.revocation,
             }),
-            Some(inventory) => serde_json::to_vec(&AuthorityV2 {
-                version: 2,
+            Some(inventory) => serde_json::to_vec(&InventoryAuthorityWire {
+                version: self.catalog as u8,
                 input: self.input.clone(),
                 transaction: self.transaction,
                 revocation: self.revocation,
@@ -202,19 +203,22 @@ impl Authority {
                     return Err(WorkspaceError::RecoveryRequired);
                 }
                 Self {
+                    catalog,
                     input: v.input,
                     transaction: v.transaction,
                     revocation: v.revocation,
                     inventory: None,
                 }
             }
-            2 => {
-                let v: AuthorityV2 = closed_record(bytes)?;
-                if v.version != 2 || (v.inventory.revision.get() == 0) != v.inventory.head.is_none()
+            2 | 3 => {
+                let v: InventoryAuthorityWire = closed_record(bytes)?;
+                if i64::from(v.version) != catalog
+                    || (v.inventory.revision.get() == 0) != v.inventory.head.is_none()
                 {
                     return Err(WorkspaceError::RecoveryRequired);
                 }
                 Self {
+                    catalog,
                     input: v.input,
                     transaction: v.transaction,
                     revocation: v.revocation,
@@ -229,7 +233,7 @@ impl Authority {
         Ok(value)
     }
     fn version(&self) -> i64 {
-        if self.inventory.is_some() { 2 } else { 1 }
+        self.catalog
     }
 }
 pub(super) struct Initial {
@@ -250,6 +254,7 @@ pub(super) async fn initialize(
     namespace.validate()?;
     if let Some(initial) = initial {
         let authority = Authority {
+            catalog: schema::CURRENT,
             input: input.clone(),
             transaction: initial.transaction,
             revocation: Sequence::new(1).map_err(|_| WorkspaceError::InvalidInput)?,
@@ -293,7 +298,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=2")
+            sqlx::query("PRAGMA user_version=3")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -372,7 +377,7 @@ pub(super) async fn authenticate(
         .map_err(|_| WorkspaceError::StorageFailure)?;
     let checked = async {
         namespace.validate()?;
-        unchanged(&mut tx, expected, &root, &grant).await?;
+        unchanged(&mut tx, expected, authority.version(), &root, &grant).await?;
         record.authenticate(selected, proof, clock.now()?)
     }
     .await;
@@ -440,6 +445,14 @@ pub(super) async fn revoke(
         .await
         .map_err(|_| WorkspaceError::StorageFailure)?;
     let changed: Result<(), WorkspaceError> = async {
+        unchanged(
+            &mut tx,
+            expected,
+            authority.version(),
+            &old_root,
+            &old_grant,
+        )
+        .await?;
         // Current clock and both exact protected snapshots fence the write after provider IO.
         record.authenticate_retained_capture(selected, proof)?;
         let now = clock.now()?;
@@ -482,9 +495,17 @@ pub(super) async fn revoke(
 async fn unchanged(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
+    catalog: i64,
     root: &[u8],
     grant: &[u8],
 ) -> Result<(), WorkspaceError> {
+    let current: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    if current != catalog {
+        return Err(WorkspaceError::RecoveryRequired);
+    }
     let matched: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM stock_authority WHERE singleton=1 AND protected=?) AND EXISTS(SELECT 1 FROM stock_grants WHERE grant_id=? AND protected=?)")
         .bind(root).bind(input.grant_id().as_bytes().as_slice()).bind(grant).fetch_one(connection).await.map_err(|_| WorkspaceError::StorageFailure)?;
     if matched != 1 {
@@ -494,20 +515,20 @@ async fn unchanged(
 }
 
 impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
-    fn create_pool(
+    fn execute_inventory(
         &self,
-        request: radroots_storage::inventory::CreatePoolRequest,
+        request: radroots_storage::inventory::InventoryRequest,
         proof: AttachmentProof,
     ) -> radroots_transport::BoxFuture<
         '_,
         Result<
-            radroots_storage::inventory::PoolCreationOutcome,
+            radroots_storage::inventory::InventoryOutcome,
             radroots_storage::command::OperationError,
         >,
     > {
-        Box::pin(self.worker.create_pool(request, proof))
+        Box::pin(self.worker.execute_inventory(request, proof))
     }
-    fn pool_creation(
+    fn inventory_operation(
         &self,
         binding: WorkspaceBinding,
         minimum: radroots_storage::inventory::InventoryCheckpointRef,
@@ -517,13 +538,13 @@ impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
     ) -> radroots_transport::BoxFuture<
         '_,
         Result<
-            Option<radroots_storage::inventory::PoolCreationReceipt>,
+            Option<radroots_storage::inventory::InventoryReceipt>,
             radroots_storage::command::OperationError,
         >,
     > {
         Box::pin(
             self.worker
-                .pool_creation(binding, minimum, operation, digest, proof),
+                .inventory_operation(binding, minimum, operation, digest, proof),
         )
     }
     fn pool(

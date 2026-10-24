@@ -1,12 +1,18 @@
-//! Owner-private pool creation on the existing connection owner.
+//! Owner-private inventory effects on the existing connection owner.
+mod checkpoint;
+mod codec;
+mod plan;
 use super::*;
+use checkpoint::{MinimumProof, authenticate_minimum};
+use codec::{Movement, MovementKind, OperationWire, decode_operation};
+use plan::{plan_effect, record_version};
 use radroots_domain::{
     CheckpointDigest, CommandDigest, OperationId, PoolId, UnixSeconds,
     stock::{PhysicalBalances, PoolBalances, PoolSnapshot},
 };
 use radroots_storage::{
     command::{CommitAttempt, OperationError, protected::same_binding},
-    inventory::{CreatePoolRequest, PoolCreationOutcome, PoolCreationReceipt},
+    inventory::{InventoryOutcome, InventoryReceipt, InventoryRequest},
 };
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
@@ -107,9 +113,9 @@ impl Turn<'_> {
     }
     pub async fn create(
         &mut self,
-        request: CreatePoolRequest,
+        request: InventoryRequest,
         proof: AttachmentProof,
-    ) -> Result<PoolCreationOutcome, OperationError> {
+    ) -> Result<InventoryOutcome, OperationError> {
         let mut access = self
             .access(request.binding(), request.minimum_checkpoint(), &proof)
             .await?;
@@ -131,7 +137,7 @@ impl Turn<'_> {
             }
             self.confirm(&access, &proof, Some(&retained), None, None, None)
                 .await?;
-            return Ok(PoolCreationOutcome::Committed(Box::new(retained.receipt)));
+            return Ok(InventoryOutcome::Committed(Box::new(retained.receipt)));
         }
         if access.current.observed_at() < request.binding().observed_at() {
             return Err(WorkspaceError::Unavailable.into());
@@ -139,30 +145,30 @@ impl Turn<'_> {
         if access.current.observed_at() >= context.not_after() {
             return Err(OperationError::DeadlineExceeded);
         }
-        let input = request.command().input();
-        if read_pool(self.connection, self.selected, self.crypto, input.id())
-            .await?
-            .is_some()
-        {
-            return Err(OperationError::StaleState);
+        let catalog = access.authority.version();
+        if catalog < 3 && request.command().correction_input().is_some() {
+            return Err(OperationError::UnsupportedOperation);
         }
-        let zero =
-            radroots_domain::Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?;
-        let pool = PoolSnapshot::new(
-            input.id(),
-            input.unit(),
-            PoolBalances::new(
-                input.initial_ticks(),
-                PhysicalBalances {
-                    available: input.initial_ticks(),
-                    ..PhysicalBalances::ZERO
-                },
-            )
-            .map_err(|_| OperationError::InvalidCommand)?,
-            zero,
-        );
+        let existing = read_pool(
+            self.connection,
+            self.selected,
+            self.crypto,
+            request.command().pool_id(),
+        )
+        .await?;
+        let before = existing.as_ref().map(|v| v.pool);
+        let (pool, quantity, movement_kind) = plan_effect(request.command(), before)?;
+        let label = if let Some(input) = request.command().creation_input() {
+            input.label()
+        } else {
+            existing
+                .as_ref()
+                .ok_or(OperationError::StaleState)?
+                .view
+                .label()
+        };
         let transaction = TransactionId::from_bytes(super::super::random()?);
-        let movement = if input.initial_ticks() == radroots_domain::stock::StockTicks::ZERO {
+        let movement = if quantity == radroots_domain::stock::StockTicks::ZERO {
             None
         } else {
             Some(super::super::random()?)
@@ -195,8 +201,9 @@ impl Turn<'_> {
             digest,
             Some(transaction),
         );
-        let receipt = PoolCreationReceipt::from_committed_store(
+        let receipt = InventoryReceipt::from_committed_store(
             attempt,
+            request.command().kind(),
             pool,
             radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
                 self.selected.authority(),
@@ -212,7 +219,7 @@ impl Turn<'_> {
                 pool.id().as_bytes(),
                 &encode(&PoolWire {
                     version: 1,
-                    label: input.label(),
+                    label,
                     pool,
                 })?,
             )
@@ -220,17 +227,18 @@ impl Turn<'_> {
         let protected_movement = if let Some(id) = movement {
             Some(
                 self.crypto
-                    .seal_stock_record(
+                    .seal_stock_record_for_catalog(
                         self.selected,
                         "movement",
                         &id,
+                        catalog,
                         &encode(&Movement {
-                            version: 1,
+                            version: record_version(catalog)?,
                             operation,
                             digest,
                             pool: pool.id(),
-                            quantity: input.initial_ticks(),
-                            kind: MovementKind::Introduced,
+                            quantity,
+                            kind: movement_kind,
                         })?,
                     )
                     .await?,
@@ -242,12 +250,14 @@ impl Turn<'_> {
             .map_err(|_| OperationError::InvalidCommand)?;
         let protected_operation = self
             .crypto
-            .seal_stock_record(
+            .seal_stock_record_for_catalog(
                 self.selected,
                 "operation",
                 operation.as_bytes(),
+                catalog,
                 &encode(&OperationWire {
-                    version: 1,
+                    version: record_version(catalog)?,
+                    before: if catalog == 3 { Some(before) } else { None },
                     selection: request.binding().input(),
                     scope: request.binding().scope(),
                     principal: request.binding().principal_id(),
@@ -273,7 +283,7 @@ impl Turn<'_> {
                 checkpoint
                     .pools
                     .get()
-                    .checked_add(1)
+                    .checked_add(u64::from(before.is_none()))
                     .ok_or(WorkspaceError::Capacity)?,
             )
             .map_err(|_| WorkspaceError::Capacity)?,
@@ -288,7 +298,7 @@ impl Turn<'_> {
         });
         let root = self
             .crypto
-            .seal_stock_root(self.selected, 2, &access.authority.encode()?)
+            .seal_stock_root(self.selected, catalog, &access.authority.encode()?)
             .await?;
         self.namespace.validate()?;
         let mut tx = self
@@ -297,7 +307,7 @@ impl Turn<'_> {
             .await
             .map_err(|_| OperationError::StorageFailure)?;
         let changed:Result<(),OperationError>=async {
-            super::unchanged(&mut tx,self.selected,&access.root,&access.grant).await?;
+            super::unchanged(&mut tx,self.selected,access.authority.version(),&access.root,&access.grant).await?;
             check_head(&mut tx,checkpoint).await?;
             access.minimum_proof.confirm(&mut tx).await?;
             let current=access.record.authenticate(request.binding().input(),&proof,self.clock.now()?)?;
@@ -307,9 +317,16 @@ impl Turn<'_> {
             self.namespace.validate()?;
             let absent:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND grant_id=? AND operation_id=?").bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             if absent!=0 {return Err(OperationError::StaleState);}
-            let existing:i64=sqlx::query_scalar("SELECT count(*) FROM stock_pools WHERE pool_id=?").bind(pool.id().as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
-            if existing!=0 {return Err(OperationError::StaleState);}
-            sqlx::query("INSERT INTO stock_pools(pool_id,revision,protected) VALUES(?,1,?)").bind(pool.id().as_bytes().as_slice()).bind(protected_pool).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+            if let Some(before)=before {
+                let original=existing.as_ref().ok_or(OperationError::RecoveryRequired)?;
+                let updated=sqlx::query("UPDATE stock_pools SET revision=?,protected=? WHERE pool_id=? AND revision=? AND protected=?")
+                    .bind(pool.version().get() as i64).bind(protected_pool).bind(pool.id().as_bytes().as_slice()).bind(before.version().get() as i64).bind(&original.protected).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+                if updated.rows_affected()!=1 {return Err(OperationError::StaleState);}
+            } else {
+                let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_pools WHERE pool_id=?").bind(pool.id().as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+                if count!=0 {return Err(OperationError::StaleState);}
+                sqlx::query("INSERT INTO stock_pools(pool_id,revision,protected) VALUES(?,?,?)").bind(pool.id().as_bytes().as_slice()).bind(pool.version().get() as i64).bind(protected_pool).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+            }
             sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected) VALUES(?,?,?,?,?,?,?,?,?)")
                 .bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(digest.as_bytes().as_slice()).bind(transaction.as_bytes().as_slice()).bind(pool.id().as_bytes().as_slice()).bind(revision.get() as i64).bind(head.as_bytes().as_slice()).bind(protected_operation).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             if let (Some(id),Some(protected))=(movement,protected_movement) {
@@ -321,15 +338,15 @@ impl Turn<'_> {
         if let Err(error) = changed {
             if tx.rollback().await.is_err() {
                 *self.uncertain = true;
-                return Ok(PoolCreationOutcome::Unknown(attempt));
+                return Ok(InventoryOutcome::Unknown(attempt));
             }
             return Err(error);
         }
         if tx.commit().await.is_err() {
             *self.uncertain = true;
-            return Ok(PoolCreationOutcome::Unknown(attempt));
+            return Ok(InventoryOutcome::Unknown(attempt));
         }
-        Ok(PoolCreationOutcome::Committed(Box::new(receipt)))
+        Ok(InventoryOutcome::Committed(Box::new(receipt)))
     }
     async fn confirm(
         &mut self,
@@ -347,7 +364,7 @@ impl Turn<'_> {
             .map_err(|_| OperationError::StorageFailure)?;
         let checked:Result<(),OperationError>=async {
             self.namespace.validate()?;
-            super::unchanged(&mut tx,self.selected,&access.root,&access.grant).await?;
+            super::unchanged(&mut tx,self.selected,access.authority.version(),&access.root,&access.grant).await?;
             check_head(&mut tx,access.authority.inventory.ok_or(OperationError::UnsupportedOperation)?).await?;
             access.minimum_proof.confirm(&mut tx).await?;
             let current=access.record.authenticate(access.current.input(),proof,self.clock.now()?)?;
@@ -381,7 +398,7 @@ impl Turn<'_> {
         operation: OperationId,
         digest: Option<CommandDigest>,
         proof: AttachmentProof,
-    ) -> Result<Option<PoolCreationReceipt>, OperationError> {
+    ) -> Result<Option<InventoryReceipt>, OperationError> {
         let access = self.access(&binding, minimum, &proof).await?;
         let result = read_operation(
             self.connection,
@@ -484,78 +501,11 @@ async fn read_pool(
         protected,
     }))
 }
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum MovementKind {
-    Introduced,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Movement {
-    version: u8,
-    operation: OperationId,
-    digest: CommandDigest,
-    pool: PoolId,
-    quantity: radroots_domain::stock::StockTicks,
-    kind: MovementKind,
-}
-#[derive(Serialize)]
-struct OperationWire<'a> {
-    version: u8,
-    selection: &'a AttachmentInput,
-    scope: WorkspaceScope,
-    principal: &'a str,
-    grant_revision: Sequence,
-    grant_expires_at: UnixSeconds,
-    observed_at: UnixSeconds,
-    minimum_revision: Sequence,
-    minimum_head: Option<CheckpointDigest>,
-    transaction: TransactionId,
-    revision: Sequence,
-    previous_head: Option<CheckpointDigest>,
-    head: CheckpointDigest,
-    command: &'a RawValue,
-    pool: PoolSnapshot,
-    movement: Option<[u8; 32]>,
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct OperationDecode<'a> {
-    version: u8,
-    selection: AttachmentInput,
-    scope: WorkspaceScope,
-    principal: String,
-    grant_revision: Sequence,
-    grant_expires_at: UnixSeconds,
-    observed_at: UnixSeconds,
-    minimum_revision: Sequence,
-    #[serde(deserialize_with = "super::required_nullable")]
-    minimum_head: Option<CheckpointDigest>,
-    transaction: TransactionId,
-    revision: Sequence,
-    #[serde(deserialize_with = "super::required_nullable")]
-    previous_head: Option<CheckpointDigest>,
-    head: CheckpointDigest,
-    #[serde(borrow)]
-    command: &'a RawValue,
-    pool: PoolSnapshot,
-    #[serde(deserialize_with = "super::required_nullable")]
-    movement: Option<[u8; 32]>,
-}
-struct OperationData {
-    version: u8,
-    transaction: TransactionId,
-    revision: Sequence,
-    previous_head: Option<CheckpointDigest>,
-    head: CheckpointDigest,
-    pool: PoolSnapshot,
-    movement: Option<[u8; 32]>,
-}
 struct Retained {
     previous_head: Option<CheckpointDigest>,
     movement: Option<[u8; 32]>,
     movement_protected: Option<Vec<u8>>,
-    receipt: PoolCreationReceipt,
+    receipt: InventoryReceipt,
     digest: CommandDigest,
     protected: Vec<u8>,
 }
@@ -573,62 +523,31 @@ async fn read_operation(
         .try_get::<Option<Vec<u8>>, _>(5)
         .map_err(|_| OperationError::RecoveryRequired)?
         .ok_or(OperationError::RecoveryRequired)?;
+    let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| OperationError::RecoveryRequired)?;
     let clear = crypto
-        .open_stock_record(input, "operation", operation.as_bytes(), &protected)
+        .open_stock_record_for_catalog(
+            input,
+            "operation",
+            operation.as_bytes(),
+            catalog,
+            &protected,
+        )
         .await?;
-    let (request, decoded) = clear.expose_secret(|bytes| -> Result<_, OperationError> {
-        let decoded: OperationDecode<'_> =
-            super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
-        let captured = WorkspaceBinding::from_authenticated_host(
-            decoded.selection,
-            decoded.scope,
-            binding.actor(),
-            decoded.principal,
-            decoded.grant_revision,
-            decoded.grant_expires_at,
-            decoded.observed_at,
-        )?;
-        let minimum = radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
-            captured.input().authority(),
-            decoded.minimum_revision,
-            decoded.minimum_head,
-        )?;
-        let request = CreatePoolRequest::from_protected_wire(
-            captured,
-            minimum,
-            decoded.command.get().as_bytes(),
-        )?;
-        Ok((
-            request,
-            OperationData {
-                version: decoded.version,
-                transaction: decoded.transaction,
-                revision: decoded.revision,
-                previous_head: decoded.previous_head,
-                head: decoded.head,
-                pool: decoded.pool,
-                movement: decoded.movement,
-            },
-        ))
-    })?;
+    let (request, decoded) =
+        clear.expose_secret(|bytes| decode_operation(bytes, catalog, binding))?;
     same_binding(request.binding(), binding)?;
     let digest = request.command().digest();
-    let pool_input = request.command().input();
-    let physical = decoded.pool.balances().physical();
-    if decoded.version != 1
+    let (planned, quantity, movement_kind) = plan_effect(request.command(), decoded.before)
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    if decoded.version != record_version(catalog)?
         || request.command().context().operation_id() != operation
         || decoded.revision.get() == 0
         || (decoded.revision.get() == 1) != decoded.previous_head.is_none()
-        || decoded.pool.version().get() != 1
-        || decoded.pool.id() != pool_input.id()
-        || decoded.pool.unit() != pool_input.unit()
-        || decoded.pool.balances().introduced() != pool_input.initial_ticks()
-        || physical.available != pool_input.initial_ticks()
-        || physical
-            != (PhysicalBalances {
-                available: pool_input.initial_ticks(),
-                ..PhysicalBalances::ZERO
-            })
+        || decoded.pool != planned
+        || (catalog == 2 && decoded.before.is_some())
     {
         return Err(OperationError::RecoveryRequired);
     }
@@ -677,34 +596,36 @@ async fn read_operation(
     let movement_protected = if let Some(id) = decoded.movement {
         let protected:Vec<u8>=sqlx::query_scalar("SELECT protected FROM stock_movements WHERE movement_id=? AND actor=? AND grant_id=? AND operation_id=? AND pool_id=? AND length(protected) BETWEEN 1 AND 262144").bind(id.as_slice()).bind(binding.actor().participant().as_bytes().as_slice()).bind(binding.input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(decoded.pool.id().as_bytes().as_slice()).fetch_optional(connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
         let clear = crypto
-            .open_stock_record(input, "movement", &id, &protected)
+            .open_stock_record_for_catalog(input, "movement", &id, catalog, &protected)
             .await?;
         let movement: Movement = clear
             .expose_secret(|bytes| super::closed_record(bytes))
             .map_err(|_| OperationError::RecoveryRequired)?;
-        if movement.version != 1
+        if movement.version != record_version(catalog)?
             || movement.operation != operation
             || movement.digest != digest
             || movement.pool != decoded.pool.id()
-            || movement.quantity != pool_input.initial_ticks()
+            || movement.quantity != quantity
+            || movement.kind != movement_kind
             || movement.quantity == radroots_domain::stock::StockTicks::ZERO
         {
             return Err(OperationError::RecoveryRequired);
         }
         Some(protected)
     } else {
-        if pool_input.initial_ticks() != radroots_domain::stock::StockTicks::ZERO {
+        if quantity != radroots_domain::stock::StockTicks::ZERO {
             return Err(OperationError::RecoveryRequired);
         }
         None
     };
-    let receipt = PoolCreationReceipt::from_committed_store(
+    let receipt = InventoryReceipt::from_committed_store(
         CommitAttempt::new(
             input.workspace_id(),
             operation,
             digest,
             Some(decoded.transaction),
         ),
+        request.command().kind(),
         decoded.pool,
         radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
             request.command().context().authority(),
@@ -767,111 +688,4 @@ fn chain_head(value: ChainInput<'_>) -> Result<CheckpointDigest, OperationError>
     h.update([u8::from(movement.is_some())]);
     h.update(movement.unwrap_or([0; 32]));
     Ok(CheckpointDigest::from_bytes(h.finalize().into()))
-}
-
-/// Constant-memory witness of the exact protected ancestry checked before IO
-/// enters the write transaction. The transaction rereads every bound SQL row;
-/// no key-provider callback or decryption runs while it owns the SQL lock.
-struct MinimumProof {
-    lower: u64,
-    upper: u64,
-    digest: [u8; 32],
-}
-impl MinimumProof {
-    async fn confirm(&self, connection: &mut SqliteConnection) -> Result<(), OperationError> {
-        let mut hash = history_hash();
-        for revision in (self.lower..=self.upper).rev() {
-            let row=sqlx::query("SELECT actor,grant_id,operation_id,command_digest,transaction_id,pool_id,chain_head,CASE WHEN length(protected) BETWEEN 1 AND 262144 THEN protected END FROM stock_operations WHERE revision=?")
-                .bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
-            hash.update(revision.to_be_bytes());
-            for column in 0..7 {
-                let bytes: Vec<u8> = row
-                    .try_get(column)
-                    .map_err(|_| OperationError::RecoveryRequired)?;
-                if bytes.len() != 32 {
-                    return Err(OperationError::RecoveryRequired);
-                }
-                hash.update(bytes);
-            }
-            let protected: Vec<u8> = row
-                .try_get::<Option<Vec<u8>>, _>(7)
-                .map_err(|_| OperationError::RecoveryRequired)?
-                .ok_or(OperationError::RecoveryRequired)?;
-            hash.update((protected.len() as u64).to_be_bytes());
-            hash.update(protected);
-        }
-        let actual: [u8; 32] = hash.finalize().into();
-        if actual != self.digest {
-            return Err(OperationError::RecoveryRequired);
-        }
-        Ok(())
-    }
-}
-fn history_hash() -> Sha256 {
-    let mut hash = Sha256::new();
-    hash.update(b"radroots.seller_stock.ancestry_snapshot.v1\0");
-    hash
-}
-async fn authenticate_minimum(
-    connection: &mut SqliteConnection,
-    input: &AttachmentInput,
-    crypto: &WorkspaceCrypto,
-    binding: &WorkspaceBinding,
-    current: InventoryCheckpoint,
-    minimum: radroots_storage::inventory::InventoryCheckpointRef,
-) -> Result<MinimumProof, OperationError> {
-    if minimum.authority() != input.authority() {
-        return Err(WorkspaceError::StaleAuthority.into());
-    }
-    if minimum.revision().get() > current.revision.get() {
-        return Err(WorkspaceError::StaleCheckpoint.into());
-    }
-    let lower = minimum.revision().get().max(1);
-    let upper = current.revision.get();
-    let mut hash = history_hash();
-    let mut expected = current.head;
-    for revision in (lower..=upper).rev() {
-        let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32")
-            .bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
-        let operation = OperationId::from_bytes(
-            id.try_into()
-                .map_err(|_| OperationError::RecoveryRequired)?,
-        );
-        let retained = read_operation(connection, input, crypto, binding, operation)
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?;
-        let receipt = &retained.receipt;
-        if receipt.checkpoint().revision().get() != revision
-            || receipt.checkpoint().head() != expected
-        {
-            return Err(WorkspaceError::StaleCheckpoint.into());
-        }
-        if revision == minimum.revision().get() && expected != minimum.head() {
-            return Err(WorkspaceError::StaleCheckpoint.into());
-        }
-        hash.update(revision.to_be_bytes());
-        hash.update(binding.actor().participant().as_bytes());
-        hash.update(binding.input().grant_id().as_bytes());
-        hash.update(operation.as_bytes());
-        hash.update(retained.digest.as_bytes());
-        hash.update(
-            receipt
-                .transaction_id()
-                .ok_or(OperationError::RecoveryRequired)?
-                .as_bytes(),
-        );
-        hash.update(receipt.pool().id().as_bytes());
-        hash.update(expected.ok_or(OperationError::RecoveryRequired)?.as_bytes());
-        hash.update((retained.protected.len() as u64).to_be_bytes());
-        hash.update(&retained.protected);
-        expected = retained.previous_head;
-    }
-    if minimum.revision().get() == 0 && expected.is_some() {
-        return Err(WorkspaceError::StaleCheckpoint.into());
-    }
-    Ok(MinimumProof {
-        lower,
-        upper,
-        digest: hash.finalize().into(),
-    })
 }

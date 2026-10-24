@@ -169,6 +169,36 @@ impl WorkspaceCrypto {
         )
         .await
     }
+    pub(super) async fn seal_stock_record_for_catalog(
+        &self,
+        input: &super::AttachmentInput,
+        kind: &str,
+        id: &[u8; 32],
+        catalog: i64,
+        clear: &[u8],
+    ) -> Result<Vec<u8>, WorkspaceError> {
+        self.seal_bound(
+            stock_record_context_for_catalog(input, kind, id, catalog)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            clear,
+        )
+        .await
+    }
+    pub(super) async fn open_stock_record_for_catalog(
+        &self,
+        input: &super::AttachmentInput,
+        kind: &str,
+        id: &[u8; 32],
+        catalog: i64,
+        protected: &[u8],
+    ) -> Result<SecretMaterial, WorkspaceError> {
+        self.open_bound(
+            stock_record_context_for_catalog(input, kind, id, catalog)?,
+            PRIVATE_PAYLOAD_MAX_BYTES,
+            protected,
+        )
+        .await
+    }
     pub(super) async fn seal_stock_record(
         &self,
         input: &super::AttachmentInput,
@@ -682,6 +712,7 @@ fn stock_root_context(
     let schema = match version {
         1 => "radroots.seller_stock.authority.v1",
         2 => "radroots.seller_stock.authority.v2",
+        3 => "radroots.seller_stock.authority.v3",
         _ => return Err(WorkspaceError::RecoveryRequired),
     };
     let original = stock_context(input, true)?;
@@ -724,5 +755,25 @@ fn stock_record_context(
         EnvelopeSubject::parse("stock_record", id.to_string())
             .map_err(|_| WorkspaceError::InvalidInput)?,
         PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::InvalidInput)?,
+    ))
+}
+
+fn stock_record_context_for_catalog(
+    input: &super::AttachmentInput,
+    kind: &str,
+    id: &[u8; 32],
+    catalog: i64,
+) -> Result<EnvelopeContext, WorkspaceError> {
+    let original = stock_record_context(input, kind, id)?;
+    let schema = match (catalog, kind) {
+        (2, _) | (3, "pool") => return Ok(original),
+        (3, "operation") => "radroots.seller_stock.operation.v2",
+        (3, "movement") => "radroots.seller_stock.movement.v2",
+        _ => return Err(WorkspaceError::RecoveryRequired),
+    };
+    Ok(EnvelopeContext::new(
+        original.purpose().clone(),
+        original.subject().clone(),
+        PayloadSchemaId::parse(schema).map_err(|_| WorkspaceError::RecoveryRequired)?,
     ))
 }

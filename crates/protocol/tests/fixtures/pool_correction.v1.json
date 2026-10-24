@@ -1,0 +1,107 @@
+{
+  "provenance": "Synthetic complete correction cases. Independent Python sorted ASCII schema keys, compact UTF-8 strings and string-only exact numbers implement this RFC8785 subset, not general JCS. Exact command/approval domain prefixes include NUL. No Rust serializer or hashing helper is called.",
+  "oracle_python": "3.14.7 (main, Sep 29 2026, 14:50:11) [Clang 22.1.3 ]",
+  "cases": [
+    {
+      "wire": {
+        "type": "stock.adjust",
+        "context": {
+          "actor": {
+            "grant_id": "0303030303030303030303030303030303030303030303030303030303030303",
+            "organization": null,
+            "participant": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "role": "seller"
+          },
+          "approval": null,
+          "authority": {
+            "executor_id": "0202020202020202020202020202020202020202020202020202020202020202",
+            "generation": "1"
+          },
+          "correlation_id": null,
+          "expected": null,
+          "not_after": "200",
+          "operation_id": "0707070707070707070707070707070707070707070707070707070707070707",
+          "route_digest": "0606060606060606060606060606060606060606060606060606060606060606",
+          "workspace_id": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        "input": {
+          "amount": "0.125",
+          "expected_version": "1",
+          "pool_id": "0808080808080808080808080808080808080808080808080808080808080808",
+          "reason": "counted 🥕\nexactly",
+          "direction": "add"
+        }
+      },
+      "semantic_canonical_utf8": "{\"context\":{\"actor\":{\"grant_id\":\"0303030303030303030303030303030303030303030303030303030303030303\",\"organization\":null,\"participant\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"role\":\"seller\"},\"approval\":null,\"authority\":{\"executor_id\":\"0202020202020202020202020202020202020202020202020202020202020202\",\"generation\":\"1\"},\"expected\":null,\"not_after\":\"200\",\"operation_id\":\"0707070707070707070707070707070707070707070707070707070707070707\",\"route_digest\":\"0606060606060606060606060606060606060606060606060606060606060606\",\"workspace_id\":\"0101010101010101010101010101010101010101010101010101010101010101\"},\"input\":{\"amount\":\"0.125\",\"direction\":\"add\",\"expected_version\":\"1\",\"pool_id\":\"0808080808080808080808080808080808080808080808080808080808080808\",\"reason\":\"counted 🥕\\nexactly\"},\"type\":\"stock.adjust\"}",
+      "command_digest": "5ed1baa9b3d079d98af6bc920cd177706cb7f59387f8cecf84d26f4a02bb048f",
+      "approval_intent_digest": "2077afe3aa23f87ab4d80c4008c2558bd0f9437f1a29bc8ca2744bf327fb889d"
+    },
+    {
+      "wire": {
+        "type": "stock.adjust",
+        "context": {
+          "actor": {
+            "grant_id": "0303030303030303030303030303030303030303030303030303030303030303",
+            "organization": null,
+            "participant": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "role": "seller"
+          },
+          "approval": null,
+          "authority": {
+            "executor_id": "0202020202020202020202020202020202020202020202020202020202020202",
+            "generation": "1"
+          },
+          "correlation_id": null,
+          "expected": null,
+          "not_after": "200",
+          "operation_id": "0707070707070707070707070707070707070707070707070707070707070707",
+          "route_digest": "0606060606060606060606060606060606060606060606060606060606060606",
+          "workspace_id": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        "input": {
+          "amount": "0.125",
+          "expected_version": "1",
+          "pool_id": "0808080808080808080808080808080808080808080808080808080808080808",
+          "reason": "counted 🥕\nexactly",
+          "direction": "remove"
+        }
+      },
+      "semantic_canonical_utf8": "{\"context\":{\"actor\":{\"grant_id\":\"0303030303030303030303030303030303030303030303030303030303030303\",\"organization\":null,\"participant\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"role\":\"seller\"},\"approval\":null,\"authority\":{\"executor_id\":\"0202020202020202020202020202020202020202020202020202020202020202\",\"generation\":\"1\"},\"expected\":null,\"not_after\":\"200\",\"operation_id\":\"0707070707070707070707070707070707070707070707070707070707070707\",\"route_digest\":\"0606060606060606060606060606060606060606060606060606060606060606\",\"workspace_id\":\"0101010101010101010101010101010101010101010101010101010101010101\"},\"input\":{\"amount\":\"0.125\",\"direction\":\"remove\",\"expected_version\":\"1\",\"pool_id\":\"0808080808080808080808080808080808080808080808080808080808080808\",\"reason\":\"counted 🥕\\nexactly\"},\"type\":\"stock.adjust\"}",
+      "command_digest": "b881441b181d078638642d53cfec15933d0e21febab551951e50fb4773954761",
+      "approval_intent_digest": "fe748a41fd6b3230013b2d125866007c6cbc0388ec1f4917ebdcd29403c2ffec"
+    },
+    {
+      "wire": {
+        "type": "stock.spoil",
+        "context": {
+          "actor": {
+            "grant_id": "0303030303030303030303030303030303030303030303030303030303030303",
+            "organization": null,
+            "participant": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "role": "seller"
+          },
+          "approval": null,
+          "authority": {
+            "executor_id": "0202020202020202020202020202020202020202020202020202020202020202",
+            "generation": "1"
+          },
+          "correlation_id": null,
+          "expected": null,
+          "not_after": "200",
+          "operation_id": "0707070707070707070707070707070707070707070707070707070707070707",
+          "route_digest": "0606060606060606060606060606060606060606060606060606060606060606",
+          "workspace_id": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        "input": {
+          "amount": "0.125",
+          "expected_version": "1",
+          "pool_id": "0808080808080808080808080808080808080808080808080808080808080808",
+          "reason": "counted 🥕\nexactly"
+        }
+      },
+      "semantic_canonical_utf8": "{\"context\":{\"actor\":{\"grant_id\":\"0303030303030303030303030303030303030303030303030303030303030303\",\"organization\":null,\"participant\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"role\":\"seller\"},\"approval\":null,\"authority\":{\"executor_id\":\"0202020202020202020202020202020202020202020202020202020202020202\",\"generation\":\"1\"},\"expected\":null,\"not_after\":\"200\",\"operation_id\":\"0707070707070707070707070707070707070707070707070707070707070707\",\"route_digest\":\"0606060606060606060606060606060606060606060606060606060606060606\",\"workspace_id\":\"0101010101010101010101010101010101010101010101010101010101010101\"},\"input\":{\"amount\":\"0.125\",\"expected_version\":\"1\",\"pool_id\":\"0808080808080808080808080808080808080808080808080808080808080808\",\"reason\":\"counted 🥕\\nexactly\"},\"type\":\"stock.spoil\"}",
+      "command_digest": "43a6ab75f03e70446c88765da779d9a761df5f32513c5107f372dda70d1594e8",
+      "approval_intent_digest": "3745ab07f5927c7033d67ffa21469cfb97bf778b35babb95da173820cb9c9b75"
+    }
+  ]
+}

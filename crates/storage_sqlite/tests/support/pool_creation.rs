@@ -7,8 +7,8 @@ use radroots_protocol::command::{CapturedPoolCreation, CreatePoolInput};
 use radroots_storage::{
     command::OperationError,
     inventory::{
-        CreatePoolRequest, InventoryCheckpointRef, InventoryStore, PoolCreationOutcome,
-        PoolCreationReceipt,
+        InventoryCheckpointRef, InventoryOutcome, InventoryReceipt, InventoryRequest,
+        InventoryStore,
     },
 };
 use radroots_storage_sqlite::workspace::{SellerStockConfig, StockEnrollment};
@@ -31,7 +31,7 @@ fn request(
     operation: u8,
     pool: u8,
     label: &str,
-) -> CreatePoolRequest {
+) -> InventoryRequest {
     let input = binding.input();
     let context = CommandContextData::new(
         OperationId::from_bytes([operation; 32]),
@@ -50,7 +50,7 @@ fn request(
         MeasurementUnit::Kilogram,
     )
     .unwrap();
-    CreatePoolRequest::new(
+    InventoryRequest::new(
         binding.clone(),
         minimum(binding),
         CapturedPoolCreation::new(
@@ -95,10 +95,10 @@ async fn create(
         .unwrap();
     (store, enrollment, binding)
 }
-fn committed(outcome: PoolCreationOutcome) -> PoolCreationReceipt {
+fn committed(outcome: InventoryOutcome) -> InventoryReceipt {
     match outcome {
-        PoolCreationOutcome::Committed(receipt) => *receipt,
-        PoolCreationOutcome::Unknown(_) => panic!("expected confirmed inventory commit"),
+        InventoryOutcome::Committed(receipt) => *receipt,
+        InventoryOutcome::Unknown(_) => panic!("expected confirmed inventory commit"),
     }
 }
 async fn database(f: &Fixture) -> sqlx::SqliteConnection {
@@ -111,12 +111,18 @@ async fn database(f: &Fixture) -> sqlx::SqliteConnection {
     .unwrap()
 }
 #[tokio::test]
-async fn real_pool_creation_commits_reopens_and_replays_original_effect_after_command_expiry() {
+async fn real_inventory_operation_commits_reopens_and_replays_original_effect_after_command_expiry()
+{
     let f = Fixture::new();
     let (store, e, binding) = create(&f).await;
     let original = request(&binding, 1, 2, "Carrots");
     let digest = original.command().digest();
-    let receipt = committed(store.create_pool(original, proof(e.proof())).await.unwrap());
+    let receipt = committed(
+        store
+            .execute_inventory(original, proof(e.proof()))
+            .await
+            .unwrap(),
+    );
     assert_eq!(receipt.pool().balances().physical().available.get(), 250);
     assert_eq!(receipt.pool().balances().introduced().get(), 250);
     assert_eq!(receipt.pool().unit().scale(), 3);
@@ -139,7 +145,7 @@ async fn real_pool_creation_commits_reopens_and_replays_original_effect_after_co
     );
     assert_eq!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 minimum(&binding),
                 OperationId::from_bytes([1; 32]),
@@ -154,7 +160,7 @@ async fn real_pool_creation_commits_reopens_and_replays_original_effect_after_co
     assert_eq!(
         committed(
             store
-                .create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
+                .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
                 .await
                 .unwrap()
         ),
@@ -162,13 +168,13 @@ async fn real_pool_creation_commits_reopens_and_replays_original_effect_after_co
     );
     assert!(matches!(
         store
-            .create_pool(request(&binding, 1, 2, "Changed"), proof(e.proof()))
+            .execute_inventory(request(&binding, 1, 2, "Changed"), proof(e.proof()))
             .await,
         Err(OperationError::IdempotencyConflict)
     ));
     assert!(matches!(
         store
-            .create_pool(request(&binding, 3, 4, "Late"), proof(e.proof()))
+            .execute_inventory(request(&binding, 3, 4, "Late"), proof(e.proof()))
             .await,
         Err(OperationError::DeadlineExceeded)
     ));
@@ -179,7 +185,7 @@ async fn real_pool_creation_commits_reopens_and_replays_original_effect_after_co
             .unwrap();
     assert_eq!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 minimum(&binding),
                 OperationId::from_bytes([1; 32]),
@@ -236,7 +242,7 @@ async fn each_actual_inventory_write_failure_rolls_back_pool_journal_movement_an
             .unwrap();
         assert!(
             store
-                .create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
+                .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
                 .await
                 .is_err(),
             "{table}"
@@ -290,15 +296,19 @@ async fn actual_inventory_commit_failure_is_unknown_and_fenced_until_reopen() {
     sqlx::raw_sql("CREATE TABLE deferred_inventory_fault(value INTEGER REFERENCES stock_authority(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER inventory_commit_fault AFTER INSERT ON stock_movements BEGIN INSERT INTO deferred_inventory_fault VALUES(2); END").execute(&mut connection).await.unwrap();
     let original = request(&binding, 1, 2, "Carrots");
     let digest = original.command().digest();
-    let anchor = match store.create_pool(original, proof(e.proof())).await.unwrap() {
-        PoolCreationOutcome::Unknown(anchor) => anchor,
-        PoolCreationOutcome::Committed(_) => panic!("COMMIT must fail"),
+    let anchor = match store
+        .execute_inventory(original, proof(e.proof()))
+        .await
+        .unwrap()
+    {
+        InventoryOutcome::Unknown(anchor) => anchor,
+        InventoryOutcome::Committed(_) => panic!("COMMIT must fail"),
     };
     assert_eq!(anchor.command_digest(), digest);
     assert!(anchor.transaction_id().is_some());
     assert!(matches!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 minimum(&binding),
                 OperationId::from_bytes([1; 32]),
@@ -320,7 +330,7 @@ async fn actual_inventory_commit_failure_is_unknown_and_fenced_until_reopen() {
             .unwrap();
     assert!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 minimum(&binding),
                 OperationId::from_bytes([1; 32]),
@@ -351,7 +361,7 @@ async fn sealed_root_detects_missing_inventory_history_instead_of_fresh_stock() 
     let (store, e, binding) = create(&f).await;
     committed(
         store
-            .create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
+            .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
             .await
             .unwrap(),
     );
@@ -395,7 +405,7 @@ async fn acknowledged_minimum_refuses_a_complete_older_database_snapshot() {
             .unwrap();
     let receipt = committed(
         store
-            .create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
+            .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
             .await
             .unwrap(),
     );
@@ -429,7 +439,7 @@ async fn acknowledged_minimum_refuses_a_complete_older_database_snapshot() {
     ));
     assert!(matches!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 acknowledged,
                 OperationId::from_bytes([1; 32]),
@@ -440,14 +450,14 @@ async fn acknowledged_minimum_refuses_a_complete_older_database_snapshot() {
         Err(OperationError::Workspace(WorkspaceError::StaleCheckpoint))
     ));
     let captured = request(&binding, 3, 4, "New stock");
-    let captured = CreatePoolRequest::new(
+    let captured = InventoryRequest::new(
         binding,
         acknowledged,
         CapturedPoolCreation::parse(captured.command().protected_wire()).unwrap(),
     )
     .unwrap();
     assert!(matches!(
-        store.create_pool(captured, proof(e.proof())).await,
+        store.execute_inventory(captured, proof(e.proof())).await,
         Err(OperationError::Workspace(WorkspaceError::StaleCheckpoint))
     ));
     store.close().await.unwrap();
@@ -489,13 +499,18 @@ async fn an_empty_pool_is_a_zero_genesis_without_a_fictitious_movement() {
     )
     .unwrap();
     let digest = command.digest();
-    let request = CreatePoolRequest::new(binding.clone(), minimum(&binding), command).unwrap();
-    let receipt = committed(store.create_pool(request, proof(e.proof())).await.unwrap());
+    let request = InventoryRequest::new(binding.clone(), minimum(&binding), command).unwrap();
+    let receipt = committed(
+        store
+            .execute_inventory(request, proof(e.proof()))
+            .await
+            .unwrap(),
+    );
     assert_eq!(receipt.pool().balances().introduced().get(), 0);
     assert_eq!(receipt.checkpoint().revision().get(), 1);
     assert_eq!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 minimum(&binding),
                 OperationId::from_bytes([7; 32]),
@@ -588,7 +603,7 @@ async fn expiry_or_clock_failure_inside_inventory_transaction_has_no_effect() {
             .unwrap();
         clock.armed.store(true, Ordering::SeqCst);
         let result = store
-            .create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
+            .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
             .await;
         match next {
             0 => assert!(matches!(
@@ -652,7 +667,7 @@ async fn admitted_inventory_work_survives_observer_and_close_cancellation() {
     let original = request(&binding, 1, 2, "Carrots");
     let digest = original.command().digest();
     clock.arm();
-    let mut future = store.create_pool(original, proof(e.proof()));
+    let mut future = store.execute_inventory(original, proof(e.proof()));
     assert!(futures::poll!(future.as_mut()).is_pending());
     clock.entered();
     drop(future);
@@ -671,7 +686,7 @@ async fn admitted_inventory_work_survives_observer_and_close_cancellation() {
             .await
             .unwrap();
     let receipt = store
-        .pool_creation(
+        .inventory_operation(
             binding.clone(),
             minimum(&binding),
             OperationId::from_bytes([1; 32]),
@@ -692,14 +707,14 @@ async fn current_credentials_guard_pool_reads_replay_and_new_effects_after_revoc
     let (store, e, binding) = create(&f).await;
     let receipt = committed(
         store
-            .create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
+            .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
             .await
             .unwrap(),
     );
     let wrong = || AttachmentProof::from_protected_input(&[0xB7; 32]).unwrap();
     assert!(matches!(
         store
-            .create_pool(request(&binding, 1, 2, "Carrots"), wrong())
+            .execute_inventory(request(&binding, 1, 2, "Carrots"), wrong())
             .await,
         Err(OperationError::Workspace(WorkspaceError::Unauthorized))
     ));
@@ -716,7 +731,7 @@ async fn current_credentials_guard_pool_reads_replay_and_new_effects_after_revoc
     ));
     assert!(matches!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 receipt.checkpoint(),
                 OperationId::from_bytes([1; 32]),
@@ -729,13 +744,13 @@ async fn current_credentials_guard_pool_reads_replay_and_new_effects_after_revoc
     store.revoke(e.input().clone(), e.proof()).await.unwrap();
     assert!(matches!(
         store
-            .create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
+            .execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof()))
             .await,
         Err(OperationError::Workspace(WorkspaceError::GrantRevoked))
     ));
     assert!(matches!(
         store
-            .create_pool(request(&binding, 3, 4, "New"), proof(e.proof()))
+            .execute_inventory(request(&binding, 3, 4, "New"), proof(e.proof()))
             .await,
         Err(OperationError::Workspace(WorkspaceError::GrantRevoked))
     ));
@@ -752,7 +767,7 @@ async fn current_credentials_guard_pool_reads_replay_and_new_effects_after_revoc
     ));
     assert!(matches!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding,
                 receipt.checkpoint(),
                 OperationId::from_bytes([1; 32]),
@@ -773,12 +788,13 @@ async fn current_credentials_guard_pool_reads_replay_and_new_effects_after_revoc
 }
 
 #[tokio::test]
-async fn simultaneous_pool_creations_serialize_identity_and_preserve_earlier_checkpoint_ancestry() {
+async fn simultaneous_inventory_operations_serialize_identity_and_preserve_earlier_checkpoint_ancestry()
+ {
     let f = Fixture::new();
     let (store, e, binding) = create(&f).await;
     let (left, right) = tokio::join!(
-        store.create_pool(request(&binding, 1, 2, "Carrots"), proof(e.proof())),
-        store.create_pool(request(&binding, 3, 2, "Competing"), proof(e.proof()))
+        store.execute_inventory(request(&binding, 1, 2, "Carrots"), proof(e.proof())),
+        store.execute_inventory(request(&binding, 3, 2, "Competing"), proof(e.proof()))
     );
     let first = match (left, right) {
         (Ok(value), Err(OperationError::StaleState))
@@ -786,19 +802,24 @@ async fn simultaneous_pool_creations_serialize_identity_and_preserve_earlier_che
         other => panic!("one serialized creation must win: {other:?}"),
     };
     let next = request(&binding, 5, 6, "Parsnips");
-    let next = CreatePoolRequest::new(
+    let next = InventoryRequest::new(
         binding.clone(),
         first.checkpoint(),
         CapturedPoolCreation::parse(next.command().protected_wire()).unwrap(),
     )
     .unwrap();
-    let second = committed(store.create_pool(next, proof(e.proof())).await.unwrap());
+    let second = committed(
+        store
+            .execute_inventory(next, proof(e.proof()))
+            .await
+            .unwrap(),
+    );
     assert_eq!(first.checkpoint().revision().get(), 1);
     assert_eq!(second.checkpoint().revision().get(), 2);
     assert_ne!(first.checkpoint().head(), second.checkpoint().head());
     assert_eq!(
         store
-            .pool_creation(
+            .inventory_operation(
                 binding.clone(),
                 second.checkpoint(),
                 first.attempt().operation_id(),
@@ -884,7 +905,7 @@ async fn acknowledged_branch_cannot_be_satisfied_by_unprotected_history_index_fi
             .unwrap();
     let acknowledged = committed(
         store
-            .create_pool(request(&binding, 1, 2, "First branch"), proof(e.proof()))
+            .execute_inventory(request(&binding, 1, 2, "First branch"), proof(e.proof()))
             .await
             .unwrap(),
     )
@@ -897,11 +918,11 @@ async fn acknowledged_branch_cannot_be_satisfied_by_unprotected_history_index_fi
             .await
             .unwrap();
     store
-        .create_pool(request(&binding, 3, 4, "Other branch"), proof(e.proof()))
+        .execute_inventory(request(&binding, 3, 4, "Other branch"), proof(e.proof()))
         .await
         .unwrap();
     store
-        .create_pool(
+        .execute_inventory(
             request(&binding, 5, 6, "Later other branch"),
             proof(e.proof()),
         )
@@ -933,3 +954,6 @@ async fn acknowledged_branch_cannot_be_satisfied_by_unprotected_history_index_fi
     ));
     store.close().await.unwrap();
 }
+
+#[path = "pool_correction.rs"]
+mod correction;

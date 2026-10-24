@@ -38,18 +38,18 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
-    CreatePool(
-        Box<radroots_storage::inventory::CreatePoolRequest>,
+    ExecuteInventory(
+        Box<radroots_storage::inventory::InventoryRequest>,
         AttachmentProof,
-        Reply<radroots_storage::inventory::PoolCreationOutcome, OperationError>,
+        Reply<radroots_storage::inventory::InventoryOutcome, OperationError>,
     ),
-    PoolCreation(
+    InventoryOperation(
         Box<WorkspaceBinding>,
         radroots_storage::inventory::InventoryCheckpointRef,
         OperationId,
         Option<CommandDigest>,
         AttachmentProof,
-        Reply<Option<radroots_storage::inventory::PoolCreationReceipt>, OperationError>,
+        Reply<Option<radroots_storage::inventory::InventoryReceipt>, OperationError>,
     ),
     Pool(
         Box<WorkspaceBinding>,
@@ -163,10 +163,10 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
-            Self::CreatePool(_, _, reply) => {
+            Self::ExecuteInventory(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
-            Self::PoolCreation(_, _, _, _, _, reply) => {
+            Self::InventoryOperation(_, _, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::Pool(_, _, _, _, reply) => {
@@ -365,8 +365,8 @@ impl Handle {
                                 && !matches!(
                                     &job,
                                     Job::Authenticate(..)
-                                        | Job::CreatePool(..)
-                                        | Job::PoolCreation(..)
+                                        | Job::ExecuteInventory(..)
+                                        | Job::InventoryOperation(..)
                                         | Job::Pool(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
@@ -399,7 +399,7 @@ impl Handle {
                                 continue;
                             };
                             match job {
-                                Job::CreatePool(request, proof, reply) => {
+                                Job::ExecuteInventory(request, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
                                         stock::inventory::Turn {
                                             connection,
@@ -416,7 +416,7 @@ impl Handle {
                                     };
                                     let _ = reply.send(result);
                                 }
-                                Job::PoolCreation(
+                                Job::InventoryOperation(
                                     binding,
                                     minimum,
                                     operation,
@@ -805,11 +805,11 @@ impl Handle {
         self.send(Job::StockAuthority(input, proof, reply))?;
         result.await.map_err(|_| WorkspaceError::RecoveryRequired)?
     }
-    pub(super) async fn create_pool(
+    pub(super) async fn execute_inventory(
         &self,
-        request: radroots_storage::inventory::CreatePoolRequest,
+        request: radroots_storage::inventory::InventoryRequest,
         proof: AttachmentProof,
-    ) -> Result<radroots_storage::inventory::PoolCreationOutcome, OperationError> {
+    ) -> Result<radroots_storage::inventory::InventoryOutcome, OperationError> {
         let c = request.command().context();
         let anchor = CommitAttempt::new(
             c.workspace_id(),
@@ -818,21 +818,23 @@ impl Handle {
             None,
         );
         let (reply, result) = oneshot::channel();
-        self.send(Job::CreatePool(Box::new(request), proof, reply))?;
-        result.await.unwrap_or(Ok(
-            radroots_storage::inventory::PoolCreationOutcome::Unknown(anchor),
-        ))
+        self.send(Job::ExecuteInventory(Box::new(request), proof, reply))?;
+        result
+            .await
+            .unwrap_or(Ok(radroots_storage::inventory::InventoryOutcome::Unknown(
+                anchor,
+            )))
     }
-    pub(super) async fn pool_creation(
+    pub(super) async fn inventory_operation(
         &self,
         binding: WorkspaceBinding,
         minimum: radroots_storage::inventory::InventoryCheckpointRef,
         operation: OperationId,
         digest: Option<CommandDigest>,
         proof: AttachmentProof,
-    ) -> Result<Option<radroots_storage::inventory::PoolCreationReceipt>, OperationError> {
+    ) -> Result<Option<radroots_storage::inventory::InventoryReceipt>, OperationError> {
         let (reply, result) = oneshot::channel();
-        self.send(Job::PoolCreation(
+        self.send(Job::InventoryOperation(
             Box::new(binding),
             minimum,
             operation,
@@ -855,7 +857,7 @@ impl Handle {
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
-            Job::CreatePool(..) => 64 * 1024,
+            Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,
             Job::PrepareDelivery(..) => 1024 * 1024,
             Job::BindPlan(..) => 1024 * 1024,

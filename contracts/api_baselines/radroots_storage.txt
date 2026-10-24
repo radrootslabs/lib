@@ -1364,36 +1364,39 @@ pub fn radroots_storage::memory::MemoryStorage::source_token(&self) -> radroots_
 pub fn radroots_storage::memory::MemoryStorage::status(&self) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::status::EventStoreStatus, radroots_storage::Error>>
 pub type radroots_storage::event::EventCursor = radroots_storage::event::EventPosition
 pub mod radroots_storage::inventory
-pub enum radroots_storage::inventory::PoolCreationOutcome
-pub radroots_storage::inventory::PoolCreationOutcome::Committed(alloc::boxed::Box<radroots_storage::inventory::PoolCreationReceipt>)
-pub radroots_storage::inventory::PoolCreationOutcome::Unknown(radroots_storage::command::CommitAttempt)
-pub struct radroots_storage::inventory::CreatePoolRequest
-impl radroots_storage::inventory::CreatePoolRequest
-pub const fn radroots_storage::inventory::CreatePoolRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
-pub const fn radroots_storage::inventory::CreatePoolRequest::command(&self) -> &radroots_protocol::command::stock::CapturedPoolCreation
-pub fn radroots_storage::inventory::CreatePoolRequest::from_protected_wire(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &[u8]) -> core::result::Result<Self, radroots_storage::command::OperationError>
-pub const fn radroots_storage::inventory::CreatePoolRequest::minimum_checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
-pub fn radroots_storage::inventory::CreatePoolRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock::CapturedPoolCreation) -> core::result::Result<Self, radroots_storage::command::OperationError>
-pub fn radroots_storage::inventory::CreatePoolRequest::retained_copy(&self) -> core::result::Result<Self, radroots_storage::command::OperationError>
-impl core::fmt::Debug for radroots_storage::inventory::CreatePoolRequest
-pub fn radroots_storage::inventory::CreatePoolRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub use radroots_storage::inventory::CapturedInventoryCommand
+pub use radroots_storage::inventory::InventoryCommandKind
+pub enum radroots_storage::inventory::InventoryOutcome
+pub radroots_storage::inventory::InventoryOutcome::Committed(alloc::boxed::Box<radroots_storage::inventory::InventoryReceipt>)
+pub radroots_storage::inventory::InventoryOutcome::Unknown(radroots_storage::command::CommitAttempt)
 pub struct radroots_storage::inventory::InventoryCheckpointRef
 impl radroots_storage::inventory::InventoryCheckpointRef
 pub const fn radroots_storage::inventory::InventoryCheckpointRef::authority(self) -> radroots_domain::context::AuthorityRef
 pub fn radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(radroots_domain::context::AuthorityRef, radroots_domain::context::Sequence, core::option::Option<radroots_domain::identifier::CheckpointDigest>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub const fn radroots_storage::inventory::InventoryCheckpointRef::head(self) -> core::option::Option<radroots_domain::identifier::CheckpointDigest>
 pub const fn radroots_storage::inventory::InventoryCheckpointRef::revision(self) -> radroots_domain::context::Sequence
-pub struct radroots_storage::inventory::PoolCreationReceipt
-impl radroots_storage::inventory::PoolCreationReceipt
-pub const fn radroots_storage::inventory::PoolCreationReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
-pub const fn radroots_storage::inventory::PoolCreationReceipt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
-pub fn radroots_storage::inventory::PoolCreationReceipt::from_committed_store(radroots_storage::command::CommitAttempt, radroots_domain::stock::PoolSnapshot, radroots_storage::inventory::InventoryCheckpointRef) -> core::result::Result<Self, radroots_storage::command::OperationError>
-pub const fn radroots_storage::inventory::PoolCreationReceipt::pool(&self) -> radroots_domain::stock::PoolSnapshot
-pub const fn radroots_storage::inventory::PoolCreationReceipt::transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub struct radroots_storage::inventory::InventoryReceipt
+impl radroots_storage::inventory::InventoryReceipt
+pub const fn radroots_storage::inventory::InventoryReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::inventory::InventoryReceipt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub fn radroots_storage::inventory::InventoryReceipt::from_committed_store(radroots_storage::command::CommitAttempt, radroots_protocol::command::inventory::InventoryCommandKind, radroots_domain::stock::PoolSnapshot, radroots_storage::inventory::InventoryCheckpointRef) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::InventoryReceipt::kind(&self) -> radroots_protocol::command::inventory::InventoryCommandKind
+pub const fn radroots_storage::inventory::InventoryReceipt::pool(&self) -> radroots_domain::stock::PoolSnapshot
+pub const fn radroots_storage::inventory::InventoryReceipt::transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub struct radroots_storage::inventory::InventoryRequest
+impl radroots_storage::inventory::InventoryRequest
+pub const fn radroots_storage::inventory::InventoryRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
+pub const fn radroots_storage::inventory::InventoryRequest::command(&self) -> &radroots_protocol::command::inventory::CapturedInventoryCommand
+pub fn radroots_storage::inventory::InventoryRequest::from_protected_wire(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &[u8]) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::InventoryRequest::minimum_checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub fn radroots_storage::inventory::InventoryRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, impl core::convert::Into<radroots_protocol::command::inventory::CapturedInventoryCommand>) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::inventory::InventoryRequest::retained_copy(&self) -> core::result::Result<Self, radroots_storage::command::OperationError>
+impl core::fmt::Debug for radroots_storage::inventory::InventoryRequest
+pub fn radroots_storage::inventory::InventoryRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait radroots_storage::inventory::InventoryStore: radroots_storage::workspace::WorkspaceStore
-pub fn radroots_storage::inventory::InventoryStore::create_pool(&self, radroots_storage::inventory::CreatePoolRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::inventory::PoolCreationOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::inventory::InventoryStore::execute_inventory(&self, radroots_storage::inventory::InventoryRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::inventory::InventoryOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::inventory::InventoryStore::inventory_operation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::inventory::InventoryReceipt>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::pool(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::PoolId, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_domain::stock::PoolView>, radroots_storage::command::OperationError>>
-pub fn radroots_storage::inventory::InventoryStore::pool_creation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::inventory::PoolCreationReceipt>, radroots_storage::command::OperationError>>
 pub mod radroots_storage::journal
 pub use radroots_storage::journal::BoxFuture
 pub use radroots_storage::journal::EventId

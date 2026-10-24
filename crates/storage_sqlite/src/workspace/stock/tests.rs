@@ -6,13 +6,191 @@ use crate::workspace::{
 use radroots_domain::{CommandContextData, OperationId, PoolId, UnixSeconds};
 use radroots_storage::{
     command::OperationError,
-    inventory::{CreatePoolRequest, InventoryCheckpointRef, InventoryStore},
+    inventory::{InventoryCheckpointRef, InventoryRequest, InventoryStore},
 };
 struct Clock;
 impl WorkspaceClock for Clock {
     fn now(&self) -> Result<UnixSeconds, WorkspaceError> {
         Ok(UnixSeconds::new(100).unwrap())
     }
+}
+
+#[tokio::test]
+async fn retained_inventory_v2_keeps_original_records_and_refuses_new_correction_without_upgrade() {
+    use radroots_storage::inventory::{InventoryCommandKind, InventoryOutcome};
+    let fixture = CryptoFixture::new();
+    let path = fixture.root().join("retained-v2");
+    let (input, proof, record) = SellerStockConfig::new(
+        participant(),
+        participant(),
+        "retained-stock-owner",
+        UnixSeconds::new(200).unwrap(),
+    )
+    .unwrap()
+    .enroll(
+        UnixSeconds::new(100).unwrap(),
+        WorkspaceId::from_bytes([1; 32]),
+        ExecutorId::from_bytes([2; 32]),
+        GrantId::from_bytes([3; 32]),
+        AttachmentProof::from_protected_input(&[0xA3; 32]).unwrap(),
+    )
+    .unwrap();
+    // Literal catalog2/root2 shape from cc96f676, not predecessor-binary evidence.
+    let clear=zeroize::Zeroizing::new(serde_json::to_vec(&serde_json::json!({"version":2,"input":input,"transaction":TransactionId::from_bytes([9;32]),"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null}})).unwrap());
+    let crypto = fixture.crypto();
+    let root = crypto.seal_stock_root(&input, 2, &clear).await.unwrap();
+    let grant = crypto
+        .seal_stock(&input, false, &record.encode().unwrap())
+        .await
+        .unwrap();
+    let namespace = Namespace::acquire_kind(&path, true, Kind::SellerStock).unwrap();
+    let mut connection = SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(namespace.database_path())
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .synchronous(sqlx::sqlite::SqliteSynchronous::Full),
+    )
+    .await
+    .unwrap();
+    let mut tx = connection.begin_with("BEGIN IMMEDIATE").await.unwrap();
+    for (_, _, _, sql) in schema::objects(2).unwrap() {
+        sqlx::raw_sql(sql).execute(&mut *tx).await.unwrap();
+    }
+    sqlx::query("INSERT INTO stock_authority(singleton,protected) VALUES(1,?)")
+        .bind(root)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO stock_grants(grant_id,protected) VALUES(?,?)")
+        .bind(input.grant_id().as_bytes().as_slice())
+        .bind(grant)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("PRAGMA user_version=2")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    connection.close().await.unwrap();
+    drop(namespace);
+    let store =
+        NativeWorkspace::open_seller_stock(&path, input.clone(), fixture.crypto(), Arc::new(Clock))
+            .await
+            .unwrap();
+    let binding = store.authenticate(input.clone(), &proof).await.unwrap();
+    let minimum = store
+        .stock_authority(input.clone(), &proof)
+        .await
+        .unwrap()
+        .inventory_checkpoint()
+        .unwrap();
+    let context = CommandContextData::new(
+        OperationId::from_bytes([7; 32]),
+        binding.actor(),
+        input.workspace_id(),
+        input.authority(),
+        input.route_digest(),
+        None,
+        None,
+        UnixSeconds::new(150).unwrap(),
+        None,
+    )
+    .unwrap();
+    let wire = serde_json::json!({"type":"stock.create_pool","context":context,"input":{"id":PoolId::from_bytes([8;32]),"label":"retained","unit":"each","tick_scale":"0","initial_quantity":"1"}});
+    let copy = || {
+        proof
+            .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+            .unwrap()
+    };
+    let created = match store
+        .execute_inventory(
+            InventoryRequest::from_protected_wire(
+                binding.clone(),
+                minimum,
+                &serde_json::to_vec(&wire).unwrap(),
+            )
+            .unwrap(),
+            copy(),
+        )
+        .await
+        .unwrap()
+    {
+        InventoryOutcome::Committed(receipt) => *receipt,
+        InventoryOutcome::Unknown(_) => panic!("retained creation must confirm"),
+    };
+    assert_eq!(created.kind(), InventoryCommandKind::CreatePool);
+    assert_eq!(created.pool().balances().physical().available.get(), 1);
+    store.close().await.unwrap();
+    let store =
+        NativeWorkspace::open_seller_stock(&path, input.clone(), fixture.crypto(), Arc::new(Clock))
+            .await
+            .unwrap();
+    assert_eq!(
+        store
+            .inventory_operation(
+                binding.clone(),
+                created.checkpoint(),
+                OperationId::from_bytes([7; 32]),
+                Some(created.attempt().command_digest()),
+                copy()
+            )
+            .await
+            .unwrap(),
+        Some(created.clone())
+    );
+    let mut corrected = serde_json::json!({"type":"stock.adjust","context":context,"input":{"pool_id":PoolId::from_bytes([8;32]),"expected_version":"1","direction":"add","amount":"1","reason":"new correction profile"}});
+    corrected["context"]["operation_id"] = serde_json::json!(OperationId::from_bytes([10; 32]));
+    assert!(matches!(
+        store
+            .execute_inventory(
+                InventoryRequest::from_protected_wire(
+                    binding,
+                    created.checkpoint(),
+                    &serde_json::to_vec(&corrected).unwrap()
+                )
+                .unwrap(),
+                copy()
+            )
+            .await,
+        Err(OperationError::UnsupportedOperation)
+    ));
+    store.close().await.unwrap();
+    let mut connection = SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(path.join("stock_execution_v1.sqlite")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(schema::admit(&mut connection).await.unwrap(), 2);
+    let protected: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_operations")
+        .fetch_one(&mut connection)
+        .await
+        .unwrap();
+    let old = fixture
+        .crypto()
+        .open_stock_record(
+            &input,
+            "operation",
+            OperationId::from_bytes([7; 32]).as_bytes(),
+            &protected,
+        )
+        .await
+        .unwrap();
+    old.expose_secret(|bytes| {
+        let value: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        assert_eq!(value["version"], 1);
+        assert!(value.get("before").is_none());
+    });
+    sqlx::query("PRAGMA user_version=3")
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    connection.close().await.unwrap();
+    assert!(
+        NativeWorkspace::open_seller_stock(&path, input, fixture.crypto(), Arc::new(Clock))
+            .await
+            .is_err()
+    );
 }
 #[tokio::test]
 async fn retained_enrollment_v1_authenticates_but_never_auto_creates_inventory() {
@@ -99,7 +277,7 @@ async fn retained_enrollment_v1_authenticates_but_never_auto_creates_inventory()
     )
     .unwrap();
     let wire = serde_json::json!({"type":"stock.create_pool","context":context,"input":{"id":PoolId::from_bytes([8;32]),"label":"retained","unit":"each","tick_scale":"0","initial_quantity":"1"}});
-    let request = CreatePoolRequest::from_protected_wire(
+    let request = InventoryRequest::from_protected_wire(
         binding,
         InventoryCheckpointRef::from_host_metadata(
             input.authority(),
@@ -114,7 +292,7 @@ async fn retained_enrollment_v1_authenticates_but_never_auto_creates_inventory()
         .with_secret(|b| AttachmentProof::from_protected_input(b))
         .unwrap();
     assert!(matches!(
-        store.create_pool(request, copy).await,
+        store.execute_inventory(request, copy).await,
         Err(OperationError::UnsupportedOperation)
     ));
     store.close().await.unwrap();

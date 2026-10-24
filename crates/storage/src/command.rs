@@ -63,7 +63,7 @@ pub enum OperationError {
     DeadlineExceeded,
     /// The retained operation identity binds a different command commitment.
     IdempotencyConflict,
-    /// The selected publication coordinate has another retained decision/head.
+    /// The selected state, pool version or retained decision has changed.
     StaleState,
     /// A known storage failure preceded writes or had confirmed rollback.
     StorageFailure,

@@ -161,6 +161,10 @@ pub fn radroots_domain::listing::SaleUnit::package_unspecified(&str) -> core::re
 impl core::fmt::Debug for radroots_domain::listing::SaleUnit
 pub fn radroots_domain::listing::SaleUnit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_domain::stock
+pub enum radroots_domain::stock::AvailableStockCorrection
+pub radroots_domain::stock::AvailableStockCorrection::Add
+pub radroots_domain::stock::AvailableStockCorrection::Remove
+pub radroots_domain::stock::AvailableStockCorrection::Spoil
 #[non_exhaustive] pub enum radroots_domain::stock::StockError
 pub radroots_domain::stock::StockError::ConservationViolation
 pub radroots_domain::stock::StockError::FractionalCount
@@ -170,6 +174,7 @@ pub radroots_domain::stock::StockError::OutOfRange
 pub radroots_domain::stock::StockError::PrecisionLoss
 pub radroots_domain::stock::StockError::Underflow
 pub radroots_domain::stock::StockError::UnitMismatch
+pub radroots_domain::stock::StockError::ZeroMovement
 impl core::error::Error for radroots_domain::stock::StockError
 impl core::fmt::Display for radroots_domain::stock::StockError
 pub fn radroots_domain::stock::StockError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -191,6 +196,7 @@ impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PhysicalB
 pub fn radroots_domain::stock::PhysicalBalances::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::PoolBalances
 impl radroots_domain::stock::PoolBalances
+pub fn radroots_domain::stock::PoolBalances::correct_available(self, radroots_domain::stock::AvailableStockCorrection, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub const fn radroots_domain::stock::PoolBalances::introduced(self) -> radroots_domain::stock::StockTicks
 pub fn radroots_domain::stock::PoolBalances::new(radroots_domain::stock::StockTicks, radroots_domain::stock::PhysicalBalances) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub const fn radroots_domain::stock::PoolBalances::physical(self) -> radroots_domain::stock::PhysicalBalances

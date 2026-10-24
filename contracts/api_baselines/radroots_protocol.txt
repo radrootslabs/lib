@@ -177,6 +177,25 @@ impl core::convert::From<radroots_protocol::listing::CapturedListingCommand> for
 pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::listing::CapturedListingCommand) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedCommand
 pub fn radroots_protocol::command::CapturedCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::command::CapturedInventoryCommand
+pub radroots_protocol::command::CapturedInventoryCommand::CorrectPool(radroots_protocol::command::CapturedPoolCorrection)
+pub radroots_protocol::command::CapturedInventoryCommand::CreatePool(radroots_protocol::command::CapturedPoolCreation)
+impl radroots_protocol::command::CapturedInventoryCommand
+pub const fn radroots_protocol::command::CapturedInventoryCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedInventoryCommand::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedInventoryCommand::correction_input(&self) -> core::option::Option<&radroots_protocol::command::PoolCorrectionInput>
+pub const fn radroots_protocol::command::CapturedInventoryCommand::creation_input(&self) -> core::option::Option<&radroots_protocol::command::CreatePoolInput>
+pub const fn radroots_protocol::command::CapturedInventoryCommand::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::command::CapturedInventoryCommand::kind(&self) -> radroots_protocol::command::InventoryCommandKind
+pub fn radroots_protocol::command::CapturedInventoryCommand::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::CapturedInventoryCommand::pool_id(&self) -> radroots_domain::identifier::PoolId
+pub fn radroots_protocol::command::CapturedInventoryCommand::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::command::CapturedPoolCorrection> for radroots_protocol::command::CapturedInventoryCommand
+pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedPoolCorrection) -> Self
+impl core::convert::From<radroots_protocol::command::CapturedPoolCreation> for radroots_protocol::command::CapturedInventoryCommand
+pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedPoolCreation) -> Self
+impl core::fmt::Debug for radroots_protocol::command::CapturedInventoryCommand
+pub fn radroots_protocol::command::CapturedInventoryCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_protocol::command::ChatKind
 pub radroots_protocol::command::ChatKind::Inquire
 pub radroots_protocol::command::ChatKind::Reply
@@ -196,6 +215,11 @@ pub radroots_protocol::command::CommandKind::PublishListing
 pub radroots_protocol::command::CommandKind::Reply
 impl radroots_protocol::command::CommandKind
 pub const fn radroots_protocol::command::CommandKind::as_str(self) -> &'static str
+pub enum radroots_protocol::command::InventoryCommandKind
+pub radroots_protocol::command::InventoryCommandKind::AddStock
+pub radroots_protocol::command::InventoryCommandKind::CreatePool
+pub radroots_protocol::command::InventoryCommandKind::RemoveStock
+pub radroots_protocol::command::InventoryCommandKind::SpoilStock
 pub struct radroots_protocol::command::CapturedChatCommand
 impl radroots_protocol::command::CapturedChatCommand
 pub const fn radroots_protocol::command::CapturedChatCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
@@ -215,6 +239,19 @@ impl core::convert::From<radroots_protocol::command::CapturedChatCommand> for ra
 pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::command::CapturedChatCommand) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedChatCommand
 pub fn radroots_protocol::command::CapturedChatCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::CapturedPoolCorrection
+impl radroots_protocol::command::CapturedPoolCorrection
+pub const fn radroots_protocol::command::CapturedPoolCorrection::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedPoolCorrection::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedPoolCorrection::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::command::CapturedPoolCorrection::input(&self) -> &radroots_protocol::command::PoolCorrectionInput
+pub fn radroots_protocol::command::CapturedPoolCorrection::new(radroots_domain::context::CommandContextData, radroots_protocol::command::PoolCorrectionInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedPoolCorrection::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedPoolCorrection::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::command::CapturedPoolCorrection> for radroots_protocol::command::CapturedInventoryCommand
+pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedPoolCorrection) -> Self
+impl core::fmt::Debug for radroots_protocol::command::CapturedPoolCorrection
+pub fn radroots_protocol::command::CapturedPoolCorrection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::CapturedPoolCreation
 impl radroots_protocol::command::CapturedPoolCreation
 pub const fn radroots_protocol::command::CapturedPoolCreation::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
@@ -224,6 +261,8 @@ pub const fn radroots_protocol::command::CapturedPoolCreation::input(&self) -> &
 pub fn radroots_protocol::command::CapturedPoolCreation::new(radroots_domain::context::CommandContextData, radroots_protocol::command::CreatePoolInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
 pub fn radroots_protocol::command::CapturedPoolCreation::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
 pub fn radroots_protocol::command::CapturedPoolCreation::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::command::CapturedPoolCreation> for radroots_protocol::command::CapturedInventoryCommand
+pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedPoolCreation) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedPoolCreation
 pub fn radroots_protocol::command::CapturedPoolCreation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::CreatePoolInput
@@ -255,6 +294,16 @@ impl core::fmt::Debug for radroots_protocol::command::ListingRevisionRef
 pub fn radroots_protocol::command::ListingRevisionRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_protocol::command::ListingRevisionRef
 pub fn radroots_protocol::command::ListingRevisionRef::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+pub struct radroots_protocol::command::PoolCorrectionInput
+impl radroots_protocol::command::PoolCorrectionInput
+pub const fn radroots_protocol::command::PoolCorrectionInput::amount(&self) -> radroots_domain::amount::PositiveDecimal
+pub const fn radroots_protocol::command::PoolCorrectionInput::expected_version(&self) -> radroots_domain::context::Sequence
+pub const fn radroots_protocol::command::PoolCorrectionInput::kind(&self) -> radroots_domain::stock::AvailableStockCorrection
+pub fn radroots_protocol::command::PoolCorrectionInput::new(radroots_domain::identifier::PoolId, radroots_domain::context::Sequence, radroots_domain::stock::AvailableStockCorrection, radroots_domain::amount::PositiveDecimal, &str) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::PoolCorrectionInput::pool_id(&self) -> radroots_domain::identifier::PoolId
+pub fn radroots_protocol::command::PoolCorrectionInput::reason(&self) -> &str
+impl core::fmt::Debug for radroots_protocol::command::PoolCorrectionInput
+pub fn radroots_protocol::command::PoolCorrectionInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::ReplyInput
 impl radroots_protocol::command::ReplyInput
 pub fn radroots_protocol::command::ReplyInput::new(radroots_domain::identifier::ThreadId, radroots_identity::key::PublicKey, radroots_domain::identifier::MessageId, &str) -> core::result::Result<Self, radroots_protocol::command::CommandError>

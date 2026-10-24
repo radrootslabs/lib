@@ -5,21 +5,22 @@ use crate::{
     workspace::{AttachmentProof, WorkspaceBinding, WorkspaceScope, WorkspaceStore},
 };
 use radroots_domain::{CommandDigest, OperationId, PoolId, TransactionId, stock::PoolSnapshot};
-use radroots_protocol::command::CapturedPoolCreation;
+pub use radroots_protocol::command::{CapturedInventoryCommand, InventoryCommandKind};
 use radroots_transport::BoxFuture;
 
-/// Exact captured owner-private creation and original authenticated observation.
-pub struct CreatePoolRequest {
+/// Exact captured owner-private inventory command and original authenticated observation.
+pub struct InventoryRequest {
     binding: WorkspaceBinding,
     minimum: InventoryCheckpointRef,
-    command: CapturedPoolCreation,
+    command: CapturedInventoryCommand,
 }
-impl CreatePoolRequest {
+impl InventoryRequest {
     pub fn new(
         binding: WorkspaceBinding,
         minimum: InventoryCheckpointRef,
-        command: CapturedPoolCreation,
+        command: impl Into<CapturedInventoryCommand>,
     ) -> Result<Self, OperationError> {
+        let command = command.into();
         let context = command.context();
         let selection = binding.input();
         if binding.scope() != WorkspaceScope::SellerStockOwner {
@@ -59,7 +60,7 @@ impl CreatePoolRequest {
         Self::new(
             binding,
             minimum,
-            CapturedPoolCreation::parse(wire).map_err(|_| OperationError::RecoveryRequired)?,
+            CapturedInventoryCommand::parse(wire).map_err(|_| OperationError::RecoveryRequired)?,
         )
     }
     /// Independently retained acknowledged minimum, never guessed from a cache.
@@ -69,21 +70,21 @@ impl CreatePoolRequest {
     pub const fn binding(&self) -> &WorkspaceBinding {
         &self.binding
     }
-    pub const fn command(&self) -> &CapturedPoolCreation {
+    pub const fn command(&self) -> &CapturedInventoryCommand {
         &self.command
     }
     pub fn retained_copy(&self) -> Result<Self, OperationError> {
         Self::new(
             self.binding.clone(),
             self.minimum,
-            CapturedPoolCreation::parse(self.command.protected_wire())
+            CapturedInventoryCommand::parse(self.command.protected_wire())
                 .map_err(|_| OperationError::RecoveryRequired)?,
         )
     }
 }
-impl core::fmt::Debug for CreatePoolRequest {
+impl core::fmt::Debug for InventoryRequest {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("CreatePoolRequest(<redacted>)")
+        f.write_str("InventoryRequest(<redacted>)")
     }
 }
 /// A claimed acknowledged inventory checkpoint. The trusted host must retain
@@ -119,31 +120,40 @@ impl InventoryCheckpointRef {
         self.head
     }
 }
-/// Confirmed owner-private effect, without any signature or publication claim.
+/// Confirmed owner-private inventory effect, without any signature or publication claim.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PoolCreationReceipt {
+pub struct InventoryReceipt {
     attempt: CommitAttempt,
     pool: PoolSnapshot,
+    kind: InventoryCommandKind,
     checkpoint: InventoryCheckpointRef,
 }
-impl PoolCreationReceipt {
+impl InventoryReceipt {
     /// Reconstructs only metadata. A host must confirm its actual transaction.
     pub fn from_committed_store(
         attempt: CommitAttempt,
+        kind: InventoryCommandKind,
         pool: PoolSnapshot,
         checkpoint: InventoryCheckpointRef,
     ) -> Result<Self, OperationError> {
         if attempt.transaction_id().is_none()
-            || pool.version().get() != 1
+            || pool.version().get() == 0
+            || (kind == InventoryCommandKind::CreatePool && pool.version().get() != 1)
+            || (kind != InventoryCommandKind::CreatePool && pool.version().get() < 2)
             || checkpoint.revision().get() == 0
         {
             return Err(OperationError::RecoveryRequired);
         }
         Ok(Self {
             attempt,
+            kind,
             pool,
             checkpoint,
         })
+    }
+    /// Exact effect family retained by the original command.
+    pub const fn kind(&self) -> InventoryCommandKind {
+        self.kind
     }
     /// Checkpoint retained by the trusted host for subsequent recovery admission.
     pub const fn checkpoint(&self) -> InventoryCheckpointRef {
@@ -161,26 +171,26 @@ impl PoolCreationReceipt {
 }
 /// Unknown completion retains the original operation/digest/transaction anchor.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PoolCreationOutcome {
-    Committed(Box<PoolCreationReceipt>),
+pub enum InventoryOutcome {
+    Committed(Box<InventoryReceipt>),
     Unknown(CommitAttempt),
 }
 /// Native and browser hosts enforce these same atomic rules, never a memory
 /// success placeholder. No signing or network work occurs in these methods.
 pub trait InventoryStore: WorkspaceStore {
-    fn create_pool(
+    fn execute_inventory(
         &self,
-        request: CreatePoolRequest,
+        request: InventoryRequest,
         proof: AttachmentProof,
-    ) -> BoxFuture<'_, Result<PoolCreationOutcome, OperationError>>;
-    fn pool_creation(
+    ) -> BoxFuture<'_, Result<InventoryOutcome, OperationError>>;
+    fn inventory_operation(
         &self,
         binding: WorkspaceBinding,
         minimum: InventoryCheckpointRef,
         operation: OperationId,
         digest: Option<CommandDigest>,
         proof: AttachmentProof,
-    ) -> BoxFuture<'_, Result<Option<PoolCreationReceipt>, OperationError>>;
+    ) -> BoxFuture<'_, Result<Option<InventoryReceipt>, OperationError>>;
     fn pool(
         &self,
         binding: WorkspaceBinding,

@@ -338,14 +338,17 @@ worker until close and explicit reopen. This enrollment boundary provides no
 pool allocation, old-order recovery, transfer, signing or business confirmation;
 ordinary outbox journal jobs are refused on the stock namespace.
 
-## Owner-private pool creation
+## Owner-private inventory transactions
 
-The current stock factory creates exact catalog version2 and protected authority
-payload version2. Retained enrollment-only version1 still authenticates and
+The current stock factory creates exact catalog version3 and protected authority
+payload version3. Retained enrollment-only version1 still authenticates and
 revokes with its original codec; its inventory ports refuse unsupported work.
+Retained inventory version2 keeps its original pool-creation records and refuses
+new correction commands. Current operation/movement payloads use explicit
+version2 codecs; retained version2 stores keep their exact version1 codecs.
 No namespace is automatically migrated. Ordinary outbox catalogs are separate.
 
-`InventoryStore` admits `CreatePoolRequest` with the exact captured command,
+`InventoryStore` admits `InventoryRequest` with the exact captured command,
 current stock-owner binding, credential and independently retained minimum
 inventory checkpoint. The backend verifies that minimum against its protected
 root and authenticated retained history before reads, replay or new writes.
@@ -361,8 +364,8 @@ transfer qualification remain separate requirements.
 from0 through6 alongside its unit and exact `initial_quantity`. Each counts
 require scale0. The command digest includes precision and every semantic context
 field; correlation remains diagnostic. No implicit conversion or rounding occurs.
-A confirmed owner-private receipt identifies the original transaction, initial
-pool effect and acknowledged checkpoint. Its pool snapshot describes that
+A confirmed `InventoryReceipt` identifies the exact command effect class,
+original transaction, pool effect and acknowledged checkpoint. Its snapshot describes that
 original effect; use the current pool query for a later projection.
 
 One `BEGIN IMMEDIATE` transaction CAS-checks protected authority and grant,
@@ -372,4 +375,20 @@ No signer or network work occurs. An empty pool has zero stock and no physical
 movement. Replay returns the original effect before fresh deadline checks.
 Known failures confirm rollback; unknown completion fences the owner until
 reopen and reconciliation by its original operation and digest. Firm holds,
-allocation, correction/deficit policy, commerce and transfer are still pending.
+allocation, held-stock correction/deficit policy, commerce and transfer are still pending.
+
+`stock.adjust` captures an explicit add/remove direction and `stock.spoil`
+captures physical waste. Both retain a positive exact amount, expected pool
+version and private reason. The pool's fixed unit/precision resolves exact ticks;
+neither command converts or rounds. Available backing moves to cumulative waste
+or removed stock; positive corrections increase cumulative introduced stock.
+Depletion never frees lifetime introduced capacity or silently spends held or
+quarantined backing. Held-stock depletion still needs the qualified obligation
+and deficit transition; an available-stock underflow is refused.
+
+The same native transaction retains the original before/after projection,
+command and movement, updates the exact protected pool by version/bytes CAS,
+and advances protected progress. Replay reauthenticates and returns that original
+effect before comparing fresh versions or deadlines. Catalog identity is
+rechecked with protected snapshots inside the transaction, after provider IO.
+The ordinary facade and complete commerce behavior remain in implementation.
