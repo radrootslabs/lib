@@ -42,6 +42,17 @@ authorization or stock.
 `Quantity` uses the existing measurement identity and exact decimal bounds.
 Conversions between g/kg and mL/L are explicit and reject precision loss;
 arithmetic requires matching units. `each` counts remain integral.
+
+`stock` supplies exact pool values for the durable-executor implementation.
+`StockTicks` admits canonical integer strings from0 through10^18; JSON numbers
+are rejected. `PoolUnit` requires an explicit physical unit and precision0–6,
+with integral `each` counts. Quantity conversion rejects rounding and implicit
+unit changes. `PoolBalances` checks the sum of available, preparatory hold,
+committed hold, physical quarantine, consumed, waste and removed against
+introduced stock. Released stock is a movement, and promises or deficits cannot
+fill a physical balance. A `PoolSnapshot` retains a distinct pool ID and declared
+revision. These data claims grant no write permission or stock authority.
+
 `ContentMeasure` descriptors distinguish fixed, estimated and unspecified
 contents; estimates do not provide fixed conversions or stock backing. Existing
 sale options validate selected amounts against their minimum, increment and

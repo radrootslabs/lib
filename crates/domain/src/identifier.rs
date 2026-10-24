@@ -135,6 +135,10 @@ identifier!(
 );
 identifier!(ExecutorId, "An exact 256-bit selected executor identifier.");
 identifier!(
+    PoolId,
+    "An exact 256-bit physical stock pool identifier, not authority."
+);
+identifier!(
     OperationId,
     "An exact 256-bit retained operation identifier."
 );

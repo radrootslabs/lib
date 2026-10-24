@@ -19,6 +19,8 @@ mod message;
 mod money;
 mod pricing;
 mod quantity;
+/// Exact physical stock values; these are neither authority nor a stock store.
+pub mod stock;
 mod time;
 mod variable_price;
 
@@ -49,7 +51,7 @@ pub use fulfillment::{FulfillmentError, PrivateFulfillment};
 pub use identifier::{
     AgreementLineId, ApprovalIntentDigest, CheckpointDigest, CommandDigest, EnvelopeEventId,
     ExecutorId, FulfillmentGroupId, GrantId, IdentifierError, ListingOptionId, MessageId,
-    OperationId, OrderId, RecordId, RouteDigest, RumorEventId, SigningAttemptId, SourceId,
+    OperationId, OrderId, PoolId, RecordId, RouteDigest, RumorEventId, SigningAttemptId, SourceId,
     TermsDigest, ThreadId, TransactionId, WorkspaceId,
 };
 pub use issuance::{FIRST_ISSUANCE_MAX_SECONDS, IssuanceWindow};

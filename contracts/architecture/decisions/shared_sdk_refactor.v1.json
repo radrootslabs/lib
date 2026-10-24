@@ -515,6 +515,23 @@
     "rounding": "half_even_once_per_net_line_then_checked_sum",
     "binding_numbers": "exact_decimal_or_integer_strings",
     "stock_ticks_max": 1000000000000000000,
+    "stock_scale_max": 6,
+    "stock_units": [
+      "g",
+      "kg",
+      "mL",
+      "L",
+      "each"
+    ],
+    "stock_physical_categories": [
+      "available",
+      "preparatory_hold",
+      "committed_hold",
+      "physical_quarantine",
+      "consumed",
+      "waste",
+      "removed"
+    ],
     "generation_max": 9223372036854775807
   },
   "limits": {

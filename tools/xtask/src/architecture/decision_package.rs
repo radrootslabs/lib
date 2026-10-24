@@ -149,6 +149,9 @@ struct Values {
     rounding: String,
     binding_numbers: String,
     stock_ticks_max: u64,
+    stock_scale_max: u8,
+    stock_units: Vec<String>,
+    stock_physical_categories: Vec<String>,
     generation_max: u64,
 }
 
@@ -510,6 +513,18 @@ fn validate_values(v: &Values, limits: &BTreeMap<String, u64>) -> Result<(), Str
             && v.rounding == "half_even_once_per_net_line_then_checked_sum"
             && v.binding_numbers == "exact_decimal_or_integer_strings"
             && v.stock_ticks_max == 1_000_000_000_000_000_000
+            && v.stock_scale_max == 6
+            && v.stock_units == ["g", "kg", "mL", "L", "each"]
+            && v.stock_physical_categories
+                == [
+                    "available",
+                    "preparatory_hold",
+                    "committed_hold",
+                    "physical_quarantine",
+                    "consumed",
+                    "waste",
+                    "removed",
+                ]
             && v.generation_max == i64::MAX as u64,
         "exact economics, registry or binding value contract drift",
     )?;
