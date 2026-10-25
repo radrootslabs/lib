@@ -109,8 +109,12 @@ pub struct StockOperationSnapshot {
     checkpoint: InventoryCheckpointRef,
     recipients: [StockRecipientSnapshot; 2],
     installation: Option<super::StockInstallationReceipt>,
+    aborted: Option<super::StockAbortReceipt>,
 }
 impl StockOperationSnapshot {
+    pub fn aborted(&self) -> Option<&super::StockAbortReceipt> {
+        self.aborted.as_ref()
+    }
     pub fn installation(&self) -> Option<&super::StockInstallationReceipt> {
         self.installation.as_ref()
     }
@@ -211,12 +215,46 @@ pub(in crate::workspace) async fn read(
         claims.push(claim_proof);
         summaries.push(summary);
     }
-    let installation = if auth.access.authority.catalog == 12 {
+    let installation = if auth.access.authority.catalog >= 12 {
         Some(
             Box::pin(super::inventory::installation::existing(
                 turn,
                 &auth,
                 request.operation,
+            ))
+            .await?,
+        )
+    } else {
+        None
+    };
+    let aborted = if auth.access.authority.catalog == 13 {
+        Some(
+            Box::pin(super::inventory::abort::existing(
+                turn,
+                &auth.access,
+                request.operation,
+            ))
+            .await?,
+        )
+    } else {
+        None
+    };
+    if aborted.as_ref().is_some_and(|(value, _)| value.is_some())
+        && installation
+            .as_ref()
+            .is_some_and(|(value, _)| value.is_some())
+    {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let current_order = if auth.access.authority.catalog == 13 {
+        Some(
+            Box::pin(super::inventory::checkpoint::authenticate_order_state(
+                turn.connection,
+                turn.selected,
+                turn.crypto,
+                &auth.access.current,
+                &auth.access.authority,
+                auth.original.receipt.order_id(),
             ))
             .await?,
         )
@@ -233,22 +271,39 @@ pub(in crate::workspace) async fn read(
         Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
         None,
     )?;
-    let witness = Box::pin(checkpoint::authenticate_minimum(
-        turn.connection,
-        turn.selected,
-        turn.crypto,
-        &auth.access.current,
-        &auth.access.authority,
-        minimum,
-    ))
-    .await?;
+    let witness = if current_order.is_none() {
+        Some(
+            Box::pin(checkpoint::authenticate_minimum(
+                turn.connection,
+                turn.selected,
+                turn.crypto,
+                &auth.access.current,
+                &auth.access.authority,
+                minimum,
+            ))
+            .await?,
+        )
+    } else {
+        None
+    };
     let mut tx = turn
         .connection
         .begin_with("BEGIN IMMEDIATE")
         .await
         .map_err(|_| OperationError::StorageFailure)?;
     let checked: Result<(), OperationError> = async {
-        witness.confirm(&mut tx).await?;
+        if let Some(witness) = &witness {
+            witness.confirm(&mut tx).await?;
+        }
+        if let Some(current_order) = &current_order {
+            current_order.confirm(&mut tx).await?;
+        }
+        if let Some((retained, identity)) = &aborted {
+            identity.confirm(&mut tx).await?;
+            if let Some(retained) = retained {
+                retained.confirm(&mut tx).await?;
+            }
+        }
         if let Some((retained, identity)) = &installation {
             identity.confirm(&mut tx).await?;
             if let Some(retained) = retained {
@@ -287,6 +342,7 @@ pub(in crate::workspace) async fn read(
             .ok_or(OperationError::RecoveryRequired)?,
     );
     Ok(StockOperationSnapshot {
+        aborted: aborted.and_then(|(retained, _)| retained.map(|value| value.receipt)),
         installation: installation.and_then(|(retained, _)| retained.map(|value| value.receipt)),
         preparation: auth.original.receipt,
         plan: auth.plan.map(|value| value.bound),

@@ -15,6 +15,7 @@ pub(in crate::workspace::stock) struct Retained {
     pub receipt: StockAcceptanceReceipt,
     pub movements: Vec<ledger::MovementWitness>,
     order_cipher: Vec<u8>,
+    operation_keyed: bool,
 }
 impl Retained {
     pub(in crate::workspace::stock) fn held_allocations(
@@ -69,21 +70,41 @@ impl Retained {
                 return Err(OperationError::RecoveryRequired);
             }
         }
-        let count: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM stock_orders WHERE order_id=? AND revision=1 AND protected=?",
-        )
-        .bind(self.receipt.order.as_bytes().as_slice())
-        .bind(&self.order_cipher)
-        .fetch_one(connection)
-        .await
-        .map_err(|_| OperationError::RecoveryRequired)?;
+        let actor = self.frame.header.actor.participant();
+        let query = if self.operation_keyed {
+            sqlx::query_scalar("SELECT count(*) FROM stock_orders WHERE actor=? AND operation_id=? AND order_id=? AND revision=1 AND protected=?")
+                .bind(actor.as_bytes().as_slice())
+                .bind(self.frame.header.operation.as_bytes().as_slice())
+                .bind(self.receipt.order.as_bytes().as_slice())
+                .bind(&self.order_cipher)
+        } else {
+            sqlx::query_scalar(
+                "SELECT count(*) FROM stock_orders WHERE order_id=? AND revision=1 AND protected=?",
+            )
+            .bind(self.receipt.order.as_bytes().as_slice())
+            .bind(&self.order_cipher)
+        };
+        let count: i64 = query
+            .fetch_one(connection)
+            .await
+            .map_err(|_| OperationError::RecoveryRequired)?;
         if count != 1 {
             return Err(OperationError::RecoveryRequired);
         }
         Ok(())
     }
     pub fn into_history(self) -> ledger::HistoryEntry {
+        let preparation = self.operation_keyed.then(|| {
+            preparation_digest(
+                self.frame.header.actor.participant().as_bytes(),
+                self.frame.header.operation.as_bytes(),
+                self.receipt.order.as_bytes(),
+                &self.order_cipher,
+            )
+        });
         ledger::HistoryEntry {
+            aborted: None,
+            preparation,
             local_record: None,
             installation: None,
             signing: None,
@@ -95,6 +116,47 @@ impl Retained {
             movements: self.movements,
         }
     }
+}
+fn preparation_digest(
+    actor: &[u8; 32],
+    operation: &[u8; 32],
+    order: &[u8; 32],
+    protected: &[u8],
+) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"radroots.seller_stock.preparation_projection.v1\0");
+    hash.update(actor);
+    hash.update(operation);
+    hash.update(order);
+    hash.update(1_u64.to_be_bytes());
+    hash.update((protected.len() as u64).to_be_bytes());
+    hash.update(protected);
+    hash.finalize().into()
+}
+pub(in crate::workspace::stock) async fn raw_preparation(
+    connection: &mut SqliteConnection,
+    actor: &[u8; 32],
+    operation: &[u8; 32],
+) -> Result<[u8; 32], OperationError> {
+    let row = sqlx::query("SELECT order_id,revision,CASE WHEN length(protected) BETWEEN 1 AND 262144 THEN protected END FROM stock_orders WHERE actor=? AND operation_id=?")
+        .bind(actor.as_slice()).bind(operation.as_slice()).fetch_optional(connection).await
+        .map_err(|_| OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
+    let order: [u8; 32] = row
+        .try_get::<Vec<u8>, _>(0)
+        .map_err(|_| OperationError::RecoveryRequired)?
+        .try_into()
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    let revision: i64 = row
+        .try_get(1)
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    if revision != 1 {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let protected: Vec<u8> = row
+        .try_get::<Option<Vec<u8>>, _>(2)
+        .map_err(|_| OperationError::RecoveryRequired)?
+        .ok_or(OperationError::RecoveryRequired)?;
+    Ok(preparation_digest(actor, operation, &order, &protected))
 }
 pub(super) fn receipt(
     input: &AttachmentInput,
@@ -253,7 +315,30 @@ pub(in crate::workspace::stock) async fn read(
         return Err(OperationError::RecoveryRequired);
     }
     let expected_fence = fence(header, &command)?;
-    let row = sqlx::query("SELECT revision,protected FROM stock_orders WHERE order_id=? AND length(protected) BETWEEN 1 AND 262144").bind(expected_fence.order.as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_| OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
+    let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    let operation_keyed = match catalog {
+        1..=12 => false,
+        13 => true,
+        _ => return Err(OperationError::RecoveryRequired),
+    };
+    let actor = header.actor.participant();
+    let query = if operation_keyed {
+        sqlx::query("SELECT revision,protected FROM stock_orders WHERE actor=? AND operation_id=? AND order_id=? AND length(protected) BETWEEN 1 AND 262144")
+            .bind(actor.as_bytes().as_slice())
+            .bind(header.operation.as_bytes().as_slice())
+            .bind(expected_fence.order.as_bytes().as_slice())
+    } else {
+        sqlx::query("SELECT revision,protected FROM stock_orders WHERE order_id=? AND length(protected) BETWEEN 1 AND 262144")
+            .bind(expected_fence.order.as_bytes().as_slice())
+    };
+    let row = query
+        .fetch_optional(&mut *connection)
+        .await
+        .map_err(|_| OperationError::RecoveryRequired)?
+        .ok_or(OperationError::RecoveryRequired)?;
     let revision: i64 = row
         .try_get(0)
         .map_err(|_| OperationError::RecoveryRequired)?;
@@ -311,6 +396,7 @@ pub(in crate::workspace::stock) async fn read(
         frame,
         movements,
         order_cipher,
+        operation_keyed,
     };
     retained.confirm(connection).await?;
     Ok(Some(retained))

@@ -48,6 +48,16 @@ enum Job {
         AttachmentProof,
         Reply<Option<stock::StockInstallationReceipt>, OperationError>,
     ),
+    AbortStockPreparation(
+        Box<stock::StockAbortRequest>,
+        AttachmentProof,
+        Reply<stock::StockAbortOutcome, OperationError>,
+    ),
+    StockPreparationAbort(
+        Box<stock::StockAbortRequest>,
+        AttachmentProof,
+        Reply<Option<stock::StockAbortReceipt>, OperationError>,
+    ),
     StockSnapshot(
         Box<stock::StockSnapshotRequest>,
         AttachmentProof,
@@ -300,6 +310,12 @@ impl Job {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::StockAgreementInstallation(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::AbortStockPreparation(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockPreparationAbort(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::StockSnapshot(_, _, reply) => {
@@ -585,6 +601,8 @@ impl Handle {
                                         | Job::StockSnapshot(..)
                                         | Job::InstallStockAgreement(..)
                                         | Job::StockAgreementInstallation(..)
+                                        | Job::AbortStockPreparation(..)
+                                        | Job::StockPreparationAbort(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -841,6 +859,46 @@ impl Handle {
                                     };
                                     let _ = reply.send(result);
                                 }
+                                Job::AbortStockPreparation(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::inventory::abort::abort(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockPreparationAbort(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::inventory::abort::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
                                 Job::StockSnapshot(request, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
                                         Box::pin(stock::snapshot::read(
@@ -1015,7 +1073,7 @@ impl Handle {
                                 }
                                 Job::PrepareStockAcceptance(request, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
-                                        stock::inventory::acceptance::admit(
+                                        Box::pin(stock::inventory::acceptance::admit(
                                             &mut stock::inventory::Turn {
                                                 connection,
                                                 namespace: &namespace,
@@ -1026,7 +1084,7 @@ impl Handle {
                                             },
                                             *request,
                                             proof,
-                                        )
+                                        ))
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -1676,6 +1734,25 @@ impl Handle {
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
+    pub(super) async fn abort_proven_unissued(
+        &self,
+        request: stock::StockAbortRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockAbortOutcome, OperationError> {
+        let unknown = stock::StockAbortOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::AbortStockPreparation(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_preparation_abort(
+        &self,
+        request: stock::StockAbortRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockAbortReceipt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockPreparationAbort(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn stock_operation_snapshot(
         &self,
         request: stock::StockSnapshotRequest,
@@ -1872,7 +1949,9 @@ impl Handle {
             | Job::StockEvidencePage(..)
             | Job::StockSnapshot(..)
             | Job::InstallStockAgreement(..)
-            | Job::StockAgreementInstallation(..) => 1024 * 1024,
+            | Job::StockAgreementInstallation(..)
+            | Job::AbortStockPreparation(..)
+            | Job::StockPreparationAbort(..) => 1024 * 1024,
             Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,
             Job::BindStockSigningPlan(..)
             | Job::StockSigningPlan(..)

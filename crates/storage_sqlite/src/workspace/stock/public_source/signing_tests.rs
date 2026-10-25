@@ -346,7 +346,7 @@ async fn dropped_t1_observer_keeps_owned_work_and_close_drains_before_original_r
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
     let mut pending = Box::pin(
         r.store
             .bind_stock_signing_intents(request, r.enrollment.proof()),
@@ -400,7 +400,7 @@ async fn t1_final_permission_order_root_and_clock_witnesses_refuse_changes_after
         let mut raw = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
         let mut pending = Box::pin(
             r.store
                 .bind_stock_signing_intents(request, r.enrollment.proof()),

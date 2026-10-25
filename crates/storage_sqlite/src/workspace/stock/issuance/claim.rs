@@ -266,6 +266,14 @@ pub(in crate::workspace) async fn claim(
         confirm_read(turn, &auth, &witness, Some(&retained), &proof).await?;
         return Ok(StockClaimOutcome::Existing(retained.report));
     }
+    let current_order = Box::pin(super::super::order_state::signing_state(
+        turn,
+        &auth.access,
+        auth.original.receipt.order_id(),
+        request.operation,
+        true,
+    ))
+    .await?;
     let at = auth.access.current.observed_at();
     acceptance::check_consent(&auth.access, &auth.consent, &auth.command, true, at)?;
     if at < plan.bound.bound_at() || at >= plan.bound.preparation().first_issue_deadline() {
@@ -367,6 +375,7 @@ pub(in crate::workspace) async fn claim(
         witness.confirm(&mut tx).await?;
         let current=auth.confirm(&mut tx,turn.namespace,turn.clock,&proof,true).await?;
         for pool in &backing { pool.confirm(&mut tx).await?; }
+        if let Some(current_order) = &current_order {current_order.confirm(&mut tx).await?;}
         if current.observed_at()<at {return Err(WorkspaceError::Unavailable.into());}
         framed.insert_record(&mut tx).await?;
         sqlx::query("INSERT INTO stock_signing_claims(actor,operation_id,recipient,entry_id) VALUES(?,?,?,?)").bind(turn.selected.participant().as_bytes().as_slice()).bind(request.operation.as_bytes().as_slice()).bind(request.recipient.as_bytes().as_slice()).bind(entry.as_bytes().as_slice()).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;

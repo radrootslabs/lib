@@ -109,6 +109,7 @@ impl std::fmt::Debug for StockAcceptanceReceipt {
 #[derive(Debug)]
 pub enum StockAcceptanceOutcome {
     Prepared(Box<StockAcceptanceReceipt>),
+    Aborted(Box<super::abort::StockAbortReceipt>),
     Unknown(CommitAttempt),
 }
 
@@ -336,7 +337,7 @@ pub(in crate::workspace) async fn admit(
     let access = turn
         .access(&request.binding, request.minimum, &proof)
         .await?;
-    if !matches!(access.authority.catalog, 9..=12) {
+    if !matches!(access.authority.catalog, 9..=13) {
         return Err(OperationError::UnsupportedOperation);
     }
     let command = &request.command;
@@ -371,6 +372,11 @@ pub(in crate::workspace) async fn admit(
                 return Err(OperationError::Unauthorized);
             }
         }
+        let aborted = if access.authority.catalog == 13 {
+            Some(Box::pin(super::abort::existing(turn, &access, operation)).await?)
+        } else {
+            None
+        };
         let mut tx = turn
             .connection
             .begin_with("BEGIN IMMEDIATE")
@@ -380,6 +386,12 @@ pub(in crate::workspace) async fn admit(
             identity.confirm(&mut tx).await?;
             consent_proof.confirm(&mut tx).await?;
             original.confirm(&mut tx).await?;
+            if let Some((retained, witness)) = &aborted {
+                witness.confirm(&mut tx).await?;
+                if let Some(retained) = retained {
+                    retained.confirm(&mut tx).await?;
+                }
+            }
             let current = access
                 .confirm(&mut tx, turn.namespace, turn.clock, &proof)
                 .await?;
@@ -392,6 +404,9 @@ pub(in crate::workspace) async fn admit(
             return Err(OperationError::RecoveryRequired);
         }
         checked?;
+        if let Some((Some(aborted), _)) = aborted {
+            return Ok(StockAcceptanceOutcome::Aborted(Box::new(aborted.receipt)));
+        }
         return Ok(StockAcceptanceOutcome::Prepared(Box::new(original.receipt)));
     }
     // All fresh source/mapping/pool planning follows original identity recovery.
@@ -447,15 +462,42 @@ pub(in crate::workspace) async fn admit(
     {
         return Err(OperationError::StaleState);
     }
-    let order_proof = checkpoint::authenticate_order_absence(
-        turn.connection,
-        turn.selected,
-        turn.crypto,
-        &access.current,
-        &access.authority,
-        expected.order_id(),
-    )
-    .await?;
+    let current_order = if access.authority.catalog == 13 {
+        let checked = Box::pin(checkpoint::authenticate_order_state(
+            turn.connection,
+            turn.selected,
+            turn.crypto,
+            &access.current,
+            &access.authority,
+            expected.order_id(),
+        ))
+        .await?;
+        if checked
+            .witness
+            .expected
+            .is_some_and(|value| value.phase != super::super::order_state::Phase::Aborted)
+        {
+            return Err(OperationError::StaleState);
+        }
+        Some(checked)
+    } else {
+        None
+    };
+    let order_proof = if current_order.is_none() {
+        Some(
+            checkpoint::authenticate_order_absence(
+                turn.connection,
+                turn.selected,
+                turn.crypto,
+                &access.current,
+                &access.authority,
+                expected.order_id(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     let mut mappings = Vec::new();
     let mut mapping_reads = Vec::new();
     let mut pool_ids = BTreeSet::new();
@@ -741,7 +783,7 @@ pub(in crate::workspace) async fn admit(
         .map_err(|_| OperationError::StorageFailure)?;
     let changed: Result<(), OperationError> = async {
         identity.confirm(&mut tx).await?; consent_proof.confirm(&mut tx).await?; source_minimum.confirm(&mut tx).await?;
-        order_proof.confirm(&mut tx).await?; admitted.confirm(&mut tx).await?;
+        if let Some(order_proof) = &order_proof {order_proof.confirm(&mut tx).await?;} admitted.confirm(&mut tx).await?;
         super::super::check_source_counts(&mut tx, access.authority.sources.ok_or(OperationError::RecoveryRequired)?).await?;
         for mapping in &mapping_reads { mapping.confirm(&mut tx).await?; }
         for witness in &pool_proofs { witness.confirm(&mut tx).await?; }
@@ -752,8 +794,10 @@ pub(in crate::workspace) async fn admit(
         let current = access.confirm(&mut tx, turn.namespace, turn.clock, &proof).await?;
         check_consent(&access, &consent, command, true, current.observed_at())?; admitted.validate_at(current.observed_at())?;
         if current.observed_at() >= body.issue_before { return Err(OperationError::DeadlineExceeded); }
-        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_orders WHERE order_id=?").bind(fence.order.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
-        if count != 0 { return Err(OperationError::StaleState); }
+        if current_order.is_none() {
+            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_orders WHERE order_id=?").bind(fence.order.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
+            if count != 0 { return Err(OperationError::StaleState); }
+        }
         sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected,family,order_id,related_operation,subject_grant) VALUES(?,?,?,?,?,NULL,?,?,?,2,?,NULL,NULL)")
             .bind(header.actor.participant().as_bytes().as_slice()).bind(access.current.input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(header.digest.as_bytes().as_slice()).bind(transaction.as_bytes().as_slice()).bind(revision.get() as i64).bind(header.head.as_bytes().as_slice()).bind(&framed.protected).bind(fence.order.as_bytes().as_slice()).execute(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
         framed.insert_parts(&mut tx, header.actor, operation).await?;
@@ -763,7 +807,15 @@ pub(in crate::workspace) async fn admit(
             if updated.rows_affected() != 1 { return Err(OperationError::StaleState); }
             sqlx::query("INSERT INTO stock_movements(movement_id,actor,grant_id,operation_id,pool_id,protected) VALUES(?,?,?,?,?,?)").bind(body.movements[index].as_slice()).bind(header.actor.participant().as_bytes().as_slice()).bind(access.current.input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(effect.before().id().as_bytes().as_slice()).bind(&changed_movements[index]).execute(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
         }
-        sqlx::query("INSERT INTO stock_orders(order_id,revision,protected) VALUES(?,?,?)").bind(fence.order.as_bytes().as_slice()).bind(fence.revision.get() as i64).bind(order_cipher).execute(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
+        if let Some(current_order) = &current_order {
+            sqlx::query("INSERT INTO stock_orders(actor,operation_id,order_id,revision,protected) VALUES(?,?,?,?,?)")
+                .bind(header.actor.participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice())
+                .bind(fence.order.as_bytes().as_slice()).bind(fence.revision.get() as i64).bind(order_cipher)
+                .execute(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
+            current_order.advance(&mut tx, super::super::order_state::Marker::from_header(&framed.header, super::super::order_state::Phase::Prepared)?).await?;
+        } else {
+            sqlx::query("INSERT INTO stock_orders(order_id,revision,protected) VALUES(?,?,?)").bind(fence.order.as_bytes().as_slice()).bind(fence.revision.get() as i64).bind(order_cipher).execute(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
+        }
         let updated = sqlx::query("UPDATE stock_authority SET protected=? WHERE singleton=1 AND protected=?").bind(root).bind(&access.root).execute(&mut *tx).await.map_err(|_| OperationError::StorageFailure)?;
         if updated.rows_affected() != 1 { return Err(OperationError::RecoveryRequired); }
         turn.namespace.validate()?; Ok(())

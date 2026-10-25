@@ -312,6 +312,7 @@ async fn each_actual_write_failure_rolls_back_all_pool_holds_and_order_fence() {
         "CREATE TRIGGER fault BEFORE UPDATE ON stock_pools WHEN hex(NEW.pool_id)=replace(hex(zeroblob(32)),'00','51') BEGIN SELECT RAISE(ABORT,'fixture'); END",
         "CREATE TRIGGER fault BEFORE INSERT ON stock_movements BEGIN SELECT RAISE(ABORT,'fixture'); END",
         "CREATE TRIGGER fault BEFORE INSERT ON stock_orders BEGIN SELECT RAISE(ABORT,'fixture'); END",
+        "CREATE TRIGGER fault BEFORE INSERT ON stock_order_states BEGIN SELECT RAISE(ABORT,'fixture'); END",
         "CREATE TRIGGER fault BEFORE UPDATE ON stock_authority BEGIN SELECT RAISE(ABORT,'fixture'); END",
     ] {
         let r = Rig::new().await;
@@ -329,7 +330,7 @@ async fn each_actual_write_failure_rolls_back_all_pool_holds_and_order_fence() {
         assert_pool(&r, 80, 10, 0, 1).await;
         assert_pool(&r, 81, 10, 0, 1).await;
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM stock_orders")
+            sqlx::query_scalar::<_, i64>("SELECT (SELECT count(*) FROM stock_orders)+(SELECT count(*) FROM stock_order_states)")
                 .fetch_one(&mut raw)
                 .await
                 .unwrap(),
@@ -415,7 +416,7 @@ async fn lost_observer_retains_actual_two_pool_preparation_and_drain_precedes_re
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
     let mut pending = Box::pin(
         r.store
             .prepare_stock_acceptance(request, r.enrollment.proof()),
@@ -458,7 +459,7 @@ async fn source_mapping_pool_order_and_grant_rows_are_rechecked_after_final_prov
         "INSERT INTO stock_source_records(record_id,protected) VALUES(randomblob(32),x'01')",
         "UPDATE stock_public_heads SET protected=randomblob(length(protected))",
         "UPDATE stock_grants SET protected=randomblob(length(protected))",
-        "INSERT INTO stock_orders(order_id,revision,protected) VALUES(randomblob(32),1,x'01')",
+        "INSERT INTO stock_orders(actor,operation_id,order_id,revision,protected) SELECT actor,operation_id,randomblob(32),1,x'01' FROM stock_operations WHERE family=1 LIMIT 1",
     ] {
         let mut r = Rig::new().await;
         seed(&r, "10").await;
@@ -469,7 +470,7 @@ async fn source_mapping_pool_order_and_grant_rows_are_rechecked_after_final_prov
         let mut raw = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
         let mut pending = Box::pin(
             r.store
                 .prepare_stock_acceptance(request, r.enrollment.proof()),
@@ -506,7 +507,7 @@ async fn final_clock_recheck_refuses_expiry_and_rollback_after_protection_withou
         let provider = reopen(&mut r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
         let mut pending = Box::pin(
             r.store
                 .prepare_stock_acceptance(request, r.enrollment.proof()),

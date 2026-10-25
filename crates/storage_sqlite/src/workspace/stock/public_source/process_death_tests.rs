@@ -1,4 +1,4 @@
-//! Private process-death qualification of already implemented S and T2.
+//! Private process-death qualification of S, T2 and proven-unissued abort.
 use super::*;
 use radroots_domain::{CommandDigest, OperationId};
 use radroots_secrets::{
@@ -21,6 +21,7 @@ const CHILD: &str = "workspace::stock::public_source::tests::provider::history::
 enum Edge {
     Capture,
     Install,
+    Abort,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -141,33 +142,36 @@ async fn stock_process_child() {
         .unwrap()
         .inventory_checkpoint()
         .unwrap();
-    let report = store
-        .stock_signing_attempt(
-            StockClaimRequest::new(
-                binding.clone(),
-                minimum,
-                control.operation,
-                control.digest,
-                control.recipient,
-            ),
-            &proof,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-    let capture =
-        StockEvidenceCapture::verify(binding.clone(), &report, &control.raw, None).unwrap();
+    let capture = if matches!(control.edge, Edge::Abort) {
+        None
+    } else {
+        let report = store
+            .stock_signing_attempt(
+                StockClaimRequest::new(
+                    binding.clone(),
+                    minimum,
+                    control.operation,
+                    control.digest,
+                    control.recipient,
+                ),
+                &proof,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        Some(StockEvidenceCapture::verify(binding.clone(), &report, &control.raw, None).unwrap())
+    };
     if control.before {
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
     }
     let work = async {
         match control.edge {
             Edge::Capture => {
                 committed(
                     store
-                        .capture_stock_signing_evidence(&capture, &proof)
+                        .capture_stock_signing_evidence(capture.as_ref().unwrap(), &proof)
                         .await
                         .unwrap(),
                 );
@@ -177,6 +181,22 @@ async fn stock_process_child() {
                     store
                         .install_stock_agreement(
                             StockInstallationRequest::new(
+                                binding,
+                                minimum,
+                                control.operation,
+                                control.digest,
+                            ),
+                            &proof,
+                        )
+                        .await
+                        .unwrap(),
+                );
+            }
+            Edge::Abort => {
+                aborts::released(
+                    store
+                        .abort_proven_unissued(
+                            crate::workspace::StockAbortRequest::new(
                                 binding,
                                 minimum,
                                 control.operation,
@@ -205,16 +225,31 @@ async fn stock_process_child() {
 }
 
 #[tokio::test]
-async fn process_death_before_and_after_capture_or_install_preserves_original_stock_and_evidence() {
-    for edge in [Edge::Capture, Edge::Install] {
+async fn process_death_before_and_after_capture_install_or_abort_preserves_original_stock_and_evidence()
+ {
+    for edge in [Edge::Capture, Edge::Install, Edge::Abort] {
         for before in [true, false] {
             let mut r = Rig::new().await;
-            let receipt = Box::pin(ready(&r)).await;
+            let receipt = if matches!(edge, Edge::Abort) {
+                Box::pin(prepared(&r)).await.1
+            } else {
+                Box::pin(ready(&r)).await
+            };
             let recipient = peer(&r, &receipt);
-            let (report, raw) = Box::pin(obtained(&r, &receipt, recipient)).await;
+            let (report, raw) = if matches!(edge, Edge::Abort) {
+                (None, String::new())
+            } else {
+                let (report, raw) = Box::pin(obtained(&r, &receipt, recipient)).await;
+                (Some(report), raw)
+            };
             if matches!(edge, Edge::Install) {
-                let capture =
-                    StockEvidenceCapture::verify(r.binding.clone(), &report, &raw, None).unwrap();
+                let capture = StockEvidenceCapture::verify(
+                    r.binding.clone(),
+                    report.as_ref().unwrap(),
+                    &raw,
+                    None,
+                )
+                .unwrap();
                 committed(
                     r.store
                         .capture_stock_signing_evidence(&capture, r.enrollment.proof())
@@ -250,10 +285,14 @@ async fn process_death_before_and_after_capture_or_install_preserves_original_st
                 current.revision().get(),
                 minimum.revision().get() + u64::from(!before)
             );
-            assert!(matches!(
-                claim(&r, &receipt, recipient).await.unwrap(),
-                StockClaimOutcome::Existing(_)
-            ));
+            if matches!(edge, Edge::Abort) {
+                assert!(claim(&r, &receipt, recipient).await.is_err());
+            } else {
+                assert!(matches!(
+                    claim(&r, &receipt, recipient).await.unwrap(),
+                    StockClaimOutcome::Existing(_)
+                ));
+            }
             let snapshot = r
                 .store
                 .stock_operation_snapshot(
@@ -272,15 +311,22 @@ async fn process_death_before_and_after_capture_or_install_preserves_original_st
                 .iter()
                 .find(|value| value.recipient() == recipient)
                 .unwrap();
-            let has_evidence = matches!(edge, Edge::Install) || !before;
+            let has_evidence =
+                matches!(edge, Edge::Install) || (matches!(edge, Edge::Capture) && !before);
             assert_eq!(peer.first_evidence().is_some(), has_evidence);
             let has_installation = matches!(edge, Edge::Install) && !before;
             assert_eq!(snapshot.installation().is_some(), has_installation);
+            let has_abort = matches!(edge, Edge::Abort) && !before;
+            assert_eq!(snapshot.aborted().is_some(), has_abort);
+            assert_eq!(peer.claim().is_some(), !matches!(edge, Edge::Abort));
             assert_eq!(
                 history(&r).await.analysis().seller_head(),
                 has_evidence.then_some(receipt.rumor().record_id())
             );
-            if has_installation {
+            if has_abort {
+                balances(&r, 80, 10, 0, 0, 3).await;
+                balances(&r, 81, 10, 0, 0, 3).await;
+            } else if has_installation {
                 balances(&r, 80, 9, 0, 1, 3).await;
                 balances(&r, 81, 8, 0, 2, 3).await;
                 let replay = installed(install(&r, &receipt).await.unwrap());
@@ -290,10 +336,30 @@ async fn process_death_before_and_after_capture_or_install_preserves_original_st
                 balances(&r, 81, 8, 2, 0, 2).await;
             }
             assert_eq!(inventory_minimum(&r).await, current);
+            if matches!(edge, Edge::Abort) {
+                let first = aborts::released(aborts::abort(&r, &receipt).await.unwrap());
+                if let Some(original) = snapshot.aborted() {
+                    assert_eq!(first.attempt(), original.attempt());
+                }
+                balances(&r, 80, 10, 0, 0, 3).await;
+                balances(&r, 81, 10, 0, 0, 3).await;
+                let complete = inventory_minimum(&r).await;
+                assert_eq!(
+                    aborts::released(aborts::abort(&r, &receipt).await.unwrap()).attempt(),
+                    first.attempt()
+                );
+                assert_eq!(inventory_minimum(&r).await, complete);
+                r.store.close().await.unwrap();
+                continue;
+            }
             if !has_evidence {
-                let capture =
-                    StockEvidenceCapture::verify(r.binding.clone(), &report, &control.raw, None)
-                        .unwrap();
+                let capture = StockEvidenceCapture::verify(
+                    r.binding.clone(),
+                    report.as_ref().unwrap(),
+                    &control.raw,
+                    None,
+                )
+                .unwrap();
                 committed(
                     r.store
                         .capture_stock_signing_evidence(&capture, r.enrollment.proof())

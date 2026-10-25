@@ -8,6 +8,82 @@ fn ticks(value: u64) -> StockTicks {
 }
 
 #[test]
+fn preparatory_release_preserves_other_claims_and_cumulative_physical_history() {
+    let physical = PhysicalBalances {
+        available: ticks(4),
+        preparatory_hold: ticks(3),
+        committed_hold: ticks(5),
+        physical_quarantine: ticks(7),
+        consumed: ticks(11),
+        waste: ticks(13),
+        removed: ticks(17),
+    };
+    let original = PoolBalances::new(ticks(60), physical).unwrap();
+    let partial = original.release_preparatory(ticks(2)).unwrap();
+    assert_eq!(partial.introduced(), ticks(60));
+    assert_eq!(
+        partial.physical(),
+        PhysicalBalances {
+            available: ticks(6),
+            preparatory_hold: ticks(1),
+            ..physical
+        }
+    );
+    let complete = partial.release_preparatory(ticks(1)).unwrap();
+    assert_eq!(complete.introduced(), ticks(60));
+    assert_eq!(
+        complete.physical(),
+        PhysicalBalances {
+            available: ticks(7),
+            preparatory_hold: StockTicks::ZERO,
+            ..physical
+        }
+    );
+    assert_eq!(
+        complete.release_preparatory(ticks(1)),
+        Err(StockError::Underflow)
+    );
+    assert_eq!(
+        original.release_preparatory(ticks(4)),
+        Err(StockError::Underflow)
+    );
+    assert_eq!(
+        original.release_preparatory(StockTicks::ZERO),
+        Err(StockError::ZeroMovement)
+    );
+    assert_eq!(original.physical(), physical);
+}
+
+#[test]
+fn preparatory_release_at_introduced_maximum_does_not_mint_or_exhaust_capacity() {
+    let original = PoolBalances::new(
+        StockTicks::MAX,
+        PhysicalBalances {
+            preparatory_hold: StockTicks::MAX,
+            ..PhysicalBalances::ZERO
+        },
+    )
+    .unwrap();
+    let released = original.release_preparatory(StockTicks::MAX).unwrap();
+    assert_eq!(released.introduced(), StockTicks::MAX);
+    assert_eq!(
+        released.physical(),
+        PhysicalBalances {
+            available: StockTicks::MAX,
+            ..PhysicalBalances::ZERO
+        }
+    );
+    assert_eq!(
+        released
+            .hold_available(StockTicks::MAX)
+            .unwrap()
+            .release_preparatory(StockTicks::MAX)
+            .unwrap(),
+        released
+    );
+}
+
+#[test]
 fn installation_moves_only_exact_preparatory_backing_and_preserves_all_other_categories() {
     let physical = PhysicalBalances {
         available: ticks(30),

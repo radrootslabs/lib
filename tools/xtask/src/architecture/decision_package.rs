@@ -157,6 +157,7 @@ struct NativeSellerStockAuthority {
     signing_plan_binding: SigningPlanBinding,
     signing_issuance: SigningIssuance,
     initial_agreement_installation: InitialAgreementInstallation,
+    preparation_abort: PreparationAbort,
     business_consent_payload_version: u16,
     business_consent_action: String,
     business_consent_modes: Vec<String>,
@@ -211,6 +212,24 @@ struct AcceptancePreparation {
     final_source_counts_and_witnesses_required: bool,
     signer_invoked: bool,
     agreement_installed: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreparationAbort {
+    payload_version: u32,
+    journal_family: u32,
+    worker_charge_bytes: u32,
+    all_recipient_claims_must_be_absent: bool,
+    caller_nonissuance_assertion_is_proof: bool,
+    current_exact_recovery_consent_required: bool,
+    atomic_exact_original_release_required: bool,
+    original_preparations_retained: bool,
+    current_order_projection_authenticated: bool,
+    later_initial_requires_original_abort: bool,
+    fresh_signing_after_abort: bool,
+    unknown_commit_fences_owner: bool,
+    signer_or_transport_invoked: bool,
 }
 
 #[derive(Deserialize)]
@@ -448,10 +467,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 12
+            && stock.schema_version == 13
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v12"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v13"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -553,6 +572,29 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .signing_issuance
                 .capture_retains_distinct_valid_encodings
             && !stock.signing_issuance.agreement_installed
+            && stock.preparation_abort.payload_version == 1
+            && stock.preparation_abort.journal_family == 7
+            && stock.preparation_abort.worker_charge_bytes == 1048576
+            && stock.preparation_abort.all_recipient_claims_must_be_absent
+            && !stock
+                .preparation_abort
+                .caller_nonissuance_assertion_is_proof
+            && stock
+                .preparation_abort
+                .current_exact_recovery_consent_required
+            && stock
+                .preparation_abort
+                .atomic_exact_original_release_required
+            && stock.preparation_abort.original_preparations_retained
+            && stock
+                .preparation_abort
+                .current_order_projection_authenticated
+            && stock
+                .preparation_abort
+                .later_initial_requires_original_abort
+            && !stock.preparation_abort.fresh_signing_after_abort
+            && stock.preparation_abort.unknown_commit_fences_owner
+            && !stock.preparation_abort.signer_or_transport_invoked
             && stock.initial_agreement_installation.payload_version == 1
             && stock.initial_agreement_installation.journal_family == 6
             && stock.initial_agreement_installation.worker_charge_bytes == 1048576
@@ -1258,6 +1300,34 @@ mod tests {
                     &format!(
                         "/native_seller_stock_authority/initial_agreement_installation/{field}"
                     ),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn abort_requires_protected_absence_exact_original_release_and_retained_preparations() {
+        for (field, bad) in [
+            ("payload_version", json!(2)),
+            ("journal_family", json!(6)),
+            ("worker_charge_bytes", json!(1048577)),
+            ("all_recipient_claims_must_be_absent", json!(false)),
+            ("caller_nonissuance_assertion_is_proof", json!(true)),
+            ("current_exact_recovery_consent_required", json!(false)),
+            ("atomic_exact_original_release_required", json!(false)),
+            ("original_preparations_retained", json!(false)),
+            ("current_order_projection_authenticated", json!(false)),
+            ("later_initial_requires_original_abort", json!(false)),
+            ("fresh_signing_after_abort", json!(true)),
+            ("unknown_commit_fences_owner", json!(false)),
+            ("signer_or_transport_invoked", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/preparation_abort/{field}"),
                     bad
                 ))
                 .is_err(),

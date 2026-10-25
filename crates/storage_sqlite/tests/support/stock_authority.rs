@@ -602,7 +602,7 @@ async fn changed_catalog_after_protected_reads_is_refused_before_authenticated_c
         clock.release();
         assert_eq!(operation.await, Err(WorkspaceError::RecoveryRequired));
         store.close().await.unwrap();
-        sqlx::query("PRAGMA user_version=12")
+        sqlx::query("PRAGMA user_version=13")
             .execute(&mut connection)
             .await
             .unwrap();

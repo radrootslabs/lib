@@ -327,6 +327,7 @@ pub fn radroots_domain::stock::PoolBalances::install_preparatory(self, radroots_
 pub const fn radroots_domain::stock::PoolBalances::introduced(self) -> radroots_domain::stock::StockTicks
 pub fn radroots_domain::stock::PoolBalances::new(radroots_domain::stock::StockTicks, radroots_domain::stock::PhysicalBalances) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub const fn radroots_domain::stock::PoolBalances::physical(self) -> radroots_domain::stock::PhysicalBalances
+pub fn radroots_domain::stock::PoolBalances::release_preparatory(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
 impl core::fmt::Debug for radroots_domain::stock::PoolBalances
 pub fn radroots_domain::stock::PoolBalances::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_domain::stock::PoolBalances

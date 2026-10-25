@@ -75,7 +75,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 12,
+    "schema_version": 13,
     "retained_enrollment_versions": [
       1
     ],
@@ -89,9 +89,10 @@
       8,
       9,
       10,
-      11
+      11,
+      12
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v12",
+    "authority_payload_schema": "radroots.seller_stock.authority.v13",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -261,6 +262,21 @@
       "unknown_commit_fences_owner": true,
       "signer_or_transport_invoked": false,
       "relay_delivery_claimed": false
+    },
+    "preparation_abort": {
+      "payload_version": 1,
+      "journal_family": 7,
+      "worker_charge_bytes": 1048576,
+      "all_recipient_claims_must_be_absent": true,
+      "caller_nonissuance_assertion_is_proof": false,
+      "current_exact_recovery_consent_required": true,
+      "atomic_exact_original_release_required": true,
+      "original_preparations_retained": true,
+      "current_order_projection_authenticated": true,
+      "later_initial_requires_original_abort": true,
+      "fresh_signing_after_abort": false,
+      "unknown_commit_fences_owner": true,
+      "signer_or_transport_invoked": false
     }
   },
   "provenance": {

@@ -1,4 +1,6 @@
 //! Real T2 transactions over original T0/T1 and authenticated peer evidence.
+#[path = "abort_tests.rs"]
+mod aborts;
 #[path = "local_history_tests.rs"]
 mod local_history;
 #[cfg(unix)]
@@ -317,6 +319,7 @@ async fn every_t2_write_failure_rolls_back_all_pool_agreement_and_work_effects()
         "CREATE TRIGGER fault BEFORE INSERT ON stock_publication_work WHEN (SELECT count(*) FROM stock_publication_work)=1 BEGIN SELECT RAISE(ABORT,'fault'); END",
         "CREATE TRIGGER fault BEFORE UPDATE ON stock_pools WHEN OLD.pool_id=(SELECT max(pool_id) FROM stock_pools) BEGIN SELECT RAISE(ABORT,'fault'); END",
         "CREATE TRIGGER fault BEFORE INSERT ON stock_movements BEGIN SELECT RAISE(ABORT,'fault'); END",
+        "CREATE TRIGGER fault BEFORE UPDATE ON stock_order_states BEGIN SELECT RAISE(ABORT,'fault'); END",
         "CREATE TRIGGER fault BEFORE UPDATE ON stock_authority BEGIN SELECT RAISE(ABORT,'fault'); END",
     ] {
         let r = Rig::new().await;
@@ -409,7 +412,7 @@ async fn lost_t2_observer_drains_and_reopens_one_atomic_installation() {
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
     let mut pending = Box::pin(
         r.store
             .install_stock_agreement(selected, r.enrollment.proof()),
@@ -448,7 +451,7 @@ async fn late_t2_backing_or_grant_or_evidence_change_never_commits_partial_insta
         let mut db = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
         let mut pending = Box::pin(
             r.store
                 .install_stock_agreement(selected, r.enrollment.proof()),

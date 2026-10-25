@@ -32,10 +32,17 @@ pub(super) async fn check_counts(connection: &mut SqliteConnection) -> Result<()
         return Err(WorkspaceError::RecoveryRequired);
     }
     if catalog >= 12 {
-        let (agreements, installs, work):(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM stock_agreements),(SELECT count(*) FROM stock_operations WHERE family=6),(SELECT count(*) FROM stock_publication_work)").fetch_one(connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
+        let (agreements, installs, work):(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM stock_agreements),(SELECT count(*) FROM stock_operations WHERE family=6),(SELECT count(*) FROM stock_publication_work)").fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
         if agreements != installs
             || work != installs.checked_mul(2).ok_or(WorkspaceError::Capacity)?
         {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+    }
+    if catalog == 13 {
+        let (aborts, entries, states, orders):(i64,i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM stock_aborts),(SELECT count(*) FROM stock_operations WHERE family=7),(SELECT count(*) FROM stock_order_states),(SELECT count(DISTINCT order_id) FROM stock_orders)")
+            .fetch_one(connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
+        if aborts != entries || states != orders {
             return Err(WorkspaceError::RecoveryRequired);
         }
     }

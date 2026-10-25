@@ -22,6 +22,7 @@ pub(super) enum Family {
     SigningClaim,
     SigningEvidence,
     Installation,
+    AbortedPreparation,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -75,6 +76,7 @@ impl Header {
                     | Family::SigningClaim
                     | Family::SigningEvidence
                     | Family::Installation
+                    | Family::AbortedPreparation
             ) != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
@@ -328,6 +330,7 @@ impl Family {
             Self::SigningClaim => 4,
             Self::SigningEvidence => 5,
             Self::Installation => 6,
+            Self::AbortedPreparation => 7,
         }
     }
 }
@@ -435,6 +438,8 @@ pub(super) struct MovementWitness {
 /// A completely decoded original effect. Only the owning family decoder
 /// supplies its pool effects and movement witnesses; SQL indexes do not.
 pub(super) struct HistoryEntry {
+    pub aborted: Option<super::inventory::abort::Projection>,
+    pub preparation: Option<[u8; 32]>,
     pub header: Header,
     pub protected: Vec<u8>,
     pub parts_witness: [u8; 32],
@@ -481,6 +486,8 @@ pub(super) async fn history(
                 _ => return Err(OperationError::RecoveryRequired),
             };
             Ok(Some(HistoryEntry {
+                aborted: None,
+                preparation: None,
                 local_record: None,
                 installation: None,
                 signing: None,
@@ -514,6 +521,8 @@ pub(super) async fn history(
                 return Err(OperationError::RecoveryRequired);
             }
             Ok(Some(HistoryEntry {
+                aborted: None,
+                preparation: None,
                 local_record: None,
                 installation: None,
                 signing: None,
@@ -525,7 +534,7 @@ pub(super) async fn history(
                 movements: vec![],
             }))
         }
-        Some(2) if matches!(authority.catalog, 9..=12) => Ok(Some(
+        Some(2) if matches!(authority.catalog, 9..=13) => Ok(Some(
             Box::pin(super::inventory::acceptance::codec::read(
                 connection, input, crypto, operation,
             ))
@@ -534,7 +543,7 @@ pub(super) async fn history(
             .into_history(),
         )),
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10..=12) => {
+        Some(3) if matches!(authority.catalog, 10..=13) => {
             let retained = Box::pin(super::signing_plan::read_entry(
                 connection, input, crypto, operation,
             ))
@@ -558,8 +567,16 @@ pub(super) async fn history(
             .ok_or(OperationError::RecoveryRequired)?
             .into_history(),
         )),
-        Some(6) if authority.catalog == 12 => Ok(Some(
+        Some(6) if matches!(authority.catalog, 12 | 13) => Ok(Some(
             Box::pin(super::inventory::installation::read_entry(
+                connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
+        )),
+        Some(7) if authority.catalog == 13 => Ok(Some(
+            Box::pin(super::inventory::abort::read_entry(
                 connection, input, crypto, operation,
             ))
             .await?
@@ -616,6 +633,22 @@ impl HistoryEntry {
         )?;
         hash.update([header.parts]);
         hash.update(self.parts_witness);
+        match (header.family, self.aborted) {
+            (Family::AbortedPreparation, Some(projection)) => {
+                hash.update(projection.digest(header.actor.participant(), header.operation))
+            }
+            (Family::AbortedPreparation, None) | (_, Some(_)) => {
+                return Err(OperationError::RecoveryRequired);
+            }
+            (_, None) => {}
+        }
+        if let Some(preparation) = self.preparation {
+            if header.family != Family::Acceptance {
+                return Err(OperationError::RecoveryRequired);
+            }
+            hash.update(b"P13");
+            hash.update(preparation);
+        }
         match (header.family, self.signing) {
             (Family::SigningClaim | Family::SigningEvidence, Some(projection)) => {
                 hash.update(projection.digest(header.actor.participant(), header.operation))

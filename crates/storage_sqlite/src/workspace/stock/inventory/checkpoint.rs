@@ -14,6 +14,10 @@ impl MinimumProof {
         &self,
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {
+        let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|_| OperationError::RecoveryRequired)?;
         let mut hash = history_hash(self.multipart);
         for revision in (self.lower..=self.upper).rev() {
             let row=sqlx::query("SELECT actor,grant_id,operation_id,command_digest,transaction_id,pool_id,chain_head,CASE WHEN length(protected) BETWEEN 1 AND 262144 THEN protected END FROM stock_operations WHERE revision=?")
@@ -64,7 +68,7 @@ impl MinimumProof {
                 let related: Option<Vec<u8>> = row
                     .try_get(2)
                     .map_err(|_| OperationError::RecoveryRequired)?;
-                if !(0..=6).contains(&family) {
+                if !(0..=7).contains(&family) {
                     return Err(OperationError::RecoveryRequired);
                 }
                 let subject: Option<Vec<u8>> = row
@@ -78,6 +82,18 @@ impl MinimumProof {
                     super::super::ledger::raw_parts_witness(connection, &actor, &operation).await?;
                 hash.update([parts]);
                 hash.update(witness);
+                if family == 7 {
+                    hash.update(
+                        super::abort::raw_projection(connection, &actor, &operation).await?,
+                    );
+                }
+                if catalog == 13 && family == 2 {
+                    hash.update(b"P13");
+                    hash.update(
+                        super::acceptance::codec::raw_preparation(connection, &actor, &operation)
+                            .await?,
+                    );
+                }
                 if matches!(family, 4 | 5) {
                     hash.update(
                         super::super::issuance::raw_projection(
@@ -117,6 +133,72 @@ fn history_hash(multipart: bool) -> Sha256 {
     hash.update([u8::from(multipart)]);
     hash
 }
+/// Authenticate current order cache data from the complete protected chain.
+/// The caller must retain this proof through the final SQL transaction.
+pub(in crate::workspace::stock) async fn authenticate_order_state(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    authority: &Authority,
+    order: radroots_domain::OrderId,
+) -> Result<super::super::order_state::Checked, OperationError> {
+    if authority.catalog != 13 {
+        return Err(OperationError::UnsupportedOperation);
+    }
+    let current = authority
+        .inventory
+        .ok_or(OperationError::RecoveryRequired)?;
+    let mut previous = current.head;
+    let mut hash = history_hash(true);
+    let mut chain = super::super::order_state::Chain::new();
+    for revision in (1..=current.revision.get()).rev() {
+        let id: Vec<u8> = sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32")
+            .bind(revision as i64).fetch_optional(&mut *connection).await
+            .map_err(|_| OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
+        let entry = Box::pin(super::super::ledger::history(
+            connection,
+            input,
+            crypto,
+            binding,
+            authority,
+            OperationId::from_bytes(
+                id.try_into()
+                    .map_err(|_| OperationError::RecoveryRequired)?,
+            ),
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
+        if entry.header.revision.get() != revision || Some(entry.header.head) != previous {
+            return Err(OperationError::RecoveryRequired);
+        }
+        if entry.header.order == Some(order)
+            && let Some(marker) = super::super::order_state::Marker::from_history(&entry)?
+        {
+            chain.observe(marker)?;
+        }
+        entry.hash(&mut hash)?;
+        previous = entry.header.previous;
+    }
+    if previous.is_some() {
+        return Err(OperationError::RecoveryRequired);
+    }
+    chain.complete()?;
+    let witness = super::super::order_state::Witness {
+        order,
+        expected: chain.latest,
+    };
+    witness.confirm(connection).await?;
+    Ok(super::super::order_state::Checked {
+        witness,
+        ancestry: MinimumProof {
+            lower: 1,
+            upper: current.revision.get(),
+            digest: hash.finalize().into(),
+            multipart: true,
+        },
+    })
+}
 /// Initial decisions must prove absence through authenticated effects, rather
 /// than trusting the mutable order index or its current row count alone.
 pub(super) async fn authenticate_order_absence(
@@ -130,7 +212,7 @@ pub(super) async fn authenticate_order_absence(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    if !matches!(authority.catalog, 9..=12) {
+    if !matches!(authority.catalog, 9..=13) {
         return Err(OperationError::UnsupportedOperation);
     }
     let upper = current.revision.get();
@@ -177,6 +259,10 @@ pub(in crate::workspace::stock) struct EntryIdentity {
     pub protected_digest: [u8; 32],
 }
 pub(in crate::workspace::stock) enum IdentityTarget {
+    Abort {
+        operation: OperationId,
+        expected: Option<EntryIdentity>,
+    },
     Operation(OperationId, Option<EntryIdentity>),
     Consent {
         operation: OperationId,
@@ -208,7 +294,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    let multipart = matches!(authority.catalog, 7..=12);
+    let multipart = matches!(authority.catalog, 7..=13);
     let upper = current.revision.get();
     let mut previous = current.head;
     let mut hash = history_hash(multipart);
@@ -219,7 +305,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
             id.try_into()
                 .map_err(|_| OperationError::RecoveryRequired)?,
         );
-        let (identity, predecessor, natural, signing_plan, signing_claim, installation) =
+        let (identity, predecessor, natural, signing_plan, signing_claim, installation, aborted) =
             if multipart {
                 let entry = Box::pin(super::super::ledger::history(
                     connection, input, crypto, binding, authority, operation,
@@ -259,6 +345,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
                         None
                     },
                     entry.installation.map(|value| value.operation),
+                    entry.aborted.map(|value| value.operation),
                 )
             } else {
                 let entry = read_operation(connection, input, crypto, binding, operation)
@@ -281,9 +368,14 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
                     None,
                     None,
                     None,
+                    None,
                 )
             };
         let (matched, expected) = match &target {
+            IdentityTarget::Abort {
+                operation: wanted,
+                expected,
+            } => (aborted == Some(*wanted), *expected),
             IdentityTarget::Operation(wanted, expected) => (*wanted == operation, *expected),
             IdentityTarget::Consent {
                 operation: wanted,
@@ -322,6 +414,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
         | IdentityTarget::Consent { expected, .. }
         | IdentityTarget::SigningPlan { expected, .. }
         | IdentityTarget::SigningClaim { expected, .. }
+        | IdentityTarget::Abort { expected, .. }
         | IdentityTarget::Installation { expected, .. } => expected,
     };
     if previous.is_some() || expected.is_some() {
@@ -378,7 +471,7 @@ pub(in crate::workspace::stock) async fn authenticate_minimum_with_local(
         minimum.revision().get().max(1)
     };
     let upper = current.revision.get();
-    let multipart = matches!(authority.catalog, 7..=12);
+    let multipart = matches!(authority.catalog, 7..=13);
     let mut hash = history_hash(multipart);
     let mut expected = current.head;
     for revision in (lower..=upper).rev() {
@@ -642,7 +735,7 @@ async fn authenticate_projected(
         .ok_or(OperationError::UnsupportedOperation)?;
     let upper = current.revision.get();
     let mut expected = current.head;
-    let multipart = matches!(authority.catalog, 7..=12);
+    let multipart = matches!(authority.catalog, 7..=13);
     let mut hash = history_hash(multipart);
     for revision in (1..=upper).rev() {
         let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32").bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;

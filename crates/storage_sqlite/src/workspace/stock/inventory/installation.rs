@@ -222,7 +222,7 @@ pub(in crate::workspace) async fn install(
         &proof,
     ))
     .await?;
-    if auth.access.authority.catalog != 12 {
+    if !matches!(auth.access.authority.catalog, 12 | 13) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;
@@ -234,6 +234,26 @@ pub(in crate::workspace) async fn install(
     if auth.access.current.observed_at() < plan.bound.bound_at() {
         return Err(WorkspaceError::Unavailable.into());
     }
+    let current_order = if auth.access.authority.catalog == 13 {
+        let checked = Box::pin(super::checkpoint::authenticate_order_state(
+            turn.connection,
+            turn.selected,
+            turn.crypto,
+            &auth.access.current,
+            &auth.access.authority,
+            plan.bound.preparation().order_id(),
+        ))
+        .await?;
+        if checked.witness.expected.is_none_or(|value| {
+            value.phase != super::super::order_state::Phase::Prepared
+                || value.operation != request.operation
+        }) {
+            return Err(OperationError::StaleState);
+        }
+        Some(checked)
+    } else {
+        None
+    };
     let recipients = *plan.bound.preparation().rumor().recipients();
     let mut selections = Vec::with_capacity(2);
     let mut work = Vec::with_capacity(2);
@@ -428,6 +448,9 @@ pub(in crate::workspace) async fn install(
             if changed.rows_affected()!=1 {return Err(OperationError::StaleState);}
             sqlx::query("INSERT INTO stock_movements(movement_id,actor,grant_id,operation_id,pool_id,protected) VALUES(?,?,?,?,?,?)").bind(effect.movement.as_slice()).bind(turn.selected.participant().as_bytes().as_slice()).bind(current.input().grant_id().as_bytes().as_slice()).bind(entry.as_bytes().as_slice()).bind(effect.before.id().as_bytes().as_slice()).bind(&movement_bytes[index]).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
         }
+        if let Some(current_order) = &current_order {
+            current_order.advance(&mut tx, super::super::order_state::Marker::from_header(&framed.header, super::super::order_state::Phase::Installed)?).await?;
+        }
         let changed=sqlx::query("UPDATE stock_authority SET protected=? WHERE singleton=1 AND protected=?").bind(root).bind(&auth.access.root).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
         if changed.rows_affected()!=1 {return Err(OperationError::RecoveryRequired);}turn.namespace.validate()?;Ok(())
     }.await;
@@ -458,7 +481,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if auth.access.authority.catalog != 12 {
+    if !matches!(auth.access.authority.catalog, 12 | 13) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (retained, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;

@@ -148,7 +148,7 @@ pub(in crate::workspace::stock) async fn load(
     proof: &AttachmentProof,
 ) -> Result<Authorized, OperationError> {
     let access = turn.access(binding, minimum, proof).await?;
-    if !matches!(access.authority.catalog, 10..=12) {
+    if !matches!(access.authority.catalog, 10..=13) {
         return Err(OperationError::UnsupportedOperation);
     }
     let original = Box::pin(acceptance::codec::read(
@@ -282,6 +282,14 @@ pub(in crate::workspace) async fn bind(
             auth.plan.ok_or(OperationError::RecoveryRequired)?.bound,
         )));
     }
+    let current_order = Box::pin(super::order_state::signing_state(
+        turn,
+        &auth.access,
+        auth.original.receipt.order_id(),
+        plan.operation_id(),
+        false,
+    ))
+    .await?;
     let backing = Box::pin(inventory::backing::read(
         turn,
         &auth.access,
@@ -361,6 +369,7 @@ pub(in crate::workspace) async fn bind(
         auth.original_proof.confirm(&mut tx).await?; auth.consent_proof.confirm(&mut tx).await?; auth.plan_proof.confirm(&mut tx).await?; auth.original.confirm(&mut tx).await?;
         let current = auth.access.confirm(&mut tx, turn.namespace, turn.clock, &proof).await?;
         for pool in &backing { pool.confirm(&mut tx).await?; }
+        if let Some(current_order) = &current_order {current_order.confirm(&mut tx).await?;}
         acceptance::check_consent(&auth.access, &auth.consent, &auth.command, true, current.observed_at())?;
         if current.observed_at() < bound_at || current.observed_at() >= auth.original.receipt.first_issue_deadline() { return Err(OperationError::DeadlineExceeded); }
         sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected,family,order_id,related_operation,subject_grant) VALUES(?,?,?,?,?,NULL,?,?,?,3,?,?,NULL)")
