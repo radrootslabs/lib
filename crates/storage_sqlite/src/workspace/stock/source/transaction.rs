@@ -28,7 +28,7 @@ async fn access(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, binding.input(), turn.crypto).await?;
-    if authority.catalog != 6 {
+    if !matches!(authority.catalog, 6 | 7) {
         return Err(OperationError::UnsupportedOperation);
     }
     let current = record.authenticate(binding.input(), proof, turn.clock.now()?)?;

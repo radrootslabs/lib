@@ -125,6 +125,18 @@ struct NativeSellerStockAuthority {
     retained_inventory_versions: Vec<u16>,
     authority_payload_schema: String,
     inventory_operation_payload_schema: String,
+    operation_part_payload_schema: String,
+    operation_body_max_bytes: u32,
+    operation_part_max_bytes: u32,
+    operation_part_max_count: u16,
+    operation_identity_requires_protected_ancestry: bool,
+    business_consent_payload_version: u16,
+    business_consent_action: String,
+    business_consent_modes: Vec<String>,
+    business_consent_admin_issuance_required: bool,
+    business_consent_binds_exact_command_and_subject_grant: bool,
+    business_consent_issuance_has_order_or_stock_effects: bool,
+    business_consent_worker_charge_bytes: u32,
     inventory_movement_payload_schema: String,
     grant_payload_schema: String,
     grant_change_payload_schema: String,
@@ -329,11 +341,23 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 6
+            && stock.schema_version == 7
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v6"
-            && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v4"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v7"
+            && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v5"
+            && stock.operation_part_payload_schema == "radroots.seller_stock.operation_part.v1"
+            && stock.operation_body_max_bytes == 262144
+            && stock.operation_part_max_bytes == 16384
+            && stock.operation_part_max_count == 16
+            && stock.operation_identity_requires_protected_ancestry
+            && stock.business_consent_payload_version == 1
+            && stock.business_consent_action == "orders.accept"
+            && stock.business_consent_modes == ["execute_and_recover", "recover_only"]
+            && stock.business_consent_admin_issuance_required
+            && stock.business_consent_binds_exact_command_and_subject_grant
+            && !stock.business_consent_issuance_has_order_or_stock_effects
+            && stock.business_consent_worker_charge_bytes == 524288
             && stock.mapping_payload_schema == "radroots.seller_stock.mapping.v1"
             && stock.source_payload_schemas
                 == [
@@ -918,6 +942,47 @@ mod tests {
             ("private_causal_heads_use_timestamp_lww", true),
         ] {
             assert!(validate_bytes(&changed(&format!("/execution/{field}"), json!(bad))).is_err());
+        }
+    }
+
+    #[test]
+    fn consent_ledger_requires_bounded_parts_explicit_scopes_and_protected_identity() {
+        for (field, bad) in [
+            ("schema_version", json!(6)),
+            ("retained_inventory_versions", json!([2, 3, 4, 5])),
+            (
+                "operation_part_payload_schema",
+                json!("radroots.seller_stock.operation_part.v2"),
+            ),
+            ("operation_body_max_bytes", json!(262145)),
+            ("operation_part_max_bytes", json!(16385)),
+            ("operation_part_max_count", json!(17)),
+            (
+                "operation_identity_requires_protected_ancestry",
+                json!(false),
+            ),
+            ("business_consent_payload_version", json!(2)),
+            ("business_consent_action", json!("stock.add")),
+            ("business_consent_modes", json!(["execute_and_recover"])),
+            ("business_consent_admin_issuance_required", json!(false)),
+            (
+                "business_consent_binds_exact_command_and_subject_grant",
+                json!(false),
+            ),
+            (
+                "business_consent_issuance_has_order_or_stock_effects",
+                json!(true),
+            ),
+            ("business_consent_worker_charge_bytes", json!(16384)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
         }
     }
 

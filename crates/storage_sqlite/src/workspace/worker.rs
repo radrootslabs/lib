@@ -38,6 +38,21 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    IssueStockConsent(
+        Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
+        Box<stock::StockConsentCapture>,
+        AttachmentProof,
+        Reply<stock::StockConsentOutcome, OperationError>,
+    ),
+    StockConsent(
+        Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
+        OperationId,
+        radroots_domain::GrantId,
+        AttachmentProof,
+        Reply<Option<stock::StockConsentReceipt>, OperationError>,
+    ),
     RetainStockSource(
         Box<WorkspaceBinding>,
         radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
@@ -189,6 +204,12 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::IssueStockConsent(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockConsent(_, _, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::RetainStockSource(_, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -403,6 +424,8 @@ impl Handle {
                                 && !matches!(
                                     &job,
                                     Job::Authenticate(..)
+                                        | Job::IssueStockConsent(..)
+                                        | Job::StockConsent(..)
                                         | Job::ChangeStockGrant(..)
                                         | Job::ExecuteInventory(..)
                                         | Job::InventoryOperation(..)
@@ -496,6 +519,58 @@ impl Handle {
                                             uncertain: &mut uncertain,
                                         }
                                         .creation(*binding, minimum, operation, digest, proof)
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::IssueStockConsent(binding, minimum, capture, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::consent::issue(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            *capture,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockConsent(
+                                    binding,
+                                    minimum,
+                                    operation,
+                                    subject,
+                                    proof,
+                                    reply,
+                                ) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::consent::query(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            operation,
+                                            subject,
+                                            proof,
+                                        )
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -979,6 +1054,48 @@ impl Handle {
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
+    pub(super) async fn issue_stock_consent(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        capture: stock::StockConsentCapture,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockConsentOutcome, OperationError> {
+        let anchor = stock::StockConsentOutcome::Unknown {
+            control_operation: capture.control_operation_id(),
+            transaction: capture.transaction_id(),
+            command_operation: capture.command().context().operation_id(),
+            subject: capture.subject_grant(),
+        };
+        let (reply, result) = oneshot::channel();
+        self.send(Job::IssueStockConsent(
+            Box::new(binding),
+            minimum,
+            Box::new(capture),
+            proof,
+            reply,
+        ))?;
+        result.await.unwrap_or(Ok(anchor))
+    }
+    pub(super) async fn stock_consent(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        operation: OperationId,
+        subject: radroots_domain::GrantId,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockConsentReceipt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockConsent(
+            Box::new(binding),
+            minimum,
+            operation,
+            subject,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn retain_stock_source(
         &self,
         binding: WorkspaceBinding,
@@ -1047,6 +1164,7 @@ impl Handle {
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
+            Job::IssueStockConsent(..) => 512 * 1024,
             Job::RetainStockSource(..) => 256 * 1024,
             Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,

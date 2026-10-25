@@ -23,7 +23,8 @@ mod schema;
 mod snapshot;
 mod stock;
 pub use stock::{
-    SellerStockConfig, StockAuthorityReceipt, StockEnrollment, StockGrantEnrollment,
+    SellerStockConfig, StockAuthorityReceipt, StockConsentCapture, StockConsentMode,
+    StockConsentOutcome, StockConsentReceipt, StockEnrollment, StockGrantEnrollment,
     StockGrantOutcome, StockGrantReceipt, StockSourceCapture, StockSourceOutcome,
     StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
 };

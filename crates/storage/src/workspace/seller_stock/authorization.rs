@@ -160,6 +160,11 @@ impl StockGrantRecord {
     pub fn expires_at(&self) -> UnixSeconds {
         self.credential.expires_at()
     }
+    /// Returns the decoded revocation claim. Current protected provenance and
+    /// grant-set membership must be authenticated by the concrete owner.
+    pub fn is_revoked(&self) -> bool {
+        self.credential.is_revoked()
+    }
     pub fn permissions(&self) -> &StockGrantScope {
         &self.permissions
     }

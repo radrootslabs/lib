@@ -39,6 +39,9 @@ impl Drop for WorkspaceGrant {
     }
 }
 impl WorkspaceGrant {
+    pub(super) const fn is_revoked(&self) -> bool {
+        self.wire.revoked
+    }
     pub(super) fn expires_at(&self) -> UnixSeconds {
         self.wire.expires_at
     }

@@ -8,7 +8,12 @@ pub use radroots_storage::workspace::seller_stock::SellerStockConfig;
 use radroots_storage::workspace::seller_stock::{
     SellerAuthoritySelection, StockAction, StockAuthorizationRef, StockGrantRecord, StockGrantScope,
 };
+pub(in crate::workspace) mod consent;
+pub use consent::{
+    StockConsentCapture, StockConsentMode, StockConsentOutcome, StockConsentReceipt,
+};
 pub(in crate::workspace) mod grants;
+mod ledger;
 pub(in crate::workspace) mod source;
 use grants::StockRecord;
 pub use grants::{StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt};
@@ -191,6 +196,7 @@ struct InventoryCheckpoint {
     movements: Sequence,
     head: Option<radroots_domain::CheckpointDigest>,
     mappings: Option<Sequence>,
+    orders: Option<Sequence>,
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -202,6 +208,17 @@ struct InventoryCheckpointCurrent {
     #[serde(deserialize_with = "required_nullable")]
     head: Option<radroots_domain::CheckpointDigest>,
 }
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InventoryCheckpointUnified {
+    revision: Sequence,
+    pools: Sequence,
+    movements: Sequence,
+    mappings: Sequence,
+    orders: Sequence,
+    #[serde(deserialize_with = "required_nullable")]
+    head: Option<radroots_domain::CheckpointDigest>,
+}
 impl From<InventoryCheckpointLegacy> for InventoryCheckpoint {
     fn from(value: InventoryCheckpointLegacy) -> Self {
         Self {
@@ -210,6 +227,7 @@ impl From<InventoryCheckpointLegacy> for InventoryCheckpoint {
             movements: value.movements,
             head: value.head,
             mappings: None,
+            orders: None,
         }
     }
 }
@@ -221,6 +239,19 @@ impl From<InventoryCheckpointCurrent> for InventoryCheckpoint {
             movements: value.movements,
             head: value.head,
             mappings: Some(value.mappings),
+            orders: None,
+        }
+    }
+}
+impl From<InventoryCheckpointUnified> for InventoryCheckpoint {
+    fn from(value: InventoryCheckpointUnified) -> Self {
+        Self {
+            revision: value.revision,
+            pools: value.pools,
+            movements: value.movements,
+            head: value.head,
+            mappings: Some(value.mappings),
+            orders: Some(value.orders),
         }
     }
 }
@@ -243,6 +274,16 @@ impl InventoryCheckpoint {
             movements: self.movements,
             head: self.head,
             mappings: self.mappings.ok_or(WorkspaceError::RecoveryRequired)?,
+        })
+    }
+    fn unified(self) -> Result<InventoryCheckpointUnified, WorkspaceError> {
+        Ok(InventoryCheckpointUnified {
+            revision: self.revision,
+            pools: self.pools,
+            movements: self.movements,
+            head: self.head,
+            mappings: self.mappings.ok_or(WorkspaceError::RecoveryRequired)?,
+            orders: self.orders.ok_or(WorkspaceError::RecoveryRequired)?,
         })
     }
 }
@@ -305,8 +346,45 @@ struct AuthorityV6 {
     sources: SourceCheckpoint,
     authorization: StockAuthorizationRef,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityV7 {
+    version: u8,
+    #[serde(deserialize_with = "object")]
+    namespace: SellerAuthoritySelection,
+    administrator: GrantId,
+    transaction: TransactionId,
+    revocation: Sequence,
+    #[serde(deserialize_with = "object")]
+    inventory: InventoryCheckpointUnified,
+    #[serde(deserialize_with = "object")]
+    sources: SourceCheckpoint,
+    authorization: StockAuthorizationRef,
+}
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
+        if self.catalog == 7 {
+            let bytes = zeroize::Zeroizing::new(
+                serde_json::to_vec(&AuthorityV7 {
+                    version: 7,
+                    namespace: SellerAuthoritySelection::from_attachment(&self.input),
+                    administrator: self.input.grant_id(),
+                    transaction: self.transaction,
+                    revocation: self.revocation,
+                    inventory: self
+                        .inventory
+                        .ok_or(WorkspaceError::RecoveryRequired)?
+                        .unified()?,
+                    sources: self.sources.ok_or(WorkspaceError::RecoveryRequired)?,
+                    authorization: self.authorization.ok_or(WorkspaceError::RecoveryRequired)?,
+                })
+                .map_err(|_| WorkspaceError::StorageFailure)?,
+            );
+            if bytes.len() > 16 * 1024 {
+                return Err(WorkspaceError::Capacity);
+            }
+            return Ok(bytes);
+        }
         if self.catalog == 6 {
             let bytes = serde_json::to_vec(&AuthorityV6 {
                 version: 6,
@@ -476,6 +554,34 @@ impl Authority {
                     sources: Some(value.sources),
                 }
             }
+            7 => {
+                let value: AuthorityV7 = closed_record(bytes)?;
+                if value.version != 7
+                    || value.authorization.generation() != value.revocation
+                    || (value.inventory.revision.get() == 0) != value.inventory.head.is_none()
+                    || value.inventory.orders.get() > value.inventory.revision.get()
+                    || value.inventory.pools.get() > value.inventory.revision.get()
+                    || value.inventory.mappings.get() > value.inventory.revision.get()
+                    || value.inventory.movements.get()
+                        > value.inventory.revision.get().saturating_mul(64)
+                    || (value.sources.revision.get() == 0) != value.sources.head.is_none()
+                    || (value.sources.revision.get() == 0) != (value.sources.parts.get() == 0)
+                    || value.sources.records.get() > value.sources.revision.get()
+                    || value.sources.parts.get() / 3 < value.sources.revision.get()
+                    || value.sources.parts.get() > value.sources.revision.get().saturating_mul(12)
+                {
+                    return Err(WorkspaceError::RecoveryRequired);
+                }
+                Self {
+                    catalog,
+                    input: value.namespace.attachment(value.administrator)?,
+                    transaction: value.transaction,
+                    revocation: value.revocation,
+                    inventory: Some(value.inventory.into()),
+                    authorization: Some(value.authorization),
+                    sources: Some(value.sources),
+                }
+            }
             _ => return Err(WorkspaceError::RecoveryRequired),
         };
         if value.revocation.get() == 0 {
@@ -517,6 +623,11 @@ pub(super) async fn initialize(
             transaction: initial.transaction,
             revocation: Sequence::new(1).map_err(|_| WorkspaceError::InvalidInput)?,
             inventory: Some(InventoryCheckpoint {
+                orders: if schema::CURRENT == 7 {
+                    Some(Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?)
+                } else {
+                    None
+                },
                 mappings: Some(Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?),
                 revision: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
                 head: None,
@@ -564,7 +675,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=6")
+            sqlx::query("PRAGMA user_version=7")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;

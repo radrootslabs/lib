@@ -58,7 +58,7 @@ impl MappingRead {
     }
 }
 pub(super) fn require(access: &Access, key: OptionMappingKey) -> Result<(), OperationError> {
-    if !(5..=6).contains(&access.authority.catalog) {
+    if !(5..=7).contains(&access.authority.catalog) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()
@@ -180,10 +180,7 @@ pub(super) async fn prepare(
         turn.selected,
         turn.crypto,
         &access.current,
-        access
-            .authority
-            .inventory
-            .ok_or(OperationError::UnsupportedOperation)?,
+        &access.authority,
         input.key(),
         before,
     )

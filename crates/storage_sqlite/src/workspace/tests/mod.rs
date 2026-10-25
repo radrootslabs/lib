@@ -53,7 +53,7 @@ fn reference(id: &str, backend: BackendKind, version: u32) -> SecretRef {
 }
 pub(super) struct CryptoFixture {
     _temp: tempfile::TempDir,
-    provider: Arc<FileProvider>,
+    pub(super) provider: Arc<FileProvider>,
 }
 impl CryptoFixture {
     pub(super) fn root(&self) -> std::path::PathBuf {
@@ -87,8 +87,14 @@ impl CryptoFixture {
             .unwrap();
     }
     pub(super) fn crypto(&self) -> WorkspaceCrypto {
+        self.crypto_with_provider(self.provider.clone())
+    }
+    pub(super) fn crypto_with_provider(
+        &self,
+        provider: Arc<dyn SecretProvider>,
+    ) -> WorkspaceCrypto {
         WorkspaceCrypto::new(
-            self.provider.clone(),
+            provider,
             reference("grant-key", BackendKind::File, 1),
             SecretMaterial::from_slice(&[0x41; 32]).unwrap(),
             AccessPolicy::standard(),

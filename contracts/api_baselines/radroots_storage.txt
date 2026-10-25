@@ -2419,6 +2419,7 @@ pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::encode(&self
 pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::expires_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::from_enrollment(radroots_storage::workspace::grant::WorkspaceGrant) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::input(&self) -> &radroots_storage::workspace::AttachmentInput
+pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::is_revoked(&self) -> bool
 pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::new(radroots_storage::workspace::AttachmentInput, alloc::string::String, radroots_domain::context::UnixSeconds, radroots_storage::workspace::seller_stock::StockGrantScope, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::permissions(&self) -> &radroots_storage::workspace::seller_stock::StockGrantScope
 pub fn radroots_storage::workspace::seller_stock::StockGrantRecord::revoke(&mut self) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>

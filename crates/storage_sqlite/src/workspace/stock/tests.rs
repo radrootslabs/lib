@@ -109,7 +109,7 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
     )
     .await
     .unwrap();
-    assert_eq!(schema::admit(&mut connection).await, Ok(6));
+    assert_eq!(schema::admit(&mut connection).await, Ok(7));
     assert_eq!(schema::integrity(&mut connection).await, Ok(()));
     let root: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_authority")
         .fetch_one(&mut connection)
@@ -117,18 +117,18 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
         .unwrap();
     let clear = fixture
         .crypto()
-        .open_stock_root(enrollment.input(), 6, &root)
+        .open_stock_root(enrollment.input(), 7, &root)
         .await
         .unwrap();
     let authority = clear
-        .expose_secret(|bytes| Authority::decode(bytes, 6))
+        .expose_secret(|bytes| Authority::decode(bytes, 7))
         .unwrap();
     clear.expose_secret(|bytes| {
         let original:serde_json::Value=serde_json::from_slice(bytes).unwrap();
         assert_eq!(original["inventory"]["mappings"],"0");
         for bad in [serde_json::json!([]),serde_json::json!({"revision":"1","pools":"1","movements":"1","head":original["inventory"]["head"]})] {
             let mut value=original.clone();value["inventory"]=bad;
-            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),6).is_err());
+            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),7).is_err());
         }
         for bad in [
             serde_json::json!([]),
@@ -139,7 +139,7 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
             serde_json::json!({"revision":"1","records":"2","parts":"3","head":"01".repeat(32)}),
         ] {
             let mut value=original.clone();value["sources"]=bad;
-            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),6).is_err());
+            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),7).is_err());
         }
     });
     assert_eq!(authority.input, *enrollment.input());
@@ -189,7 +189,7 @@ async fn current_and_retained_roots_bind_the_complete_namespace_with_distinct_ca
     let caller = namespace.attachment(GrantId::from_bytes([9; 32])).unwrap();
     let crypto = fixture.crypto();
     let clear = b"synthetic context payload";
-    for version in [4, 5, 6] {
+    for version in [4, 5, 6, 7] {
         let current = crypto
             .seal_stock_root(&owner, version, clear)
             .await
@@ -255,10 +255,22 @@ async fn retained_inventory_v4_preserves_scoped_grants_and_original_effects_with
 async fn retained_inventory_v5_preserves_mappings_and_never_adds_source_tables() {
     retained_inventory_catalog(5).await;
 }
-async fn retained_inventory_catalog(catalog: i64) {
-    use radroots_storage::inventory::{InventoryCommandKind, InventoryOutcome};
-    let fixture = CryptoFixture::new();
-    let path = fixture.root().join("retained-v2");
+#[tokio::test]
+async fn retained_inventory_v6_preserves_original_physical_and_source_capabilities() {
+    retained_inventory_catalog(6).await;
+}
+#[tokio::test]
+async fn current_v7_physical_ledger_uses_protected_parts() {
+    assert_eq!(schema::CURRENT, 7);
+    retained_inventory_catalog(7).await;
+}
+// Exact catalog fixtures exercise retained/successor codecs; they are not
+// evidence from a predecessor executable or a factory migration.
+pub(super) async fn literal_catalog(
+    fixture: &CryptoFixture,
+    path: &std::path::Path,
+    catalog: i64,
+) -> (AttachmentInput, AttachmentProof) {
     let (input, proof, record) = SellerStockConfig::new(
         participant(),
         participant(),
@@ -301,16 +313,23 @@ async fn retained_inventory_catalog(catalog: i64) {
     } else {
         serde_json::json!({"version":catalog,"input":input,"transaction":TransactionId::from_bytes([9;32]),"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null}})
     };
-    if catalog == 5 {
-        value["version"] = serde_json::json!(5);
+    if catalog >= 5 {
+        value["version"] = serde_json::json!(catalog);
         value["inventory"]["mappings"] = serde_json::json!("0");
+    }
+    if catalog >= 6 {
+        value["sources"] =
+            serde_json::json!({"revision":"0","records":"0","parts":"0","head":null});
+    }
+    if catalog == 7 {
+        value["inventory"]["orders"] = serde_json::json!("0");
     }
     let clear = zeroize::Zeroizing::new(serde_json::to_vec(&value).unwrap());
     let root = crypto
         .seal_stock_root(&input, catalog, &clear)
         .await
         .unwrap();
-    let namespace = Namespace::acquire_kind(&path, true, Kind::SellerStock).unwrap();
+    let namespace = Namespace::acquire_kind(path, true, Kind::SellerStock).unwrap();
     let mut connection = SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
             .filename(namespace.database_path())
@@ -339,6 +358,8 @@ async fn retained_inventory_catalog(catalog: i64) {
         3 => "PRAGMA user_version=3",
         4 => "PRAGMA user_version=4",
         5 => "PRAGMA user_version=5",
+        6 => "PRAGMA user_version=6",
+        7 => "PRAGMA user_version=7",
         _ => unreachable!(),
     })
     .execute(&mut *tx)
@@ -347,13 +368,21 @@ async fn retained_inventory_catalog(catalog: i64) {
     tx.commit().await.unwrap();
     connection.close().await.unwrap();
     drop(namespace);
+    (input, proof)
+}
+
+async fn retained_inventory_catalog(catalog: i64) {
+    use radroots_storage::inventory::{InventoryCommandKind, InventoryOutcome};
+    let fixture = CryptoFixture::new();
+    let path = fixture.root().join("retained-v2");
+    let (input, proof) = literal_catalog(&fixture, &path, catalog).await;
     let store =
         NativeWorkspace::open_seller_stock(&path, input.clone(), fixture.crypto(), Arc::new(Clock))
             .await
             .unwrap();
     let binding = store.authenticate(input.clone(), &proof).await.unwrap();
     let authority = store.stock_authority(input.clone(), &proof).await.unwrap();
-    assert!(authority.source_checkpoint().is_none());
+    assert_eq!(authority.source_checkpoint().is_some(), catalog >= 6);
     let minimum = authority.inventory_checkpoint().unwrap();
     let context = CommandContextData::new(
         OperationId::from_bytes([7; 32]),
@@ -460,6 +489,71 @@ async fn retained_inventory_catalog(catalog: i64) {
             InventoryOutcome::Unknown(_) => panic!("retained correction must confirm"),
         }
     }
+    if catalog >= 6 {
+        // The caller's minimum is newer than this original operation. A
+        // hidden SQL identity must still fail protected absence verification.
+        let mut raw = SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(path.join("stock_execution_v1.sqlite"))
+                .foreign_keys(false),
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE stock_operations SET operation_id=? WHERE operation_id=?")
+            .bind([0x78_u8; 32].as_slice())
+            .bind([7_u8; 32].as_slice())
+            .execute(&mut raw)
+            .await
+            .unwrap();
+        assert!(matches!(
+            store
+                .inventory_operation(
+                    binding.clone(),
+                    latest,
+                    OperationId::from_bytes([7; 32]),
+                    None,
+                    copy()
+                )
+                .await,
+            Err(OperationError::RecoveryRequired
+                | OperationError::Workspace(WorkspaceError::RecoveryRequired))
+        ));
+        assert!(matches!(
+            store
+                .execute_inventory(
+                    InventoryRequest::from_protected_wire(
+                        binding.clone(),
+                        latest,
+                        &serde_json::to_vec(&wire).unwrap()
+                    )
+                    .unwrap(),
+                    copy()
+                )
+                .await,
+            Err(OperationError::RecoveryRequired
+                | OperationError::Workspace(WorkspaceError::RecoveryRequired))
+        ));
+        sqlx::query("UPDATE stock_operations SET operation_id=? WHERE operation_id=?")
+            .bind([7_u8; 32].as_slice())
+            .bind([0x78_u8; 32].as_slice())
+            .execute(&mut raw)
+            .await
+            .unwrap();
+        raw.close().await.unwrap();
+        assert_eq!(
+            store
+                .inventory_operation(
+                    binding.clone(),
+                    latest,
+                    OperationId::from_bytes([7; 32]),
+                    None,
+                    copy()
+                )
+                .await
+                .unwrap(),
+            Some(created.clone())
+        );
+    }
     if catalog >= 4 {
         let child = StockGrantEnrollment::prepare(
             &SellerAuthoritySelection::from_attachment(&input),
@@ -507,7 +601,7 @@ async fn retained_inventory_catalog(catalog: i64) {
     assert_eq!(
         reopened
             .inventory_operation(
-                binding,
+                binding.clone(),
                 latest,
                 OperationId::from_bytes([7; 32]),
                 None,
@@ -530,18 +624,35 @@ async fn retained_inventory_catalog(catalog: i64) {
             .fetch_one(&mut connection)
             .await
             .unwrap();
-    let old = fixture
-        .crypto()
-        .open_stock_record_for_catalog(
+    let old = if catalog == 7 {
+        let retained = ledger::read(
+            &mut connection,
             &input,
-            "operation",
-            OperationId::from_bytes([7; 32]).as_bytes(),
-            catalog,
-            &protected,
+            &fixture.crypto(),
+            OperationId::from_bytes([7; 32]),
         )
         .await
+        .unwrap()
         .unwrap();
-    old.expose_secret(|bytes| {
+        assert_eq!(retained.header.version, 5);
+        assert_eq!(retained.header.family.code(), 0);
+        retained.body
+    } else {
+        let old = fixture
+            .crypto()
+            .open_stock_record_for_catalog(
+                &input,
+                "operation",
+                OperationId::from_bytes([7; 32]).as_bytes(),
+                catalog,
+                &protected,
+            )
+            .await
+            .unwrap();
+        old.expose_secret(|bytes| zeroize::Zeroizing::new(bytes.to_vec()))
+    };
+    {
+        let bytes = old.as_slice();
         let value: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         let value = if catalog >= 4 {
             assert_eq!(value["version"], if catalog == 4 { 3 } else { 4 });
@@ -560,12 +671,82 @@ async fn retained_inventory_catalog(catalog: i64) {
         } else {
             assert_eq!(value["before"], serde_json::Value::Null);
         }
-    });
+    }
+    if catalog >= 6 {
+        // Exercise the actual minimum/projection witness after provider IO,
+        // inside a real SQL transaction. Row counts and the protected header
+        // stay unchanged while one referenced ciphertext changes.
+        for part in [false, true] {
+            if part && catalog != 7 {
+                continue;
+            }
+            let (authority, _, _, _) = read(&mut connection, &input, &fixture.crypto())
+                .await
+                .unwrap();
+            let minimum = radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
+                input.authority(),
+                Sequence::new(0).unwrap(),
+                None,
+            )
+            .unwrap()
+            .with_optional_authorization(authority.authorization);
+            let witness = inventory::grant_minimum(
+                &mut connection,
+                &input,
+                &fixture.crypto(),
+                &binding,
+                &authority,
+                minimum,
+            )
+            .await
+            .unwrap();
+            let (select, mutate, restore) = if part {
+                (
+                    "SELECT protected FROM stock_operation_parts WHERE operation_id=? AND part=0",
+                    "UPDATE stock_operation_parts SET protected=randomblob(length(protected)) WHERE operation_id=? AND part=0",
+                    "UPDATE stock_operation_parts SET protected=? WHERE operation_id=? AND part=0",
+                )
+            } else {
+                (
+                    "SELECT protected FROM stock_movements WHERE operation_id=?",
+                    "UPDATE stock_movements SET protected=randomblob(length(protected)) WHERE operation_id=?",
+                    "UPDATE stock_movements SET protected=? WHERE operation_id=?",
+                )
+            };
+            let original: Vec<u8> = sqlx::query_scalar(select)
+                .bind(OperationId::from_bytes([7; 32]).as_bytes().as_slice())
+                .fetch_one(&mut connection)
+                .await
+                .unwrap();
+            sqlx::query(mutate)
+                .bind(OperationId::from_bytes([7; 32]).as_bytes().as_slice())
+                .execute(&mut connection)
+                .await
+                .unwrap();
+            let mut tx = connection.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            assert_eq!(
+                witness.confirm(&mut tx).await,
+                Err(OperationError::RecoveryRequired)
+            );
+            tx.rollback().await.unwrap();
+            sqlx::query(restore)
+                .bind(original)
+                .bind(OperationId::from_bytes([7; 32]).as_bytes().as_slice())
+                .execute(&mut connection)
+                .await
+                .unwrap();
+            let mut tx = connection.begin_with("BEGIN IMMEDIATE").await.unwrap();
+            assert_eq!(witness.confirm(&mut tx).await, Ok(()));
+            tx.rollback().await.unwrap();
+        }
+    }
     sqlx::query(match catalog {
         2 => "PRAGMA user_version=3",
         3 => "PRAGMA user_version=4",
         4 => "PRAGMA user_version=5",
         5 => "PRAGMA user_version=6",
+        6 => "PRAGMA user_version=7",
+        7 => "PRAGMA user_version=6",
         _ => unreachable!(),
     })
     .execute(&mut connection)

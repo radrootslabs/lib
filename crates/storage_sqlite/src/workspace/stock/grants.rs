@@ -324,7 +324,7 @@ pub(in crate::workspace) async fn change(
     }
     let (mut authority, record, old_root, old_grant) =
         super::read(turn.connection, change.caller.input(), turn.crypto).await?;
-    if !(4..=6).contains(&authority.catalog) {
+    if !(4..=7).contains(&authority.catalog) {
         return Err(WorkspaceError::Unauthorized);
     }
     let catalog = authority.catalog;
@@ -347,9 +347,7 @@ pub(in crate::workspace) async fn change(
         turn.selected,
         turn.crypto,
         &current,
-        authority
-            .inventory
-            .ok_or(WorkspaceError::RecoveryRequired)?,
+        &authority,
         change.minimum,
     )
     .await?;

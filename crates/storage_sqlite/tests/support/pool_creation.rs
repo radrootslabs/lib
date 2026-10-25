@@ -368,7 +368,7 @@ async fn sealed_root_detects_missing_inventory_history_instead_of_fresh_stock() 
     );
     let mut connection = database(&f).await;
     sqlx::raw_sql(
-        "DELETE FROM stock_movements; DELETE FROM stock_operations; DELETE FROM stock_pools",
+        "DELETE FROM stock_movements; DELETE FROM stock_operation_parts; DELETE FROM stock_operations; DELETE FROM stock_pools",
     )
     .execute(&mut connection)
     .await

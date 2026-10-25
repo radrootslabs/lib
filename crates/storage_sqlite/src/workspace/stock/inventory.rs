@@ -1,5 +1,5 @@
 //! Owner-private inventory effects on the existing connection owner.
-mod checkpoint;
+pub(super) mod checkpoint;
 mod codec;
 mod mapping;
 mod plan;
@@ -10,10 +10,10 @@ pub(super) async fn grant_minimum(
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,
     binding: &WorkspaceBinding,
-    current: InventoryCheckpoint,
+    authority: &Authority,
     minimum: radroots_storage::inventory::InventoryCheckpointRef,
 ) -> Result<MinimumProof, WorkspaceError> {
-    authenticate_minimum(connection, input, crypto, binding, current, minimum)
+    authenticate_minimum(connection, input, crypto, binding, authority, minimum)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)
 }
@@ -35,6 +35,15 @@ pub(super) async fn check_head(
     connection: &mut SqliteConnection,
     checkpoint: InventoryCheckpoint,
 ) -> Result<(), WorkspaceError> {
+    if let Some(expected) = checkpoint.orders {
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_orders")
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|_| WorkspaceError::RecoveryRequired)?;
+        if count != expected.get() as i64 {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+    }
     let row=sqlx::query("SELECT count(*),coalesce(max(revision),0),coalesce(sum(CASE WHEN revision=? AND chain_head=? THEN 1 ELSE 0 END),0) FROM stock_operations")
         .bind(checkpoint.revision.get() as i64).bind(checkpoint.head.map(|id|id.as_bytes().to_vec())).fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
     let count: i64 = row
@@ -74,13 +83,14 @@ pub(super) async fn check_head(
     }
     Ok(())
 }
-struct Access {
-    authority: Authority,
-    record: StockRecord,
-    root: Vec<u8>,
-    grant: Vec<u8>,
-    current: WorkspaceBinding,
-    minimum_proof: MinimumProof,
+pub(super) struct Access {
+    pub(super) authority: Authority,
+    pub(super) record: StockRecord,
+    pub(super) root: Vec<u8>,
+    pub(super) grant: Vec<u8>,
+    pub(super) current: WorkspaceBinding,
+    pub(super) minimum_proof: MinimumProof,
+    identity_proof: Option<MinimumProof>,
     projection_proof: Option<MinimumProof>,
     mapping_read: Option<mapping::MappingRead>,
 }
@@ -92,8 +102,52 @@ pub(in crate::workspace) struct Turn<'a> {
     pub clock: &'a dyn WorkspaceClock,
     pub uncertain: &'a mut bool,
 }
+impl Access {
+    /// Rechecks authenticated store state inside the caller's actual SQL
+    /// transaction. Family-specific permissions and deadlines remain separate.
+    pub(super) async fn confirm(
+        &self,
+        connection: &mut SqliteConnection,
+        namespace: &Namespace,
+        clock: &dyn WorkspaceClock,
+        proof: &AttachmentProof,
+    ) -> Result<WorkspaceBinding, OperationError> {
+        namespace.validate()?;
+        super::unchanged(
+            connection,
+            self.current.input(),
+            self.authority.catalog,
+            &self.root,
+            &self.grant,
+        )
+        .await?;
+        if let Some(state) = self.authority.authorization {
+            grants::check_state(connection, state).await?;
+        }
+        check_head(
+            connection,
+            self.authority
+                .inventory
+                .ok_or(OperationError::UnsupportedOperation)?,
+        )
+        .await?;
+        self.minimum_proof.confirm(connection).await?;
+        if let Some(identity) = &self.identity_proof {
+            identity.confirm(connection).await?;
+        }
+        let current = self
+            .record
+            .authenticate(self.current.input(), proof, clock.now()?)?;
+        same_binding(&self.current, &current)?;
+        if current.observed_at() < self.current.observed_at() {
+            return Err(WorkspaceError::Unavailable.into());
+        }
+        namespace.validate()?;
+        Ok(current)
+    }
+}
 impl Turn<'_> {
-    async fn access(
+    pub(super) async fn access(
         &mut self,
         binding: &WorkspaceBinding,
         minimum: radroots_storage::inventory::InventoryCheckpointRef,
@@ -135,9 +189,7 @@ impl Turn<'_> {
             self.selected,
             self.crypto,
             &current,
-            authority
-                .inventory
-                .ok_or(OperationError::UnsupportedOperation)?,
+            &authority,
             minimum,
         )
         .await?;
@@ -149,6 +201,7 @@ impl Turn<'_> {
             grant,
             current,
             minimum_proof,
+            identity_proof: None,
             projection_proof: None,
             mapping_read: None,
         })
@@ -171,15 +224,29 @@ impl Turn<'_> {
         let operation = context.operation_id();
         let digest = request.command().digest();
         // Retained identity precedes every fresh deadline or pool-existence check.
-        if let Some(retained) = read_operation(
+        let retained = read_operation(
             self.connection,
             self.selected,
             self.crypto,
             request.binding(),
             operation,
         )
-        .await?
-        {
+        .await?;
+        access.identity_proof = Some(
+            checkpoint::authenticate_identity(
+                self.connection,
+                self.selected,
+                self.crypto,
+                &access.current,
+                &access.authority,
+                checkpoint::IdentityTarget::Operation(
+                    operation,
+                    retained.as_ref().map(Retained::identity).transpose()?,
+                ),
+            )
+            .await?,
+        );
+        if let Some(retained) = retained {
             if retained.digest != digest {
                 return Err(OperationError::IdempotencyConflict);
             }
@@ -241,10 +308,7 @@ impl Turn<'_> {
                 self.selected,
                 self.crypto,
                 &access.current,
-                access
-                    .authority
-                    .inventory
-                    .ok_or(OperationError::UnsupportedOperation)?,
+                &access.authority,
                 request.command().pool_id(),
                 before,
             )
@@ -359,40 +423,76 @@ impl Turn<'_> {
         };
         let command: &RawValue = serde_json::from_slice(request.command().protected_wire())
             .map_err(|_| OperationError::InvalidCommand)?;
-        let protected_operation = self
-            .crypto
-            .seal_stock_record_for_catalog(
-                self.selected,
-                "operation",
-                operation.as_bytes(),
-                catalog,
-                &encode_operation(
-                    &OperationWire {
-                        version: record_version(catalog)?,
-                        before: if catalog >= 3 { Some(before) } else { None },
-                        selection: request.binding().input(),
-                        scope: request.binding().scope(),
-                        principal: request.binding().principal_id(),
-                        grant_revision: request.binding().grant_revision(),
-                        grant_expires_at: request.binding().expires_at(),
-                        observed_at: request.binding().observed_at(),
-                        minimum_revision: request.minimum_checkpoint().revision(),
-                        minimum_head: request.minimum_checkpoint().head(),
+        let operation_body = encode_operation(
+            &OperationWire {
+                version: record_version(catalog)?,
+                before: if catalog >= 3 { Some(before) } else { None },
+                selection: request.binding().input(),
+                scope: request.binding().scope(),
+                principal: request.binding().principal_id(),
+                grant_revision: request.binding().grant_revision(),
+                grant_expires_at: request.binding().expires_at(),
+                observed_at: request.binding().observed_at(),
+                minimum_revision: request.minimum_checkpoint().revision(),
+                minimum_head: request.minimum_checkpoint().head(),
+                transaction,
+                revision,
+                previous_head: checkpoint.head,
+                head,
+                command,
+                pool,
+                movement,
+            },
+            catalog,
+            access.authority.authorization,
+            mapping.as_ref().map(|value| value.effect),
+        )?;
+        let framed = if catalog == 7 {
+            Some(
+                super::ledger::prepare(
+                    self.crypto,
+                    self.selected,
+                    super::ledger::Header {
+                        version: 5,
+                        family: super::ledger::Family::Inventory,
+                        namespace: SellerAuthoritySelection::from_attachment(self.selected),
+                        actor: request.binding().actor(),
+                        operation,
+                        digest,
                         transaction,
                         revision,
-                        previous_head: checkpoint.head,
+                        previous: checkpoint.head,
                         head,
-                        command,
-                        pool,
-                        movement,
+                        pool: Some(pool.id()),
+                        order: None,
+                        related_operation: None,
+                        subject_grant: None,
+                        bytes: 0,
+                        parts: 0,
+                        body_digest: [0; 32],
                     },
-                    catalog,
-                    access.authority.authorization,
-                    mapping.as_ref().map(|value| value.effect),
-                )?,
+                    &operation_body,
+                )
+                .await?,
             )
-            .await?;
+        } else {
+            None
+        };
+        let protected_operation = if let Some(framed) = &framed {
+            framed.protected.clone()
+        } else {
+            self.crypto
+                .seal_stock_record_for_catalog(
+                    self.selected,
+                    "operation",
+                    operation.as_bytes(),
+                    catalog,
+                    &operation_body,
+                )
+                .await?
+        };
         access.authority.inventory = Some(InventoryCheckpoint {
+            orders: checkpoint.orders,
             mappings: checkpoint
                 .mappings
                 .map(|count| {
@@ -443,6 +543,7 @@ impl Turn<'_> {
             if let Some(state)=access.authority.authorization { grants::check_state(&mut tx,state).await?; }
             check_head(&mut tx,checkpoint).await?;
             access.minimum_proof.confirm(&mut tx).await?;
+            if let Some(identity)=&access.identity_proof {identity.confirm(&mut tx).await?;}
             if let Some(proof)=&access.projection_proof {proof.confirm(&mut tx).await?;}
             let current=access.record.authenticate(request.binding().input(),&proof,self.clock.now()?)?;
             same_binding(request.binding(),&current)?;
@@ -468,6 +569,7 @@ impl Turn<'_> {
             }
             sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected) VALUES(?,?,?,?,?,?,?,?,?)")
                 .bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(digest.as_bytes().as_slice()).bind(transaction.as_bytes().as_slice()).bind(pool.id().as_bytes().as_slice()).bind(revision.get() as i64).bind(head.as_bytes().as_slice()).bind(protected_operation).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+            if let Some(framed)=&framed {framed.insert_parts(&mut tx,request.binding().actor(),operation).await?;}
             if let (Some(id),Some(protected))=(movement,protected_movement) {
             sqlx::query("INSERT INTO stock_movements(movement_id,actor,grant_id,operation_id,pool_id,protected) VALUES(?,?,?,?,?,?)").bind(id.as_slice()).bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(pool.id().as_bytes().as_slice()).bind(protected).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             }
@@ -507,6 +609,7 @@ impl Turn<'_> {
             if let Some(state)=access.authority.authorization { grants::check_state(&mut tx,state).await?; }
             check_head(&mut tx,access.authority.inventory.ok_or(OperationError::UnsupportedOperation)?).await?;
             access.minimum_proof.confirm(&mut tx).await?;
+            if let Some(identity)=&access.identity_proof {identity.confirm(&mut tx).await?;}
             if let Some(proof)=&access.projection_proof {proof.confirm(&mut tx).await?;}
             if let Some(mapping)=&access.mapping_read {mapping.confirm(&mut tx).await?;}
             let current=access.record.authenticate(access.current.input(),proof,self.clock.now()?)?;
@@ -517,6 +620,10 @@ impl Turn<'_> {
             if let Some(retained)=operation {
                 let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND operation_id=? AND protected=?").bind(current.actor().participant().as_bytes().as_slice()).bind(retained.receipt.attempt().operation_id().as_bytes().as_slice()).bind(&retained.protected).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
                 if count!=1 {return Err(OperationError::RecoveryRequired);}
+                if let Some((header,parts))=&retained.frame {
+                    super::ledger::confirm_header(&mut tx,header,&retained.protected).await?;
+                    super::ledger::confirm_parts(&mut tx,header.actor,header.operation,*parts,header.parts).await?;
+                }
                 let movement_count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_movements WHERE actor=? AND operation_id=?").bind(current.actor().participant().as_bytes().as_slice()).bind(retained.receipt.attempt().operation_id().as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
                 if movement_count!=i64::from(retained.movement.is_some()) {return Err(OperationError::RecoveryRequired);}
                 if let (Some(id),Some(protected))=(retained.movement,retained.movement_protected.as_ref()) {
@@ -542,7 +649,7 @@ impl Turn<'_> {
         digest: Option<CommandDigest>,
         proof: AttachmentProof,
     ) -> Result<Option<InventoryReceipt>, OperationError> {
-        let access = self.access(&binding, minimum, &proof).await?;
+        let mut access = self.access(&binding, minimum, &proof).await?;
         let result = read_operation(
             self.connection,
             self.selected,
@@ -551,6 +658,20 @@ impl Turn<'_> {
             operation,
         )
         .await?;
+        access.identity_proof = Some(
+            checkpoint::authenticate_identity(
+                self.connection,
+                self.selected,
+                self.crypto,
+                &access.current,
+                &access.authority,
+                checkpoint::IdentityTarget::Operation(
+                    operation,
+                    result.as_ref().map(Retained::identity).transpose()?,
+                ),
+            )
+            .await?,
+        );
         if !access.record.allows_action(StockAction::ReadOperations) {
             return Err(OperationError::Unauthorized);
         }
@@ -594,10 +715,7 @@ impl Turn<'_> {
             self.selected,
             self.crypto,
             &access.current,
-            access
-                .authority
-                .inventory
-                .ok_or(OperationError::UnsupportedOperation)?,
+            &access.authority,
             key,
             result,
         )
@@ -627,10 +745,7 @@ impl Turn<'_> {
                 self.selected,
                 self.crypto,
                 &access.current,
-                access
-                    .authority
-                    .inventory
-                    .ok_or(OperationError::UnsupportedOperation)?,
+                &access.authority,
                 id,
                 result.as_ref().map(|v| v.pool),
             )
@@ -704,16 +819,31 @@ async fn read_pool(
         protected,
     }))
 }
-struct Retained {
-    original_grant: GrantId,
-    previous_head: Option<CheckpointDigest>,
-    movement: Option<[u8; 32]>,
-    movement_protected: Option<Vec<u8>>,
-    receipt: InventoryReceipt,
-    digest: CommandDigest,
-    protected: Vec<u8>,
+pub(super) struct Retained {
+    pub(super) frame: Option<(super::ledger::Header, [u8; 32])>,
+    pub(super) original_grant: GrantId,
+    pub(super) previous_head: Option<CheckpointDigest>,
+    pub(super) movement: Option<[u8; 32]>,
+    pub(super) movement_protected: Option<Vec<u8>>,
+    pub(super) receipt: InventoryReceipt,
+    pub(super) digest: CommandDigest,
+    pub(super) protected: Vec<u8>,
 }
-async fn read_operation(
+impl Retained {
+    fn identity(&self) -> Result<checkpoint::EntryIdentity, OperationError> {
+        Ok(checkpoint::EntryIdentity {
+            operation: self.receipt.attempt().operation_id(),
+            revision: self.receipt.checkpoint().revision(),
+            head: self
+                .receipt
+                .checkpoint()
+                .head()
+                .ok_or(OperationError::RecoveryRequired)?,
+            protected_digest: Sha256::digest(&self.protected).into(),
+        })
+    }
+}
+pub(super) async fn read_operation(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,
@@ -731,16 +861,40 @@ async fn read_operation(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let clear = crypto
-        .open_stock_record_for_catalog(
-            input,
-            "operation",
-            operation.as_bytes(),
-            catalog,
-            &protected,
+    let (frame, request, decoded) = if catalog == 7 {
+        let retained = super::ledger::read(connection, input, crypto, operation)
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?;
+        if retained.protected != protected {
+            return Err(OperationError::RecoveryRequired);
+        }
+        if retained.header.family != super::ledger::Family::Inventory {
+            return Err(OperationError::IdempotencyConflict);
+        }
+        let (request, decoded) = decode_operation(retained.body.as_slice(), catalog)?;
+        if retained.header.actor != request.binding().actor()
+            || retained.header.previous != decoded.previous_head
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        (
+            Some((retained.header, retained.parts_witness)),
+            request,
+            decoded,
         )
-        .await?;
-    let (request, decoded) = clear.expose_secret(|bytes| decode_operation(bytes, catalog))?;
+    } else {
+        let clear = crypto
+            .open_stock_record_for_catalog(
+                input,
+                "operation",
+                operation.as_bytes(),
+                catalog,
+                &protected,
+            )
+            .await?;
+        let (request, decoded) = clear.expose_secret(|bytes| decode_operation(bytes, catalog))?;
+        (None, request, decoded)
+    };
     if !SellerAuthoritySelection::from_attachment(request.binding().input())
         .matches_attachment(binding.input())
         || request.binding().actor().participant() != binding.actor().participant()
@@ -862,6 +1016,7 @@ async fn read_operation(
         )?
     };
     Ok(Some(Retained {
+        frame,
         original_grant: request.binding().input().grant_id(),
         previous_head: decoded.previous_head,
         movement: decoded.movement,

@@ -709,7 +709,7 @@ fn stock_root_context(
     input: &super::AttachmentInput,
     version: i64,
 ) -> Result<EnvelopeContext, WorkspaceError> {
-    if matches!(version, 4..=6) {
+    if matches!(version, 4..=7) {
         use sha2::{Digest, Sha256};
         let namespace =
             radroots_storage::workspace::seller_stock::SellerAuthoritySelection::from_attachment(
@@ -726,8 +726,10 @@ fn stock_root_context(
             b"radroots.seller_stock.authority_context.v4\0"
         } else if version == 5 {
             b"radroots.seller_stock.authority_context.v5\0"
-        } else {
+        } else if version == 6 {
             b"radroots.seller_stock.authority_context.v6\0"
+        } else {
+            b"radroots.seller_stock.authority_context.v7\0"
         });
         hash.update(wire.as_slice());
         let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
@@ -740,8 +742,10 @@ fn stock_root_context(
                 "radroots.seller_stock.authority.v4"
             } else if version == 5 {
                 "radroots.seller_stock.authority.v5"
-            } else {
+            } else if version == 6 {
                 "radroots.seller_stock.authority.v6"
+            } else {
+                "radroots.seller_stock.authority.v7"
             })
             .map_err(|_| WorkspaceError::InvalidInput)?,
         ));
@@ -777,6 +781,10 @@ fn stock_record_context(
         "source_record" => (
             "radroots.seller_stock.source_record",
             "radroots.seller_stock.source_record.v1",
+        ),
+        "operation_part" => (
+            "radroots.seller_stock.operation_part",
+            "radroots.seller_stock.operation_part.v1",
         ),
         "source_evidence" => (
             "radroots.seller_stock.source_evidence",
@@ -827,11 +835,12 @@ fn stock_record_context_for_catalog(
 ) -> Result<EnvelopeContext, WorkspaceError> {
     let original = stock_record_context(input, kind, id)?;
     let schema = match (catalog, kind) {
-        (2, _) | (3..=6, "pool") => return Ok(original),
+        (2, _) | (3..=7, "pool") => return Ok(original),
         (3, "operation") => "radroots.seller_stock.operation.v2",
         (4, "operation") => "radroots.seller_stock.operation.v3",
         (5 | 6, "operation") => "radroots.seller_stock.operation.v4",
-        (3..=6, "movement") => "radroots.seller_stock.movement.v2",
+        (7, "operation") => "radroots.seller_stock.operation.v5",
+        (3..=7, "movement") => "radroots.seller_stock.movement.v2",
         _ => return Err(WorkspaceError::RecoveryRequired),
     };
     Ok(EnvelopeContext::new(
