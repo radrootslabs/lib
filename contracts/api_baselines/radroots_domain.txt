@@ -74,6 +74,8 @@ impl core::fmt::Debug for radroots_domain::listing::ListingCoordinate
 pub fn radroots_domain::listing::ListingCoordinate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_domain::listing::ListingCoordinate
 pub fn radroots_domain::listing::ListingCoordinate::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::listing::ListingCoordinate
+pub fn radroots_domain::listing::ListingCoordinate::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::listing::ListingId(_)
 impl radroots_domain::listing::ListingId
 pub const fn radroots_domain::listing::ListingId::as_bytes(&self) -> &[u8; 16]
@@ -165,6 +167,18 @@ pub enum radroots_domain::stock::AvailableStockCorrection
 pub radroots_domain::stock::AvailableStockCorrection::Add
 pub radroots_domain::stock::AvailableStockCorrection::Remove
 pub radroots_domain::stock::AvailableStockCorrection::Spoil
+#[non_exhaustive] pub enum radroots_domain::stock::MappingError
+pub radroots_domain::stock::MappingError::InvalidVersion
+pub radroots_domain::stock::MappingError::Quantity(radroots_domain::QuantityError)
+pub radroots_domain::stock::MappingError::Stock(radroots_domain::stock::StockError)
+pub radroots_domain::stock::MappingError::ZeroDraw
+impl core::convert::From<radroots_domain::QuantityError> for radroots_domain::stock::MappingError
+pub fn radroots_domain::stock::MappingError::from(radroots_domain::QuantityError) -> Self
+impl core::convert::From<radroots_domain::stock::StockError> for radroots_domain::stock::MappingError
+pub fn radroots_domain::stock::MappingError::from(radroots_domain::stock::StockError) -> Self
+impl core::error::Error for radroots_domain::stock::MappingError
+impl core::fmt::Display for radroots_domain::stock::MappingError
+pub fn radroots_domain::stock::MappingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::stock::StockError
 pub radroots_domain::stock::StockError::ConservationViolation
 pub radroots_domain::stock::StockError::FractionalCount
@@ -175,9 +189,34 @@ pub radroots_domain::stock::StockError::PrecisionLoss
 pub radroots_domain::stock::StockError::Underflow
 pub radroots_domain::stock::StockError::UnitMismatch
 pub radroots_domain::stock::StockError::ZeroMovement
+impl core::convert::From<radroots_domain::stock::StockError> for radroots_domain::stock::MappingError
+pub fn radroots_domain::stock::MappingError::from(radroots_domain::stock::StockError) -> Self
 impl core::error::Error for radroots_domain::stock::StockError
 impl core::fmt::Display for radroots_domain::stock::StockError
 pub fn radroots_domain::stock::StockError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::stock::OptionMappingKey
+impl radroots_domain::stock::OptionMappingKey
+pub const fn radroots_domain::stock::OptionMappingKey::listing(self) -> radroots_domain::listing::ListingCoordinate
+pub const fn radroots_domain::stock::OptionMappingKey::new(radroots_domain::listing::ListingCoordinate, radroots_domain::ListingOptionId) -> Self
+pub const fn radroots_domain::stock::OptionMappingKey::option_id(self) -> radroots_domain::ListingOptionId
+impl core::fmt::Debug for radroots_domain::stock::OptionMappingKey
+pub fn radroots_domain::stock::OptionMappingKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::stock::OptionPoolMapping
+impl radroots_domain::stock::OptionPoolMapping
+pub fn radroots_domain::stock::OptionPoolMapping::draw_for_sales(self, radroots_domain::PositiveDecimal) -> core::result::Result<radroots_domain::stock::StockTicks, radroots_domain::stock::MappingError>
+pub const fn radroots_domain::stock::OptionPoolMapping::key(self) -> radroots_domain::stock::OptionMappingKey
+pub fn radroots_domain::stock::OptionPoolMapping::new(radroots_domain::stock::OptionMappingKey, radroots_domain::PoolId, radroots_domain::stock::PoolUnit, radroots_domain::Quantity, radroots_domain::Sequence) -> core::result::Result<Self, radroots_domain::stock::MappingError>
+pub const fn radroots_domain::stock::OptionPoolMapping::per_sale_ticks(self) -> radroots_domain::stock::StockTicks
+pub const fn radroots_domain::stock::OptionPoolMapping::per_sale_unit(self) -> radroots_domain::Quantity
+pub const fn radroots_domain::stock::OptionPoolMapping::pool_id(self) -> radroots_domain::PoolId
+pub const fn radroots_domain::stock::OptionPoolMapping::pool_unit(self) -> radroots_domain::stock::PoolUnit
+pub const fn radroots_domain::stock::OptionPoolMapping::version(self) -> radroots_domain::Sequence
+impl core::fmt::Debug for radroots_domain::stock::OptionPoolMapping
+pub fn radroots_domain::stock::OptionPoolMapping::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_domain::stock::OptionPoolMapping
+pub fn radroots_domain::stock::OptionPoolMapping::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::OptionPoolMapping
+pub fn radroots_domain::stock::OptionPoolMapping::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::PhysicalBalances
 pub radroots_domain::stock::PhysicalBalances::available: radroots_domain::stock::StockTicks
 pub radroots_domain::stock::PhysicalBalances::committed_hold: radroots_domain::stock::StockTicks
@@ -443,6 +482,8 @@ pub radroots_domain::QuantityError::PrecisionLoss
 pub radroots_domain::QuantityError::UnitMismatch
 impl core::convert::From<radroots_domain::AmountError> for radroots_domain::QuantityError
 pub fn radroots_domain::QuantityError::from(radroots_domain::AmountError) -> Self
+impl core::convert::From<radroots_domain::QuantityError> for radroots_domain::stock::MappingError
+pub fn radroots_domain::stock::MappingError::from(radroots_domain::QuantityError) -> Self
 impl core::error::Error for radroots_domain::QuantityError
 pub fn radroots_domain::QuantityError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
 impl core::fmt::Display for radroots_domain::QuantityError
@@ -1044,6 +1085,8 @@ pub fn radroots_domain::Quantity::new(radroots_domain::Decimal, radroots_domain:
 pub const fn radroots_domain::Quantity::unit(self) -> radroots_domain::listing::MeasurementUnit
 impl core::fmt::Debug for radroots_domain::Quantity
 pub fn radroots_domain::Quantity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::Quantity
+pub fn radroots_domain::Quantity::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::ReadinessClaim
 impl radroots_domain::ReadinessClaim
 pub const fn radroots_domain::ReadinessClaim::agreement(&self) -> radroots_domain::RecordId

@@ -153,12 +153,74 @@ struct Authority {
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct InventoryCheckpoint {
+struct InventoryCheckpointLegacy {
     revision: Sequence,
     pools: Sequence,
     movements: Sequence,
     #[serde(deserialize_with = "required_nullable")]
     head: Option<radroots_domain::CheckpointDigest>,
+}
+#[derive(Clone, Copy)]
+struct InventoryCheckpoint {
+    revision: Sequence,
+    pools: Sequence,
+    movements: Sequence,
+    head: Option<radroots_domain::CheckpointDigest>,
+    mappings: Option<Sequence>,
+}
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InventoryCheckpointCurrent {
+    revision: Sequence,
+    pools: Sequence,
+    movements: Sequence,
+    mappings: Sequence,
+    #[serde(deserialize_with = "required_nullable")]
+    head: Option<radroots_domain::CheckpointDigest>,
+}
+impl From<InventoryCheckpointLegacy> for InventoryCheckpoint {
+    fn from(value: InventoryCheckpointLegacy) -> Self {
+        Self {
+            revision: value.revision,
+            pools: value.pools,
+            movements: value.movements,
+            head: value.head,
+            mappings: None,
+        }
+    }
+}
+impl From<InventoryCheckpointCurrent> for InventoryCheckpoint {
+    fn from(value: InventoryCheckpointCurrent) -> Self {
+        Self {
+            revision: value.revision,
+            pools: value.pools,
+            movements: value.movements,
+            head: value.head,
+            mappings: Some(value.mappings),
+        }
+    }
+}
+impl InventoryCheckpoint {
+    fn legacy(self) -> Result<InventoryCheckpointLegacy, WorkspaceError> {
+        if self.mappings.is_some() {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+        Ok(InventoryCheckpointLegacy {
+            revision: self.revision,
+            pools: self.pools,
+            movements: self.movements,
+            head: self.head,
+        })
+    }
+    fn current(self) -> Result<InventoryCheckpointCurrent, WorkspaceError> {
+        Ok(InventoryCheckpointCurrent {
+            revision: self.revision,
+            pools: self.pools,
+            movements: self.movements,
+            head: self.head,
+            mappings: self.mappings.ok_or(WorkspaceError::RecoveryRequired)?,
+        })
+    }
 }
 fn required_nullable<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
     d: D,
@@ -180,7 +242,7 @@ struct InventoryAuthorityWire {
     input: AttachmentInput,
     transaction: TransactionId,
     revocation: Sequence,
-    inventory: InventoryCheckpoint,
+    inventory: InventoryCheckpointLegacy,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -190,11 +252,42 @@ struct AuthorityV4 {
     administrator: GrantId,
     transaction: TransactionId,
     revocation: Sequence,
-    inventory: InventoryCheckpoint,
+    inventory: InventoryCheckpointLegacy,
+    authorization: StockAuthorizationRef,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityV5 {
+    version: u8,
+    namespace: SellerAuthoritySelection,
+    administrator: GrantId,
+    transaction: TransactionId,
+    revocation: Sequence,
+    #[serde(deserialize_with = "object")]
+    inventory: InventoryCheckpointCurrent,
     authorization: StockAuthorizationRef,
 }
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
+        if self.catalog == 5 {
+            let bytes = serde_json::to_vec(&AuthorityV5 {
+                version: 5,
+                namespace: SellerAuthoritySelection::from_attachment(&self.input),
+                administrator: self.input.grant_id(),
+                transaction: self.transaction,
+                revocation: self.revocation,
+                inventory: self
+                    .inventory
+                    .ok_or(WorkspaceError::RecoveryRequired)?
+                    .current()?,
+                authorization: self.authorization.ok_or(WorkspaceError::RecoveryRequired)?,
+            })
+            .map_err(|_| WorkspaceError::StorageFailure)?;
+            if bytes.len() > 16 * 1024 {
+                return Err(WorkspaceError::Capacity);
+            }
+            return Ok(zeroize::Zeroizing::new(bytes));
+        }
         if self.catalog == 4 {
             let bytes = serde_json::to_vec(&AuthorityV4 {
                 version: 4,
@@ -202,7 +295,10 @@ impl Authority {
                 administrator: self.input.grant_id(),
                 transaction: self.transaction,
                 revocation: self.revocation,
-                inventory: self.inventory.ok_or(WorkspaceError::RecoveryRequired)?,
+                inventory: self
+                    .inventory
+                    .ok_or(WorkspaceError::RecoveryRequired)?
+                    .legacy()?,
                 authorization: self.authorization.ok_or(WorkspaceError::RecoveryRequired)?,
             })
             .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -223,7 +319,7 @@ impl Authority {
                 input: self.input.clone(),
                 transaction: self.transaction,
                 revocation: self.revocation,
-                inventory,
+                inventory: inventory.legacy()?,
             }),
         }
         .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -257,7 +353,7 @@ impl Authority {
                     input: v.input,
                     transaction: v.transaction,
                     revocation: v.revocation,
-                    inventory: Some(v.inventory),
+                    inventory: Some(v.inventory.into()),
                     authorization: None,
                 }
             }
@@ -274,7 +370,24 @@ impl Authority {
                     input: v.namespace.attachment(v.administrator)?,
                     transaction: v.transaction,
                     revocation: v.revocation,
-                    inventory: Some(v.inventory),
+                    inventory: Some(v.inventory.into()),
+                    authorization: Some(v.authorization),
+                }
+            }
+            5 => {
+                let v: AuthorityV5 = closed_record(bytes)?;
+                if v.version != 5
+                    || v.authorization.generation() != v.revocation
+                    || (v.inventory.revision.get() == 0) != v.inventory.head.is_none()
+                {
+                    return Err(WorkspaceError::RecoveryRequired);
+                }
+                Self {
+                    catalog,
+                    input: v.namespace.attachment(v.administrator)?,
+                    transaction: v.transaction,
+                    revocation: v.revocation,
+                    inventory: Some(v.inventory.into()),
                     authorization: Some(v.authorization),
                 }
             }
@@ -313,6 +426,7 @@ pub(super) async fn initialize(
             transaction: initial.transaction,
             revocation: Sequence::new(1).map_err(|_| WorkspaceError::InvalidInput)?,
             inventory: Some(InventoryCheckpoint {
+                mappings: Some(Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?),
                 revision: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
                 head: None,
                 pools: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
@@ -359,7 +473,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=4")
+            sqlx::query("PRAGMA user_version=5")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -406,7 +520,7 @@ async fn read(
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
     let clear = crypto.open_stock_root(input, catalog, &root).await?;
     let authority = clear.expose_secret(|bytes| Authority::decode(bytes, catalog))?;
-    if (if catalog == 4 {
+    if (if catalog >= 4 {
         !SellerAuthoritySelection::from_attachment(&authority.input).matches_attachment(input)
     } else {
         authority.input != *input
@@ -414,7 +528,7 @@ async fn read(
     {
         return Err(WorkspaceError::WrongNamespace);
     }
-    let record = if catalog == 4 {
+    let record = if catalog >= 4 {
         grants::check_state(
             connection,
             authority
@@ -527,7 +641,7 @@ pub(super) async fn revoke(
     }
     let (mut authority, mut record, old_root, old_grant) =
         read(connection, selected, crypto).await?;
-    if authority.catalog == 4 {
+    if authority.catalog >= 4 {
         return Err(WorkspaceError::Unauthorized);
     }
     let expiry = record
@@ -625,6 +739,21 @@ async fn unchanged(
 }
 
 impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
+    fn option_mapping(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        key: radroots_domain::stock::OptionMappingKey,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_domain::stock::OptionPoolMapping>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.option_mapping(binding, minimum, key, proof))
+    }
     fn execute_inventory(
         &self,
         request: radroots_storage::inventory::InventoryRequest,
@@ -681,4 +810,19 @@ fn closed_record<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> Result<T, Worksp
         return Err(WorkspaceError::RecoveryRequired);
     }
     serde_json::from_slice(bytes).map_err(|_| WorkspaceError::RecoveryRequired)
+}
+fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<T, D::Error> {
+    struct Object<T>(std::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for Object<T> {
+        type Value = T;
+        fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("a closed object")
+        }
+        fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<T, A::Error> {
+            T::deserialize(serde::de::value::MapAccessDeserializer::new(map))
+        }
+    }
+    deserializer.deserialize_map(Object(std::marker::PhantomData))
 }

@@ -1114,3 +1114,6 @@ async fn a_mutable_pool_index_cannot_hide_a_more_recent_protected_pool_effect() 
 
 #[path = "stock_grants.rs"]
 mod grants;
+
+#[path = "option_mapping.rs"]
+mod mapping;

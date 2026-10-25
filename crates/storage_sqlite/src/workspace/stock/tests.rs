@@ -16,7 +16,7 @@ impl WorkspaceClock for Clock {
 }
 
 #[tokio::test]
-async fn catalog4_grant_set_reopens_with_original_namespace_after_one_grant_change() {
+async fn current_grant_set_reopens_with_original_namespace_after_one_grant_change() {
     let fixture = CryptoFixture::new();
     let path = fixture.root().join("grant-reopen");
     let enrollment = StockEnrollment::prepare(
@@ -109,7 +109,7 @@ async fn catalog4_grant_set_reopens_with_original_namespace_after_one_grant_chan
     )
     .await
     .unwrap();
-    assert_eq!(schema::admit(&mut connection).await, Ok(4));
+    assert_eq!(schema::admit(&mut connection).await, Ok(5));
     assert_eq!(schema::integrity(&mut connection).await, Ok(()));
     let root: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_authority")
         .fetch_one(&mut connection)
@@ -117,12 +117,20 @@ async fn catalog4_grant_set_reopens_with_original_namespace_after_one_grant_chan
         .unwrap();
     let clear = fixture
         .crypto()
-        .open_stock_root(enrollment.input(), 4, &root)
+        .open_stock_root(enrollment.input(), 5, &root)
         .await
         .unwrap();
     let authority = clear
-        .expose_secret(|bytes| Authority::decode(bytes, 4))
+        .expose_secret(|bytes| Authority::decode(bytes, 5))
         .unwrap();
+    clear.expose_secret(|bytes| {
+        let original:serde_json::Value=serde_json::from_slice(bytes).unwrap();
+        assert_eq!(original["inventory"]["mappings"],"0");
+        for bad in [serde_json::json!([]),serde_json::json!({"revision":"1","pools":"1","movements":"1","head":original["inventory"]["head"]})] {
+            let mut value=original.clone();value["inventory"]=bad;
+            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),5).is_err());
+        }
+    });
     assert_eq!(authority.input, *enrollment.input());
     assert_eq!(
         grants::check_state(&mut connection, authority.authorization.unwrap()).await,
@@ -147,7 +155,7 @@ async fn catalog4_grant_set_reopens_with_original_namespace_after_one_grant_chan
 }
 
 #[tokio::test]
-async fn root4_context_binds_the_complete_namespace_independently_of_caller_grants() {
+async fn current_and_retained_roots_bind_the_complete_namespace_with_distinct_catalog_contexts() {
     use radroots_storage::workspace::seller_stock::SellerAuthoritySelection;
     use serde_json::json;
     let fixture = CryptoFixture::new();
@@ -170,41 +178,52 @@ async fn root4_context_binds_the_complete_namespace_independently_of_caller_gran
     let caller = namespace.attachment(GrantId::from_bytes([9; 32])).unwrap();
     let crypto = fixture.crypto();
     let clear = b"synthetic context payload";
-    let current = crypto.seal_stock_root(&owner, 4, clear).await.unwrap();
-    crypto
-        .open_stock_root(&caller, 4, &current)
-        .await
-        .unwrap()
-        .expose_secret(|bytes| assert_eq!(bytes, clear));
-    let retained = crypto.seal_stock_root(&owner, 3, clear).await.unwrap();
-    assert!(crypto.open_stock_root(&caller, 3, &retained).await.is_err());
-    assert!(crypto.open_stock_root(&owner, 3, &current).await.is_err());
-    let value = serde_json::to_value(namespace).unwrap();
-    let other_key = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
-    for (path, bad) in [
-        ("/workspace_id", json!("0b".repeat(32))),
-        ("/authority/executor_id", json!("0b".repeat(32))),
-        ("/authority/generation", json!("2")),
-        ("/participant", json!(other_key)),
-        ("/endpoint", json!("local://another-namespace")),
-        ("/endpoint_identity", json!(other_key)),
-        ("/checkpoint/digest", json!("0b".repeat(32))),
-        ("/route_digest", json!("0b".repeat(32))),
-    ] {
-        let mut changed = value.clone();
-        *changed.pointer_mut(path).unwrap() = bad;
-        let selected: SellerAuthoritySelection = serde_json::from_value(changed).unwrap();
+    for version in [4, 5] {
+        let current = crypto
+            .seal_stock_root(&owner, version, clear)
+            .await
+            .unwrap();
+        crypto
+            .open_stock_root(&caller, version, &current)
+            .await
+            .unwrap()
+            .expose_secret(|bytes| assert_eq!(bytes, clear));
+        let retained = crypto.seal_stock_root(&owner, 3, clear).await.unwrap();
+        assert!(crypto.open_stock_root(&caller, 3, &retained).await.is_err());
+        assert!(crypto.open_stock_root(&owner, 3, &current).await.is_err());
         assert!(
             crypto
-                .open_stock_root(
-                    &selected.attachment(GrantId::from_bytes([9; 32])).unwrap(),
-                    4,
-                    &current
-                )
+                .open_stock_root(&owner, if version == 4 { 5 } else { 4 }, &current)
                 .await
-                .is_err(),
-            "{path}"
+                .is_err()
         );
+        let value = serde_json::to_value(&namespace).unwrap();
+        let other_key = "c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5";
+        for (path, bad) in [
+            ("/workspace_id", json!("0b".repeat(32))),
+            ("/authority/executor_id", json!("0b".repeat(32))),
+            ("/authority/generation", json!("2")),
+            ("/participant", json!(other_key)),
+            ("/endpoint", json!("local://another-namespace")),
+            ("/endpoint_identity", json!(other_key)),
+            ("/checkpoint/digest", json!("0b".repeat(32))),
+            ("/route_digest", json!("0b".repeat(32))),
+        ] {
+            let mut changed = value.clone();
+            *changed.pointer_mut(path).unwrap() = bad;
+            let selected: SellerAuthoritySelection = serde_json::from_value(changed).unwrap();
+            assert!(
+                crypto
+                    .open_stock_root(
+                        &selected.attachment(GrantId::from_bytes([9; 32])).unwrap(),
+                        version,
+                        &current
+                    )
+                    .await
+                    .is_err(),
+                "{path}"
+            );
+        }
     }
 }
 
@@ -215,6 +234,11 @@ async fn retained_inventory_v2_keeps_original_records_and_refuses_new_correction
 #[tokio::test]
 async fn retained_inventory_v3_preserves_correction_and_original_records_without_upgrade() {
     retained_inventory_catalog(3).await;
+}
+#[tokio::test]
+async fn retained_inventory_v4_preserves_scoped_grants_and_original_effects_without_adding_mappings()
+ {
+    retained_inventory_catalog(4).await;
 }
 async fn retained_inventory_catalog(catalog: i64) {
     use radroots_storage::inventory::{InventoryCommandKind, InventoryOutcome};
@@ -236,14 +260,35 @@ async fn retained_inventory_catalog(catalog: i64) {
     )
     .unwrap();
     // Literal retained catalog/root shapes from published creation/correction source; not predecessor-binary evidence.
-    let clear=zeroize::Zeroizing::new(serde_json::to_vec(&serde_json::json!({"version":catalog,"input":input,"transaction":TransactionId::from_bytes([9;32]),"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null}})).unwrap());
     let crypto = fixture.crypto();
+    let grant_clear = if catalog == 4 {
+        StockGrantRecord::from_enrollment(record)
+            .unwrap()
+            .encode()
+            .unwrap()
+    } else {
+        record.encode().unwrap()
+    };
+    let grant = if catalog == 4 {
+        crypto
+            .seal_stock_record(&input, "grant", input.grant_id().as_bytes(), &grant_clear)
+            .await
+            .unwrap()
+    } else {
+        crypto
+            .seal_stock(&input, false, &grant_clear)
+            .await
+            .unwrap()
+    };
+    // The v4 namespace, grant2 and operation3 envelopes remain frozen literals.
+    let value = if catalog == 4 {
+        serde_json::json!({"version":4,"namespace":SellerAuthoritySelection::from_attachment(&input),"administrator":input.grant_id(),"transaction":TransactionId::from_bytes([9;32]),"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null},"authorization":grants::single_state(input.grant_id(),&grant).unwrap()})
+    } else {
+        serde_json::json!({"version":catalog,"input":input,"transaction":TransactionId::from_bytes([9;32]),"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null}})
+    };
+    let clear = zeroize::Zeroizing::new(serde_json::to_vec(&value).unwrap());
     let root = crypto
         .seal_stock_root(&input, catalog, &clear)
-        .await
-        .unwrap();
-    let grant = crypto
-        .seal_stock(&input, false, &record.encode().unwrap())
         .await
         .unwrap();
     let namespace = Namespace::acquire_kind(&path, true, Kind::SellerStock).unwrap();
@@ -270,10 +315,11 @@ async fn retained_inventory_catalog(catalog: i64) {
         .execute(&mut *tx)
         .await
         .unwrap();
-    sqlx::query(if catalog == 2 {
-        "PRAGMA user_version=2"
-    } else {
-        "PRAGMA user_version=3"
+    sqlx::query(match catalog {
+        2 => "PRAGMA user_version=2",
+        3 => "PRAGMA user_version=3",
+        4 => "PRAGMA user_version=4",
+        _ => unreachable!(),
     })
     .execute(&mut *tx)
     .await
@@ -346,12 +392,28 @@ async fn retained_inventory_catalog(catalog: i64) {
             .unwrap(),
         Some(created.clone())
     );
+    let mut mapping = serde_json::json!({"type":"stock.map_option","context":context,"input":{"listing":{"kind":30402,"author":participant(),"d":"0a".repeat(16)},"option_id":"0b".repeat(32),"pool_id":PoolId::from_bytes([8;32]),"expected_mapping_version":"0","per_sale_unit":{"amount":"1","unit":"each"}}});
+    mapping["context"]["operation_id"] = serde_json::json!(OperationId::from_bytes([11; 32]));
+    assert_eq!(
+        store
+            .execute_inventory(
+                InventoryRequest::from_protected_wire(
+                    binding.clone(),
+                    created.checkpoint(),
+                    &serde_json::to_vec(&mapping).unwrap()
+                )
+                .unwrap(),
+                copy()
+            )
+            .await,
+        Err(OperationError::UnsupportedOperation)
+    );
     let mut corrected = serde_json::json!({"type":"stock.adjust","context":context,"input":{"pool_id":PoolId::from_bytes([8;32]),"expected_version":"1","direction":"add","amount":"1","reason":"new correction profile"}});
     corrected["context"]["operation_id"] = serde_json::json!(OperationId::from_bytes([10; 32]));
     let correction = store
         .execute_inventory(
             InventoryRequest::from_protected_wire(
-                binding,
+                binding.clone(),
                 created.checkpoint(),
                 &serde_json::to_vec(&corrected).unwrap(),
             )
@@ -359,6 +421,7 @@ async fn retained_inventory_catalog(catalog: i64) {
             copy(),
         )
         .await;
+    let mut latest = created.checkpoint();
     if catalog == 2 {
         assert!(matches!(
             correction,
@@ -369,11 +432,69 @@ async fn retained_inventory_catalog(catalog: i64) {
             InventoryOutcome::Committed(value) => {
                 assert_eq!(value.pool().version().get(), 2);
                 assert_eq!(value.pool().balances().physical().available.get(), 2);
+                latest = value.checkpoint();
             }
             InventoryOutcome::Unknown(_) => panic!("retained correction must confirm"),
         }
     }
+    if catalog == 4 {
+        let child = StockGrantEnrollment::prepare(
+            &SellerAuthoritySelection::from_attachment(&input),
+            "retained-device".into(),
+            UnixSeconds::new(200).unwrap(),
+            StockGrantScope::full_inventory(),
+        )
+        .unwrap();
+        let receipt = match store
+            .enroll_stock_grant(binding.clone(), latest, &proof, &child)
+            .await
+            .unwrap()
+        {
+            StockGrantOutcome::Committed(value) => value,
+            _ => panic!("retained grant must confirm"),
+        };
+        latest = latest.with_authorization(receipt.authorization());
+        let delegated = store
+            .authenticate(child.input().clone(), child.proof())
+            .await
+            .unwrap();
+        let child_proof = child
+            .proof()
+            .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+            .unwrap();
+        assert_eq!(
+            store
+                .pool(delegated, latest, PoolId::from_bytes([8; 32]), child_proof)
+                .await
+                .unwrap()
+                .unwrap()
+                .snapshot()
+                .balances()
+                .physical()
+                .available
+                .get(),
+            2
+        );
+    }
     store.close().await.unwrap();
+    let reopened =
+        NativeWorkspace::open_seller_stock(&path, input.clone(), fixture.crypto(), Arc::new(Clock))
+            .await
+            .unwrap();
+    assert_eq!(
+        reopened
+            .inventory_operation(
+                binding,
+                latest,
+                OperationId::from_bytes([7; 32]),
+                None,
+                copy()
+            )
+            .await
+            .unwrap(),
+        Some(created)
+    );
+    reopened.close().await.unwrap();
     let mut connection = SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(path.join("stock_execution_v1.sqlite")),
     )
@@ -399,6 +520,13 @@ async fn retained_inventory_catalog(catalog: i64) {
         .unwrap();
     old.expose_secret(|bytes| {
         let value: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+        let value = if catalog == 4 {
+            assert_eq!(value["version"], 3);
+            assert!(value.get("mapping").is_none());
+            value["operation"].clone()
+        } else {
+            value
+        };
         assert_eq!(value["version"], if catalog == 2 { 1 } else { 2 });
         if catalog == 2 {
             assert!(value.get("before").is_none());
@@ -406,10 +534,11 @@ async fn retained_inventory_catalog(catalog: i64) {
             assert_eq!(value["before"], serde_json::Value::Null);
         }
     });
-    sqlx::query(if catalog == 2 {
-        "PRAGMA user_version=3"
-    } else {
-        "PRAGMA user_version=4"
+    sqlx::query(match catalog {
+        2 => "PRAGMA user_version=3",
+        3 => "PRAGMA user_version=4",
+        4 => "PRAGMA user_version=5",
+        _ => unreachable!(),
     })
     .execute(&mut connection)
     .await

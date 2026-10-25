@@ -43,6 +43,60 @@ impl serde::Serialize for ListingCoordinate {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for ListingCoordinate {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            kind: u16,
+            #[serde(deserialize_with = "canonical_author")]
+            author: PublicKey,
+            d: ListingId,
+        }
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Wire;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a closed NIP-99 listing coordinate object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<Wire, A::Error> {
+                <Wire as serde::Deserialize>::deserialize(
+                    serde::de::value::MapAccessDeserializer::new(map),
+                )
+            }
+        }
+        let wire = deserializer.deserialize_map(Visitor)?;
+        if wire.kind != 30402 {
+            return Err(serde::de::Error::custom(
+                "unsupported listing coordinate kind",
+            ));
+        }
+        Ok(Self::new(wire.author, wire.d))
+    }
+}
+
+#[cfg(feature = "serde")]
+fn canonical_author<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<PublicKey, D::Error> {
+    struct Author;
+    impl serde::de::Visitor<'_> for Author {
+        type Value = PublicKey;
+        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("a canonical lowercase public key")
+        }
+        fn visit_str<E: serde::de::Error>(self, value: &str) -> Result<PublicKey, E> {
+            let key = PublicKey::from_hex(value).map_err(E::custom)?;
+            if key.to_hex() != value {
+                return Err(E::custom("noncanonical listing author"));
+            }
+            Ok(key)
+        }
+    }
+    deserializer.deserialize_str(Author)
+}
+
 /// Exact revision identity and coordinate; bytes alone authenticate no source.
 #[derive(Clone, Copy, Eq, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]

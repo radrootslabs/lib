@@ -136,7 +136,9 @@ impl<'de> Deserialize<'de> for PoolSnapshot {
     }
 }
 
-fn object<'de, D: Deserializer<'de>, T: Deserialize<'de>>(deserializer: D) -> Result<T, D::Error> {
+pub(super) fn object<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<T, D::Error> {
     struct Visitor<T>(core::marker::PhantomData<T>);
     impl<'de, T: Deserialize<'de>> de::Visitor<'de> for Visitor<T> {
         type Value = T;

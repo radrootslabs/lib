@@ -140,6 +140,76 @@ pub(super) async fn authenticate_projection(
     pool: PoolId,
     projected: Option<PoolSnapshot>,
 ) -> Result<MinimumProof, OperationError> {
+    authenticate_projected(
+        connection,
+        input,
+        crypto,
+        binding,
+        current,
+        Projection::Pool(pool, projected),
+    )
+    .await
+}
+pub(super) async fn authenticate_mapping_projection(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    current: InventoryCheckpoint,
+    key: radroots_domain::stock::OptionMappingKey,
+    projected: Option<radroots_domain::stock::OptionPoolMapping>,
+) -> Result<MinimumProof, OperationError> {
+    authenticate_projected(
+        connection,
+        input,
+        crypto,
+        binding,
+        current,
+        Projection::Mapping(key, projected),
+    )
+    .await
+}
+enum Projection {
+    Pool(PoolId, Option<PoolSnapshot>),
+    Mapping(
+        radroots_domain::stock::OptionMappingKey,
+        Option<radroots_domain::stock::OptionPoolMapping>,
+    ),
+}
+impl Projection {
+    fn matches(&self, receipt: &InventoryReceipt) -> Result<bool, OperationError> {
+        let matched = match self {
+            Self::Pool(id, projected) if *id == receipt.pool().id() => {
+                Some(*projected == Some(receipt.pool()))
+            }
+            Self::Mapping(key, projected)
+                if receipt.mapping().is_some_and(|value| value.key() == *key) =>
+            {
+                Some(*projected == receipt.mapping())
+            }
+            _ => None,
+        };
+        match matched {
+            Some(true) => Ok(true),
+            Some(false) => Err(OperationError::RecoveryRequired),
+            None => Ok(false),
+        }
+    }
+    fn present(&self) -> bool {
+        match self {
+            Self::Pool(_, value) => value.is_some(),
+            Self::Mapping(_, value) => value.is_some(),
+        }
+    }
+}
+async fn authenticate_projected(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    current: InventoryCheckpoint,
+    projected: Projection,
+) -> Result<MinimumProof, OperationError> {
     let upper = current.revision.get();
     let mut expected = current.head;
     let mut hash = history_hash();
@@ -158,10 +228,7 @@ pub(super) async fn authenticate_projection(
             return Err(OperationError::RecoveryRequired);
         }
         hash_retained(&mut hash, revision, binding, operation, &retained)?;
-        if retained.receipt.pool().id() == pool {
-            if projected != Some(retained.receipt.pool()) {
-                return Err(OperationError::RecoveryRequired);
-            }
+        if projected.matches(&retained.receipt)? {
             return Ok(MinimumProof {
                 lower: revision,
                 upper,
@@ -170,7 +237,7 @@ pub(super) async fn authenticate_projection(
         }
         expected = retained.previous_head;
     }
-    if expected.is_some() || projected.is_some() {
+    if expected.is_some() || projected.present() {
         return Err(OperationError::RecoveryRequired);
     }
     Ok(MinimumProof {

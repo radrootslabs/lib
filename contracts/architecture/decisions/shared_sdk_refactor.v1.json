@@ -75,16 +75,22 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 4,
+    "schema_version": 5,
     "retained_enrollment_versions": [
       1
     ],
     "retained_inventory_versions": [
       2,
-      3
+      3,
+      4
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v4",
-    "inventory_operation_payload_schema": "radroots.seller_stock.operation.v3",
+    "authority_payload_schema": "radroots.seller_stock.authority.v5",
+    "inventory_operation_payload_schema": "radroots.seller_stock.operation.v4",
+    "mapping_payload_schema": "radroots.seller_stock.mapping.v1",
+    "mapping_owner_administration_required": true,
+    "mapping_changes_physical_stock": false,
+    "mapping_changes_pool_version": false,
+    "mapping_create_expected_version": 0,
     "inventory_movement_payload_schema": "radroots.seller_stock.movement.v2",
     "pool_tick_scale_explicit": true,
     "pool_tick_scale_encoding": "canonical_integer_string",

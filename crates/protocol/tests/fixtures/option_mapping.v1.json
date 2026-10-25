@@ -1,0 +1,88 @@
+{
+  "provenance": "Synthetic complete option mapping cases. Independent Python sorted ASCII schema keys, compact UTF-8 strings and exact string values implement the governed RFC8785 subset; fixed30402 is the sole numeric field. No Rust serializer/hash helper or product data is consumed.",
+  "oracle_python": "3.14.7 (main, Sep 29 2026, 14:50:11) [Clang 22.1.3 ]",
+  "cases": [
+    {
+      "wire": {
+        "type": "stock.map_option",
+        "context": {
+          "actor": {
+            "grant_id": "0303030303030303030303030303030303030303030303030303030303030303",
+            "organization": null,
+            "participant": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "role": "seller"
+          },
+          "approval": null,
+          "authority": {
+            "executor_id": "0202020202020202020202020202020202020202020202020202020202020202",
+            "generation": "1"
+          },
+          "correlation_id": null,
+          "expected": null,
+          "not_after": "200",
+          "operation_id": "0707070707070707070707070707070707070707070707070707070707070707",
+          "route_digest": "0606060606060606060606060606060606060606060606060606060606060606",
+          "workspace_id": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        "input": {
+          "listing": {
+            "kind": 30402,
+            "author": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "d": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+          },
+          "option_id": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+          "pool_id": "0808080808080808080808080808080808080808080808080808080808080808",
+          "per_sale_unit": {
+            "amount": "250",
+            "unit": "g"
+          },
+          "expected_mapping_version": "0"
+        }
+      },
+      "semantic_canonical_utf8": "{\"context\":{\"actor\":{\"grant_id\":\"0303030303030303030303030303030303030303030303030303030303030303\",\"organization\":null,\"participant\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"role\":\"seller\"},\"approval\":null,\"authority\":{\"executor_id\":\"0202020202020202020202020202020202020202020202020202020202020202\",\"generation\":\"1\"},\"expected\":null,\"not_after\":\"200\",\"operation_id\":\"0707070707070707070707070707070707070707070707070707070707070707\",\"route_digest\":\"0606060606060606060606060606060606060606060606060606060606060606\",\"workspace_id\":\"0101010101010101010101010101010101010101010101010101010101010101\"},\"input\":{\"expected_mapping_version\":\"0\",\"listing\":{\"author\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"d\":\"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a\",\"kind\":30402},\"option_id\":\"0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b\",\"per_sale_unit\":{\"amount\":\"250\",\"unit\":\"g\"},\"pool_id\":\"0808080808080808080808080808080808080808080808080808080808080808\"},\"type\":\"stock.map_option\"}",
+      "command_digest": "a67c3594862d6ed343ac973f7bde4d92186cff90f2618565b78dd213e8bc4d0c",
+      "approval_intent_digest": "e5f0c37f4bfe25b69e32fbca9f0ba765295e535921c4263a22a81da549254642"
+    },
+    {
+      "wire": {
+        "type": "stock.map_option",
+        "context": {
+          "actor": {
+            "grant_id": "0303030303030303030303030303030303030303030303030303030303030303",
+            "organization": null,
+            "participant": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "role": "seller"
+          },
+          "approval": null,
+          "authority": {
+            "executor_id": "0202020202020202020202020202020202020202020202020202020202020202",
+            "generation": "1"
+          },
+          "correlation_id": null,
+          "expected": null,
+          "not_after": "200",
+          "operation_id": "0707070707070707070707070707070707070707070707070707070707070707",
+          "route_digest": "0606060606060606060606060606060606060606060606060606060606060606",
+          "workspace_id": "0101010101010101010101010101010101010101010101010101010101010101"
+        },
+        "input": {
+          "listing": {
+            "kind": 30402,
+            "author": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+            "d": "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+          },
+          "option_id": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+          "pool_id": "0909090909090909090909090909090909090909090909090909090909090909",
+          "per_sale_unit": {
+            "amount": "0.5",
+            "unit": "kg"
+          },
+          "expected_mapping_version": "1"
+        }
+      },
+      "semantic_canonical_utf8": "{\"context\":{\"actor\":{\"grant_id\":\"0303030303030303030303030303030303030303030303030303030303030303\",\"organization\":null,\"participant\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"role\":\"seller\"},\"approval\":null,\"authority\":{\"executor_id\":\"0202020202020202020202020202020202020202020202020202020202020202\",\"generation\":\"1\"},\"expected\":null,\"not_after\":\"200\",\"operation_id\":\"0707070707070707070707070707070707070707070707070707070707070707\",\"route_digest\":\"0606060606060606060606060606060606060606060606060606060606060606\",\"workspace_id\":\"0101010101010101010101010101010101010101010101010101010101010101\"},\"input\":{\"expected_mapping_version\":\"1\",\"listing\":{\"author\":\"79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"d\":\"0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a\",\"kind\":30402},\"option_id\":\"0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b\",\"per_sale_unit\":{\"amount\":\"0.5\",\"unit\":\"kg\"},\"pool_id\":\"0909090909090909090909090909090909090909090909090909090909090909\"},\"type\":\"stock.map_option\"}",
+      "command_digest": "9b4d3d27e915806280c6fd784b9df94d3932944d1e38ecd2cce7f75595d3870a",
+      "approval_intent_digest": "06aca7ebc1aa1bb63e715ac92c4696ed0e08f15bfccca5df4031a8f0e51f8836"
+    }
+  ]
+}

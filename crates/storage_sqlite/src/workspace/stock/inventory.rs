@@ -1,6 +1,7 @@
 //! Owner-private inventory effects on the existing connection owner.
 mod checkpoint;
 mod codec;
+mod mapping;
 mod plan;
 use super::*;
 use checkpoint::{MinimumProof, authenticate_minimum, authenticate_projection};
@@ -53,6 +54,15 @@ pub(super) async fn check_head(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    if let Some(expected) = checkpoint.mappings {
+        let actual: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_mappings")
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|_| WorkspaceError::RecoveryRequired)?;
+        if actual != expected.get() as i64 {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+    }
     if pools != checkpoint.pools.get() as i64 || movements != checkpoint.movements.get() as i64 {
         return Err(WorkspaceError::RecoveryRequired);
     }
@@ -72,6 +82,7 @@ struct Access {
     current: WorkspaceBinding,
     minimum_proof: MinimumProof,
     projection_proof: Option<MinimumProof>,
+    mapping_read: Option<mapping::MappingRead>,
 }
 pub(in crate::workspace) struct Turn<'a> {
     pub connection: &'a mut SqliteConnection,
@@ -104,6 +115,9 @@ impl Turn<'_> {
             return Err(OperationError::Unauthorized);
         }
         same_binding(binding, &current)?;
+        if current.observed_at() < binding.observed_at() {
+            return Err(WorkspaceError::Unavailable.into());
+        }
         if authority.authorization != minimum.authorization() {
             return Err(WorkspaceError::StaleCheckpoint.into());
         }
@@ -136,6 +150,7 @@ impl Turn<'_> {
             current,
             minimum_proof,
             projection_proof: None,
+            mapping_read: None,
         })
     }
     pub async fn create(
@@ -149,6 +164,9 @@ impl Turn<'_> {
         access
             .record
             .require(StockAction::ReadOperations, request.command().pool_id())?;
+        if let Some(input) = request.command().mapping_input() {
+            mapping::require(&access, input.key())?;
+        }
         let context = request.command().context();
         let operation = context.operation_id();
         let digest = request.command().digest();
@@ -172,23 +190,28 @@ impl Turn<'_> {
         if request.replay_only() {
             return Err(OperationError::RecoveryRequired);
         }
-        access.record.require(
-            match request.command().kind() {
-                radroots_storage::inventory::InventoryCommandKind::CreatePool => {
-                    StockAction::CreatePool
-                }
-                radroots_storage::inventory::InventoryCommandKind::AddStock => {
-                    StockAction::AddStock
-                }
-                radroots_storage::inventory::InventoryCommandKind::RemoveStock => {
-                    StockAction::RemoveStock
-                }
-                radroots_storage::inventory::InventoryCommandKind::SpoilStock => {
-                    StockAction::SpoilStock
-                }
-            },
-            request.command().pool_id(),
-        )?;
+        if request.command().mapping_input().is_none() {
+            access.record.require(
+                match request.command().kind() {
+                    radroots_storage::inventory::InventoryCommandKind::MapOption => {
+                        return Err(OperationError::RecoveryRequired);
+                    }
+                    radroots_storage::inventory::InventoryCommandKind::CreatePool => {
+                        StockAction::CreatePool
+                    }
+                    radroots_storage::inventory::InventoryCommandKind::AddStock => {
+                        StockAction::AddStock
+                    }
+                    radroots_storage::inventory::InventoryCommandKind::RemoveStock => {
+                        StockAction::RemoveStock
+                    }
+                    radroots_storage::inventory::InventoryCommandKind::SpoilStock => {
+                        StockAction::SpoilStock
+                    }
+                },
+                request.command().pool_id(),
+            )?;
+        }
         // An original captured command may be replayed under a replacement grant,
         // but a new effect must have been captured under this current grant.
         if request.command().context().actor() != access.current.actor() {
@@ -228,6 +251,7 @@ impl Turn<'_> {
             .await?,
         );
         let (pool, quantity, movement_kind) = plan_effect(request.command(), before)?;
+        let mapping = mapping::prepare(self, &access, &request, pool).await?;
         let label = if let Some(input) = request.command().creation_input() {
             input.label()
         } else {
@@ -271,30 +295,46 @@ impl Turn<'_> {
             digest,
             Some(transaction),
         );
-        let receipt = InventoryReceipt::from_committed_store(
-            attempt,
-            request.command().kind(),
-            pool,
+        let receipt_checkpoint =
             radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
                 self.selected.authority(),
                 revision,
                 Some(head),
             )?
-            .with_optional_authorization(access.authority.authorization),
-        )?;
-        let protected_pool = self
-            .crypto
-            .seal_stock_record(
-                self.selected,
-                "pool",
-                pool.id().as_bytes(),
-                &encode(&PoolWire {
-                    version: 1,
-                    label,
-                    pool,
-                })?,
+            .with_optional_authorization(access.authority.authorization);
+        let receipt = if let Some(mapping) = &mapping {
+            InventoryReceipt::from_committed_mapping(
+                attempt,
+                pool,
+                mapping.effect.after,
+                receipt_checkpoint,
+            )?
+        } else {
+            InventoryReceipt::from_committed_store(
+                attempt,
+                request.command().kind(),
+                pool,
+                receipt_checkpoint,
+            )?
+        };
+        let protected_pool = if mapping.is_some() {
+            None
+        } else {
+            Some(
+                self.crypto
+                    .seal_stock_record(
+                        self.selected,
+                        "pool",
+                        pool.id().as_bytes(),
+                        &encode(&PoolWire {
+                            version: 1,
+                            label,
+                            pool,
+                        })?,
+                    )
+                    .await?,
             )
-            .await?;
+        };
         let protected_movement = if let Some(id) = movement {
             Some(
                 self.crypto
@@ -348,10 +388,27 @@ impl Turn<'_> {
                     },
                     catalog,
                     access.authority.authorization,
+                    mapping.as_ref().map(|value| value.effect),
                 )?,
             )
             .await?;
         access.authority.inventory = Some(InventoryCheckpoint {
+            mappings: checkpoint
+                .mappings
+                .map(|count| {
+                    Sequence::new(
+                        count
+                            .get()
+                            .checked_add(u64::from(
+                                mapping
+                                    .as_ref()
+                                    .is_some_and(|value| value.effect.before.is_none()),
+                            ))
+                            .ok_or(WorkspaceError::Capacity)?,
+                    )
+                    .map_err(|_| WorkspaceError::Capacity)
+                })
+                .transpose()?,
             revision,
             head: Some(head),
             pools: Sequence::new(
@@ -394,7 +451,12 @@ impl Turn<'_> {
             self.namespace.validate()?;
             let absent:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND operation_id=?").bind(request.binding().actor().participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             if absent!=0 {return Err(OperationError::StaleState);}
-            if let Some(before)=before {
+            if let Some(mapping)=&mapping {
+                let original=existing.as_ref().ok_or(OperationError::RecoveryRequired)?;
+                let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_pools WHERE pool_id=? AND revision=? AND protected=?").bind(pool.id().as_bytes().as_slice()).bind(pool.version().get() as i64).bind(&original.protected).fetch_one(&mut *tx).await.map_err(|_|OperationError::RecoveryRequired)?;
+                if count!=1 {return Err(OperationError::RecoveryRequired);}
+                mapping.apply(&mut tx).await?;
+            } else if let Some(before)=before {
                 let original=existing.as_ref().ok_or(OperationError::RecoveryRequired)?;
                 let updated=sqlx::query("UPDATE stock_pools SET revision=?,protected=? WHERE pool_id=? AND revision=? AND protected=?")
                     .bind(pool.version().get() as i64).bind(protected_pool).bind(pool.id().as_bytes().as_slice()).bind(before.version().get() as i64).bind(&original.protected).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
@@ -446,8 +508,10 @@ impl Turn<'_> {
             check_head(&mut tx,access.authority.inventory.ok_or(OperationError::UnsupportedOperation)?).await?;
             access.minimum_proof.confirm(&mut tx).await?;
             if let Some(proof)=&access.projection_proof {proof.confirm(&mut tx).await?;}
+            if let Some(mapping)=&access.mapping_read {mapping.confirm(&mut tx).await?;}
             let current=access.record.authenticate(access.current.input(),proof,self.clock.now()?)?;
             same_binding(&access.current,&current)?;
+            if current.observed_at()<access.current.observed_at() {return Err(WorkspaceError::Unavailable.into());}
             if let Some(operation)=absent_operation {let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_operations WHERE actor=? AND operation_id=?").bind(current.actor().participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;if count!=0 {return Err(OperationError::RecoveryRequired);}}
             if let Some(id)=absent_pool {let count:i64=sqlx::query_scalar("SELECT count(*) FROM stock_pools WHERE pool_id=?").bind(id.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;if count!=0 {return Err(OperationError::RecoveryRequired);}}
             if let Some(retained)=operation {
@@ -494,6 +558,9 @@ impl Turn<'_> {
             access
                 .record
                 .require(StockAction::ReadOperations, retained.receipt.pool().id())?;
+            if let Some(mapping) = retained.receipt.mapping() {
+                mapping::require(&access, mapping.key())?;
+            }
         }
         if let Some(retained) = &result
             && digest.is_some_and(|d| d != retained.digest)
@@ -510,6 +577,39 @@ impl Turn<'_> {
         )
         .await?;
         Ok(result.map(|v| v.receipt))
+    }
+    pub async fn option_mapping(
+        &mut self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        key: radroots_domain::stock::OptionMappingKey,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_domain::stock::OptionPoolMapping>, OperationError> {
+        let mut access = self.access(&binding, minimum, &proof).await?;
+        mapping::require(&access, key)?;
+        let retained = mapping::read(self.connection, self.selected, self.crypto, key).await?;
+        let result = retained.as_ref().map(|value| value.value);
+        let witness = checkpoint::authenticate_mapping_projection(
+            self.connection,
+            self.selected,
+            self.crypto,
+            &access.current,
+            access
+                .authority
+                .inventory
+                .ok_or(OperationError::UnsupportedOperation)?,
+            key,
+            result,
+        )
+        .await?;
+        access.mapping_read = Some(mapping::MappingRead {
+            key,
+            retained,
+            proof: witness,
+        });
+        self.confirm(&access, &proof, None, None, None, None)
+            .await?;
+        Ok(result)
     }
     pub async fn pool(
         &mut self,
@@ -640,8 +740,7 @@ async fn read_operation(
             &protected,
         )
         .await?;
-    let (request, decoded) =
-        clear.expose_secret(|bytes| decode_operation(bytes, catalog, binding))?;
+    let (request, decoded) = clear.expose_secret(|bytes| decode_operation(bytes, catalog))?;
     if !SellerAuthoritySelection::from_attachment(request.binding().input())
         .matches_attachment(binding.input())
         || request.binding().actor().participant() != binding.actor().participant()
@@ -657,6 +756,15 @@ async fn read_operation(
     }
     let (planned, quantity, movement_kind) = plan_effect(request.command(), decoded.before)
         .map_err(|_| OperationError::RecoveryRequired)?;
+    let expected_mapping = mapping::effect(
+        request.command(),
+        decoded.pool,
+        decoded.mapping.and_then(|value| value.before),
+    )
+    .map_err(|_| OperationError::RecoveryRequired)?;
+    if expected_mapping != decoded.mapping || (catalog < 5 && decoded.mapping.is_some()) {
+        return Err(OperationError::RecoveryRequired);
+    }
     if decoded.version != record_version(catalog)?
         || request.command().context().operation_id() != operation
         || decoded.revision.get() == 0
@@ -731,22 +839,28 @@ async fn read_operation(
         }
         None
     };
-    let receipt = InventoryReceipt::from_committed_store(
-        CommitAttempt::new(
-            input.workspace_id(),
-            operation,
-            digest,
-            Some(decoded.transaction),
-        ),
-        request.command().kind(),
-        decoded.pool,
-        radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
-            request.command().context().authority(),
-            decoded.revision,
-            Some(decoded.head),
+    let attempt = CommitAttempt::new(
+        input.workspace_id(),
+        operation,
+        digest,
+        Some(decoded.transaction),
+    );
+    let checkpoint = radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
+        request.command().context().authority(),
+        decoded.revision,
+        Some(decoded.head),
+    )?
+    .with_optional_authorization(decoded.authorization);
+    let receipt = if let Some(mapping) = decoded.mapping {
+        InventoryReceipt::from_committed_mapping(attempt, decoded.pool, mapping.after, checkpoint)?
+    } else {
+        InventoryReceipt::from_committed_store(
+            attempt,
+            request.command().kind(),
+            decoded.pool,
+            checkpoint,
         )?
-        .with_optional_authorization(decoded.authorization),
-    )?;
+    };
     Ok(Some(Retained {
         original_grant: request.binding().input().grant_id(),
         previous_head: decoded.previous_head,

@@ -103,6 +103,11 @@ struct StockCapabilityContract {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NativeSellerStockAuthority {
+    mapping_payload_schema: String,
+    mapping_owner_administration_required: bool,
+    mapping_changes_physical_stock: bool,
+    mapping_changes_pool_version: bool,
+    mapping_create_expected_version: u16,
     capability_contract: StockCapabilityContract,
     scope: String,
     database: String,
@@ -316,11 +321,16 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 4
+            && stock.schema_version == 5
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v4"
-            && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v3"
+            && stock.retained_inventory_versions == [2, 3, 4]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v5"
+            && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v4"
+            && stock.mapping_payload_schema == "radroots.seller_stock.mapping.v1"
+            && stock.mapping_owner_administration_required
+            && !stock.mapping_changes_physical_stock
+            && !stock.mapping_changes_pool_version
+            && stock.mapping_create_expected_version == 0
             && stock.inventory_movement_payload_schema == "radroots.seller_stock.movement.v2"
             && stock.grant_payload_schema == "radroots.seller_stock.grant.v2"
             && stock.grant_change_payload_schema == "radroots.seller_stock.grant_change.v1"
@@ -887,6 +897,40 @@ mod tests {
             ("private_causal_heads_use_timestamp_lww", true),
         ] {
             assert!(validate_bytes(&changed(&format!("/execution/{field}"), json!(bad))).is_err());
+        }
+    }
+
+    #[test]
+    fn native_mapping_contract_preserves_catalogs_owner_access_and_physical_non_effects() {
+        for (field, bad) in [
+            ("schema_version", json!(4)),
+            ("retained_inventory_versions", json!([2, 3])),
+            (
+                "mapping_payload_schema",
+                json!("radroots.seller_stock.mapping.v2"),
+            ),
+            (
+                "inventory_operation_payload_schema",
+                json!("radroots.seller_stock.operation.v3"),
+            ),
+            (
+                "authority_payload_schema",
+                json!("radroots.seller_stock.authority.v4"),
+            ),
+            ("mapping_owner_administration_required", json!(false)),
+            ("mapping_changes_physical_stock", json!(true)),
+            ("mapping_changes_pool_version", json!(true)),
+            ("mapping_create_expected_version", json!(1)),
+            ("inventory_scope_grants_administration", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
         }
     }
 

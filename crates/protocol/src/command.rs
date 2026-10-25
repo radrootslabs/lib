@@ -52,10 +52,12 @@ mod captured;
 mod inventory;
 mod stock;
 mod stock_correction;
+mod stock_mapping;
 pub use captured::{CapturedCommand, CommandKind};
 pub use inventory::{CapturedInventoryCommand, InventoryCommandKind};
 pub use stock::{CapturedPoolCreation, CreatePoolInput};
 pub use stock_correction::{CapturedPoolCorrection, PoolCorrectionInput};
+pub use stock_mapping::{CapturedOptionMapping, MapOptionInput};
 
 /// A captured public listing reference. This descriptor verifies neither its
 /// source event nor its availability, terms or stock backing.

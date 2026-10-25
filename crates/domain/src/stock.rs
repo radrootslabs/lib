@@ -3,6 +3,8 @@
 
 use crate::{PoolId, Quantity, Sequence, listing::MeasurementUnit};
 use core::{fmt, str::FromStr};
+mod mapping;
+pub use mapping::{MappingError, OptionMappingKey, OptionPoolMapping};
 
 /// A bounded, input-free stock value failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

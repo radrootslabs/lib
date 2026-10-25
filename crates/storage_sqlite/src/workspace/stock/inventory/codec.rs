@@ -96,19 +96,38 @@ struct OperationV3<'a> {
     #[serde(borrow)]
     operation: &'a RawValue,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OperationV4<'a> {
+    version: u8,
+    authorization: StockAuthorizationRef,
+    #[serde(borrow)]
+    operation: &'a RawValue,
+    #[serde(deserialize_with = "super::required_nullable")]
+    mapping: Option<super::mapping::MappingEffect>,
+}
 pub(super) fn encode_operation(
     value: &OperationWire<'_>,
     catalog: i64,
     authorization: Option<StockAuthorizationRef>,
+    mapping: Option<super::mapping::MappingEffect>,
 ) -> Result<zeroize::Zeroizing<Vec<u8>>, OperationError> {
     let clear = super::encode(value)?;
-    if catalog != 4 {
+    if catalog < 4 {
         return Ok(clear);
     }
     let raw = RawValue::from_string(
         String::from_utf8(clear.to_vec()).map_err(|_| OperationError::StorageFailure)?,
     )
     .map_err(|_| OperationError::StorageFailure)?;
+    if catalog == 5 {
+        return super::encode(&OperationV4 {
+            version: 4,
+            authorization: authorization.ok_or(OperationError::RecoveryRequired)?,
+            operation: &raw,
+            mapping,
+        });
+    }
     super::encode(&OperationV3 {
         version: 3,
         authorization: authorization.ok_or(OperationError::RecoveryRequired)?,
@@ -116,6 +135,7 @@ pub(super) fn encode_operation(
     })
 }
 pub(super) struct OperationData {
+    pub(super) mapping: Option<super::mapping::MappingEffect>,
     pub(super) authorization: Option<StockAuthorizationRef>,
     pub(super) version: u8,
     pub(super) before: Option<PoolSnapshot>,
@@ -130,16 +150,32 @@ pub(super) struct OperationData {
 pub(super) fn decode_operation(
     bytes: &[u8],
     catalog: i64,
-    _binding: &WorkspaceBinding,
 ) -> Result<(InventoryRequest, OperationData), OperationError> {
+    decode_inner(bytes, catalog, false)
+}
+fn decode_inner(
+    bytes: &[u8],
+    catalog: i64,
+    allow_mapping: bool,
+) -> Result<(InventoryRequest, OperationData), OperationError> {
+    if catalog == 5 {
+        let decoded: OperationV4<'_> =
+            super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
+        if decoded.version != 4 {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let (request, mut data) = decode_inner(decoded.operation.get().as_bytes(), 3, true)?;
+        data.authorization = Some(decoded.authorization);
+        data.mapping = decoded.mapping;
+        return Ok((request, data));
+    }
     if catalog == 4 {
         let decoded: OperationV3<'_> =
             super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
         if decoded.version != 3 {
             return Err(OperationError::RecoveryRequired);
         }
-        let (request, mut data) =
-            decode_operation(decoded.operation.get().as_bytes(), 3, _binding)?;
+        let (request, mut data) = decode_inner(decoded.operation.get().as_bytes(), 3, false)?;
         data.authorization = Some(decoded.authorization);
         return Ok((request, data));
     }
@@ -171,9 +207,13 @@ pub(super) fn decode_operation(
                 minimum,
                 decoded.command.get().as_bytes(),
             )?;
+            if !allow_mapping && request.command().mapping_input().is_some() {
+                return Err(OperationError::RecoveryRequired);
+            }
             Ok((
                 request,
                 OperationData {
+                    mapping: None,
                     authorization: None,
                     version: decoded.version,
                     before: prior,

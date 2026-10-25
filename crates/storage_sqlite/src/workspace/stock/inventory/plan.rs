@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn record_version(catalog: i64) -> Result<u8, OperationError> {
     match catalog {
         2 => Ok(1),
-        3 | 4 => Ok(2),
+        3..=5 => Ok(2),
         _ => Err(OperationError::RecoveryRequired),
     }
 }
@@ -21,6 +21,17 @@ pub(super) fn plan_effect(
     use radroots_domain::stock::{AvailableStockCorrection, StockError};
     use radroots_storage::inventory::CapturedInventoryCommand;
     match command {
+        CapturedInventoryCommand::MapOption(command) => {
+            let pool = before.ok_or(OperationError::StaleState)?;
+            if pool.id() != command.input().pool_id() {
+                return Err(OperationError::RecoveryRequired);
+            }
+            Ok((
+                pool,
+                radroots_domain::stock::StockTicks::ZERO,
+                MovementKind::Introduced,
+            ))
+        }
         CapturedInventoryCommand::CreatePool(command) => {
             if before.is_some() {
                 return Err(OperationError::StaleState);

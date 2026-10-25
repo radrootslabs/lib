@@ -179,6 +179,7 @@ pub struct InventoryReceipt {
     attempt: CommitAttempt,
     pool: PoolSnapshot,
     kind: InventoryCommandKind,
+    mapping: Option<radroots_domain::stock::OptionPoolMapping>,
     checkpoint: InventoryCheckpointRef,
 }
 impl InventoryReceipt {
@@ -193,6 +194,7 @@ impl InventoryReceipt {
             || pool.version().get() == 0
             || (kind == InventoryCommandKind::CreatePool && pool.version().get() != 1)
             || (kind != InventoryCommandKind::CreatePool && pool.version().get() < 2)
+            || kind == InventoryCommandKind::MapOption
             || checkpoint.revision().get() == 0
         {
             return Err(OperationError::RecoveryRequired);
@@ -201,8 +203,37 @@ impl InventoryReceipt {
             attempt,
             kind,
             pool,
+            mapping: None,
             checkpoint,
         })
+    }
+    /// Reconstructs mapping-effect metadata only. A qualified host must confirm
+    /// the original transaction and its unchanged referenced pool separately.
+    pub fn from_committed_mapping(
+        attempt: CommitAttempt,
+        pool: PoolSnapshot,
+        mapping: radroots_domain::stock::OptionPoolMapping,
+        checkpoint: InventoryCheckpointRef,
+    ) -> Result<Self, OperationError> {
+        if attempt.transaction_id().is_none()
+            || checkpoint.revision().get() == 0
+            || pool.version().get() == 0
+            || mapping.pool_id() != pool.id()
+            || mapping.pool_unit() != pool.unit()
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        Ok(Self {
+            attempt,
+            pool,
+            kind: InventoryCommandKind::MapOption,
+            mapping: Some(mapping),
+            checkpoint,
+        })
+    }
+    /// Original private mapping effect; absent for physical inventory commands.
+    pub const fn mapping(&self) -> Option<radroots_domain::stock::OptionPoolMapping> {
+        self.mapping
     }
     /// Exact effect family retained by the original command.
     pub const fn kind(&self) -> InventoryCommandKind {
@@ -231,6 +262,15 @@ pub enum InventoryOutcome {
 /// Native and browser hosts enforce these same atomic rules, never a memory
 /// success placeholder. No signing or network work occurs in these methods.
 pub trait InventoryStore: WorkspaceStore {
+    /// Reads current owner-private configuration after authenticating retained
+    /// progress. Physical inventory scopes confer no configuration access.
+    fn option_mapping(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: InventoryCheckpointRef,
+        key: radroots_domain::stock::OptionMappingKey,
+        proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<radroots_domain::stock::OptionPoolMapping>, OperationError>>;
     fn execute_inventory(
         &self,
         request: InventoryRequest,

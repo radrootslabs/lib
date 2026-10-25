@@ -38,6 +38,13 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    OptionMapping(
+        Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
+        radroots_domain::stock::OptionMappingKey,
+        AttachmentProof,
+        Reply<Option<radroots_domain::stock::OptionPoolMapping>, OperationError>,
+    ),
     ChangeStockGrant(
         Box<stock::grants::Change>,
         AttachmentProof,
@@ -168,6 +175,9 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::OptionMapping(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::ChangeStockGrant(_, _, reply) => {
                 let _ = reply.send(Err(WorkspaceError::RecoveryRequired));
             }
@@ -377,6 +387,7 @@ impl Handle {
                                         | Job::ExecuteInventory(..)
                                         | Job::InventoryOperation(..)
                                         | Job::Pool(..)
+                                        | Job::OptionMapping(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -463,6 +474,23 @@ impl Handle {
                                             uncertain: &mut uncertain,
                                         }
                                         .creation(*binding, minimum, operation, digest, proof)
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::OptionMapping(binding, minimum, key, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::inventory::Turn {
+                                            connection,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                        }
+                                        .option_mapping(*binding, minimum, key, proof)
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -880,6 +908,23 @@ impl Handle {
             minimum,
             operation,
             digest,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn option_mapping(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        key: radroots_domain::stock::OptionMappingKey,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_domain::stock::OptionPoolMapping>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::OptionMapping(
+            Box::new(binding),
+            minimum,
+            key,
             proof,
             reply,
         ))?;

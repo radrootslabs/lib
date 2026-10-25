@@ -59,7 +59,7 @@ impl StockRecord {
             Err(OperationError::Unauthorized)
         }
     }
-    fn administrator(&self) -> bool {
+    pub(super) fn administrator(&self) -> bool {
         matches!(self, Self::Scoped(v) if v.administrator())
     }
 }
@@ -324,9 +324,10 @@ pub(in crate::workspace) async fn change(
     }
     let (mut authority, record, old_root, old_grant) =
         super::read(turn.connection, change.caller.input(), turn.crypto).await?;
-    if authority.catalog != 4 {
+    if !(4..=5).contains(&authority.catalog) {
         return Err(WorkspaceError::Unauthorized);
     }
+    let catalog = authority.catalog;
     let current = record.authenticate(change.caller.input(), &proof, turn.clock.now()?)?;
     if current.observed_at() < change.caller.observed_at() {
         return Err(WorkspaceError::Unavailable);
@@ -382,7 +383,7 @@ pub(in crate::workspace) async fn change(
             .await
             .map_err(|_| WorkspaceError::StorageFailure)?;
         let checked: Result<(), WorkspaceError> = async {
-            super::unchanged(&mut tx, current.input(), 4, &old_root, &old_grant).await?;
+            super::unchanged(&mut tx, current.input(), catalog, &old_root, &old_grant).await?;
             check_state(&mut tx, authorization).await?;
             ancestry
                 .confirm(&mut tx)
@@ -471,7 +472,7 @@ pub(in crate::workspace) async fn change(
     authority.authorization = Some(next);
     let root = turn
         .crypto
-        .seal_stock_root(turn.selected, 4, &authority.encode()?)
+        .seal_stock_root(turn.selected, catalog, &authority.encode()?)
         .await?;
     let retained = ChangeWire {
         version: 1,
@@ -501,7 +502,7 @@ pub(in crate::workspace) async fn change(
         .map_err(|_| WorkspaceError::StorageFailure)?;
     let changed: Result<(), WorkspaceError> = async {
         turn.namespace.validate()?;
-        super::unchanged(&mut tx, current.input(), 4, &old_root, &old_grant).await?;
+        super::unchanged(&mut tx, current.input(), catalog, &old_root, &old_grant).await?;
         check_state(&mut tx, authorization).await?;
         ancestry
             .confirm(&mut tx)

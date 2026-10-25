@@ -19,6 +19,8 @@ pub enum InventoryCommandKind {
     RemoveStock,
     /// Audited physical spoilage.
     SpoilStock,
+    /// Owner-private listing option configuration, without a physical movement.
+    MapOption,
 }
 /// Original bounded captured inventory data. Its metadata establishes no grant,
 /// physical stock, transaction completion or permission to change obligations.
@@ -27,6 +29,8 @@ pub enum CapturedInventoryCommand {
     CreatePool(CapturedPoolCreation),
     /// Exact adjustment or spoilage profile.
     CorrectPool(CapturedPoolCorrection),
+    /// Exact private option mapping configuration.
+    MapOption(super::CapturedOptionMapping),
 }
 impl CapturedInventoryCommand {
     pub fn parse(raw: &[u8]) -> Result<Self, CommandError> {
@@ -38,6 +42,7 @@ impl CapturedInventoryCommand {
         }
         let header: Header = parse_object(raw)?;
         match header.kind.as_str() {
+            "stock.map_option" => super::CapturedOptionMapping::parse(raw).map(Self::MapOption),
             "stock.create_pool" => CapturedPoolCreation::parse(raw).map(Self::CreatePool),
             "stock.adjust" | "stock.spoil" => {
                 CapturedPoolCorrection::parse(raw).map(Self::CorrectPool)
@@ -49,29 +54,34 @@ impl CapturedInventoryCommand {
         match self {
             Self::CreatePool(v) => v.context(),
             Self::CorrectPool(v) => v.context(),
+            Self::MapOption(v) => v.context(),
         }
     }
     pub const fn digest(&self) -> CommandDigest {
         match self {
             Self::CreatePool(v) => v.digest(),
             Self::CorrectPool(v) => v.digest(),
+            Self::MapOption(v) => v.digest(),
         }
     }
     pub const fn approval_intent_digest(&self) -> ApprovalIntentDigest {
         match self {
             Self::CreatePool(v) => v.approval_intent_digest(),
             Self::CorrectPool(v) => v.approval_intent_digest(),
+            Self::MapOption(v) => v.approval_intent_digest(),
         }
     }
     pub fn protected_wire(&self) -> &[u8] {
         match self {
             Self::CreatePool(v) => v.protected_wire(),
             Self::CorrectPool(v) => v.protected_wire(),
+            Self::MapOption(v) => v.protected_wire(),
         }
     }
     pub const fn kind(&self) -> InventoryCommandKind {
         match self {
             Self::CreatePool(_) => InventoryCommandKind::CreatePool,
+            Self::MapOption(_) => InventoryCommandKind::MapOption,
             Self::CorrectPool(v) => match v.input().kind() {
                 AvailableStockCorrection::Add => InventoryCommandKind::AddStock,
                 AvailableStockCorrection::Remove => InventoryCommandKind::RemoveStock,
@@ -84,26 +94,39 @@ impl CapturedInventoryCommand {
         match self {
             Self::CreatePool(v) => v.input().id(),
             Self::CorrectPool(v) => v.input().pool_id(),
+            Self::MapOption(v) => v.input().pool_id(),
+        }
+    }
+    /// Borrows actual mapping configuration, without manufacturing it for other commands.
+    pub const fn mapping_input(&self) -> Option<&super::MapOptionInput> {
+        match self {
+            Self::MapOption(v) => Some(v.input()),
+            Self::CreatePool(_) | Self::CorrectPool(_) => None,
         }
     }
     /// Borrows actual creation data; correction commands never fabricate it.
     pub const fn creation_input(&self) -> Option<&super::CreatePoolInput> {
         match self {
             Self::CreatePool(v) => Some(v.input()),
-            Self::CorrectPool(_) => None,
+            Self::CorrectPool(_) | Self::MapOption(_) => None,
         }
     }
     /// Borrows actual correction data; creation commands never fabricate it.
     pub const fn correction_input(&self) -> Option<&super::PoolCorrectionInput> {
         match self {
             Self::CorrectPool(v) => Some(v.input()),
-            Self::CreatePool(_) => None,
+            Self::CreatePool(_) | Self::MapOption(_) => None,
         }
     }
 }
 impl From<CapturedPoolCreation> for CapturedInventoryCommand {
     fn from(value: CapturedPoolCreation) -> Self {
         Self::CreatePool(value)
+    }
+}
+impl From<super::CapturedOptionMapping> for CapturedInventoryCommand {
+    fn from(value: super::CapturedOptionMapping) -> Self {
+        Self::MapOption(value)
     }
 }
 impl From<CapturedPoolCorrection> for CapturedInventoryCommand {

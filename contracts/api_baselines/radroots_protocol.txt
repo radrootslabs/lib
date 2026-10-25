@@ -180,6 +180,7 @@ pub fn radroots_protocol::command::CapturedCommand::fmt(&self, &mut core::fmt::F
 pub enum radroots_protocol::command::CapturedInventoryCommand
 pub radroots_protocol::command::CapturedInventoryCommand::CorrectPool(radroots_protocol::command::CapturedPoolCorrection)
 pub radroots_protocol::command::CapturedInventoryCommand::CreatePool(radroots_protocol::command::CapturedPoolCreation)
+pub radroots_protocol::command::CapturedInventoryCommand::MapOption(radroots_protocol::command::CapturedOptionMapping)
 impl radroots_protocol::command::CapturedInventoryCommand
 pub const fn radroots_protocol::command::CapturedInventoryCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
 pub const fn radroots_protocol::command::CapturedInventoryCommand::context(&self) -> &radroots_domain::context::CommandContextData
@@ -187,9 +188,12 @@ pub const fn radroots_protocol::command::CapturedInventoryCommand::correction_in
 pub const fn radroots_protocol::command::CapturedInventoryCommand::creation_input(&self) -> core::option::Option<&radroots_protocol::command::CreatePoolInput>
 pub const fn radroots_protocol::command::CapturedInventoryCommand::digest(&self) -> radroots_domain::identifier::CommandDigest
 pub const fn radroots_protocol::command::CapturedInventoryCommand::kind(&self) -> radroots_protocol::command::InventoryCommandKind
+pub const fn radroots_protocol::command::CapturedInventoryCommand::mapping_input(&self) -> core::option::Option<&radroots_protocol::command::MapOptionInput>
 pub fn radroots_protocol::command::CapturedInventoryCommand::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
 pub const fn radroots_protocol::command::CapturedInventoryCommand::pool_id(&self) -> radroots_domain::identifier::PoolId
 pub fn radroots_protocol::command::CapturedInventoryCommand::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::command::CapturedOptionMapping> for radroots_protocol::command::CapturedInventoryCommand
+pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedOptionMapping) -> Self
 impl core::convert::From<radroots_protocol::command::CapturedPoolCorrection> for radroots_protocol::command::CapturedInventoryCommand
 pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedPoolCorrection) -> Self
 impl core::convert::From<radroots_protocol::command::CapturedPoolCreation> for radroots_protocol::command::CapturedInventoryCommand
@@ -218,6 +222,7 @@ pub const fn radroots_protocol::command::CommandKind::as_str(self) -> &'static s
 pub enum radroots_protocol::command::InventoryCommandKind
 pub radroots_protocol::command::InventoryCommandKind::AddStock
 pub radroots_protocol::command::InventoryCommandKind::CreatePool
+pub radroots_protocol::command::InventoryCommandKind::MapOption
 pub radroots_protocol::command::InventoryCommandKind::RemoveStock
 pub radroots_protocol::command::InventoryCommandKind::SpoilStock
 pub struct radroots_protocol::command::CapturedChatCommand
@@ -239,6 +244,19 @@ impl core::convert::From<radroots_protocol::command::CapturedChatCommand> for ra
 pub fn radroots_protocol::command::CapturedCommand::from(radroots_protocol::command::CapturedChatCommand) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedChatCommand
 pub fn radroots_protocol::command::CapturedChatCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::CapturedOptionMapping
+impl radroots_protocol::command::CapturedOptionMapping
+pub const fn radroots_protocol::command::CapturedOptionMapping::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedOptionMapping::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedOptionMapping::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::command::CapturedOptionMapping::input(&self) -> &radroots_protocol::command::MapOptionInput
+pub fn radroots_protocol::command::CapturedOptionMapping::new(radroots_domain::context::CommandContextData, radroots_protocol::command::MapOptionInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedOptionMapping::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedOptionMapping::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::command::CapturedOptionMapping> for radroots_protocol::command::CapturedInventoryCommand
+pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedOptionMapping) -> Self
+impl core::fmt::Debug for radroots_protocol::command::CapturedOptionMapping
+pub fn radroots_protocol::command::CapturedOptionMapping::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::CapturedPoolCorrection
 impl radroots_protocol::command::CapturedPoolCorrection
 pub const fn radroots_protocol::command::CapturedPoolCorrection::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
@@ -294,6 +312,15 @@ impl core::fmt::Debug for radroots_protocol::command::ListingRevisionRef
 pub fn radroots_protocol::command::ListingRevisionRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl serde_core::ser::Serialize for radroots_protocol::command::ListingRevisionRef
 pub fn radroots_protocol::command::ListingRevisionRef::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+pub struct radroots_protocol::command::MapOptionInput
+impl radroots_protocol::command::MapOptionInput
+pub const fn radroots_protocol::command::MapOptionInput::expected_mapping_version(&self) -> radroots_domain::context::Sequence
+pub const fn radroots_protocol::command::MapOptionInput::key(&self) -> radroots_domain::stock::mapping::OptionMappingKey
+pub fn radroots_protocol::command::MapOptionInput::new(radroots_domain::stock::mapping::OptionMappingKey, radroots_domain::identifier::PoolId, radroots_domain::quantity::Quantity, radroots_domain::context::Sequence) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::MapOptionInput::per_sale_unit(&self) -> radroots_domain::quantity::Quantity
+pub const fn radroots_protocol::command::MapOptionInput::pool_id(&self) -> radroots_domain::identifier::PoolId
+impl core::fmt::Debug for radroots_protocol::command::MapOptionInput
+pub fn radroots_protocol::command::MapOptionInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::PoolCorrectionInput
 impl radroots_protocol::command::PoolCorrectionInput
 pub const fn radroots_protocol::command::PoolCorrectionInput::amount(&self) -> radroots_domain::amount::PositiveDecimal

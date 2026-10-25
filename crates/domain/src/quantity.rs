@@ -9,6 +9,32 @@ pub struct Quantity {
     unit: MeasurementUnit,
 }
 
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Quantity {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            amount: Decimal,
+            unit: MeasurementUnit,
+        }
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Wire;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a closed exact quantity object")
+            }
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, map: A) -> Result<Wire, A::Error> {
+                <Wire as serde::Deserialize>::deserialize(
+                    serde::de::value::MapAccessDeserializer::new(map),
+                )
+            }
+        }
+        let wire = deserializer.deserialize_map(Visitor)?;
+        Self::new(wire.amount, wire.unit).map_err(serde::de::Error::custom)
+    }
+}
+
 impl Quantity {
     /// Admits exact values, including explicit zero; each counts are integral.
     pub fn new(amount: Decimal, unit: MeasurementUnit) -> Result<Self, QuantityError> {
