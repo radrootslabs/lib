@@ -221,6 +221,9 @@
       "agreement_installed": false
     },
     "signing_issuance": {
+      "coherent_operation_snapshot_required": true,
+      "final_evidence_selectors_and_page_rows_required": true,
+      "recovery_view_has_dispatch_or_installation_rights": false,
       "fresh_current_backing_projection_required": true,
       "evidence_page_max": 32,
       "claim_family": 4,

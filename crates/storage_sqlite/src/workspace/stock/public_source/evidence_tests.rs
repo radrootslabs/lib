@@ -1,5 +1,7 @@
 //! Obtained-byte capture executes on the same real native stock owner.
 use super::*;
+#[path = "snapshot_tests.rs"]
+mod snapshots;
 use crate::workspace::{StockEvidenceCapture, StockEvidenceOutcome, StockEvidenceReceipt};
 use sha2::{Digest, Sha256};
 async fn obtained(

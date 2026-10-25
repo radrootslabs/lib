@@ -174,7 +174,7 @@ struct Body {
     claimed_at: UnixSeconds,
 }
 
-pub(super) async fn existing(
+pub(in crate::workspace::stock) async fn existing(
     turn: &mut Turn<'_>,
     auth: &signing_plan::Authorized,
     operation: OperationId,

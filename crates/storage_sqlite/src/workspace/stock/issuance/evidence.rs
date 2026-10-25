@@ -8,6 +8,7 @@ use radroots_signing::{
 use std::num::NonZeroU64;
 use zeroize::Zeroizing;
 mod codec;
+pub(in crate::workspace::stock) mod selection;
 pub(in crate::workspace::stock) use codec::read_entry;
 const MAX_RAW: usize = 64 * 1024;
 
@@ -185,47 +186,29 @@ pub(in crate::workspace) async fn page(
         minimum,
     )
     .await?;
-    let rows=sqlx::query("SELECT CASE WHEN length(e.evidence_digest)=32 THEN e.evidence_digest END,CASE WHEN length(e.entry_id)=32 THEN e.entry_id END,o.revision FROM stock_signing_evidence e JOIN stock_operations o ON o.actor=e.actor AND o.operation_id=e.entry_id WHERE e.actor=? AND e.operation_id=? AND e.recipient=? AND (? IS NULL OR o.revision>?) ORDER BY o.revision LIMIT 33")
-        .bind(turn.selected.participant().as_bytes().as_slice()).bind(request.operation.as_bytes().as_slice()).bind(request.recipient.as_bytes().as_slice()).bind(after.map(|v|v.get() as i64)).bind(after.map(|v|v.get() as i64)).fetch_all(&mut *turn.connection).await.map_err(|_|OperationError::RecoveryRequired)?;
-    let more = rows.len() > 32;
+    let selected = selection::page(
+        turn.connection,
+        turn.selected.participant(),
+        request.operation,
+        request.recipient,
+        after,
+    )
+    .await?;
+    let more = selected.len() > 32;
     let mut last = None;
-    let mut receipts = Vec::with_capacity(rows.len().min(32));
-    for row in rows.into_iter().take(32) {
-        let digest: Vec<u8> = row
-            .try_get::<Option<Vec<u8>>, _>(0)
-            .map_err(|_| OperationError::RecoveryRequired)?
-            .ok_or(OperationError::RecoveryRequired)?;
-        let entry: Vec<u8> = row
-            .try_get::<Option<Vec<u8>>, _>(1)
-            .map_err(|_| OperationError::RecoveryRequired)?
-            .ok_or(OperationError::RecoveryRequired)?;
-        let retained = read_entry(
+    let mut receipts = Vec::with_capacity(selected.len().min(32));
+    for value in selected.iter().take(32).copied() {
+        let retained = selection::open(
             turn.connection,
             turn.selected,
             turn.crypto,
-            OperationId::from_bytes(
-                entry
-                    .try_into()
-                    .map_err(|_| OperationError::RecoveryRequired)?,
-            ),
+            request.operation,
+            request.recipient,
+            value,
         )
-        .await?
-        .ok_or(OperationError::RecoveryRequired)?;
-        let revision: i64 = row
-            .try_get(2)
-            .map_err(|_| OperationError::RecoveryRequired)?;
-        if revision <= 0 || retained.frame.header.revision.get() != revision as u64 {
-            return Err(OperationError::RecoveryRequired);
-        }
-        last = Some(retained.frame.header.revision);
-        let value = retained.value.receipt;
-        if value.digest.as_slice() != digest
-            || value.attempt.operation_id() != request.operation
-            || value.recipient != request.recipient
-        {
-            return Err(OperationError::RecoveryRequired);
-        }
-        receipts.push(value);
+        .await?;
+        last = Some(value.revision);
+        receipts.push(retained.value.receipt);
     }
     let mut tx = turn
         .connection
@@ -234,6 +217,18 @@ pub(in crate::workspace) async fn page(
         .map_err(|_| OperationError::StorageFailure)?;
     let checked: Result<(), OperationError> = async {
         witness.confirm(&mut tx).await?;
+        if selection::page(
+            &mut tx,
+            turn.selected.participant(),
+            request.operation,
+            request.recipient,
+            after,
+        )
+        .await?
+            != selected
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
         auth.confirm(&mut tx, turn.namespace, turn.clock, &proof, false)
             .await?;
         Ok(())
@@ -423,23 +418,27 @@ async fn lookup(
     recipient: PublicKey,
     digest: [u8; 32],
 ) -> Result<Option<codec::Retained>, OperationError> {
-    let id:Option<Vec<u8>>=sqlx::query_scalar("SELECT CASE WHEN length(entry_id)=32 THEN entry_id END FROM stock_signing_evidence WHERE actor=? AND operation_id=? AND recipient=? AND evidence_digest=?").bind(input.participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(recipient.as_bytes().as_slice()).bind(digest.as_slice()).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?;
-    match id {
-        None => Ok(None),
-        Some(id) => Ok(Some(
-            read_entry(
-                connection,
-                input,
-                crypto,
-                OperationId::from_bytes(
-                    id.try_into()
-                        .map_err(|_| OperationError::RecoveryRequired)?,
-                ),
-            )
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?,
-        )),
+    let Some(entry) = selection::entry(
+        connection,
+        input.participant(),
+        operation,
+        recipient,
+        digest,
+    )
+    .await?
+    else {
+        return Ok(None);
+    };
+    let retained = read_entry(connection, input, crypto, entry)
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
+    if retained.value.receipt.attempt().operation_id() != operation
+        || retained.value.receipt.recipient() != recipient
+        || retained.value.receipt.digest() != &digest
+    {
+        return Err(OperationError::RecoveryRequired);
     }
+    Ok(Some(retained))
 }
 
 pub(in crate::workspace) async fn read(
@@ -495,6 +494,18 @@ pub(in crate::workspace) async fn read(
         .map_err(|_| OperationError::StorageFailure)?;
     let checked: Result<(), OperationError> = async {
         witness.confirm(&mut tx).await?;
+        if selection::entry(
+            &mut tx,
+            turn.selected.participant(),
+            request.operation,
+            request.recipient,
+            digest,
+        )
+        .await?
+            != retained.as_ref().map(|value| value.frame.header.operation)
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
         claim.1.confirm(&mut tx).await?;
         auth.confirm(&mut tx, turn.namespace, turn.clock, &proof, false)
             .await?;

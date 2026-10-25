@@ -24,7 +24,12 @@ pub use issuance::{
     StockSigningAttempt,
 };
 pub(in crate::workspace) mod signing_plan;
+pub(in crate::workspace) mod snapshot;
 pub use signing_plan::{StockBoundSigningPlan, StockSigningPlanOutcome, StockSigningPlanRequest};
+pub use snapshot::{
+    StockClaimReference, StockOperationSnapshot, StockRecipientSnapshot, StockSigningProgress,
+    StockSnapshotRequest,
+};
 pub(in crate::workspace) mod public_source;
 pub use public_source::{
     StockListingCapture, StockListingOutcome, StockListingReceipt, StockListingSnapshot,

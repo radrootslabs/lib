@@ -38,6 +38,11 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    StockSnapshot(
+        Box<stock::StockSnapshotRequest>,
+        AttachmentProof,
+        Reply<stock::StockOperationSnapshot, OperationError>,
+    ),
     StockEvidencePage(
         Box<stock::StockClaimRequest>,
         Option<radroots_domain::Sequence>,
@@ -279,6 +284,9 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::StockSnapshot(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::StockEvidencePage(_, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -556,6 +564,7 @@ impl Handle {
                                         | Job::CaptureStockEvidence(..)
                                         | Job::StockEvidence(..)
                                         | Job::StockEvidencePage(..)
+                                        | Job::StockSnapshot(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -766,6 +775,26 @@ impl Handle {
                                             *capture,
                                             proof,
                                         )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockSnapshot(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::snapshot::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -1560,6 +1589,15 @@ impl Handle {
         ))?;
         result.await.unwrap_or(Ok(anchor))
     }
+    pub(super) async fn stock_operation_snapshot(
+        &self,
+        request: stock::StockSnapshotRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockOperationSnapshot, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockSnapshot(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn stock_signing_evidence_page(
         &self,
         request: stock::StockClaimRequest,
@@ -1739,7 +1777,9 @@ impl Handle {
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
             Job::RetainStockListing(..) | Job::CaptureStockEvidence(..) => 256 * 1024,
-            Job::StockEvidence(..) | Job::StockEvidencePage(..) => 1024 * 1024,
+            Job::StockEvidence(..) | Job::StockEvidencePage(..) | Job::StockSnapshot(..) => {
+                1024 * 1024
+            }
             Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,
             Job::BindStockSigningPlan(..)
             | Job::StockSigningPlan(..)

@@ -427,3 +427,11 @@ owner until drain/reopen and reconciliation; the caller retains its input.
 page by original operation and recipient, so recovery can retrieve exact bytes
 without retaining a caller-side digest or requesting another signature.
 Agreement installation, stock conversion and delivery remain pending.
+
+`stock_operation_snapshot` authenticates original T0/T1, both recipient claims,
+and each recipient's evidence count and first exact artifact in one coherent
+observation. A bound plan, unknown claim and obtained artifact remain distinct
+from installation. Current RecoverOnly consent can inspect original progress
+after the first-issue deadline. Evidence selectors, page row sets, counts and
+absence facts are compared again after provider work inside the final read
+transaction. A recovery view never returns a fresh dispatch permit.

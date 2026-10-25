@@ -25,13 +25,15 @@ mod stock;
 pub use stock::{
     SellerStockConfig, StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
     StockAuthorityReceipt, StockBoundSigningPlan, StockCapturedEvidence, StockClaimOutcome,
-    StockClaimRequest, StockConsentCapture, StockConsentMode, StockConsentOutcome,
-    StockConsentReceipt, StockDispatchPermit, StockEnrollment, StockEvidenceCapture,
-    StockEvidenceOutcome, StockEvidencePage, StockEvidenceReceipt, StockGrantEnrollment,
-    StockGrantOutcome, StockGrantReceipt, StockHistorySnapshot, StockListingCapture,
-    StockListingOutcome, StockListingReceipt, StockListingSnapshot, StockRequestSnapshot,
-    StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest, StockSourceCapture,
-    StockSourceOutcome, StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
+    StockClaimReference, StockClaimRequest, StockConsentCapture, StockConsentMode,
+    StockConsentOutcome, StockConsentReceipt, StockDispatchPermit, StockEnrollment,
+    StockEvidenceCapture, StockEvidenceOutcome, StockEvidencePage, StockEvidenceReceipt,
+    StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt, StockHistorySnapshot,
+    StockListingCapture, StockListingOutcome, StockListingReceipt, StockListingSnapshot,
+    StockOperationSnapshot, StockRecipientSnapshot, StockRequestSnapshot, StockSigningAttempt,
+    StockSigningPlanOutcome, StockSigningPlanRequest, StockSigningProgress, StockSnapshotRequest,
+    StockSourceCapture, StockSourceOutcome, StockSourceProfile, StockSourceReceipt,
+    StockSourceSnapshot,
 };
 mod worker;
 

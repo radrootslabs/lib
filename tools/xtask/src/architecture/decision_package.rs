@@ -211,6 +211,9 @@ struct AcceptancePreparation {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SigningIssuance {
+    coherent_operation_snapshot_required: bool,
+    final_evidence_selectors_and_page_rows_required: bool,
+    recovery_view_has_dispatch_or_installation_rights: bool,
     fresh_current_backing_projection_required: bool,
     evidence_page_max: u32,
     claim_family: u32,
@@ -494,6 +497,13 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock
                 .signing_issuance
                 .fresh_current_backing_projection_required
+            && stock.signing_issuance.coherent_operation_snapshot_required
+            && stock
+                .signing_issuance
+                .final_evidence_selectors_and_page_rows_required
+            && !stock
+                .signing_issuance
+                .recovery_view_has_dispatch_or_installation_rights
             && stock.signing_issuance.evidence_page_max == 32
             && stock.signing_issuance.claim_family == 4
             && stock.signing_issuance.evidence_family == 5
@@ -1124,6 +1134,15 @@ mod tests {
     #[test]
     fn stock_claims_require_confirmed_dispatch_and_clock_independent_original_capture() {
         for (field, bad) in [
+            ("coherent_operation_snapshot_required", json!(false)),
+            (
+                "final_evidence_selectors_and_page_rows_required",
+                json!(false),
+            ),
+            (
+                "recovery_view_has_dispatch_or_installation_rights",
+                json!(true),
+            ),
             ("fresh_current_backing_projection_required", json!(false)),
             ("evidence_page_max", json!(33)),
             ("claim_family", json!(3)),

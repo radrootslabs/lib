@@ -1,0 +1,290 @@
+//! One authenticated observation of original preparation and per-recipient S.
+use super::*;
+use inventory::{Turn, checkpoint};
+use issuance::{claim, evidence::selection};
+use radroots_domain::{CommandDigest, OperationId, PublicKey, SigningAttemptId, UnixSeconds};
+use radroots_signing::issuance::IntentBinding;
+use radroots_storage::{command::OperationError, inventory::InventoryCheckpointRef};
+
+/// Original-operation selector data; it grants no read or execution permission.
+pub struct StockSnapshotRequest {
+    binding: WorkspaceBinding,
+    minimum: InventoryCheckpointRef,
+    operation: OperationId,
+    digest: CommandDigest,
+}
+impl StockSnapshotRequest {
+    pub const fn new(
+        binding: WorkspaceBinding,
+        minimum: InventoryCheckpointRef,
+        operation: OperationId,
+        digest: CommandDigest,
+    ) -> Self {
+        Self {
+            binding,
+            minimum,
+            operation,
+            digest,
+        }
+    }
+}
+impl std::fmt::Debug for StockSnapshotRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StockSnapshotRequest(<redacted>)")
+    }
+}
+
+/// Recorded signing facts, independent of installation or delivery success.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StockSigningProgress {
+    Unbound,
+    Bound,
+    Unknown,
+    Obtained,
+}
+/// Immutable claim identity. This reference cannot construct a dispatch permit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StockClaimReference {
+    id: SigningAttemptId,
+    transaction: TransactionId,
+    at: UnixSeconds,
+    binding: IntentBinding,
+}
+impl StockClaimReference {
+    pub const fn attempt_id(&self) -> SigningAttemptId {
+        self.id
+    }
+    pub const fn transaction_id(&self) -> TransactionId {
+        self.transaction
+    }
+    pub const fn claimed_at(&self) -> UnixSeconds {
+        self.at
+    }
+    pub const fn binding(&self) -> IntentBinding {
+        self.binding
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StockRecipientSnapshot {
+    recipient: PublicKey,
+    expected: Option<[u8; 32]>,
+    claim: Option<StockClaimReference>,
+    count: Sequence,
+    first: Option<StockEvidenceReceipt>,
+}
+impl StockRecipientSnapshot {
+    pub const fn recipient(&self) -> PublicKey {
+        self.recipient
+    }
+    pub const fn expected_event_id(&self) -> Option<[u8; 32]> {
+        self.expected
+    }
+    pub const fn claim(&self) -> Option<StockClaimReference> {
+        self.claim
+    }
+    /// Number of distinct retained original encodings, not new commitments.
+    pub const fn evidence_count(&self) -> Sequence {
+        self.count
+    }
+    pub const fn first_evidence(&self) -> Option<StockEvidenceReceipt> {
+        self.first
+    }
+    pub const fn progress(&self) -> StockSigningProgress {
+        if self.first.is_some() {
+            StockSigningProgress::Obtained
+        } else if self.claim.is_some() {
+            StockSigningProgress::Unknown
+        } else if self.expected.is_some() {
+            StockSigningProgress::Bound
+        } else {
+            StockSigningProgress::Unbound
+        }
+    }
+}
+/// Coherent original T0/T1/claim/obtained view. No installation, release,
+/// reissuance, delivery or global history-completeness claim follows from it.
+pub struct StockOperationSnapshot {
+    preparation: StockAcceptanceReceipt,
+    plan: Option<StockBoundSigningPlan>,
+    checkpoint: InventoryCheckpointRef,
+    recipients: [StockRecipientSnapshot; 2],
+}
+impl StockOperationSnapshot {
+    pub const fn preparation(&self) -> &StockAcceptanceReceipt {
+        &self.preparation
+    }
+    pub const fn signing_plan(&self) -> Option<&StockBoundSigningPlan> {
+        self.plan.as_ref()
+    }
+    pub const fn checkpoint(&self) -> InventoryCheckpointRef {
+        self.checkpoint
+    }
+    pub const fn recipients(&self) -> &[StockRecipientSnapshot; 2] {
+        &self.recipients
+    }
+}
+impl std::fmt::Debug for StockOperationSnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StockOperationSnapshot(<redacted>)")
+    }
+}
+
+pub(in crate::workspace) async fn read(
+    turn: &mut Turn<'_>,
+    request: StockSnapshotRequest,
+    proof: AttachmentProof,
+) -> Result<StockOperationSnapshot, OperationError> {
+    let auth = signing_plan::load(
+        turn,
+        &request.binding,
+        request.minimum,
+        request.operation,
+        request.digest,
+        &proof,
+    )
+    .await?;
+    if auth.access.authority.catalog != 11 {
+        return Err(OperationError::UnsupportedOperation);
+    }
+    let mut reports = Vec::with_capacity(2);
+    let mut claims = Vec::with_capacity(2);
+    let mut summaries = Vec::with_capacity(2);
+    for recipient in auth.original.receipt.rumor().recipients() {
+        let (retained, claim_proof) =
+            claim::existing(turn, &auth, request.operation, *recipient).await?;
+        let reference = retained.as_ref().map(|value| StockClaimReference {
+            id: value.report.attempt_id(),
+            transaction: value.report.transaction_id(),
+            at: value.report.claimed_at(),
+            binding: value.report.binding(),
+        });
+        let summary = selection::Summary::read(
+            turn.connection,
+            turn.selected.participant(),
+            request.operation,
+            *recipient,
+        )
+        .await?;
+        let first = if let Some(selected) = summary.first {
+            Some(
+                selection::open(
+                    turn.connection,
+                    turn.selected,
+                    turn.crypto,
+                    request.operation,
+                    *recipient,
+                    selected,
+                )
+                .await?
+                .value
+                .receipt(),
+            )
+        } else {
+            None
+        };
+        let expected = auth.plan.as_ref().and_then(|plan| {
+            plan.bound
+                .plan()
+                .seals()
+                .iter()
+                .find(|seal| seal.recipient() == *recipient)
+                .map(|seal| seal.event_id())
+        });
+        if reference.is_some() && expected.is_none()
+            || first.is_some_and(|value| {
+                reference.is_none_or(|claim| claim.id != value.signing_attempt_id())
+            })
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        reports.push(StockRecipientSnapshot {
+            recipient: *recipient,
+            expected,
+            claim: reference,
+            count: summary.count,
+            first,
+        });
+        claims.push(claim_proof);
+        summaries.push(summary);
+    }
+    let before = auth
+        .access
+        .authority
+        .inventory
+        .ok_or(OperationError::RecoveryRequired)?;
+    let minimum = InventoryCheckpointRef::from_host_metadata(
+        turn.selected.authority(),
+        Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+        None,
+    )?;
+    let witness = checkpoint::authenticate_minimum(
+        turn.connection,
+        turn.selected,
+        turn.crypto,
+        &auth.access.current,
+        &auth.access.authority,
+        minimum,
+    )
+    .await?;
+    let mut tx = turn
+        .connection
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|_| OperationError::StorageFailure)?;
+    let checked: Result<(), OperationError> = async {
+        witness.confirm(&mut tx).await?;
+        for (index, report) in reports.iter().enumerate() {
+            claims[index].confirm(&mut tx).await?;
+            summaries[index]
+                .confirm(
+                    &mut tx,
+                    turn.selected.participant(),
+                    request.operation,
+                    report.recipient,
+                )
+                .await?;
+        }
+        auth.confirm(&mut tx, turn.namespace, turn.clock, &proof, false)
+            .await?;
+        Ok(())
+    }
+    .await;
+    if tx.rollback().await.is_err() {
+        *turn.uncertain = true;
+        return Err(OperationError::RecoveryRequired);
+    }
+    checked?;
+    let checkpoint = InventoryCheckpointRef::from_host_metadata(
+        turn.selected.authority(),
+        before.revision,
+        before.head,
+    )?
+    .with_authorization(
+        auth.access
+            .authority
+            .authorization
+            .ok_or(OperationError::RecoveryRequired)?,
+    );
+    Ok(StockOperationSnapshot {
+        preparation: auth.original.receipt,
+        plan: auth.plan.map(|value| value.bound),
+        checkpoint,
+        recipients: reports
+            .try_into()
+            .map_err(|_| OperationError::RecoveryRequired)?,
+    })
+}
+impl NativeWorkspace {
+    pub async fn stock_operation_snapshot(
+        &self,
+        request: StockSnapshotRequest,
+        proof: &AttachmentProof,
+    ) -> Result<StockOperationSnapshot, OperationError> {
+        self.worker
+            .stock_operation_snapshot(
+                request,
+                proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?,
+            )
+            .await
+    }
+}
