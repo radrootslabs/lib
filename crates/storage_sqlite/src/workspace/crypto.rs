@@ -709,7 +709,7 @@ fn stock_root_context(
     input: &super::AttachmentInput,
     version: i64,
 ) -> Result<EnvelopeContext, WorkspaceError> {
-    if matches!(version, 4 | 5) {
+    if matches!(version, 4..=6) {
         use sha2::{Digest, Sha256};
         let namespace =
             radroots_storage::workspace::seller_stock::SellerAuthoritySelection::from_attachment(
@@ -724,8 +724,10 @@ fn stock_root_context(
         let mut hash = Sha256::new();
         hash.update(if version == 4 {
             b"radroots.seller_stock.authority_context.v4\0"
-        } else {
+        } else if version == 5 {
             b"radroots.seller_stock.authority_context.v5\0"
+        } else {
+            b"radroots.seller_stock.authority_context.v6\0"
         });
         hash.update(wire.as_slice());
         let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
@@ -736,8 +738,10 @@ fn stock_root_context(
                 .map_err(|_| WorkspaceError::InvalidInput)?,
             PayloadSchemaId::parse(if version == 4 {
                 "radroots.seller_stock.authority.v4"
-            } else {
+            } else if version == 5 {
                 "radroots.seller_stock.authority.v5"
+            } else {
+                "radroots.seller_stock.authority.v6"
             })
             .map_err(|_| WorkspaceError::InvalidInput)?,
         ));
@@ -769,6 +773,18 @@ fn stock_record_context(
         "mapping" => (
             "radroots.seller_stock.mapping",
             "radroots.seller_stock.mapping.v1",
+        ),
+        "source_record" => (
+            "radroots.seller_stock.source_record",
+            "radroots.seller_stock.source_record.v1",
+        ),
+        "source_evidence" => (
+            "radroots.seller_stock.source_evidence",
+            "radroots.seller_stock.source_evidence.v1",
+        ),
+        "source_part" => (
+            "radroots.seller_stock.source_part",
+            "radroots.seller_stock.source_part.v1",
         ),
         "grant" => (
             "radroots.seller_stock.grant",
@@ -811,11 +827,11 @@ fn stock_record_context_for_catalog(
 ) -> Result<EnvelopeContext, WorkspaceError> {
     let original = stock_record_context(input, kind, id)?;
     let schema = match (catalog, kind) {
-        (2, _) | (3..=5, "pool") => return Ok(original),
+        (2, _) | (3..=6, "pool") => return Ok(original),
         (3, "operation") => "radroots.seller_stock.operation.v2",
         (4, "operation") => "radroots.seller_stock.operation.v3",
-        (5, "operation") => "radroots.seller_stock.operation.v4",
-        (3..=5, "movement") => "radroots.seller_stock.movement.v2",
+        (5 | 6, "operation") => "radroots.seller_stock.operation.v4",
+        (3..=6, "movement") => "radroots.seller_stock.movement.v2",
         _ => return Err(WorkspaceError::RecoveryRequired),
     };
     Ok(EnvelopeContext::new(

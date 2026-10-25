@@ -38,6 +38,20 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    RetainStockSource(
+        Box<WorkspaceBinding>,
+        radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        Box<stock::StockSourceCapture>,
+        AttachmentProof,
+        Reply<stock::StockSourceOutcome, OperationError>,
+    ),
+    StockSource(
+        Box<WorkspaceBinding>,
+        radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        radroots_domain::EnvelopeEventId,
+        AttachmentProof,
+        Reply<Option<stock::StockSourceSnapshot>, OperationError>,
+    ),
     OptionMapping(
         Box<WorkspaceBinding>,
         radroots_storage::inventory::InventoryCheckpointRef,
@@ -175,6 +189,12 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::RetainStockSource(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockSource(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::OptionMapping(_, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -388,6 +408,8 @@ impl Handle {
                                         | Job::InventoryOperation(..)
                                         | Job::Pool(..)
                                         | Job::OptionMapping(..)
+                                        | Job::RetainStockSource(..)
+                                        | Job::StockSource(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -474,6 +496,50 @@ impl Handle {
                                             uncertain: &mut uncertain,
                                         }
                                         .creation(*binding, minimum, operation, digest, proof)
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::RetainStockSource(binding, minimum, capture, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::source::retain(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            *capture,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockSource(binding, minimum, envelope, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::source::query(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            envelope,
+                                            proof,
+                                        )
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -913,6 +979,44 @@ impl Handle {
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
+    pub(super) async fn retain_stock_source(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        capture: stock::StockSourceCapture,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockSourceOutcome, OperationError> {
+        let anchor = stock::StockSourceOutcome::Unknown {
+            transaction: capture.transaction_id(),
+            envelope: capture.envelope_id(),
+        };
+        let (reply, result) = oneshot::channel();
+        self.send(Job::RetainStockSource(
+            Box::new(binding),
+            minimum,
+            Box::new(capture),
+            proof,
+            reply,
+        ))?;
+        result.await.unwrap_or(Ok(anchor))
+    }
+    pub(super) async fn stock_source(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        envelope: radroots_domain::EnvelopeEventId,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockSourceSnapshot>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockSource(
+            Box::new(binding),
+            minimum,
+            envelope,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn option_mapping(
         &self,
         binding: WorkspaceBinding,
@@ -943,6 +1047,7 @@ impl Handle {
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
+            Job::RetainStockSource(..) => 256 * 1024,
             Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,
             Job::PrepareDelivery(..) => 1024 * 1024,

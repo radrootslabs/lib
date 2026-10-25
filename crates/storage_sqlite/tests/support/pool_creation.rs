@@ -1117,3 +1117,6 @@ mod grants;
 
 #[path = "option_mapping.rs"]
 mod mapping;
+
+#[path = "stock_source.rs"]
+mod source;

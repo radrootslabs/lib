@@ -1,7 +1,7 @@
 //! Exact stock catalogs. Enrollment-only version1 is retained without upgrade.
 use super::WorkspaceError;
 use sqlx::SqliteConnection;
-pub(super) const CURRENT: i64 = 5;
+pub(super) const CURRENT: i64 = 6;
 const AUTHORITY: &str = "CREATE TABLE stock_authority (singleton INTEGER PRIMARY KEY CHECK(singleton=1), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 const GRANTS: &str = "CREATE TABLE stock_grants (grant_id BLOB PRIMARY KEY CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
 const POOLS: &str = "CREATE TABLE stock_pools (pool_id BLOB PRIMARY KEY CHECK(length(pool_id)=32), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
@@ -22,7 +22,7 @@ pub(super) fn objects(
     ];
     match version {
         1 => {}
-        2..=5 => objects.extend([
+        2..=6 => objects.extend([
             ("table", "stock_pools", "stock_pools", POOLS),
             ("table", "stock_operations", "stock_operations", OPERATIONS),
             (
@@ -57,8 +57,26 @@ pub(super) fn objects(
         ));
         objects.push(("index", "stock_actor_operation_identity", "stock_operations", "CREATE UNIQUE INDEX stock_actor_operation_identity ON stock_operations(actor,operation_id)"));
     }
-    if version == 5 {
+    if version >= 5 {
         objects.push(("table","stock_mappings","stock_mappings","CREATE TABLE stock_mappings (listing_author BLOB NOT NULL CHECK(length(listing_author)=32), listing_d BLOB NOT NULL CHECK(length(listing_d)=16), option_id BLOB NOT NULL CHECK(length(option_id)=32), pool_id BLOB NOT NULL REFERENCES stock_pools(pool_id), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(listing_author,listing_d,option_id)) STRICT, WITHOUT ROWID"));
+    }
+    if version == 6 {
+        objects.push(("table","stock_source_records","stock_source_records","CREATE TABLE stock_source_records (record_id BLOB PRIMARY KEY CHECK(length(record_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
+        objects.push(("table","stock_source_evidence","stock_source_evidence","CREATE TABLE stock_source_evidence (envelope_id BLOB PRIMARY KEY CHECK(length(envelope_id)=32), record_id BLOB REFERENCES stock_source_records(record_id), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
+        objects.push(("index","stock_source_transaction_identity","stock_source_evidence","CREATE UNIQUE INDEX stock_source_transaction_identity ON stock_source_evidence(transaction_id)"));
+        objects.push((
+            "index",
+            "stock_source_revision_identity",
+            "stock_source_evidence",
+            "CREATE UNIQUE INDEX stock_source_revision_identity ON stock_source_evidence(revision)",
+        ));
+        objects.push((
+            "index",
+            "stock_source_head_identity",
+            "stock_source_evidence",
+            "CREATE UNIQUE INDEX stock_source_head_identity ON stock_source_evidence(chain_head)",
+        ));
+        objects.push(("table","stock_source_parts","stock_source_parts","CREATE TABLE stock_source_parts (envelope_id BLOB NOT NULL REFERENCES stock_source_evidence(envelope_id), role INTEGER NOT NULL CHECK(role BETWEEN 0 AND 2), part INTEGER NOT NULL CHECK(part BETWEEN 0 AND 3), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(envelope_id,role,part)) STRICT, WITHOUT ROWID"));
     }
     Ok(objects)
 }

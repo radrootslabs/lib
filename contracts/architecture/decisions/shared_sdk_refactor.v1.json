@@ -75,16 +75,17 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 5,
+    "schema_version": 6,
     "retained_enrollment_versions": [
       1
     ],
     "retained_inventory_versions": [
       2,
       3,
-      4
+      4,
+      5
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v5",
+    "authority_payload_schema": "radroots.seller_stock.authority.v6",
     "inventory_operation_payload_schema": "radroots.seller_stock.operation.v4",
     "mapping_payload_schema": "radroots.seller_stock.mapping.v1",
     "mapping_owner_administration_required": true,
@@ -128,7 +129,23 @@
     "capability_contract": {
       "id": "radroots.seller_stock.native_inventory",
       "version": "1"
-    }
+    },
+    "source_payload_schemas": [
+      "radroots.seller_stock.source_record.v1",
+      "radroots.seller_stock.source_evidence.v1",
+      "radroots.seller_stock.source_part.v1"
+    ],
+    "source_profile_dispositions": [
+      "known",
+      "unsupported",
+      "rejected"
+    ],
+    "source_owner_administration_required": true,
+    "inventory_scope_grants_source_access": false,
+    "source_checkpoint_independent": true,
+    "source_profile_implies_actionability": false,
+    "source_carrier_max_bytes": 65536,
+    "source_chunk_max_bytes": 16384
   },
   "provenance": {
     "app_behavior_implementation": "independent_reimplementation",

@@ -2450,6 +2450,15 @@ impl serde_core::ser::Serialize for radroots_storage::workspace::seller_stock::S
 pub fn radroots_storage::workspace::seller_stock::StockResources::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::StockResources
 pub fn radroots_storage::workspace::seller_stock::StockResources::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_storage::workspace::seller_stock::StockSourceCheckpointRef
+impl radroots_storage::workspace::seller_stock::StockSourceCheckpointRef
+pub const fn radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::authority(self) -> radroots_domain::context::AuthorityRef
+pub const fn radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::authorization(self) -> core::option::Option<radroots_storage::workspace::seller_stock::StockAuthorizationRef>
+pub fn radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::from_host_metadata(radroots_domain::context::AuthorityRef, radroots_domain::context::Sequence, core::option::Option<radroots_domain::identifier::CheckpointDigest>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub const fn radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::head(self) -> core::option::Option<radroots_domain::identifier::CheckpointDigest>
+pub const fn radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::revision(self) -> radroots_domain::context::Sequence
+pub const fn radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::with_authorization(self, radroots_storage::workspace::seller_stock::StockAuthorizationRef) -> Self
+pub const fn radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::with_optional_authorization(self, core::option::Option<radroots_storage::workspace::seller_stock::StockAuthorizationRef>) -> Self
 #[non_exhaustive] pub enum radroots_storage::workspace::WorkspaceError
 pub radroots_storage::workspace::WorkspaceError::Capacity
 pub radroots_storage::workspace::WorkspaceError::Closed

@@ -42,6 +42,8 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
   "json",
   "std",
 ] }
+radroots_nostr = { workspace = true, default-features = false, features = ["commerce"] }
+radroots_protocol = { workspace = true, default-features = false, features = ["commerce"] }
 radroots_secrets = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false, features = [
   "serde",
@@ -63,7 +65,7 @@ sqlx = { workspace = true, features = ["runtime-tokio", "sqlite-bundled"] }
 
 [dev-dependencies]
 radroots_signing = { workspace = true, features = ["chat", "artifacts"] }
-radroots_nostr = { workspace = true, default-features = false, features = ["signing", "nip17"] }
+radroots_nostr = { workspace = true, default-features = false, features = ["nip17"] }
 radroots_protocol = { workspace = true, default-features = false, features = ["chat"] }
 nostr = { workspace = true, default-features = false, features = ["std", "nip44"] }
 futures = { workspace = true }

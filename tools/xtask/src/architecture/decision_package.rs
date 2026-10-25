@@ -103,6 +103,14 @@ struct StockCapabilityContract {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NativeSellerStockAuthority {
+    source_payload_schemas: Vec<String>,
+    source_profile_dispositions: Vec<String>,
+    source_owner_administration_required: bool,
+    inventory_scope_grants_source_access: bool,
+    source_checkpoint_independent: bool,
+    source_profile_implies_actionability: bool,
+    source_carrier_max_bytes: u32,
+    source_chunk_max_bytes: u32,
     mapping_payload_schema: String,
     mapping_owner_administration_required: bool,
     mapping_changes_physical_stock: bool,
@@ -321,12 +329,25 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 5
+            && stock.schema_version == 6
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v5"
+            && stock.retained_inventory_versions == [2, 3, 4, 5]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v6"
             && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v4"
             && stock.mapping_payload_schema == "radroots.seller_stock.mapping.v1"
+            && stock.source_payload_schemas
+                == [
+                    "radroots.seller_stock.source_record.v1",
+                    "radroots.seller_stock.source_evidence.v1",
+                    "radroots.seller_stock.source_part.v1",
+                ]
+            && stock.source_profile_dispositions == ["known", "unsupported", "rejected"]
+            && stock.source_owner_administration_required
+            && !stock.inventory_scope_grants_source_access
+            && stock.source_checkpoint_independent
+            && !stock.source_profile_implies_actionability
+            && stock.source_carrier_max_bytes == 65536
+            && stock.source_chunk_max_bytes == 16384
             && stock.mapping_owner_administration_required
             && !stock.mapping_changes_physical_stock
             && !stock.mapping_changes_pool_version
@@ -897,6 +918,31 @@ mod tests {
             ("private_causal_heads_use_timestamp_lww", true),
         ] {
             assert!(validate_bytes(&changed(&format!("/execution/{field}"), json!(bad))).is_err());
+        }
+    }
+
+    #[test]
+    fn source_retention_contract_requires_provenance_bounds_and_separate_authority() {
+        for (field, bad) in [
+            ("schema_version", json!(5)),
+            ("retained_inventory_versions", json!([2, 3, 4])),
+            ("source_payload_schemas", json!([])),
+            ("source_profile_dispositions", json!(["known"])),
+            ("source_owner_administration_required", json!(false)),
+            ("inventory_scope_grants_source_access", json!(true)),
+            ("source_checkpoint_independent", json!(false)),
+            ("source_profile_implies_actionability", json!(true)),
+            ("source_carrier_max_bytes", json!(65537)),
+            ("source_chunk_max_bytes", json!(16385)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
         }
     }
 

@@ -9,9 +9,14 @@ use radroots_storage::workspace::seller_stock::{
     SellerAuthoritySelection, StockAction, StockAuthorizationRef, StockGrantRecord, StockGrantScope,
 };
 pub(in crate::workspace) mod grants;
+pub(in crate::workspace) mod source;
 use grants::StockRecord;
 pub use grants::{StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt};
 use serde::{Deserialize, Serialize};
+pub use source::{
+    StockSourceCapture, StockSourceOutcome, StockSourceProfile, StockSourceReceipt,
+    StockSourceSnapshot,
+};
 use sqlx::{Connection, SqliteConnection};
 use std::{
     path::Path,
@@ -72,8 +77,16 @@ pub struct StockAuthorityReceipt {
     pub(super) transaction: TransactionId,
     pub(super) revocation: Sequence,
     pub(super) inventory: Option<radroots_storage::inventory::InventoryCheckpointRef>,
+    pub(super) sources: Option<radroots_storage::workspace::seller_stock::StockSourceCheckpointRef>,
 }
 impl StockAuthorityReceipt {
+    /// Separately retained source progress; profile recognition proves no order
+    /// actionability. Absent for retained catalogs without source retention.
+    pub const fn source_checkpoint(
+        &self,
+    ) -> Option<radroots_storage::workspace::seller_stock::StockSourceCheckpointRef> {
+        self.sources
+    }
     pub fn input(&self) -> &AttachmentInput {
         &self.input
     }
@@ -143,6 +156,7 @@ impl NativeWorkspace {
         self.worker.stock_authority(input, proof).await
     }
 }
+#[derive(Clone)]
 struct Authority {
     catalog: i64,
     input: AttachmentInput,
@@ -150,6 +164,16 @@ struct Authority {
     revocation: Sequence,
     inventory: Option<InventoryCheckpoint>,
     authorization: Option<StockAuthorizationRef>,
+    sources: Option<SourceCheckpoint>,
+}
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SourceCheckpoint {
+    revision: Sequence,
+    records: Sequence,
+    parts: Sequence,
+    #[serde(deserialize_with = "required_nullable")]
+    head: Option<radroots_domain::CheckpointDigest>,
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -267,8 +291,42 @@ struct AuthorityV5 {
     inventory: InventoryCheckpointCurrent,
     authorization: StockAuthorizationRef,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityV6 {
+    version: u8,
+    namespace: SellerAuthoritySelection,
+    administrator: GrantId,
+    transaction: TransactionId,
+    revocation: Sequence,
+    #[serde(deserialize_with = "object")]
+    inventory: InventoryCheckpointCurrent,
+    #[serde(deserialize_with = "object")]
+    sources: SourceCheckpoint,
+    authorization: StockAuthorizationRef,
+}
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
+        if self.catalog == 6 {
+            let bytes = serde_json::to_vec(&AuthorityV6 {
+                version: 6,
+                namespace: SellerAuthoritySelection::from_attachment(&self.input),
+                administrator: self.input.grant_id(),
+                transaction: self.transaction,
+                revocation: self.revocation,
+                inventory: self
+                    .inventory
+                    .ok_or(WorkspaceError::RecoveryRequired)?
+                    .current()?,
+                sources: self.sources.ok_or(WorkspaceError::RecoveryRequired)?,
+                authorization: self.authorization.ok_or(WorkspaceError::RecoveryRequired)?,
+            })
+            .map_err(|_| WorkspaceError::StorageFailure)?;
+            if bytes.len() > 16 * 1024 {
+                return Err(WorkspaceError::Capacity);
+            }
+            return Ok(zeroize::Zeroizing::new(bytes));
+        }
         if self.catalog == 5 {
             let bytes = serde_json::to_vec(&AuthorityV5 {
                 version: 5,
@@ -339,6 +397,7 @@ impl Authority {
                     revocation: v.revocation,
                     inventory: None,
                     authorization: None,
+                    sources: None,
                 }
             }
             2 | 3 => {
@@ -355,6 +414,7 @@ impl Authority {
                     revocation: v.revocation,
                     inventory: Some(v.inventory.into()),
                     authorization: None,
+                    sources: None,
                 }
             }
             4 => {
@@ -372,6 +432,7 @@ impl Authority {
                     revocation: v.revocation,
                     inventory: Some(v.inventory.into()),
                     authorization: Some(v.authorization),
+                    sources: None,
                 }
             }
             5 => {
@@ -389,6 +450,30 @@ impl Authority {
                     revocation: v.revocation,
                     inventory: Some(v.inventory.into()),
                     authorization: Some(v.authorization),
+                    sources: None,
+                }
+            }
+            6 => {
+                let value: AuthorityV6 = closed_record(bytes)?;
+                if value.version != 6
+                    || value.authorization.generation() != value.revocation
+                    || (value.inventory.revision.get() == 0) != value.inventory.head.is_none()
+                    || (value.sources.revision.get() == 0) != value.sources.head.is_none()
+                    || (value.sources.revision.get() == 0) != (value.sources.parts.get() == 0)
+                    || value.sources.records.get() > value.sources.revision.get()
+                    || value.sources.parts.get() / 3 < value.sources.revision.get()
+                    || value.sources.parts.get() > value.sources.revision.get().saturating_mul(12)
+                {
+                    return Err(WorkspaceError::RecoveryRequired);
+                }
+                Self {
+                    catalog,
+                    input: value.namespace.attachment(value.administrator)?,
+                    transaction: value.transaction,
+                    revocation: value.revocation,
+                    inventory: Some(value.inventory.into()),
+                    authorization: Some(value.authorization),
+                    sources: Some(value.sources),
                 }
             }
             _ => return Err(WorkspaceError::RecoveryRequired),
@@ -420,6 +505,12 @@ pub(super) async fn initialize(
     namespace.validate()?;
     if let Some(initial) = initial {
         let mut authority = Authority {
+            sources: Some(SourceCheckpoint {
+                revision: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                records: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                parts: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                head: None,
+            }),
             catalog: schema::CURRENT,
             authorization: None,
             input: input.clone(),
@@ -473,7 +564,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=5")
+            sqlx::query("PRAGMA user_version=6")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -557,6 +648,9 @@ async fn read(
     if let Some(checkpoint) = authority.inventory {
         inventory::check_head(connection, checkpoint).await?;
     }
+    if let Some(checkpoint) = authority.sources {
+        check_source_counts(connection, checkpoint).await?;
+    }
     Ok((authority, record, root, grant))
 }
 pub(super) async fn authenticate(
@@ -602,6 +696,7 @@ pub(super) async fn authenticate(
     namespace.validate()?;
     Ok((
         StockAuthorityReceipt {
+            sources:authority.sources.map(|value|radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::from_host_metadata(expected.authority(),value.revision,value.head).map(|state|state.with_optional_authorization(authority.authorization))).transpose()?,
             input: authority.input,
             transaction: authority.transaction,
             revocation: authority.revocation,
@@ -810,6 +905,39 @@ fn closed_record<'de, T: Deserialize<'de>>(bytes: &'de [u8]) -> Result<T, Worksp
         return Err(WorkspaceError::RecoveryRequired);
     }
     serde_json::from_slice(bytes).map_err(|_| WorkspaceError::RecoveryRequired)
+}
+async fn check_source_counts(
+    connection: &mut SqliteConnection,
+    checkpoint: SourceCheckpoint,
+) -> Result<(), WorkspaceError> {
+    use sqlx::Row;
+    let row=sqlx::query("SELECT count(*),coalesce(max(revision),0),coalesce(sum(CASE WHEN revision=? AND chain_head=? THEN 1 ELSE 0 END),0) FROM stock_source_evidence").bind(checkpoint.revision.get() as i64).bind(checkpoint.head.map(|id|id.as_bytes().to_vec())).fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
+    let count: i64 = row
+        .try_get(0)
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let maximum: i64 = row
+        .try_get(1)
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let matched: i64 = row
+        .try_get(2)
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let records: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_source_records")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    let parts: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_source_parts")
+        .fetch_one(connection)
+        .await
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    if count != checkpoint.revision.get() as i64
+        || maximum != count
+        || matched != i64::from(checkpoint.head.is_some())
+        || records != checkpoint.records.get() as i64
+        || parts != checkpoint.parts.get() as i64
+    {
+        return Err(WorkspaceError::RecoveryRequired);
+    }
+    Ok(())
 }
 fn object<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(
     deserializer: D,

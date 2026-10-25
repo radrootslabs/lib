@@ -58,7 +58,7 @@ impl MappingRead {
     }
 }
 pub(super) fn require(access: &Access, key: OptionMappingKey) -> Result<(), OperationError> {
-    if access.authority.catalog != 5 {
+    if !(5..=6).contains(&access.authority.catalog) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()

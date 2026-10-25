@@ -29,6 +29,8 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "radroots_domain",
             "radroots_event",
             "radroots_event_codec",
+            "radroots_nostr",
+            "radroots_protocol",
             "radroots_secrets",
             "radroots_storage",
             "radroots_transport",
