@@ -155,7 +155,7 @@ pub(in crate::workspace::stock) async fn read_entry(
     Ok(Some(retained))
 }
 impl Retained {
-    pub(super) fn identity(&self) -> EntryIdentity {
+    pub(in crate::workspace::stock) fn identity(&self) -> EntryIdentity {
         EntryIdentity {
             operation: self.frame.header.operation,
             revision: self.frame.header.revision,
@@ -163,7 +163,7 @@ impl Retained {
             protected_digest: Sha256::digest(&self.frame.protected).into(),
         }
     }
-    pub(super) async fn confirm(
+    pub(in crate::workspace::stock) async fn confirm(
         &self,
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {
@@ -191,6 +191,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            signing: None,
             header: self.frame.header,
             protected: self.frame.protected,
             parts_witness: self.frame.parts_witness,

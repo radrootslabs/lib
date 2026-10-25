@@ -24,12 +24,14 @@ mod snapshot;
 mod stock;
 pub use stock::{
     SellerStockConfig, StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
-    StockAuthorityReceipt, StockBoundSigningPlan, StockConsentCapture, StockConsentMode,
-    StockConsentOutcome, StockConsentReceipt, StockEnrollment, StockGrantEnrollment,
+    StockAuthorityReceipt, StockBoundSigningPlan, StockCapturedEvidence, StockClaimOutcome,
+    StockClaimRequest, StockConsentCapture, StockConsentMode, StockConsentOutcome,
+    StockConsentReceipt, StockDispatchPermit, StockEnrollment, StockEvidenceCapture,
+    StockEvidenceOutcome, StockEvidencePage, StockEvidenceReceipt, StockGrantEnrollment,
     StockGrantOutcome, StockGrantReceipt, StockHistorySnapshot, StockListingCapture,
     StockListingOutcome, StockListingReceipt, StockListingSnapshot, StockRequestSnapshot,
-    StockSigningPlanOutcome, StockSigningPlanRequest, StockSourceCapture, StockSourceOutcome,
-    StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
+    StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest, StockSourceCapture,
+    StockSourceOutcome, StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
 };
 mod worker;
 

@@ -1,5 +1,6 @@
 //! Owner-private inventory effects on the existing connection owner.
 pub(in crate::workspace) mod acceptance;
+pub(in crate::workspace::stock) mod backing;
 pub(super) mod checkpoint;
 mod codec;
 mod mapping;
@@ -36,6 +37,7 @@ pub(super) async fn check_head(
     connection: &mut SqliteConnection,
     checkpoint: InventoryCheckpoint,
 ) -> Result<(), WorkspaceError> {
+    super::issuance::check_counts(connection).await?;
     if let Some(expected) = checkpoint.orders {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_orders")
             .fetch_one(&mut *connection)
@@ -448,7 +450,7 @@ impl Turn<'_> {
             access.authority.authorization,
             mapping.as_ref().map(|value| value.effect),
         )?;
-        let framed = if matches!(catalog, 7..=10) {
+        let framed = if matches!(catalog, 7..=11) {
             Some(
                 super::ledger::prepare(
                     self.crypto,
@@ -862,7 +864,7 @@ pub(super) async fn read_operation(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let (frame, request, decoded) = if matches!(catalog, 7..=10) {
+    let (frame, request, decoded) = if matches!(catalog, 7..=11) {
         let retained = super::ledger::read(connection, input, crypto, operation)
             .await?
             .ok_or(OperationError::RecoveryRequired)?;

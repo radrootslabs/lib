@@ -12,7 +12,7 @@ use radroots_storage::{
     inventory::InventoryCheckpointRef,
 };
 use sha2::{Digest, Sha256};
-mod codec;
+pub(in crate::workspace::stock) mod codec;
 pub(super) use codec::read_entry;
 
 /// A bounded candidate, with actual encryption and original route verification.
@@ -93,17 +93,53 @@ pub enum StockSigningPlanOutcome {
     Unknown(CommitAttempt),
 }
 
-struct Authorized {
-    access: Access,
-    original: acceptance::codec::Retained,
-    command: radroots_protocol::command::CapturedOrderAcceptance,
-    original_proof: MinimumProof,
-    consent: consent::Retained,
-    consent_proof: MinimumProof,
-    plan: Option<codec::Retained>,
-    plan_proof: MinimumProof,
+pub(in crate::workspace::stock) struct Authorized {
+    pub(in crate::workspace::stock) access: Access,
+    pub(in crate::workspace::stock) original: acceptance::codec::Retained,
+    pub(in crate::workspace::stock) command: radroots_protocol::command::CapturedOrderAcceptance,
+    pub(in crate::workspace::stock) original_proof: MinimumProof,
+    pub(in crate::workspace::stock) consent: consent::Retained,
+    pub(in crate::workspace::stock) consent_proof: MinimumProof,
+    pub(in crate::workspace::stock) plan: Option<codec::Retained>,
+    pub(in crate::workspace::stock) plan_proof: MinimumProof,
 }
-async fn load(
+impl Authorized {
+    pub(in crate::workspace::stock) async fn confirm(
+        &self,
+        connection: &mut SqliteConnection,
+        namespace: &super::super::fs::Namespace,
+        clock: &dyn WorkspaceClock,
+        proof: &AttachmentProof,
+        fresh: bool,
+    ) -> Result<WorkspaceBinding, OperationError> {
+        self.original_proof.confirm(connection).await?;
+        self.consent_proof.confirm(connection).await?;
+        self.plan_proof.confirm(connection).await?;
+        self.original.confirm(connection).await?;
+        if let Some(plan) = &self.plan {
+            plan.confirm(connection).await?;
+        }
+        let current = self
+            .access
+            .confirm(connection, namespace, clock, proof)
+            .await?;
+        acceptance::check_consent(
+            &self.access,
+            &self.consent,
+            &self.command,
+            fresh,
+            current.observed_at(),
+        )?;
+        if fresh
+            && (current.observed_at() < self.original.receipt.prepared_at()
+                || current.observed_at() >= self.original.receipt.first_issue_deadline())
+        {
+            return Err(OperationError::DeadlineExceeded);
+        }
+        Ok(current)
+    }
+}
+pub(in crate::workspace::stock) async fn load(
     turn: &mut Turn<'_>,
     binding: &WorkspaceBinding,
     minimum: InventoryCheckpointRef,
@@ -112,7 +148,7 @@ async fn load(
     proof: &AttachmentProof,
 ) -> Result<Authorized, OperationError> {
     let access = turn.access(binding, minimum, proof).await?;
-    if access.authority.catalog != 10 {
+    if !matches!(access.authority.catalog, 10 | 11) {
         return Err(OperationError::UnsupportedOperation);
     }
     let original = acceptance::codec::read(turn.connection, turn.selected, turn.crypto, operation)
@@ -241,6 +277,12 @@ pub(in crate::workspace) async fn bind(
             auth.plan.ok_or(OperationError::RecoveryRequired)?.bound,
         )));
     }
+    let backing = Box::pin(inventory::backing::read(
+        turn,
+        &auth.access,
+        auth.original.receipt.held_pools(),
+    ))
+    .await?;
     let before = auth
         .access
         .authority
@@ -313,6 +355,7 @@ pub(in crate::workspace) async fn bind(
     let changed: Result<(), OperationError> = async {
         auth.original_proof.confirm(&mut tx).await?; auth.consent_proof.confirm(&mut tx).await?; auth.plan_proof.confirm(&mut tx).await?; auth.original.confirm(&mut tx).await?;
         let current = auth.access.confirm(&mut tx, turn.namespace, turn.clock, &proof).await?;
+        for pool in &backing { pool.confirm(&mut tx).await?; }
         acceptance::check_consent(&auth.access, &auth.consent, &auth.command, true, current.observed_at())?;
         if current.observed_at() < bound_at || current.observed_at() >= auth.original.receipt.first_issue_deadline() { return Err(OperationError::DeadlineExceeded); }
         sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected,family,order_id,related_operation,subject_grant) VALUES(?,?,?,?,?,NULL,?,?,?,3,?,?,NULL)")

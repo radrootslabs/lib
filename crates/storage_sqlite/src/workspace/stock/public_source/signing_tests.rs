@@ -1,6 +1,8 @@
 //! Actual T1 retention, error windows and original recovery. No stock release
 //! or firm agreement is inferred from a bound signing plan.
 use super::*;
+#[path = "claim_tests.rs"]
+mod claims;
 use crate::workspace::{StockBoundSigningPlan, StockSigningPlanOutcome, StockSigningPlanRequest};
 use radroots_nostr::commerce::VerifiedCommerceSigningPlan;
 use radroots_protocol::{
@@ -131,6 +133,23 @@ async fn prepared(r: &Rig) -> (CapturedOrderAcceptance, StockAcceptanceReceipt) 
     consent(r, &command).await;
     let receipt = prepare(r, &command).await.unwrap();
     (command, receipt)
+}
+
+#[tokio::test]
+async fn fresh_t1_refuses_damaged_current_pool_backing() {
+    let r = Rig::new().await;
+    let (_, receipt) = prepared(&r).await;
+    let mut raw = database(&r).await;
+    sqlx::raw_sql("UPDATE stock_pools SET protected=randomblob(length(protected))")
+        .execute(&mut raw)
+        .await
+        .unwrap();
+    assert!(
+        bind(&r, &receipt, 42).await.is_err(),
+        "current backing must be authenticated before new intent binding"
+    );
+    raw.close().await.unwrap();
+    r.store.close().await.unwrap();
 }
 #[tokio::test]
 async fn actual_t1_binds_complete_original_peer_self_plan_and_reopens_without_another_hold_or_signer()
@@ -327,7 +346,7 @@ async fn dropped_t1_observer_keeps_owned_work_and_close_drains_before_original_r
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v10", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v11", 0);
     let mut pending = Box::pin(
         r.store
             .bind_stock_signing_intents(request, r.enrollment.proof()),
@@ -362,6 +381,7 @@ async fn dropped_t1_observer_keeps_owned_work_and_close_drains_before_original_r
 #[tokio::test]
 async fn t1_final_permission_order_root_and_clock_witnesses_refuse_changes_after_provider_io() {
     for statement in [
+        "UPDATE stock_pools SET protected=randomblob(length(protected))",
         "UPDATE stock_grants SET protected=randomblob(length(protected))",
         "UPDATE stock_orders SET protected=randomblob(length(protected))",
         "UPDATE stock_authority SET protected=randomblob(length(protected))",
@@ -380,7 +400,7 @@ async fn t1_final_permission_order_root_and_clock_witnesses_refuse_changes_after
         let mut raw = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v10", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v11", 0);
         let mut pending = Box::pin(
             r.store
                 .bind_stock_signing_intents(request, r.enrollment.proof()),

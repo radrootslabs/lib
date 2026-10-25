@@ -38,6 +38,33 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    StockEvidencePage(
+        Box<stock::StockClaimRequest>,
+        Option<radroots_domain::Sequence>,
+        AttachmentProof,
+        Reply<stock::StockEvidencePage, OperationError>,
+    ),
+    CaptureStockEvidence(
+        Box<stock::StockEvidenceCapture>,
+        AttachmentProof,
+        Reply<stock::StockEvidenceOutcome, OperationError>,
+    ),
+    StockEvidence(
+        Box<stock::StockClaimRequest>,
+        [u8; 32],
+        AttachmentProof,
+        Reply<Option<stock::StockCapturedEvidence>, OperationError>,
+    ),
+    ClaimStockSigning(
+        Box<stock::StockClaimRequest>,
+        AttachmentProof,
+        Reply<stock::StockClaimOutcome, OperationError>,
+    ),
+    StockSigningAttempt(
+        Box<stock::StockClaimRequest>,
+        AttachmentProof,
+        Reply<Option<stock::StockSigningAttempt>, OperationError>,
+    ),
     BindStockSigningPlan(
         Box<stock::StockSigningPlanRequest>,
         AttachmentProof,
@@ -252,6 +279,21 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::StockEvidencePage(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::CaptureStockEvidence(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockEvidence(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::ClaimStockSigning(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockSigningAttempt(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::BindStockSigningPlan(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -509,6 +551,11 @@ impl Handle {
                                         | Job::PrepareStockAcceptance(..)
                                         | Job::BindStockSigningPlan(..)
                                         | Job::StockSigningPlan(..)
+                                        | Job::ClaimStockSigning(..)
+                                        | Job::StockSigningAttempt(..)
+                                        | Job::CaptureStockEvidence(..)
+                                        | Job::StockEvidence(..)
+                                        | Job::StockEvidencePage(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -725,9 +772,71 @@ impl Handle {
                                     };
                                     let _ = reply.send(result);
                                 }
-                                Job::BindStockSigningPlan(request, proof, reply) => {
+                                Job::StockEvidencePage(request, after, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
-                                        stock::signing_plan::bind(
+                                        Box::pin(stock::issuance::evidence::page(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            after,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::CaptureStockEvidence(evidence, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::issuance::evidence::capture(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *evidence,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockEvidence(request, digest, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::issuance::evidence::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            digest,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::ClaimStockSigning(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::issuance::claim::claim(
                                             &mut stock::inventory::Turn {
                                                 connection,
                                                 namespace: &namespace,
@@ -738,7 +847,47 @@ impl Handle {
                                             },
                                             *request,
                                             proof,
-                                        )
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockSigningAttempt(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::issuance::claim::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::BindStockSigningPlan(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::signing_plan::bind(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -754,7 +903,7 @@ impl Handle {
                                     reply,
                                 ) => {
                                     let result = if kind == Kind::SellerStock {
-                                        stock::signing_plan::read(
+                                        Box::pin(stock::signing_plan::read(
                                             &mut stock::inventory::Turn {
                                                 connection,
                                                 namespace: &namespace,
@@ -768,7 +917,7 @@ impl Handle {
                                             operation,
                                             digest,
                                             proof,
-                                        )
+                                        ))
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -1411,6 +1560,60 @@ impl Handle {
         ))?;
         result.await.unwrap_or(Ok(anchor))
     }
+    pub(super) async fn stock_signing_evidence_page(
+        &self,
+        request: stock::StockClaimRequest,
+        after: Option<radroots_domain::Sequence>,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockEvidencePage, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockEvidencePage(
+            Box::new(request),
+            after,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn capture_stock_signing_evidence(
+        &self,
+        evidence: stock::StockEvidenceCapture,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockEvidenceOutcome, OperationError> {
+        let unknown = stock::StockEvidenceOutcome::Unknown(evidence.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::CaptureStockEvidence(Box::new(evidence), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_signing_evidence(
+        &self,
+        request: stock::StockClaimRequest,
+        digest: [u8; 32],
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockCapturedEvidence>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockEvidence(Box::new(request), digest, proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn claim_stock_signing_attempt(
+        &self,
+        request: stock::StockClaimRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockClaimOutcome, OperationError> {
+        let unknown = stock::StockClaimOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::ClaimStockSigning(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_signing_attempt(
+        &self,
+        request: stock::StockClaimRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockSigningAttempt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockSigningAttempt(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn bind_stock_signing_intents(
         &self,
         request: stock::StockSigningPlanRequest,
@@ -1535,9 +1738,13 @@ impl Handle {
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
-            Job::RetainStockListing(..) => 256 * 1024,
+            Job::RetainStockListing(..) | Job::CaptureStockEvidence(..) => 256 * 1024,
+            Job::StockEvidence(..) | Job::StockEvidencePage(..) => 1024 * 1024,
             Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,
-            Job::BindStockSigningPlan(..) | Job::StockSigningPlan(..) => 1024 * 1024,
+            Job::BindStockSigningPlan(..)
+            | Job::StockSigningPlan(..)
+            | Job::ClaimStockSigning(..)
+            | Job::StockSigningAttempt(..) => 1024 * 1024,
             Job::RetainStockSource(..) => 256 * 1024,
             Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,

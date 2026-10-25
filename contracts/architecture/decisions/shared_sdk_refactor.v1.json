@@ -75,7 +75,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 10,
+    "schema_version": 11,
     "retained_enrollment_versions": [
       1
     ],
@@ -87,9 +87,10 @@
       6,
       7,
       8,
-      9
+      9,
+      10
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v10",
+    "authority_payload_schema": "radroots.seller_stock.authority.v11",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -217,6 +218,24 @@
       "current_issued_consent_required": true,
       "final_permission_and_clock_witnesses_required": true,
       "signer_invoked": false,
+      "agreement_installed": false
+    },
+    "signing_issuance": {
+      "fresh_current_backing_projection_required": true,
+      "evidence_page_max": 32,
+      "claim_family": 4,
+      "evidence_family": 5,
+      "claim_worker_charge_bytes": 1048576,
+      "capture_worker_charge_bytes": 262144,
+      "capture_raw_max_bytes": 65536,
+      "first_dispatch_requires_confirmed_commit": true,
+      "existing_claim_returns_dispatch_permit": false,
+      "protected_identity_presence_and_absence_required": true,
+      "capture_requires_original_claim_and_credential": true,
+      "capture_requires_current_consent": false,
+      "capture_requires_observation_clock": false,
+      "capture_preserves_first_optional_time": true,
+      "capture_retains_distinct_valid_encodings": true,
       "agreement_installed": false
     }
   },

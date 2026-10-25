@@ -151,6 +151,7 @@ struct NativeSellerStockAuthority {
     operation_identity_requires_protected_ancestry: bool,
     acceptance_preparation: AcceptancePreparation,
     signing_plan_binding: SigningPlanBinding,
+    signing_issuance: SigningIssuance,
     business_consent_payload_version: u16,
     business_consent_action: String,
     business_consent_modes: Vec<String>,
@@ -204,6 +205,27 @@ struct AcceptancePreparation {
     current_issued_consent_required: bool,
     final_source_counts_and_witnesses_required: bool,
     signer_invoked: bool,
+    agreement_installed: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SigningIssuance {
+    fresh_current_backing_projection_required: bool,
+    evidence_page_max: u32,
+    claim_family: u32,
+    evidence_family: u32,
+    claim_worker_charge_bytes: u32,
+    capture_worker_charge_bytes: u32,
+    capture_raw_max_bytes: u32,
+    first_dispatch_requires_confirmed_commit: bool,
+    existing_claim_returns_dispatch_permit: bool,
+    protected_identity_presence_and_absence_required: bool,
+    capture_requires_original_claim_and_credential: bool,
+    capture_requires_current_consent: bool,
+    capture_requires_observation_clock: bool,
+    capture_preserves_first_optional_time: bool,
+    capture_retains_distinct_valid_encodings: bool,
     agreement_installed: bool,
 }
 
@@ -399,10 +421,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 10
+            && stock.schema_version == 11
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v10"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v11"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -469,6 +491,34 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .final_permission_and_clock_witnesses_required
             && !stock.signing_plan_binding.signer_invoked
             && !stock.signing_plan_binding.agreement_installed
+            && stock
+                .signing_issuance
+                .fresh_current_backing_projection_required
+            && stock.signing_issuance.evidence_page_max == 32
+            && stock.signing_issuance.claim_family == 4
+            && stock.signing_issuance.evidence_family == 5
+            && stock.signing_issuance.claim_worker_charge_bytes == 1048576
+            && stock.signing_issuance.capture_worker_charge_bytes == 262144
+            && stock.signing_issuance.capture_raw_max_bytes == 65536
+            && stock
+                .signing_issuance
+                .first_dispatch_requires_confirmed_commit
+            && !stock
+                .signing_issuance
+                .existing_claim_returns_dispatch_permit
+            && stock
+                .signing_issuance
+                .protected_identity_presence_and_absence_required
+            && stock
+                .signing_issuance
+                .capture_requires_original_claim_and_credential
+            && !stock.signing_issuance.capture_requires_current_consent
+            && !stock.signing_issuance.capture_requires_observation_clock
+            && stock.signing_issuance.capture_preserves_first_optional_time
+            && stock
+                .signing_issuance
+                .capture_retains_distinct_valid_encodings
+            && !stock.signing_issuance.agreement_installed
             && stock.business_consent_payload_version == 1
             && stock.business_consent_action == "orders.accept"
             && stock.business_consent_modes == ["execute_and_recover", "recover_only"]
@@ -1068,6 +1118,43 @@ mod tests {
             ("private_causal_heads_use_timestamp_lww", true),
         ] {
             assert!(validate_bytes(&changed(&format!("/execution/{field}"), json!(bad))).is_err());
+        }
+    }
+
+    #[test]
+    fn stock_claims_require_confirmed_dispatch_and_clock_independent_original_capture() {
+        for (field, bad) in [
+            ("fresh_current_backing_projection_required", json!(false)),
+            ("evidence_page_max", json!(33)),
+            ("claim_family", json!(3)),
+            ("evidence_family", json!(4)),
+            ("claim_worker_charge_bytes", json!(16384)),
+            ("capture_worker_charge_bytes", json!(16384)),
+            ("capture_raw_max_bytes", json!(65537)),
+            ("first_dispatch_requires_confirmed_commit", json!(false)),
+            ("existing_claim_returns_dispatch_permit", json!(true)),
+            (
+                "protected_identity_presence_and_absence_required",
+                json!(false),
+            ),
+            (
+                "capture_requires_original_claim_and_credential",
+                json!(false),
+            ),
+            ("capture_requires_current_consent", json!(true)),
+            ("capture_requires_observation_clock", json!(true)),
+            ("capture_preserves_first_optional_time", json!(false)),
+            ("capture_retains_distinct_valid_encodings", json!(false)),
+            ("agreement_installed", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/signing_issuance/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
         }
     }
 

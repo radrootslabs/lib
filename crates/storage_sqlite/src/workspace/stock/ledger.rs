@@ -19,6 +19,8 @@ pub(super) enum Family {
     Consent,
     Acceptance,
     SigningPlan,
+    SigningClaim,
+    SigningEvidence,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -65,8 +67,13 @@ impl Header {
             || (self.revision.get() == 1) != self.previous.is_none()
             || (self.family == Family::Inventory) != self.pool.is_some()
             || (self.family == Family::Inventory) != self.order.is_none()
-            || matches!(self.family, Family::Consent | Family::SigningPlan)
-                != self.related_operation.is_some()
+            || matches!(
+                self.family,
+                Family::Consent
+                    | Family::SigningPlan
+                    | Family::SigningClaim
+                    | Family::SigningEvidence
+            ) != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
             || self.bytes as usize > BODY_MAX_BYTES
@@ -81,6 +88,7 @@ impl Header {
 pub(super) struct Prepared {
     pub protected: Vec<u8>,
     parts: Vec<Vec<u8>>,
+    pub(super) header: Header,
 }
 pub(super) struct Retained {
     pub header: Header,
@@ -142,9 +150,22 @@ pub(super) async fn prepare(
     let protected = crypto
         .seal_stock_record_for_catalog(input, "operation", header.operation.as_bytes(), 7, &clear)
         .await?;
-    Ok(Prepared { protected, parts })
+    Ok(Prepared {
+        protected,
+        parts,
+        header,
+    })
 }
 impl Prepared {
+    pub async fn insert_record(
+        &self,
+        connection: &mut SqliteConnection,
+    ) -> Result<(), OperationError> {
+        let h = &self.header;
+        sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected,family,order_id,related_operation,subject_grant) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            .bind(h.actor.participant().as_bytes().as_slice()).bind(h.actor.grant_id().ok_or(OperationError::RecoveryRequired)?.as_bytes().as_slice()).bind(h.operation.as_bytes().as_slice()).bind(h.digest.as_bytes().as_slice()).bind(h.transaction.as_bytes().as_slice()).bind(h.pool.map(|v|v.as_bytes().to_vec())).bind(h.revision.get() as i64).bind(h.head.as_bytes().as_slice()).bind(&self.protected).bind(h.family.code()).bind(h.order.map(|v|v.as_bytes().to_vec())).bind(h.related_operation.map(|v|v.as_bytes().to_vec())).bind(h.subject_grant.map(|v|v.as_bytes().to_vec())).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
+        self.insert_parts(connection, h.actor, h.operation).await
+    }
     /// Called only within the existing owner's SQL transaction. Protection and
     /// provider callbacks have already completed before entering this method.
     pub async fn insert_parts(
@@ -302,6 +323,8 @@ impl Family {
             Self::Consent => 1,
             Self::Acceptance => 2,
             Self::SigningPlan => 3,
+            Self::SigningClaim => 4,
+            Self::SigningEvidence => 5,
         }
     }
 }
@@ -415,6 +438,7 @@ pub(super) struct HistoryEntry {
     pub pools: Vec<radroots_domain::stock::PoolSnapshot>,
     pub mapping: Option<radroots_domain::stock::OptionPoolMapping>,
     pub movements: Vec<MovementWitness>,
+    pub signing: Option<super::issuance::Projection>,
 }
 pub(super) async fn history(
     connection: &mut SqliteConnection,
@@ -450,6 +474,7 @@ pub(super) async fn history(
                 _ => return Err(OperationError::RecoveryRequired),
             };
             Ok(Some(HistoryEntry {
+                signing: None,
                 header,
                 protected: retained.protected,
                 parts_witness,
@@ -480,6 +505,7 @@ pub(super) async fn history(
                 return Err(OperationError::RecoveryRequired);
             }
             Ok(Some(HistoryEntry {
+                signing: None,
                 header: retained.frame.header,
                 protected: retained.frame.protected,
                 parts_witness: retained.frame.parts_witness,
@@ -488,19 +514,35 @@ pub(super) async fn history(
                 movements: vec![],
             }))
         }
-        Some(2) if matches!(authority.catalog, 9 | 10) => Ok(Some(
+        Some(2) if matches!(authority.catalog, 9..=11) => Ok(Some(
             super::inventory::acceptance::codec::read(connection, input, crypto, operation)
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?
                 .into_history(),
         )),
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if authority.catalog == 10 => {
+        Some(3) if matches!(authority.catalog, 10 | 11) => {
             let retained = super::signing_plan::read_entry(connection, input, crypto, operation)
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?;
             Ok(Some(retained.into_history()))
         }
+        Some(4) if authority.catalog == 11 => Ok(Some(
+            Box::pin(super::issuance::read_entry(
+                connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
+        )),
+        Some(5) if authority.catalog == 11 => Ok(Some(
+            Box::pin(super::issuance::evidence::read_entry(
+                connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
+        )),
         Some(_) => Err(OperationError::RecoveryRequired),
     }
 }
@@ -551,6 +593,16 @@ impl HistoryEntry {
         )?;
         hash.update([header.parts]);
         hash.update(self.parts_witness);
+        match (header.family, self.signing) {
+            (Family::SigningClaim | Family::SigningEvidence, Some(projection)) => {
+                hash.update(projection.digest(header.actor.participant(), header.operation))
+            }
+            (Family::SigningClaim | Family::SigningEvidence, None) => {
+                return Err(OperationError::RecoveryRequired);
+            }
+            (_, Some(_)) => return Err(OperationError::RecoveryRequired),
+            (_, None) => {}
+        }
         if self.movements.len() > 64
             || self
                 .movements

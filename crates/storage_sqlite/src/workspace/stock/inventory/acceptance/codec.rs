@@ -73,6 +73,7 @@ impl Retained {
     }
     pub fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            signing: None,
             header: self.frame.header,
             protected: self.frame.protected,
             parts_witness: self.frame.parts_witness,

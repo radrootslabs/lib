@@ -316,7 +316,7 @@ protected credential and original creation transaction ID without touching the
 namespace. Retain those values through protected host handling before awaiting
 `NativeWorkspace::initialize_seller_stock`. This explicit factory uses
 `stock_execution_v1.sqlite` and `.stock_execution_v1.lock` in a new owner-only
-directory. Its exact version-10 catalog has separate protected authority and
+directory. Its exact version-11 catalog has separate protected authority and
 grant records. Grant scope, route, genesis, credential and AEAD context are
 separate from ordinary outboxes. The same bounded native worker owns the
 connection, admitted work, close completion and persistent writer lock.
@@ -340,11 +340,11 @@ ordinary outbox journal jobs are refused on the stock namespace.
 
 ## Owner-private inventory transactions
 
-The current stock factory creates exact catalog version10 and protected authority
-payload version10. Retained enrollment-only version1 still authenticates and
+The current stock factory creates exact catalog version11 and protected authority
+payload version11. Retained enrollment-only version1 still authenticates and
 revokes with its original codec; its inventory ports refuse unsupported work.
 Retained inventory version2 keeps its original pool-creation records and refuses
-new correction commands. Catalogs1–9 retain their exact original codecs and
+new correction commands. Catalogs1–10 retain their exact original codecs and
 capabilities; current multipart operation framing uses version5.
 No namespace is automatically migrated. Ordinary outbox catalogs are separate.
 
@@ -408,5 +408,22 @@ intent digests and all original plan bytes in one protected journal advance,
 with final permission, deadline and row-witness checks. Stock does not move
 again. `stock_signing_plan` reads the original plan through current consent;
 replacement RecoverOnly access cannot create missing intents. Uncertain commit
-requires drain/reopen and original-identity reconciliation. Durable stock
-signing claims, S capture, agreement installation and delivery remain pending.
+requires drain/reopen and original-identity reconciliation.
+
+`claim_stock_signing_attempt` commits one protected claim per original recipient
+before returning a single-use dispatch permit. Existing/recovered claims return
+reports without a new permit. Exact obtained signatures are independently
+verified again against the backend claim and appended through the borrowed
+`capture_stock_signing_evidence` input. Fresh T1 and dispatch claims also check
+current backing against protected history and compare each pool again at commit;
+legitimate changes to available stock do not reconstruct the original allocation.
+Capture requires the original scoped
+credential, preserves the first optional observation time and every distinct
+valid original encoding, and survives expiry, revocation and unavailable clocks.
+It grants no new read, signing, installation or delivery permission. Current
+consent governs `stock_signing_evidence` reads. Uncertain commits fence the
+owner until drain/reopen and reconciliation; the caller retains its input.
+`stock_signing_evidence_page` discovers up to 32 authenticated references per
+page by original operation and recipient, so recovery can retrieve exact bytes
+without retaining a caller-side digest or requesting another signature.
+Agreement installation, stock conversion and delivery remain pending.

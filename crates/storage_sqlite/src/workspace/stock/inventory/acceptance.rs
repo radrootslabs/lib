@@ -336,7 +336,7 @@ pub(in crate::workspace) async fn admit(
     let access = turn
         .access(&request.binding, request.minimum, &proof)
         .await?;
-    if !matches!(access.authority.catalog, 9 | 10) {
+    if !matches!(access.authority.catalog, 9..=11) {
         return Err(OperationError::UnsupportedOperation);
     }
     let command = &request.command;
