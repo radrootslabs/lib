@@ -75,7 +75,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 7,
+    "schema_version": 8,
     "retained_enrollment_versions": [
       1
     ],
@@ -84,9 +84,28 @@
       3,
       4,
       5,
-      6
+      6,
+      7
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v7",
+    "authority_payload_schema": "radroots.seller_stock.authority.v8",
+    "public_source_payload_schemas": [
+      "radroots.seller_stock.public_source_event.v1",
+      "radroots.seller_stock.public_source_head.v1",
+      "radroots.seller_stock.public_source_part.v1"
+    ],
+    "public_source_owner_administration_required": true,
+    "inventory_scope_grants_public_source_access": false,
+    "public_source_checkpoint_independent": true,
+    "public_source_input_requires_signature_evidence": true,
+    "public_source_read_reverifies_signature": true,
+    "public_source_global_completeness_claimed": false,
+    "public_source_profile_implies_actionability": false,
+    "public_source_head_policy": "nip01_timestamp_then_lowest_id_before_profile",
+    "public_source_duplicate_encodings": "retain_original_authenticated_event_id",
+    "public_source_raw_max_bytes": 65536,
+    "public_source_part_max_bytes": 16384,
+    "public_source_part_max_count": 4,
+    "public_source_worker_charge_bytes": 262144,
     "inventory_operation_payload_schema": "radroots.seller_stock.operation.v5",
     "operation_part_payload_schema": "radroots.seller_stock.operation_part.v1",
     "operation_body_max_bytes": 262144,

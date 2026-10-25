@@ -38,6 +38,20 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    RetainStockListing(
+        Box<WorkspaceBinding>,
+        radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        Box<stock::StockListingCapture>,
+        AttachmentProof,
+        Reply<stock::StockListingOutcome, OperationError>,
+    ),
+    StockListing(
+        Box<WorkspaceBinding>,
+        radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        stock::public_source::Lookup,
+        AttachmentProof,
+        Reply<Option<stock::StockListingSnapshot>, OperationError>,
+    ),
     IssueStockConsent(
         Box<WorkspaceBinding>,
         radroots_storage::inventory::InventoryCheckpointRef,
@@ -204,6 +218,12 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::RetainStockListing(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockListing(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::IssueStockConsent(_, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -424,6 +444,8 @@ impl Handle {
                                 && !matches!(
                                     &job,
                                     Job::Authenticate(..)
+                                        | Job::RetainStockListing(..)
+                                        | Job::StockListing(..)
                                         | Job::IssueStockConsent(..)
                                         | Job::StockConsent(..)
                                         | Job::ChangeStockGrant(..)
@@ -569,6 +591,56 @@ impl Handle {
                                             minimum,
                                             operation,
                                             subject,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::RetainStockListing(
+                                    binding,
+                                    minimum,
+                                    capture,
+                                    proof,
+                                    reply,
+                                ) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::public_source::retain(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            *capture,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockListing(binding, minimum, lookup, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::public_source::query(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            lookup,
                                             proof,
                                         )
                                         .await
@@ -1096,6 +1168,44 @@ impl Handle {
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
+    pub(super) async fn retain_stock_listing(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        capture: stock::StockListingCapture,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockListingOutcome, OperationError> {
+        let anchor = stock::StockListingOutcome::Unknown {
+            transaction: capture.transaction_id(),
+            listing: capture.listing_revision(),
+        };
+        let (reply, result) = oneshot::channel();
+        self.send(Job::RetainStockListing(
+            Box::new(binding),
+            minimum,
+            Box::new(capture),
+            proof,
+            reply,
+        ))?;
+        result.await.unwrap_or(Ok(anchor))
+    }
+    pub(super) async fn stock_listing(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        lookup: stock::public_source::Lookup,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockListingSnapshot>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockListing(
+            Box::new(binding),
+            minimum,
+            lookup,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn retain_stock_source(
         &self,
         binding: WorkspaceBinding,
@@ -1164,6 +1274,7 @@ impl Handle {
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
+            Job::RetainStockListing(..) => 256 * 1024,
             Job::IssueStockConsent(..) => 512 * 1024,
             Job::RetainStockSource(..) => 256 * 1024,
             Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,

@@ -419,7 +419,7 @@ pub(in crate::workspace) async fn issue(
     proof: AttachmentProof,
 ) -> Result<StockConsentOutcome, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if access.authority.catalog != 7 {
+    if !matches!(access.authority.catalog, 7 | 8) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()
@@ -598,7 +598,7 @@ pub(in crate::workspace) async fn issue(
     });
     let root = turn
         .crypto
-        .seal_stock_root(turn.selected, 7, &next.encode()?)
+        .seal_stock_root(turn.selected, access.authority.catalog, &next.encode()?)
         .await?;
     let receipt = StockConsentReceipt {
         operation: capture.operation,
@@ -680,7 +680,7 @@ pub(in crate::workspace) async fn query(
     proof: AttachmentProof,
 ) -> Result<Option<StockConsentReceipt>, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if access.authority.catalog != 7 {
+    if !matches!(access.authority.catalog, 7 | 8) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator() && access.current.input().grant_id() != subject {

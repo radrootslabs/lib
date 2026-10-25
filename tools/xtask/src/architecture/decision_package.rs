@@ -124,6 +124,20 @@ struct NativeSellerStockAuthority {
     retained_enrollment_versions: Vec<u16>,
     retained_inventory_versions: Vec<u16>,
     authority_payload_schema: String,
+    public_source_payload_schemas: Vec<String>,
+    public_source_owner_administration_required: bool,
+    inventory_scope_grants_public_source_access: bool,
+    public_source_checkpoint_independent: bool,
+    public_source_input_requires_signature_evidence: bool,
+    public_source_read_reverifies_signature: bool,
+    public_source_global_completeness_claimed: bool,
+    public_source_profile_implies_actionability: bool,
+    public_source_head_policy: String,
+    public_source_duplicate_encodings: String,
+    public_source_raw_max_bytes: u32,
+    public_source_part_max_bytes: u32,
+    public_source_part_max_count: u16,
+    public_source_worker_charge_bytes: u32,
     inventory_operation_payload_schema: String,
     operation_part_payload_schema: String,
     operation_body_max_bytes: u32,
@@ -341,10 +355,29 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 7
+            && stock.schema_version == 8
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v7"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v8"
+            && stock.public_source_payload_schemas
+                == [
+                    "radroots.seller_stock.public_source_event.v1",
+                    "radroots.seller_stock.public_source_head.v1",
+                    "radroots.seller_stock.public_source_part.v1",
+                ]
+            && stock.public_source_owner_administration_required
+            && !stock.inventory_scope_grants_public_source_access
+            && stock.public_source_checkpoint_independent
+            && stock.public_source_input_requires_signature_evidence
+            && stock.public_source_read_reverifies_signature
+            && !stock.public_source_global_completeness_claimed
+            && !stock.public_source_profile_implies_actionability
+            && stock.public_source_head_policy == "nip01_timestamp_then_lowest_id_before_profile"
+            && stock.public_source_duplicate_encodings == "retain_original_authenticated_event_id"
+            && stock.public_source_raw_max_bytes == 65536
+            && stock.public_source_part_max_bytes == 16384
+            && stock.public_source_part_max_count == 4
+            && stock.public_source_worker_charge_bytes == 262144
             && stock.inventory_operation_payload_schema == "radroots.seller_stock.operation.v5"
             && stock.operation_part_payload_schema == "radroots.seller_stock.operation_part.v1"
             && stock.operation_body_max_bytes == 262144
@@ -942,6 +975,43 @@ mod tests {
             ("private_causal_heads_use_timestamp_lww", true),
         ] {
             assert!(validate_bytes(&changed(&format!("/execution/{field}"), json!(bad))).is_err());
+        }
+    }
+
+    #[test]
+    fn public_sources_require_original_signatures_bounded_parts_and_profile_independent_heads() {
+        for (field, bad) in [
+            ("schema_version", json!(7)),
+            ("retained_inventory_versions", json!([2, 3, 4, 5, 6])),
+            ("public_source_payload_schemas", json!([])),
+            ("public_source_owner_administration_required", json!(false)),
+            ("inventory_scope_grants_public_source_access", json!(true)),
+            ("public_source_checkpoint_independent", json!(false)),
+            (
+                "public_source_input_requires_signature_evidence",
+                json!(false),
+            ),
+            ("public_source_read_reverifies_signature", json!(false)),
+            ("public_source_global_completeness_claimed", json!(true)),
+            ("public_source_profile_implies_actionability", json!(true)),
+            ("public_source_head_policy", json!("latest_supported")),
+            (
+                "public_source_duplicate_encodings",
+                json!("replace_original"),
+            ),
+            ("public_source_raw_max_bytes", json!(65537)),
+            ("public_source_part_max_bytes", json!(16385)),
+            ("public_source_part_max_count", json!(5)),
+            ("public_source_worker_charge_bytes", json!(16384)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
         }
     }
 

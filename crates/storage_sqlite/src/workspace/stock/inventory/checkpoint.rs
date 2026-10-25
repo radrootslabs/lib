@@ -120,7 +120,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    let multipart = authority.catalog == 7;
+    let multipart = matches!(authority.catalog, 7 | 8);
     let upper = current.revision.get();
     let mut previous = current.head;
     let mut hash = history_hash(multipart);
@@ -233,7 +233,7 @@ pub(super) async fn authenticate_minimum(
     }
     let lower = minimum.revision().get().max(1);
     let upper = current.revision.get();
-    let multipart = authority.catalog == 7;
+    let multipart = matches!(authority.catalog, 7 | 8);
     let mut hash = history_hash(multipart);
     let mut expected = current.head;
     for revision in (lower..=upper).rev() {
@@ -481,7 +481,7 @@ async fn authenticate_projected(
         .ok_or(OperationError::UnsupportedOperation)?;
     let upper = current.revision.get();
     let mut expected = current.head;
-    let multipart = authority.catalog == 7;
+    let multipart = matches!(authority.catalog, 7 | 8);
     let mut hash = history_hash(multipart);
     for revision in (1..=upper).rev() {
         let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32").bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;

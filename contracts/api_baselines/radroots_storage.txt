@@ -2439,6 +2439,15 @@ impl serde_core::ser::Serialize for radroots_storage::workspace::seller_stock::S
 pub fn radroots_storage::workspace::seller_stock::StockGrantScope::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_storage::workspace::seller_stock::StockGrantScope
 pub fn radroots_storage::workspace::seller_stock::StockGrantScope::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_storage::workspace::seller_stock::StockListingCheckpointRef(_)
+impl radroots_storage::workspace::seller_stock::StockListingCheckpointRef
+pub const fn radroots_storage::workspace::seller_stock::StockListingCheckpointRef::authority(self) -> radroots_domain::context::AuthorityRef
+pub const fn radroots_storage::workspace::seller_stock::StockListingCheckpointRef::authorization(self) -> core::option::Option<radroots_storage::workspace::seller_stock::StockAuthorizationRef>
+pub fn radroots_storage::workspace::seller_stock::StockListingCheckpointRef::from_host_metadata(radroots_domain::context::AuthorityRef, radroots_domain::context::Sequence, core::option::Option<radroots_domain::identifier::CheckpointDigest>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
+pub const fn radroots_storage::workspace::seller_stock::StockListingCheckpointRef::head(self) -> core::option::Option<radroots_domain::identifier::CheckpointDigest>
+pub const fn radroots_storage::workspace::seller_stock::StockListingCheckpointRef::revision(self) -> radroots_domain::context::Sequence
+pub const fn radroots_storage::workspace::seller_stock::StockListingCheckpointRef::with_authorization(self, radroots_storage::workspace::seller_stock::StockAuthorizationRef) -> Self
+pub const fn radroots_storage::workspace::seller_stock::StockListingCheckpointRef::with_optional_authorization(self, core::option::Option<radroots_storage::workspace::seller_stock::StockAuthorizationRef>) -> Self
 pub struct radroots_storage::workspace::seller_stock::StockResources(_)
 impl radroots_storage::workspace::seller_stock::StockResources
 pub const fn radroots_storage::workspace::seller_stock::StockResources::all_pools() -> Self

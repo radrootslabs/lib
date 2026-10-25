@@ -109,7 +109,7 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
     )
     .await
     .unwrap();
-    assert_eq!(schema::admit(&mut connection).await, Ok(7));
+    assert_eq!(schema::admit(&mut connection).await, Ok(8));
     assert_eq!(schema::integrity(&mut connection).await, Ok(()));
     let root: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_authority")
         .fetch_one(&mut connection)
@@ -117,18 +117,18 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
         .unwrap();
     let clear = fixture
         .crypto()
-        .open_stock_root(enrollment.input(), 7, &root)
+        .open_stock_root(enrollment.input(), 8, &root)
         .await
         .unwrap();
     let authority = clear
-        .expose_secret(|bytes| Authority::decode(bytes, 7))
+        .expose_secret(|bytes| Authority::decode(bytes, 8))
         .unwrap();
     clear.expose_secret(|bytes| {
         let original:serde_json::Value=serde_json::from_slice(bytes).unwrap();
         assert_eq!(original["inventory"]["mappings"],"0");
         for bad in [serde_json::json!([]),serde_json::json!({"revision":"1","pools":"1","movements":"1","head":original["inventory"]["head"]})] {
             let mut value=original.clone();value["inventory"]=bad;
-            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),7).is_err());
+            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),8).is_err());
         }
         for bad in [
             serde_json::json!([]),
@@ -139,7 +139,7 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
             serde_json::json!({"revision":"1","records":"2","parts":"3","head":"01".repeat(32)}),
         ] {
             let mut value=original.clone();value["sources"]=bad;
-            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),7).is_err());
+            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),8).is_err());
         }
     });
     assert_eq!(authority.input, *enrollment.input());
@@ -189,7 +189,7 @@ async fn current_and_retained_roots_bind_the_complete_namespace_with_distinct_ca
     let caller = namespace.attachment(GrantId::from_bytes([9; 32])).unwrap();
     let crypto = fixture.crypto();
     let clear = b"synthetic context payload";
-    for version in [4, 5, 6, 7] {
+    for version in [4, 5, 6, 7, 8] {
         let current = crypto
             .seal_stock_root(&owner, version, clear)
             .await
@@ -260,9 +260,13 @@ async fn retained_inventory_v6_preserves_original_physical_and_source_capabiliti
     retained_inventory_catalog(6).await;
 }
 #[tokio::test]
-async fn current_v7_physical_ledger_uses_protected_parts() {
-    assert_eq!(schema::CURRENT, 7);
+async fn retained_inventory_v7_keeps_consent_ledger_without_public_source_tables() {
     retained_inventory_catalog(7).await;
+}
+#[tokio::test]
+async fn current_v8_preserves_physical_and_private_source_progress_with_public_sources() {
+    assert_eq!(schema::CURRENT, 8);
+    retained_inventory_catalog(8).await;
 }
 // Exact catalog fixtures exercise retained/successor codecs; they are not
 // evidence from a predecessor executable or a factory migration.
@@ -321,8 +325,12 @@ pub(super) async fn literal_catalog(
         value["sources"] =
             serde_json::json!({"revision":"0","records":"0","parts":"0","head":null});
     }
-    if catalog == 7 {
+    if catalog >= 7 {
         value["inventory"]["orders"] = serde_json::json!("0");
+    }
+    if catalog == 8 {
+        value["public_sources"] =
+            serde_json::json!({"revision":"0","events":"0","heads":"0","parts":"0","head":null});
     }
     let clear = zeroize::Zeroizing::new(serde_json::to_vec(&value).unwrap());
     let root = crypto
@@ -360,6 +368,7 @@ pub(super) async fn literal_catalog(
         5 => "PRAGMA user_version=5",
         6 => "PRAGMA user_version=6",
         7 => "PRAGMA user_version=7",
+        8 => "PRAGMA user_version=8",
         _ => unreachable!(),
     })
     .execute(&mut *tx)
@@ -383,6 +392,7 @@ async fn retained_inventory_catalog(catalog: i64) {
     let binding = store.authenticate(input.clone(), &proof).await.unwrap();
     let authority = store.stock_authority(input.clone(), &proof).await.unwrap();
     assert_eq!(authority.source_checkpoint().is_some(), catalog >= 6);
+    assert_eq!(authority.listing_checkpoint().is_some(), catalog == 8);
     let minimum = authority.inventory_checkpoint().unwrap();
     let context = CommandContextData::new(
         OperationId::from_bytes([7; 32]),
@@ -624,7 +634,7 @@ async fn retained_inventory_catalog(catalog: i64) {
             .fetch_one(&mut connection)
             .await
             .unwrap();
-    let old = if catalog == 7 {
+    let old = if matches!(catalog, 7 | 8) {
         let retained = ledger::read(
             &mut connection,
             &input,
@@ -677,7 +687,7 @@ async fn retained_inventory_catalog(catalog: i64) {
         // inside a real SQL transaction. Row counts and the protected header
         // stay unchanged while one referenced ciphertext changes.
         for part in [false, true] {
-            if part && catalog != 7 {
+            if part && !matches!(catalog, 7 | 8) {
                 continue;
             }
             let (authority, _, _, _) = read(&mut connection, &input, &fixture.crypto())
@@ -747,6 +757,7 @@ async fn retained_inventory_catalog(catalog: i64) {
         5 => "PRAGMA user_version=6",
         6 => "PRAGMA user_version=7",
         7 => "PRAGMA user_version=6",
+        8 => "PRAGMA user_version=7",
         _ => unreachable!(),
     })
     .execute(&mut connection)

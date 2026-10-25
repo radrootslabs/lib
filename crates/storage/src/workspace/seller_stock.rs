@@ -15,7 +15,7 @@ pub use selection::{SellerAuthoritySelection, StockCapabilityContract};
 mod permissions;
 pub use permissions::{StockAction, StockGrantScope, StockResources};
 mod source;
-pub use source::StockSourceCheckpointRef;
+pub use source::{StockListingCheckpointRef, StockSourceCheckpointRef};
 /// Explicit local enrollment inputs, supplied by a trusted host interaction.
 /// Only a qualified stock host may persist the resulting authority.
 pub struct SellerStockConfig {

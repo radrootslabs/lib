@@ -26,33 +26,51 @@ struct Rig {
 }
 impl Rig {
     async fn new() -> Self {
+        Self::with_catalog(None).await
+    }
+    async fn with_catalog(catalog: Option<i64>) -> Self {
         let fixture = CryptoFixture::new();
         let path = fixture.root().join("consent");
         let clock = Arc::new(Clock(AtomicU64::new(100)));
-        let enrollment = StockEnrollment::prepare(
-            SellerStockConfig::new(
-                participant(),
-                participant(),
-                "consent-owner",
-                UnixSeconds::new(200).unwrap(),
+        let (input, proof, store) = if let Some(catalog) = catalog {
+            let (input, proof) =
+                crate::workspace::stock::tests::literal_catalog(&fixture, &path, catalog).await;
+            let store = NativeWorkspace::open_seller_stock(
+                &path,
+                input.clone(),
+                fixture.crypto(),
+                clock.clone(),
             )
-            .unwrap(),
-            clock.as_ref(),
-        )
-        .unwrap();
-        let input = enrollment.input().clone();
-        let proof = enrollment
-            .proof()
-            .with_secret(|v| AttachmentProof::from_protected_input(v))
+            .await
             .unwrap();
-        let store = NativeWorkspace::initialize_seller_stock(
-            &path,
-            &enrollment,
-            fixture.crypto(),
-            clock.clone(),
-        )
-        .await
-        .unwrap();
+            (input, proof, store)
+        } else {
+            let enrollment = StockEnrollment::prepare(
+                SellerStockConfig::new(
+                    participant(),
+                    participant(),
+                    "consent-owner",
+                    UnixSeconds::new(200).unwrap(),
+                )
+                .unwrap(),
+                clock.as_ref(),
+            )
+            .unwrap();
+            let input = enrollment.input().clone();
+            let proof = enrollment
+                .proof()
+                .with_secret(|v| AttachmentProof::from_protected_input(v))
+                .unwrap();
+            let store = NativeWorkspace::initialize_seller_stock(
+                &path,
+                &enrollment,
+                fixture.crypto(),
+                clock.clone(),
+            )
+            .await
+            .unwrap();
+            (input, proof, store)
+        };
         let binding = store.authenticate(input.clone(), &proof).await.unwrap();
         let minimum = store
             .stock_authority(input.clone(), &proof)
@@ -645,4 +663,68 @@ async fn recovery_only_can_bind_an_expired_original_command_to_an_explicit_repla
         Some(receipt)
     );
     r.store.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn retained_catalog7_issues_original_consent_without_gaining_public_source_tables() {
+    use radroots_domain::listing::ListingCoordinate;
+    use radroots_storage::workspace::seller_stock::StockListingCheckpointRef;
+    let r = Rig::with_catalog(Some(7)).await;
+    let capture = r.capture(&r.binding, 0x31);
+    let receipt = committed(
+        r.store
+            .issue_stock_consent(r.binding.clone(), r.minimum, &capture, &r.proof)
+            .await
+            .unwrap(),
+    );
+    assert!(
+        r.store
+            .stock_authority(r.input.clone(), &r.proof)
+            .await
+            .unwrap()
+            .listing_checkpoint()
+            .is_none()
+    );
+    let public = StockListingCheckpointRef::from_host_metadata(
+        r.input.authority(),
+        Sequence::new(0).unwrap(),
+        None,
+    )
+    .unwrap()
+    .with_optional_authorization(r.minimum.authorization());
+    assert!(matches!(
+        r.store
+            .stock_listing_head(
+                r.binding.clone(),
+                public,
+                ListingCoordinate::new(r.input.participant(), "04".repeat(16).parse().unwrap()),
+                &r.proof
+            )
+            .await,
+        Err(OperationError::UnsupportedOperation)
+    ));
+    let minimum = r.physical(0x41, receipt.checkpoint()).await;
+    r.store.close().await.unwrap();
+    let store = NativeWorkspace::open_seller_stock(
+        &r.path,
+        r.input.clone(),
+        r.fixture.crypto(),
+        r.clock.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        store
+            .stock_consent(
+                r.binding.clone(),
+                minimum,
+                capture.command().context().operation_id(),
+                r.input.grant_id(),
+                &r.proof
+            )
+            .await
+            .unwrap(),
+        Some(receipt)
+    );
+    store.close().await.unwrap();
 }

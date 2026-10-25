@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_repository": "https://github.com/radrootslabs/lib",
+  "source_revision": "c79337d8851ee6da0b18aa7d7e97bc5b83d537ce",
+  "source_path": "crates/nostr/tests/fixtures/public_heads.v1.json",
+  "source_sha256": "96aef2300e1b6d0b13a4ce60ab3d106c223d08fffa640e43b2598ce2b6c4c7e9",
+  "producer": "Pinned nostr-tools2.23.5 and NobleCurves2.0.1; BIP340 primary vector0 matched first; independent synthetic test data only",
+  "selection": "Every listing-prefixed public vector, invalid signature/ID and a non-listing capability scope. Raw signed bytes and expected classifications are preserved without regeneration.",
+  "oracle": "Python integer timestamps descending, then exact lowercase hexadecimal event IDs ascending; not a Rust ranking or storage implementation.",
+  "output_sha256": "85c4a71e7238757fa7505ca1578d12dc4e2b1dcefc63ba204c33daef2fc7285d"
+}

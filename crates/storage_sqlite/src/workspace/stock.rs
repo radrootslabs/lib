@@ -14,6 +14,10 @@ pub use consent::{
 };
 pub(in crate::workspace) mod grants;
 mod ledger;
+pub(in crate::workspace) mod public_source;
+pub use public_source::{
+    StockListingCapture, StockListingOutcome, StockListingReceipt, StockListingSnapshot,
+};
 pub(in crate::workspace) mod source;
 use grants::StockRecord;
 pub use grants::{StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt};
@@ -83,8 +87,17 @@ pub struct StockAuthorityReceipt {
     pub(super) revocation: Sequence,
     pub(super) inventory: Option<radroots_storage::inventory::InventoryCheckpointRef>,
     pub(super) sources: Option<radroots_storage::workspace::seller_stock::StockSourceCheckpointRef>,
+    pub(super) public_sources:
+        Option<radroots_storage::workspace::seller_stock::StockListingCheckpointRef>,
 }
 impl StockAuthorityReceipt {
+    /// Independently retained public observation progress; this certifies no
+    /// global head, profile readiness or business permission.
+    pub const fn listing_checkpoint(
+        &self,
+    ) -> Option<radroots_storage::workspace::seller_stock::StockListingCheckpointRef> {
+        self.public_sources
+    }
     /// Separately retained source progress; profile recognition proves no order
     /// actionability. Absent for retained catalogs without source retention.
     pub const fn source_checkpoint(
@@ -170,6 +183,31 @@ struct Authority {
     inventory: Option<InventoryCheckpoint>,
     authorization: Option<StockAuthorizationRef>,
     sources: Option<SourceCheckpoint>,
+    public_sources: Option<PublicSourceCheckpoint>,
+}
+#[derive(Clone, Copy, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublicSourceCheckpoint {
+    revision: Sequence,
+    events: Sequence,
+    heads: Sequence,
+    parts: Sequence,
+    #[serde(deserialize_with = "required_nullable")]
+    head: Option<radroots_domain::CheckpointDigest>,
+}
+impl PublicSourceCheckpoint {
+    fn validate(self) -> Result<(), WorkspaceError> {
+        if self.revision != self.events
+            || (self.revision.get() == 0) != self.head.is_none()
+            || (self.revision.get() == 0) != (self.heads.get() == 0)
+            || self.heads.get() > self.events.get()
+            || self.parts.get() < self.events.get()
+            || self.parts.get() > self.events.get().saturating_mul(4)
+        {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+        Ok(())
+    }
 }
 #[derive(Clone, Copy, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -361,8 +399,55 @@ struct AuthorityV7 {
     sources: SourceCheckpoint,
     authorization: StockAuthorizationRef,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthorityV8 {
+    version: u8,
+    #[serde(deserialize_with = "object")]
+    namespace: SellerAuthoritySelection,
+    administrator: GrantId,
+    transaction: TransactionId,
+    revocation: Sequence,
+    #[serde(deserialize_with = "object")]
+    inventory: InventoryCheckpointUnified,
+    #[serde(deserialize_with = "object")]
+    sources: SourceCheckpoint,
+    #[serde(deserialize_with = "object")]
+    public_sources: PublicSourceCheckpoint,
+    authorization: StockAuthorizationRef,
+}
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
+        if self.catalog != 8 && self.public_sources.is_some() {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+        if self.catalog == 8 {
+            let public_sources = self
+                .public_sources
+                .ok_or(WorkspaceError::RecoveryRequired)?;
+            public_sources.validate()?;
+            let bytes = zeroize::Zeroizing::new(
+                serde_json::to_vec(&AuthorityV8 {
+                    version: 8,
+                    namespace: SellerAuthoritySelection::from_attachment(&self.input),
+                    administrator: self.input.grant_id(),
+                    transaction: self.transaction,
+                    revocation: self.revocation,
+                    inventory: self
+                        .inventory
+                        .ok_or(WorkspaceError::RecoveryRequired)?
+                        .unified()?,
+                    sources: self.sources.ok_or(WorkspaceError::RecoveryRequired)?,
+                    public_sources,
+                    authorization: self.authorization.ok_or(WorkspaceError::RecoveryRequired)?,
+                })
+                .map_err(|_| WorkspaceError::StorageFailure)?,
+            );
+            if bytes.len() > 16 * 1024 {
+                return Err(WorkspaceError::Capacity);
+            }
+            return Ok(bytes);
+        }
         if self.catalog == 7 {
             let bytes = zeroize::Zeroizing::new(
                 serde_json::to_vec(&AuthorityV7 {
@@ -476,6 +561,7 @@ impl Authority {
                     inventory: None,
                     authorization: None,
                     sources: None,
+                    public_sources: None,
                 }
             }
             2 | 3 => {
@@ -493,6 +579,7 @@ impl Authority {
                     inventory: Some(v.inventory.into()),
                     authorization: None,
                     sources: None,
+                    public_sources: None,
                 }
             }
             4 => {
@@ -511,6 +598,7 @@ impl Authority {
                     inventory: Some(v.inventory.into()),
                     authorization: Some(v.authorization),
                     sources: None,
+                    public_sources: None,
                 }
             }
             5 => {
@@ -529,6 +617,7 @@ impl Authority {
                     inventory: Some(v.inventory.into()),
                     authorization: Some(v.authorization),
                     sources: None,
+                    public_sources: None,
                 }
             }
             6 => {
@@ -552,6 +641,7 @@ impl Authority {
                     inventory: Some(value.inventory.into()),
                     authorization: Some(value.authorization),
                     sources: Some(value.sources),
+                    public_sources: None,
                 }
             }
             7 => {
@@ -580,6 +670,37 @@ impl Authority {
                     inventory: Some(value.inventory.into()),
                     authorization: Some(value.authorization),
                     sources: Some(value.sources),
+                    public_sources: None,
+                }
+            }
+            8 => {
+                let value: AuthorityV8 = closed_record(bytes)?;
+                value.public_sources.validate()?;
+                if value.version != 8
+                    || value.authorization.generation() != value.revocation
+                    || (value.inventory.revision.get() == 0) != value.inventory.head.is_none()
+                    || value.inventory.orders.get() > value.inventory.revision.get()
+                    || value.inventory.pools.get() > value.inventory.revision.get()
+                    || value.inventory.mappings.get() > value.inventory.revision.get()
+                    || value.inventory.movements.get()
+                        > value.inventory.revision.get().saturating_mul(64)
+                    || (value.sources.revision.get() == 0) != value.sources.head.is_none()
+                    || (value.sources.revision.get() == 0) != (value.sources.parts.get() == 0)
+                    || value.sources.records.get() > value.sources.revision.get()
+                    || value.sources.parts.get() / 3 < value.sources.revision.get()
+                    || value.sources.parts.get() > value.sources.revision.get().saturating_mul(12)
+                {
+                    return Err(WorkspaceError::RecoveryRequired);
+                }
+                Self {
+                    catalog,
+                    input: value.namespace.attachment(value.administrator)?,
+                    transaction: value.transaction,
+                    revocation: value.revocation,
+                    inventory: Some(value.inventory.into()),
+                    authorization: Some(value.authorization),
+                    sources: Some(value.sources),
+                    public_sources: Some(value.public_sources),
                 }
             }
             _ => return Err(WorkspaceError::RecoveryRequired),
@@ -611,6 +732,13 @@ pub(super) async fn initialize(
     namespace.validate()?;
     if let Some(initial) = initial {
         let mut authority = Authority {
+            public_sources: Some(PublicSourceCheckpoint {
+                revision: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                events: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                heads: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                parts: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
+                head: None,
+            }),
             sources: Some(SourceCheckpoint {
                 revision: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
                 records: Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
@@ -623,7 +751,7 @@ pub(super) async fn initialize(
             transaction: initial.transaction,
             revocation: Sequence::new(1).map_err(|_| WorkspaceError::InvalidInput)?,
             inventory: Some(InventoryCheckpoint {
-                orders: if schema::CURRENT == 7 {
+                orders: if schema::CURRENT >= 7 {
                     Some(Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?)
                 } else {
                     None
@@ -675,7 +803,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=7")
+            sqlx::query("PRAGMA user_version=8")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -762,6 +890,9 @@ async fn read(
     if let Some(checkpoint) = authority.sources {
         check_source_counts(connection, checkpoint).await?;
     }
+    if let Some(checkpoint) = authority.public_sources {
+        public_source::counts(connection, checkpoint).await?;
+    }
     Ok((authority, record, root, grant))
 }
 pub(super) async fn authenticate(
@@ -807,6 +938,7 @@ pub(super) async fn authenticate(
     namespace.validate()?;
     Ok((
         StockAuthorityReceipt {
+            public_sources:authority.public_sources.map(|value|radroots_storage::workspace::seller_stock::StockListingCheckpointRef::from_host_metadata(expected.authority(),value.revision,value.head).map(|state|state.with_optional_authorization(authority.authorization))).transpose()?,
             sources:authority.sources.map(|value|radroots_storage::workspace::seller_stock::StockSourceCheckpointRef::from_host_metadata(expected.authority(),value.revision,value.head).map(|state|state.with_optional_authorization(authority.authorization))).transpose()?,
             input: authority.input,
             transaction: authority.transaction,

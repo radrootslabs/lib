@@ -447,7 +447,7 @@ impl Turn<'_> {
             access.authority.authorization,
             mapping.as_ref().map(|value| value.effect),
         )?;
-        let framed = if catalog == 7 {
+        let framed = if matches!(catalog, 7 | 8) {
             Some(
                 super::ledger::prepare(
                     self.crypto,
@@ -861,7 +861,7 @@ pub(super) async fn read_operation(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let (frame, request, decoded) = if catalog == 7 {
+    let (frame, request, decoded) = if matches!(catalog, 7 | 8) {
         let retained = super::ledger::read(connection, input, crypto, operation)
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
