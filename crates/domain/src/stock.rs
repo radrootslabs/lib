@@ -254,6 +254,19 @@ impl PoolBalances {
     pub const fn physical(self) -> PhysicalBalances {
         self.physical
     }
+    /// Proposes a positive transfer from available to preparatory backing.
+    /// Lifetime introduced and all other categories remain unchanged. This
+    /// value performs no reservation; the executor must atomically confirm its
+    /// authority, complete allocation, versions and order/operation fence.
+    pub fn hold_available(self, quantity: StockTicks) -> Result<Self, StockError> {
+        if quantity == StockTicks::ZERO {
+            return Err(StockError::ZeroMovement);
+        }
+        let mut physical = self.physical;
+        physical.available = physical.available.checked_sub(quantity)?;
+        physical.preparatory_hold = physical.preparatory_hold.checked_add(quantity)?;
+        Self::new(self.introduced, physical)
+    }
     /// Proposes a nonzero, exact correction against available backing only.
     /// Held or quarantined stock is never silently substituted for available
     /// stock. Depleting it needs a separate obligation/deficit transition.

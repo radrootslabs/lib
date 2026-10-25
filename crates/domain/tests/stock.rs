@@ -8,6 +8,77 @@ fn ticks(value: u64) -> StockTicks {
 }
 
 #[test]
+fn proposed_holds_conserve_stock_and_cannot_borrow_other_physical_categories() {
+    let physical = PhysicalBalances {
+        available: ticks(30),
+        preparatory_hold: ticks(10),
+        committed_hold: ticks(20),
+        physical_quarantine: ticks(5),
+        consumed: ticks(15),
+        waste: ticks(10),
+        removed: ticks(10),
+    };
+    let original = PoolBalances::new(ticks(100), physical).unwrap();
+    let first = original.hold_available(ticks(10)).unwrap();
+    assert_eq!(first.introduced(), original.introduced());
+    assert_eq!(
+        first.physical(),
+        PhysicalBalances {
+            available: ticks(20),
+            preparatory_hold: ticks(20),
+            ..physical
+        }
+    );
+    let full = first.hold_available(ticks(20)).unwrap();
+    assert_eq!(full.introduced(), original.introduced());
+    assert_eq!(
+        full.physical(),
+        PhysicalBalances {
+            available: StockTicks::ZERO,
+            preparatory_hold: ticks(40),
+            ..physical
+        }
+    );
+    assert_eq!(
+        original.hold_available(ticks(31)),
+        Err(StockError::Underflow)
+    );
+    assert_eq!(full.hold_available(ticks(1)), Err(StockError::Underflow));
+    assert_eq!(
+        original.hold_available(StockTicks::ZERO),
+        Err(StockError::ZeroMovement)
+    );
+    assert_eq!(original.physical(), physical);
+}
+
+#[test]
+fn proposed_holds_reach_the_exact_supported_capacity_without_wrap_or_float() {
+    let original = PoolBalances::new(
+        StockTicks::MAX,
+        PhysicalBalances {
+            available: ticks(1),
+            preparatory_hold: ticks(StockTicks::MAX.get() - 1),
+            ..PhysicalBalances::ZERO
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        original.hold_available(ticks(2)),
+        Err(StockError::Underflow)
+    );
+    let held = original.hold_available(ticks(1)).unwrap();
+    assert_eq!(held.introduced(), StockTicks::MAX);
+    assert_eq!(
+        held.physical(),
+        PhysicalBalances {
+            preparatory_hold: StockTicks::MAX,
+            ..PhysicalBalances::ZERO
+        }
+    );
+    assert_eq!(held.hold_available(ticks(1)), Err(StockError::Underflow));
+}
+
+#[test]
 fn available_corrections_conserve_audited_totals_without_touching_backed_claims() {
     use radroots_domain::stock::AvailableStockCorrection::{Add, Remove, Spoil};
     let original = PoolBalances::new(
