@@ -84,6 +84,7 @@ impl Retained {
     }
     pub fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            local_record: None,
             installation: None,
             signing: None,
             header: self.frame.header,

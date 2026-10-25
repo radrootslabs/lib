@@ -100,6 +100,7 @@ enum Job {
     ),
     StockOrderRequest(
         Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
         radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
         radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
         radroots_domain::RecordId,
@@ -108,6 +109,7 @@ enum Job {
     ),
     StockOrderHistory(
         Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
         radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
         radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
         radroots_domain::causal::CausalScope,
@@ -327,10 +329,10 @@ impl Job {
             Self::PrepareStockAcceptance(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
-            Self::StockOrderRequest(_, _, _, _, _, reply) => {
+            Self::StockOrderRequest(_, _, _, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
-            Self::StockOrderHistory(_, _, _, _, _, reply) => {
+            Self::StockOrderHistory(_, _, _, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::RetainStockListing(_, _, _, _, reply) => {
@@ -1033,6 +1035,7 @@ impl Handle {
                                 }
                                 Job::StockOrderRequest(
                                     binding,
+                                    inventory_minimum,
                                     minimum,
                                     listings,
                                     selected,
@@ -1040,7 +1043,7 @@ impl Handle {
                                     reply,
                                 ) => {
                                     let result = if kind == Kind::SellerStock {
-                                        stock::source::inspect_request(
+                                        Box::pin(stock::source::inspect_request(
                                             &mut stock::inventory::Turn {
                                                 connection,
                                                 namespace: &namespace,
@@ -1050,11 +1053,12 @@ impl Handle {
                                                 uncertain: &mut uncertain,
                                             },
                                             *binding,
+                                            inventory_minimum,
                                             minimum,
                                             listings,
                                             selected,
                                             proof,
-                                        )
+                                        ))
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -1063,6 +1067,7 @@ impl Handle {
                                 }
                                 Job::StockOrderHistory(
                                     binding,
+                                    inventory_minimum,
                                     minimum,
                                     listings,
                                     scope,
@@ -1070,7 +1075,7 @@ impl Handle {
                                     reply,
                                 ) => {
                                     let result = if kind == Kind::SellerStock {
-                                        stock::source::query_history(
+                                        Box::pin(stock::source::query_history(
                                             &mut stock::inventory::Turn {
                                                 connection,
                                                 namespace: &namespace,
@@ -1080,11 +1085,12 @@ impl Handle {
                                                 uncertain: &mut uncertain,
                                             },
                                             *binding,
+                                            inventory_minimum,
                                             minimum,
                                             listings,
                                             scope,
                                             proof,
-                                        )
+                                        ))
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -1775,6 +1781,7 @@ impl Handle {
     pub(super) async fn stock_order_request(
         &self,
         binding: WorkspaceBinding,
+        inventory_minimum: radroots_storage::inventory::InventoryCheckpointRef,
         minimum: radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
         listings: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
         selected: radroots_domain::RecordId,
@@ -1783,6 +1790,7 @@ impl Handle {
         let (reply, result) = oneshot::channel();
         self.send(Job::StockOrderRequest(
             Box::new(binding),
+            inventory_minimum,
             minimum,
             listings,
             selected,
@@ -1794,6 +1802,7 @@ impl Handle {
     pub(super) async fn stock_order_history(
         &self,
         binding: WorkspaceBinding,
+        inventory_minimum: radroots_storage::inventory::InventoryCheckpointRef,
         minimum: radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
         listings: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
         scope: radroots_domain::causal::CausalScope,
@@ -1802,6 +1811,7 @@ impl Handle {
         let (reply, result) = oneshot::channel();
         self.send(Job::StockOrderHistory(
             Box::new(binding),
+            inventory_minimum,
             minimum,
             listings,
             scope,

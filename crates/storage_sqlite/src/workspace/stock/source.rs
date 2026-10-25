@@ -259,6 +259,7 @@ impl NativeWorkspace {
     pub async fn stock_order_request(
         &self,
         binding: WorkspaceBinding,
+        inventory_minimum: radroots_storage::inventory::InventoryCheckpointRef,
         minimum: StockSourceCheckpointRef,
         listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
         request: RecordId,
@@ -266,7 +267,14 @@ impl NativeWorkspace {
     ) -> Result<StockRequestSnapshot, OperationError> {
         let proof = proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
         self.worker
-            .stock_order_request(binding, minimum, listing_minimum, request, proof)
+            .stock_order_request(
+                binding,
+                inventory_minimum,
+                minimum,
+                listing_minimum,
+                request,
+                proof,
+            )
             .await
     }
     /// Reads complete retained local causal coverage for one bilateral scope.
@@ -278,6 +286,7 @@ impl NativeWorkspace {
     pub async fn stock_order_history(
         &self,
         binding: WorkspaceBinding,
+        inventory_minimum: radroots_storage::inventory::InventoryCheckpointRef,
         minimum: StockSourceCheckpointRef,
         listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
         scope: radroots_domain::causal::CausalScope,
@@ -285,7 +294,14 @@ impl NativeWorkspace {
     ) -> Result<StockHistorySnapshot, OperationError> {
         let proof = proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
         self.worker
-            .stock_order_history(binding, minimum, listing_minimum, scope, proof)
+            .stock_order_history(
+                binding,
+                inventory_minimum,
+                minimum,
+                listing_minimum,
+                scope,
+                proof,
+            )
             .await
     }
     /// Retains original authenticated evidence on the selected owner worker.

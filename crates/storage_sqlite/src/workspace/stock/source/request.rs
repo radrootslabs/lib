@@ -21,8 +21,15 @@ pub struct StockRequestSnapshot {
     pub(super) sources: StockSourceCheckpointRef,
     pub(super) listings: StockListingCheckpointRef,
     pub(super) observed_at: UnixSeconds,
+    pub(super) inventory: radroots_storage::inventory::InventoryCheckpointRef,
 }
 impl StockRequestSnapshot {
+    /// Inventory progress included in the complete local causal read.
+    pub const fn inventory_checkpoint(
+        &self,
+    ) -> radroots_storage::inventory::InventoryCheckpointRef {
+        self.inventory
+    }
     /// Exact selected scope derived from original authenticated request content.
     pub const fn scope(&self) -> CausalScope {
         self.scope
@@ -130,11 +137,12 @@ pub(in crate::workspace::stock) async fn prepare(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,
-    authority: &Authority,
+    inventory_read: history::InventoryRead<'_>,
     request: RecordId,
     listing_minimum: StockListingCheckpointRef,
     observed_at: UnixSeconds,
 ) -> Result<Prepared, OperationError> {
+    let authority = inventory_read.authority;
     let raw = record::canonical(connection, input, crypto, request).await?;
     let observed = raw
         .as_ref()
@@ -163,8 +171,15 @@ pub(in crate::workspace::stock) async fn prepare(
         header.seller(),
     )
     .map_err(|_| OperationError::InvalidEvidence)?;
-    let history =
-        history::prepare(connection, input, crypto, authority, scope, listing_minimum).await?;
+    let history = Box::pin(history::prepare(
+        connection,
+        input,
+        crypto,
+        inventory_read,
+        scope,
+        listing_minimum,
+    ))
+    .await?;
     let nodes: Vec<_> = history
         .records
         .iter()

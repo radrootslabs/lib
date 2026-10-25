@@ -1,4 +1,6 @@
 //! Real T2 transactions over original T0/T1 and authenticated peer evidence.
+#[path = "local_history_tests.rs"]
+mod local_history;
 use super::*;
 use crate::workspace::{
     StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,

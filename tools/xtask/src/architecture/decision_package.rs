@@ -111,6 +111,10 @@ struct NativeSellerStockAuthority {
     source_profile_implies_actionability: bool,
     causal_history_current_administrator_required: bool,
     causal_history_complete_local_scope_required: bool,
+    causal_history_includes_actual_local_signed_records: bool,
+    causal_history_inventory_minimum_required: bool,
+    causal_history_logical_record_deduplication_required: bool,
+    causal_history_implies_installation: bool,
     causal_history_uninterpreted_policy: String,
     causal_history_transaction_witnesses_required: bool,
     causal_history_implies_business_permission: bool,
@@ -220,6 +224,7 @@ struct InitialAgreementInstallation {
     original_order_fence_immutable: bool,
     exact_original_hold_quantities_required: bool,
     current_exact_recovery_consent_required: bool,
+    fresh_time_not_before_original_bound_plan: bool,
     atomic_pool_agreement_and_work_required: bool,
     recipient_work_count: u32,
     unknown_commit_fences_owner: bool,
@@ -566,6 +571,9 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .current_exact_recovery_consent_required
             && stock
                 .initial_agreement_installation
+                .fresh_time_not_before_original_bound_plan
+            && stock
+                .initial_agreement_installation
                 .atomic_pool_agreement_and_work_required
             && stock.initial_agreement_installation.recipient_work_count == 2
             && stock
@@ -596,6 +604,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !stock.source_profile_implies_actionability
             && stock.causal_history_current_administrator_required
             && stock.causal_history_complete_local_scope_required
+            && stock.causal_history_includes_actual_local_signed_records
+            && stock.causal_history_inventory_minimum_required
+            && stock.causal_history_logical_record_deduplication_required
+            && !stock.causal_history_implies_installation
             && stock.causal_history_uninterpreted_policy
                 == "conservative_authenticated_participant_pair_barrier"
             && stock.causal_history_transaction_witnesses_required
@@ -1234,6 +1246,7 @@ mod tests {
             ("original_order_fence_immutable", json!(false)),
             ("exact_original_hold_quantities_required", json!(false)),
             ("current_exact_recovery_consent_required", json!(false)),
+            ("fresh_time_not_before_original_bound_plan", json!(false)),
             ("atomic_pool_agreement_and_work_required", json!(false)),
             ("recipient_work_count", json!(3)),
             ("unknown_commit_fences_owner", json!(false)),
@@ -1402,6 +1415,16 @@ mod tests {
                 json!(false),
             ),
             ("causal_history_complete_local_scope_required", json!(false)),
+            (
+                "causal_history_includes_actual_local_signed_records",
+                json!(false),
+            ),
+            ("causal_history_inventory_minimum_required", json!(false)),
+            (
+                "causal_history_logical_record_deduplication_required",
+                json!(false),
+            ),
+            ("causal_history_implies_installation", json!(true)),
             (
                 "causal_history_uninterpreted_policy",
                 json!("ignore_unknown_scope"),

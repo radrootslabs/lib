@@ -231,6 +231,9 @@ pub(in crate::workspace) async fn install(
         return Ok(StockInstallationOutcome::Installed(Box::new(old.receipt)));
     }
     let plan = auth.plan.as_ref().ok_or(OperationError::StaleState)?;
+    if auth.access.current.observed_at() < plan.bound.bound_at() {
+        return Err(WorkspaceError::Unavailable.into());
+    }
     let recipients = *plan.bound.preparation().rumor().recipients();
     let mut selections = Vec::with_capacity(2);
     let mut work = Vec::with_capacity(2);

@@ -342,6 +342,27 @@ pub(in crate::workspace::stock) async fn authenticate_minimum(
     authority: &Authority,
     minimum: radroots_storage::inventory::InventoryCheckpointRef,
 ) -> Result<MinimumProof, OperationError> {
+    Box::pin(authenticate_minimum_with_local(
+        connection, input, crypto, binding, authority, minimum, None,
+    ))
+    .await
+}
+pub(in crate::workspace::stock) struct LocalSources<'a> {
+    pub scope: radroots_domain::causal::CausalScope,
+    pub records: &'a mut std::collections::BTreeMap<
+        radroots_domain::RecordId,
+        radroots_protocol::commerce::DecodedRecord,
+    >,
+}
+pub(in crate::workspace::stock) async fn authenticate_minimum_with_local(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    authority: &Authority,
+    minimum: radroots_storage::inventory::InventoryCheckpointRef,
+    mut local: Option<LocalSources<'_>>,
+) -> Result<MinimumProof, OperationError> {
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
@@ -351,7 +372,11 @@ pub(in crate::workspace::stock) async fn authenticate_minimum(
     if minimum.revision().get() > current.revision.get() {
         return Err(WorkspaceError::StaleCheckpoint.into());
     }
-    let lower = minimum.revision().get().max(1);
+    let lower = if local.is_some() {
+        1
+    } else {
+        minimum.revision().get().max(1)
+    };
     let upper = current.revision.get();
     let multipart = matches!(authority.catalog, 7..=12);
     let mut hash = history_hash(multipart);
@@ -364,7 +389,7 @@ pub(in crate::workspace::stock) async fn authenticate_minimum(
                 .map_err(|_| OperationError::RecoveryRequired)?,
         );
         if multipart {
-            let retained = Box::pin(super::super::ledger::history(
+            let mut retained = Box::pin(super::super::ledger::history(
                 connection, input, crypto, binding, authority, operation,
             ))
             .await?
@@ -377,6 +402,22 @@ pub(in crate::workspace::stock) async fn authenticate_minimum(
                 return Err(WorkspaceError::StaleCheckpoint.into());
             }
             retained.hash(&mut hash)?;
+            if let Some(local) = &mut local
+                && let Some(record) = retained.local_record.take()
+                && local.scope.contains(record.content())
+            {
+                let id = record.record_id();
+                if let Some(known) = local.records.get(&id) {
+                    if known.content() != record.content() {
+                        return Err(OperationError::RecoveryRequired);
+                    }
+                } else {
+                    local.records.insert(id, *record);
+                    if local.records.len() > radroots_domain::causal::MAX_CAUSAL_RECORDS {
+                        return Err(WorkspaceError::Capacity.into());
+                    }
+                }
+            }
             expected = retained.header.previous;
             continue;
         }
@@ -395,7 +436,7 @@ pub(in crate::workspace::stock) async fn authenticate_minimum(
         hash_retained(&mut hash, revision, binding, operation, &retained)?;
         expected = retained.previous_head;
     }
-    if minimum.revision().get() == 0 && expected.is_some() {
+    if (minimum.revision().get() == 0 || local.is_some()) && expected.is_some() {
         return Err(WorkspaceError::StaleCheckpoint.into());
     }
     Ok(MinimumProof {

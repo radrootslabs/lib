@@ -65,10 +65,11 @@ async fn seed(r: &Rig, amount: &str) {
     physical(r, serde_json::json!({"type":"stock.map_option","context":context(r,82),"input":{"listing":line.source().coordinate(),"option_id":line.option_id(),"pool_id":pool(80),"expected_mapping_version":"0","per_sale_unit":{"amount":"1","unit":"each"}}})).await;
 }
 async fn inspect(r: &Rig) -> StockRequestSnapshot {
-    let (private, public) = minima(r).await;
+    let (private, public, _inventory) = minima(r).await;
     r.store
         .stock_order_request(
             r.binding.clone(),
+            _inventory,
             private,
             public,
             identity("request"),
@@ -108,10 +109,11 @@ async fn inspect_named(r: &Rig, name: &str) -> StockRequestSnapshot {
         .unwrap()
         .parse()
         .unwrap();
-    let (private, public) = minima(r).await;
+    let (private, public, _inventory) = minima(r).await;
     r.store
         .stock_order_request(
             r.binding.clone(),
+            _inventory,
             private,
             public,
             selected,
@@ -144,7 +146,7 @@ async fn consent(r: &Rig, command: &CapturedOrderAcceptance) {
     ));
 }
 async fn request(r: &Rig, command: &CapturedOrderAcceptance) -> StockAcceptanceRequest {
-    let (private, public) = minima(r).await;
+    let (private, public, _inventory) = minima(r).await;
     StockAcceptanceRequest::capture(
         r.binding.clone(),
         inventory_minimum(r).await,
@@ -350,7 +352,7 @@ async fn actual_commit_failure_returns_original_identity_and_requires_drain_befo
     let command = command(&r, 90, true).await;
     consent(&r, &command).await;
     let before = inventory_minimum(&r).await;
-    let (private, public) = minima(&r).await;
+    let (private, public, _inventory) = minima(&r).await;
     let mut raw = database(&r).await;
     sqlx::raw_sql("CREATE TABLE deferred_fault(value INTEGER REFERENCES stock_authority(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER fault AFTER INSERT ON stock_orders BEGIN INSERT INTO deferred_fault VALUES(2); END").execute(&mut raw).await.unwrap();
     let StockAcceptanceOutcome::Unknown(attempt) = r
@@ -681,7 +683,7 @@ async fn current_recovery_only_consent_recovers_original_after_deadlines_without
             .unwrap(),
         StockConsentOutcome::Committed(_)
     ));
-    let (private, public) = minima(&r).await;
+    let (private, public, _inventory) = minima(&r).await;
     let request = StockAcceptanceRequest::capture(
         binding,
         inventory_minimum(&r).await,

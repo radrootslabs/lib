@@ -107,6 +107,7 @@ impl Access {
 pub(in crate::workspace) async fn history(
     turn: &mut Turn<'_>,
     binding: WorkspaceBinding,
+    inventory_minimum: radroots_storage::inventory::InventoryCheckpointRef,
     minimum: StockSourceCheckpointRef,
     listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
     scope: radroots_domain::causal::CausalScope,
@@ -116,14 +117,18 @@ pub(in crate::workspace) async fn history(
     if !matches!(access.authority.catalog, 8..=12) {
         return Err(OperationError::UnsupportedOperation);
     }
-    let prepared = super::history::prepare(
+    let prepared = Box::pin(super::history::prepare(
         turn.connection,
         turn.selected,
         turn.crypto,
-        &access.authority,
+        super::history::InventoryRead {
+            binding: &access.current,
+            authority: &access.authority,
+            minimum: inventory_minimum,
+        },
         scope,
         listing_minimum,
-    )
+    ))
     .await?;
     let mut tx = turn
         .connection
@@ -154,6 +159,7 @@ pub(in crate::workspace) async fn history(
         .public_sources
         .ok_or(OperationError::RecoveryRequired)?;
     Ok(StockHistorySnapshot {
+        inventory: prepared.inventory,
         scope,records:prepared.records.len(),analysis:prepared.analysis,checkpoint:prepared.checkpoint,observed_at,
         sources:StockSourceCheckpointRef::from_host_metadata(turn.selected.authority(),private.revision,private.head)?.with_optional_authorization(access.authority.authorization),
         listings:radroots_storage::workspace::seller_stock::StockListingCheckpointRef::from_host_metadata(turn.selected.authority(),public.revision,public.head)?.with_optional_authorization(access.authority.authorization),
@@ -162,6 +168,7 @@ pub(in crate::workspace) async fn history(
 pub(in crate::workspace) async fn inspect_request(
     turn: &mut Turn<'_>,
     binding: WorkspaceBinding,
+    inventory_minimum: radroots_storage::inventory::InventoryCheckpointRef,
     minimum: StockSourceCheckpointRef,
     listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
     selected: RecordId,
@@ -171,15 +178,19 @@ pub(in crate::workspace) async fn inspect_request(
     if !matches!(access.authority.catalog, 8..=12) {
         return Err(OperationError::UnsupportedOperation);
     }
-    let prepared = super::request::prepare(
+    let prepared = Box::pin(super::request::prepare(
         turn.connection,
         turn.selected,
         turn.crypto,
-        &access.authority,
+        super::history::InventoryRead {
+            binding: &access.current,
+            authority: &access.authority,
+            minimum: inventory_minimum,
+        },
         selected,
         listing_minimum,
         access.current.observed_at(),
-    )
+    ))
     .await;
     let mut tx = turn
         .connection
@@ -218,6 +229,7 @@ pub(in crate::workspace) async fn inspect_request(
         .public_sources
         .ok_or(OperationError::RecoveryRequired)?;
     Ok(StockRequestSnapshot {
+        inventory: prepared.history.inventory,
         scope:prepared.scope,request:prepared.request,terms:Box::new(prepared.terms()?.clone()),digest:prepared.digest,
         expires:prepared.expires,quote:prepared.quote,checkpoint:prepared.history.checkpoint.clone().ok_or(OperationError::RecoveryRequired)?,observed_at,
         sources:StockSourceCheckpointRef::from_host_metadata(turn.selected.authority(),private.revision,private.head)?.with_optional_authorization(access.authority.authorization),

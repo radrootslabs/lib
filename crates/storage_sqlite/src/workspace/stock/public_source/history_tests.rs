@@ -74,7 +74,7 @@ async fn retain(r: &Rig, name: &str) {
         StockSourceProfile::Known
     };
     assert_eq!(capture.profile(), expected, "{name}");
-    let (minimum, _) = minima(r).await;
+    let (minimum, _, _) = minima(r).await;
     assert!(matches!(
         r.store
             .retain_stock_source(r.binding.clone(), minimum, &capture, r.enrollment.proof())
@@ -83,7 +83,13 @@ async fn retain(r: &Rig, name: &str) {
         StockSourceOutcome::Committed(_)
     ));
 }
-async fn minima(r: &Rig) -> (StockSourceCheckpointRef, StockListingCheckpointRef) {
+async fn minima(
+    r: &Rig,
+) -> (
+    StockSourceCheckpointRef,
+    StockListingCheckpointRef,
+    radroots_storage::inventory::InventoryCheckpointRef,
+) {
     let current = r
         .store
         .stock_authority(r.enrollment.input().clone(), r.enrollment.proof())
@@ -92,13 +98,15 @@ async fn minima(r: &Rig) -> (StockSourceCheckpointRef, StockListingCheckpointRef
     (
         current.source_checkpoint().unwrap(),
         current.listing_checkpoint().unwrap(),
+        current.inventory_checkpoint().unwrap(),
     )
 }
 async fn history(r: &Rig) -> StockHistorySnapshot {
-    let (private, public) = minima(r).await;
+    let (private, public, inventory) = minima(r).await;
     r.store
         .stock_order_history(
             r.binding.clone(),
+            inventory,
             private,
             public,
             scope(),
@@ -313,7 +321,14 @@ async fn physical_grants_and_forked_source_acknowledgments_cannot_read_private_h
     let current = minima(&r).await;
     assert_eq!(
         r.store
-            .stock_order_history(child_binding, current.0, current.1, scope(), child.proof())
+            .stock_order_history(
+                child_binding,
+                current.2,
+                current.0,
+                current.1,
+                scope(),
+                child.proof()
+            )
             .await
             .unwrap_err()
             .code(),
@@ -323,6 +338,7 @@ async fn physical_grants_and_forked_source_acknowledgments_cannot_read_private_h
         r.store
             .stock_order_history(
                 r.binding.clone(),
+                old.2,
                 old.0,
                 old.1,
                 scope(),
@@ -344,6 +360,7 @@ async fn physical_grants_and_forked_source_acknowledgments_cannot_read_private_h
         r.store
             .stock_order_history(
                 r.binding.clone(),
+                current.2,
                 fork,
                 current.1,
                 scope(),
@@ -381,11 +398,12 @@ async fn causal_reads_recheck_real_canonical_rumor_and_listing_rows_after_succes
         let mut r = Rig::new().await;
         base(&r).await;
         let provider = reopen(&mut r).await;
-        let (private, public) = minima(&r).await;
+        let (private, public, inventory) = minima(&r).await;
         let mut raw = database(&r).await;
         provider.gate.arm(Direction::Unwrap, schema, 0);
         let mut future = Box::pin(r.store.stock_order_history(
             r.binding.clone(),
+            inventory,
             private,
             public,
             scope(),
@@ -438,7 +456,7 @@ async fn causal_snapshot_reports_the_actual_final_checked_time_and_rejects_expir
         let mut r = Rig::new().await;
         base(&r).await;
         let provider = reopen(&mut r).await;
-        let (private, public) = minima(&r).await;
+        let (private, public, inventory) = minima(&r).await;
         provider.gate.arm(
             Direction::Unwrap,
             "radroots.seller_stock.public_source_part.v1",
@@ -446,6 +464,7 @@ async fn causal_snapshot_reports_the_actual_final_checked_time_and_rejects_expir
         );
         let mut future = Box::pin(r.store.stock_order_history(
             r.binding.clone(),
+            inventory,
             private,
             public,
             scope(),
@@ -470,7 +489,7 @@ async fn observer_loss_does_not_abandon_admitted_history_work_or_release_the_own
     let mut r = Rig::new().await;
     base(&r).await;
     let provider = reopen(&mut r).await;
-    let (private, public) = minima(&r).await;
+    let (private, public, inventory) = minima(&r).await;
     provider.gate.arm(
         Direction::Unwrap,
         "radroots.seller_stock.public_source_part.v1",
@@ -478,6 +497,7 @@ async fn observer_loss_does_not_abandon_admitted_history_work_or_release_the_own
     );
     let mut future = Box::pin(r.store.stock_order_history(
         r.binding.clone(),
+        inventory,
         private,
         public,
         scope(),
@@ -510,6 +530,6 @@ async fn observer_loss_does_not_abandon_admitted_history_work_or_release_the_own
         history(&r).await.analysis().readiness(),
         CausalReadiness::Complete
     );
-    assert_eq!(minima(&r).await, (private, public));
+    assert_eq!(minima(&r).await, (private, public, inventory));
     r.store.close().await.unwrap();
 }

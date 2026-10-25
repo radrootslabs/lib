@@ -19,9 +19,16 @@ pub struct StockHistorySnapshot {
     pub(super) listings: StockListingCheckpointRef,
     pub(super) observed_at: UnixSeconds,
     pub(super) records: usize,
+    pub(super) inventory: radroots_storage::inventory::InventoryCheckpointRef,
     pub(super) checkpoint: Option<radroots_domain::CheckpointRef>,
 }
 impl StockHistorySnapshot {
+    /// Independently acknowledged inventory history containing local issued records.
+    pub const fn inventory_checkpoint(
+        &self,
+    ) -> radroots_storage::inventory::InventoryCheckpointRef {
+        self.inventory
+    }
     /// Borrows complete local causal coverage data. This is not an installed
     /// order, pending-decision fence or permission to accept the request.
     pub fn checkpoint(&self) -> Option<&radroots_domain::CheckpointRef> {
@@ -58,8 +65,17 @@ impl std::fmt::Debug for StockHistorySnapshot {
         f.write_str("StockHistorySnapshot(<private coverage>)")
     }
 }
+/// Current verified access plus caller checkpoint data; not fresh authority.
+pub(in crate::workspace::stock) struct InventoryRead<'a> {
+    pub binding: &'a WorkspaceBinding,
+    pub authority: &'a Authority,
+    pub minimum: radroots_storage::inventory::InventoryCheckpointRef,
+}
 pub(in crate::workspace::stock) struct Prepared {
     pub records: BTreeMap<RecordId, DecodedRecord>,
+    pub inventory: radroots_storage::inventory::InventoryCheckpointRef,
+    inventory_proof: super::super::inventory::checkpoint::MinimumProof,
+    inventory_state: super::super::InventoryCheckpoint,
     pub analysis: CausalAnalysis,
     pub checkpoint: Option<radroots_domain::CheckpointRef>,
     pub external: Vec<SourceId>,
@@ -194,10 +210,14 @@ pub(in crate::workspace::stock) async fn prepare(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,
-    authority: &Authority,
+    inventory_read: InventoryRead<'_>,
     scope: CausalScope,
     listing_minimum: StockListingCheckpointRef,
 ) -> Result<Prepared, OperationError> {
+    let authority = inventory_read.authority;
+    if inventory_read.minimum.authorization() != authority.authorization {
+        return Err(WorkspaceError::StaleCheckpoint.into());
+    }
     if scope.seller() != input.participant() {
         return Err(OperationError::Unauthorized);
     }
@@ -242,6 +262,35 @@ pub(in crate::workspace::stock) async fn prepare(
             }
         }
     }
+    let inventory_state = authority
+        .inventory
+        .ok_or(OperationError::UnsupportedOperation)?;
+    super::super::inventory::check_head(connection, inventory_state).await?;
+    let inventory_proof = Box::pin(
+        super::super::inventory::checkpoint::authenticate_minimum_with_local(
+            connection,
+            input,
+            crypto,
+            inventory_read.binding,
+            authority,
+            inventory_read.minimum,
+            Some(super::super::inventory::checkpoint::LocalSources {
+                scope,
+                records: &mut records,
+            }),
+        ),
+    )
+    .await?;
+    let inventory = radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
+        input.authority(),
+        inventory_state.revision,
+        inventory_state.head,
+    )?
+    .with_authorization(
+        authority
+            .authorization
+            .ok_or(OperationError::RecoveryRequired)?,
+    );
     let mut wanted: BTreeSet<_> = records
         .values()
         .flat_map(|record| record.content().header().parents().iter().copied())
@@ -314,6 +363,9 @@ pub(in crate::workspace::stock) async fn prepare(
     })?;
     let (analysis, checkpoint) = coverage.into_parts();
     Ok(Prepared {
+        inventory,
+        inventory_state,
+        inventory_proof,
         records,
         analysis,
         checkpoint,
@@ -332,6 +384,8 @@ impl Prepared {
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {
         self.ancestry.confirm(connection).await?;
+        super::super::inventory::check_head(connection, self.inventory_state).await?;
+        self.inventory_proof.confirm(connection).await?;
         let mut known = known_hash();
         let mut unknown = unknown_hash();
         for revision in 1..=self.revision {

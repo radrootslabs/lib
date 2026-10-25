@@ -421,7 +421,11 @@ pub(in crate::workspace) async fn admit(
         turn.connection,
         turn.selected,
         turn.crypto,
-        &access.authority,
+        source::history::InventoryRead {
+            binding: &access.current,
+            authority: &access.authority,
+            minimum: request.minimum,
+        },
         command.input().request(),
         request.listings,
         access.current.observed_at(),

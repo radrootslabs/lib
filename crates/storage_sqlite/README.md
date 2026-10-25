@@ -395,6 +395,18 @@ The ordinary facade and complete commerce behavior remain in implementation.
 
 ## Initial native acceptance and signing-plan retention
 
+`stock_order_history` and `stock_order_request` require independently retained
+inventory, private-source and public-listing checkpoint minima. Their snapshots
+return all three checkpoints. Local peer or self records enter causal coverage
+only after original signed output is actually retained and independently
+verified. They share the incoming-record graph and deduplicate by logical record
+identity across recipients and encodings. An intent or unknown dispatch adds no
+record. An actual local signature advances causal history before installation;
+it does not itself install an agreement or prove delivery. Full protected
+inventory ancestry and final transaction witnesses guard this local coverage,
+including refusal of an acknowledged local-tail rollback when incoming-source
+checkpoints have not changed.
+
 `prepare_stock_acceptance` retains the exact authorized command, original
 request/quote/Terms and causal observation. Current issued consent is required.
 Complete automatic or explicit allocation, preparatory pool holds and the order
@@ -452,3 +464,5 @@ uncertain commit fences the owner until drain/reopen. `stock_operation_snapshot`
 reports installation separately from signing and delivery facts. This initial
 primitive does not implement amendments, handovers, releases, deficits, browser
 stock or complete ordinary caller orchestration.
+Fresh installation also refuses an observed time before its original bound
+plan, before any write; recovery of an existing installation remains historical.

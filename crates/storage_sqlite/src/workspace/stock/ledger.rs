@@ -443,6 +443,8 @@ pub(super) struct HistoryEntry {
     pub movements: Vec<MovementWitness>,
     pub signing: Option<super::issuance::Projection>,
     pub installation: Option<super::inventory::installation::Projection>,
+    /// Derived only by the independently verified obtained-evidence decoder.
+    pub local_record: Option<Box<radroots_protocol::commerce::DecodedRecord>>,
 }
 pub(super) async fn history(
     connection: &mut SqliteConnection,
@@ -479,6 +481,7 @@ pub(super) async fn history(
                 _ => return Err(OperationError::RecoveryRequired),
             };
             Ok(Some(HistoryEntry {
+                local_record: None,
                 installation: None,
                 signing: None,
                 header,
@@ -511,6 +514,7 @@ pub(super) async fn history(
                 return Err(OperationError::RecoveryRequired);
             }
             Ok(Some(HistoryEntry {
+                local_record: None,
                 installation: None,
                 signing: None,
                 header: retained.frame.header,
@@ -630,6 +634,9 @@ impl HistoryEntry {
                 return Err(OperationError::RecoveryRequired);
             }
             (_, None) => {}
+        }
+        if (header.family == Family::SigningEvidence) != self.local_record.is_some() {
+            return Err(OperationError::RecoveryRequired);
         }
         if self.movements.len() > 64
             || self

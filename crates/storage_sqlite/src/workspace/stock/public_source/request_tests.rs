@@ -14,10 +14,11 @@ fn selected(name: &str) -> RecordId {
         .unwrap()
 }
 async fn inspect(r: &Rig, name: &str) -> Result<StockRequestSnapshot, OperationError> {
-    let (private, public) = minima(r).await;
+    let (private, public, inventory) = minima(r).await;
     r.store
         .stock_order_request(
             r.binding.clone(),
+            inventory,
             private,
             public,
             selected(name),
@@ -199,7 +200,7 @@ async fn request_deadline_and_current_access_are_rechecked_after_all_actual_prov
         let mut r = Rig::new().await;
         base(&r).await;
         let provider = reopen(&mut r).await;
-        let (private, public) = minima(&r).await;
+        let (private, public, inventory) = minima(&r).await;
         provider.gate.arm(
             Direction::Unwrap,
             "radroots.seller_stock.public_source_part.v1",
@@ -207,6 +208,7 @@ async fn request_deadline_and_current_access_are_rechecked_after_all_actual_prov
         );
         let mut future = Box::pin(r.store.stock_order_request(
             r.binding.clone(),
+            inventory,
             private,
             public,
             identity("request"),
@@ -231,7 +233,7 @@ async fn protected_current_head_changes_after_opening_refuse_even_a_valid_quote_
     let mut r = Rig::new().await;
     base(&r).await;
     let provider = reopen(&mut r).await;
-    let (private, public) = minima(&r).await;
+    let (private, public, inventory) = minima(&r).await;
     let mut raw = database(&r).await;
     provider.gate.arm(
         Direction::Unwrap,
@@ -240,6 +242,7 @@ async fn protected_current_head_changes_after_opening_refuse_even_a_valid_quote_
     );
     let mut future = Box::pin(r.store.stock_order_request(
         r.binding.clone(),
+        inventory,
         private,
         public,
         identity("request"),

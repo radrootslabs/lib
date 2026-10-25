@@ -63,6 +63,7 @@ pub(in crate::workspace::stock) struct Retained {
     pub frame: ledger::Retained,
     pub value: StockCapturedEvidence,
     projection: Projection,
+    local_record: Box<radroots_protocol::commerce::DecodedRecord>,
 }
 pub(in crate::workspace::stock) async fn read_entry(
     connection: &mut SqliteConnection,
@@ -135,6 +136,15 @@ pub(in crate::workspace::stock) async fn read_entry(
         return Err(OperationError::RecoveryRequired);
     }
     let digest = Sha256::digest(raw.as_bytes()).into();
+    let rumor = original.report.bound_plan().preparation().rumor();
+    let logical =
+        radroots_protocol::private_rumor::DecodedRumor::decode(rumor.protected_wire().as_bytes())
+            .map_err(|_| OperationError::RecoveryRequired)?;
+    let local_record = radroots_protocol::commerce::decode(logical.protected_content().as_bytes())
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    if local_record.record_id() != rumor.record_id() || logical.event_id() != rumor.event_id() {
+        return Err(OperationError::RecoveryRequired);
+    }
     let projection = Projection {
         operation: original.report.bound_plan().plan().operation_id(),
         recipient: original.report.recipient(),
@@ -160,6 +170,7 @@ pub(in crate::workspace::stock) async fn read_entry(
         frame,
         value,
         projection,
+        local_record: Box::new(local_record),
     };
     retained.confirm(connection).await?;
     Ok(Some(retained))
@@ -208,6 +219,7 @@ impl Retained {
             mapping: None,
             movements: vec![],
             signing: Some(self.projection),
+            local_record: Some(self.local_record),
         }
     }
 }
