@@ -225,6 +225,34 @@ pub radroots_protocol::command::InventoryCommandKind::CreatePool
 pub radroots_protocol::command::InventoryCommandKind::MapOption
 pub radroots_protocol::command::InventoryCommandKind::RemoveStock
 pub radroots_protocol::command::InventoryCommandKind::SpoilStock
+pub struct radroots_protocol::command::AcceptOrderInput
+impl radroots_protocol::command::AcceptOrderInput
+pub const fn radroots_protocol::command::AcceptOrderInput::allocation(&self) -> &radroots_protocol::command::AllocationSelection
+pub const fn radroots_protocol::command::AcceptOrderInput::new(radroots_domain::identifier::RecordId, radroots_domain::identifier::TermsDigest, radroots_protocol::command::AllocationSelection) -> Self
+pub const fn radroots_protocol::command::AcceptOrderInput::request(&self) -> radroots_domain::identifier::RecordId
+pub const fn radroots_protocol::command::AcceptOrderInput::terms_digest(&self) -> radroots_domain::identifier::TermsDigest
+impl core::fmt::Debug for radroots_protocol::command::AcceptOrderInput
+pub fn radroots_protocol::command::AcceptOrderInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::AllocationInput
+impl radroots_protocol::command::AllocationInput
+pub const fn radroots_protocol::command::AllocationInput::expected_pool_version(self) -> radroots_domain::context::Sequence
+pub const fn radroots_protocol::command::AllocationInput::line_id(self) -> radroots_domain::identifier::AgreementLineId
+pub fn radroots_protocol::command::AllocationInput::new(radroots_domain::identifier::AgreementLineId, radroots_domain::identifier::PoolId, radroots_domain::quantity::Quantity, radroots_domain::context::Sequence) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::AllocationInput::pool_id(self) -> radroots_domain::identifier::PoolId
+pub const fn radroots_protocol::command::AllocationInput::quantity(self) -> radroots_domain::quantity::Quantity
+impl core::fmt::Debug for radroots_protocol::command::AllocationInput
+pub fn radroots_protocol::command::AllocationInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::AllocationSelection(_)
+impl radroots_protocol::command::AllocationSelection
+pub const radroots_protocol::command::AllocationSelection::MAX_ALLOCATIONS: usize
+pub const fn radroots_protocol::command::AllocationSelection::automatic() -> Self
+pub fn radroots_protocol::command::AllocationSelection::explicit(alloc::vec::Vec<radroots_protocol::command::AllocationInput>) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::AllocationSelection::explicit_allocations(&self) -> core::option::Option<&[radroots_protocol::command::AllocationInput]>
+pub const fn radroots_protocol::command::AllocationSelection::is_automatic(&self) -> bool
+impl core::fmt::Debug for radroots_protocol::command::AllocationSelection
+pub fn radroots_protocol::command::AllocationSelection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_protocol::command::AllocationSelection
+pub fn radroots_protocol::command::AllocationSelection::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 pub struct radroots_protocol::command::CapturedChatCommand
 impl radroots_protocol::command::CapturedChatCommand
 pub const fn radroots_protocol::command::CapturedChatCommand::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
@@ -257,6 +285,17 @@ impl core::convert::From<radroots_protocol::command::CapturedOptionMapping> for 
 pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedOptionMapping) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedOptionMapping
 pub fn radroots_protocol::command::CapturedOptionMapping::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::CapturedOrderAcceptance
+impl radroots_protocol::command::CapturedOrderAcceptance
+pub const fn radroots_protocol::command::CapturedOrderAcceptance::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedOrderAcceptance::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedOrderAcceptance::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::command::CapturedOrderAcceptance::input(&self) -> &radroots_protocol::command::AcceptOrderInput
+pub fn radroots_protocol::command::CapturedOrderAcceptance::new(radroots_domain::context::CommandContextData, radroots_protocol::command::AcceptOrderInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedOrderAcceptance::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedOrderAcceptance::protected_wire(&self) -> &[u8]
+impl core::fmt::Debug for radroots_protocol::command::CapturedOrderAcceptance
+pub fn radroots_protocol::command::CapturedOrderAcceptance::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::CapturedPoolCorrection
 impl radroots_protocol::command::CapturedPoolCorrection
 pub const fn radroots_protocol::command::CapturedPoolCorrection::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest

@@ -50,11 +50,15 @@ impl core::error::Error for CommandError {}
 
 mod captured;
 mod inventory;
+mod order_acceptance;
 mod stock;
 mod stock_correction;
 mod stock_mapping;
 pub use captured::{CapturedCommand, CommandKind};
 pub use inventory::{CapturedInventoryCommand, InventoryCommandKind};
+pub use order_acceptance::{
+    AcceptOrderInput, AllocationInput, AllocationSelection, CapturedOrderAcceptance,
+};
 pub use stock::{CapturedPoolCreation, CreatePoolInput};
 pub use stock_correction::{CapturedPoolCorrection, PoolCorrectionInput};
 pub use stock_mapping::{CapturedOptionMapping, MapOptionInput};
