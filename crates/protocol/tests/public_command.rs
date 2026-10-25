@@ -428,8 +428,8 @@ fn media_admission_refuses_missing_unknown_duplicate_array_and_out_of_bound_valu
 #[test]
 fn fixed_default_projection_preserves_basis_currency_and_full_command_plan_replay() {
     use radroots_protocol::{
+        intent::SigningReplay,
         listing::{ListingEvent, PublicSigningPlan},
-        plan::SigningReplay,
     };
     for (code, minor, exponent, amount) in [
         ("JPY", "101", 0, "101"),
@@ -786,8 +786,7 @@ fn unsupported_profile_features_are_refused_without_silent_fallback() {
 #[test]
 fn exact_public_plan_reconstructs_original_event_and_refuses_changed_framing_or_command() {
     use radroots_protocol::{
-        listing::PublicSigningPlan,
-        plan::{CapturedSigningPlan, SigningReplay},
+        intent::SigningReplay, listing::PublicSigningPlan, plan::CapturedSigningPlan,
     };
     let public = CapturedListingCommand::capture(
         context(),
@@ -923,7 +922,7 @@ fn artifact_selection_has_no_public_participant_and_preserves_private_keys() {
 
 #[test]
 fn public_plans_require_bounded_explicit_targets_without_scheme_or_whitespace_fallback() {
-    use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
+    use radroots_protocol::{intent::SigningReplay, listing::PublicSigningPlan};
     let command = CapturedListingCommand::capture(
         context(),
         PublishInput::parse(&serde_json::to_vec(&input()).unwrap()).unwrap(),

@@ -25,9 +25,9 @@ pub const SIGNED_EVENT_MAX_BYTES: usize = 65_536;
 pub const MAX_EVENT_UNIX_SECONDS: u64 = 253_402_300_799;
 const MAX_OBSERVATION_UNIX_MS: u64 = MAX_EVENT_UNIX_SECONDS * 1000 + 999;
 
-#[cfg(feature = "chat")]
+#[cfg(any(feature = "chat", feature = "commerce"))]
 mod dm_relays;
-#[cfg(feature = "chat")]
+#[cfg(any(feature = "chat", feature = "commerce"))]
 pub use dm_relays::VerifiedDmRelayAdvertisement;
 
 pub use radroots_protocol::intent::{ArtifactRole, IntentBinding};
@@ -204,7 +204,40 @@ impl SigningIntent {
         if seal.operation_id() != operation_id || seal.command_digest() != command_digest {
             return Err(ProviderError::InvalidInput);
         }
-        let fields = seal.fields();
+        Self::from_seal(
+            operation_id,
+            command_digest,
+            seal.fields(),
+            seal.recipient(),
+            seal.event_id(),
+            call,
+        )
+    }
+    /// Converts exact structured-commerce seal data without granting any
+    /// command, store, provider or dispatch authority.
+    #[cfg(feature = "commerce")]
+    pub fn from_commerce_seal(
+        seal: &radroots_protocol::commerce::CommerceSeal,
+        call: ProviderCall,
+    ) -> Result<Self, ProviderError> {
+        Self::from_seal(
+            seal.operation_id(),
+            seal.command_digest(),
+            seal.fields(),
+            seal.recipient(),
+            seal.event_id(),
+            call,
+        )
+    }
+    #[cfg(any(feature = "chat", feature = "artifacts", feature = "commerce"))]
+    fn from_seal(
+        operation_id: OperationId,
+        command_digest: radroots_domain::CommandDigest,
+        fields: radroots_protocol::nip01::EventFields<'_>,
+        recipient: PublicKey,
+        event_id: [u8; 32],
+        call: ProviderCall,
+    ) -> Result<Self, ProviderError> {
         let draft = radroots_event::GenericEventDraft::new(
             "radroots.message.seal.v1",
             fields.kind,
@@ -216,7 +249,7 @@ impl SigningIntent {
         .map_err(|_| ProviderError::InvalidInput)?;
         let plan =
             AuthoredEventPlan::from_generic(draft).map_err(|_| ProviderError::InvalidInput)?;
-        if plan.expected_event_id().as_bytes() != &seal.event_id() {
+        if plan.expected_event_id().as_bytes() != &event_id {
             return Err(ProviderError::InvalidInput);
         }
         Self::new(
@@ -224,7 +257,7 @@ impl SigningIntent {
             *command_digest.as_bytes(),
             plan,
             ArtifactRole::BusinessSeal,
-            Some(seal.recipient()),
+            Some(recipient),
             call,
         )
     }

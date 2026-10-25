@@ -7,10 +7,12 @@ use super::{HostBound, HostFuture, Shared, SignerSession};
 use alloc::{string::String, vec::Vec};
 use core::num::NonZeroU64;
 use radroots_domain::{PublicKey, UnixSeconds};
-use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::chat::{ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::nip59::CapturedDmRoute;
 use radroots_protocol::{
+    intent::SigningReplay,
     listing::PublicSigningPlan,
-    plan::{CapturedSigningPlan, SigningReplay, SigningTarget},
+    plan::{CapturedSigningPlan, SigningTarget},
 };
 use radroots_signing::{
     issuance::{OutcomeKind, SigningIntent},

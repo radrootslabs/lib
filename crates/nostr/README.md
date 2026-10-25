@@ -181,6 +181,13 @@ durable transition. The owning successor contract is
 The optional pinned Node fixture producer under `tools/protocol_oracle` is
 development-only; standalone Rust tests consume checked-in synthetic vectors.
 
+`commerce::VerifiedCommerceSigningPlan::verify` checks both exact recipient
+ciphertexts against the original rumor through the selected participant
+provider, verifies original signed DM advertisements and their selected subsets,
+and checks the provider's actual replay declaration. It performs no signing or
+store transaction. Current consent, approved network targets, durable T1 and
+dispatch permission remain executor obligations.
+
 ## Serialization contract
 
 - Canonical durable Radroots data should be serialized through

@@ -4,8 +4,9 @@ mod issuance;
 use super::*;
 use nostr::{JsonUtil, nips::nip44};
 use radroots_domain::EnvelopeEventId;
-use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
-use radroots_protocol::plan::SigningReplay;
+use radroots_protocol::chat::{ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::intent::SigningReplay;
+use radroots_protocol::nip59::CapturedDmRoute;
 use radroots_storage::command::{BoundSigningPlan, PlanBindingOutcome};
 fn keys(last: u8) -> nostr::Keys {
     let mut bytes = [0; 32];

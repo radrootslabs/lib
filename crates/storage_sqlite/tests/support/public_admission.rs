@@ -1,6 +1,6 @@
 //! Actual encrypted public T0/T1/S. Installation and delivery remain separate.
 use super::*;
-use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
+use radroots_protocol::{intent::SigningReplay, listing::PublicSigningPlan};
 use radroots_storage::command::{BoundSigningPlan, ClaimAttemptRequest, PlanBindingOutcome};
 
 fn public_plan(prepared: &PreparedOperation, time: u64, targets: &[String]) -> PublicSigningPlan {

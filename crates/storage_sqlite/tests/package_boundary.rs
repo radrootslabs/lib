@@ -32,6 +32,7 @@ fn sqlite_storage_declares_the_final_backend_boundaries() {
             "radroots_nostr",
             "radroots_protocol",
             "radroots_secrets",
+            "radroots_signing",
             "radroots_storage",
             "radroots_transport",
             "serde",

@@ -1,6 +1,7 @@
 //! Immutable complete known-kind signing data, without execution authority.
-use super::{CapturedDmRoute, ChatRumor, ChatSeal};
-use crate::plan::SigningReplay;
+use super::{ChatRumor, ChatSeal};
+use crate::intent::SigningReplay;
+use crate::nip59::CapturedDmRoute;
 use crate::{command::CapturedChatCommand, nip01::WireError};
 use alloc::{boxed::Box, collections::BTreeSet, string::String, vec::Vec};
 use core::fmt;
@@ -90,11 +91,7 @@ impl ChatSigningPlan {
         wire.extend_from_slice(command.digest().as_bytes());
         wire.extend_from_slice(rumor.message_id().as_bytes());
         wire.extend_from_slice(&created_at.get().to_be_bytes());
-        wire.push(match replay {
-            SigningReplay::NonReplayable => 0,
-            SigningReplay::LocalReplaySafe => 1,
-            SigningReplay::ExactReplayByRequestId => 2,
-        });
+        wire.push(replay.code());
         wire.push(seals.len() as u8);
         for (seal, route) in seals.iter().zip(&routes) {
             wire.extend_from_slice(seal.recipient().as_bytes());
@@ -145,12 +142,7 @@ impl ChatSigningPlan {
         if message_id != rumor.message_id() {
             return Err(WireError::InvalidInput);
         }
-        let replay = match input.byte()? {
-            0 => SigningReplay::NonReplayable,
-            1 => SigningReplay::LocalReplaySafe,
-            2 => SigningReplay::ExactReplayByRequestId,
-            _ => return Err(WireError::InvalidInput),
-        };
+        let replay = SigningReplay::from_code(input.byte()?)?;
         if usize::from(input.byte()?) != rumor.recipients().len() {
             return Err(WireError::InvalidInput);
         }

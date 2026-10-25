@@ -38,6 +38,19 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    BindStockSigningPlan(
+        Box<stock::StockSigningPlanRequest>,
+        AttachmentProof,
+        Reply<stock::StockSigningPlanOutcome, OperationError>,
+    ),
+    StockSigningPlan(
+        Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
+        OperationId,
+        CommandDigest,
+        AttachmentProof,
+        Reply<Option<stock::StockBoundSigningPlan>, OperationError>,
+    ),
     PrepareStockAcceptance(
         Box<stock::StockAcceptanceRequest>,
         AttachmentProof,
@@ -239,6 +252,12 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::BindStockSigningPlan(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockSigningPlan(_, _, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::PrepareStockAcceptance(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -488,6 +507,8 @@ impl Handle {
                                         | Job::StockOrderHistory(..)
                                         | Job::StockOrderRequest(..)
                                         | Job::PrepareStockAcceptance(..)
+                                        | Job::BindStockSigningPlan(..)
+                                        | Job::StockSigningPlan(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -696,6 +717,56 @@ impl Handle {
                                             *binding,
                                             minimum,
                                             *capture,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::BindStockSigningPlan(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::signing_plan::bind(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockSigningPlan(
+                                    binding,
+                                    minimum,
+                                    operation,
+                                    digest,
+                                    proof,
+                                    reply,
+                                ) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::signing_plan::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            operation,
+                                            digest,
                                             proof,
                                         )
                                         .await
@@ -1340,6 +1411,35 @@ impl Handle {
         ))?;
         result.await.unwrap_or(Ok(anchor))
     }
+    pub(super) async fn bind_stock_signing_intents(
+        &self,
+        request: stock::StockSigningPlanRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockSigningPlanOutcome, OperationError> {
+        let unknown = stock::StockSigningPlanOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::BindStockSigningPlan(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_signing_plan(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        operation: OperationId,
+        digest: CommandDigest,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockBoundSigningPlan>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockSigningPlan(
+            Box::new(binding),
+            minimum,
+            operation,
+            digest,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn prepare_stock_acceptance(
         &self,
         request: stock::StockAcceptanceRequest,
@@ -1437,6 +1537,7 @@ impl Handle {
         let bytes = match &job {
             Job::RetainStockListing(..) => 256 * 1024,
             Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,
+            Job::BindStockSigningPlan(..) | Job::StockSigningPlan(..) => 1024 * 1024,
             Job::RetainStockSource(..) => 256 * 1024,
             Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,

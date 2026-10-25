@@ -1,8 +1,8 @@
 //! Exact public T1 data. No signature, route approval or durable fact is minted.
 use super::{CapturedListingCommand, LISTING_EVENT_MAX_BYTES, ListingEvent};
 use crate::{
+    intent::SigningReplay,
     nip01::{self, WireError},
-    plan::SigningReplay,
 };
 use alloc::{boxed::Box, collections::BTreeSet, string::String, vec::Vec};
 use core::fmt;

@@ -2,8 +2,9 @@
 
 use radroots_domain::PublicKey;
 use radroots_protocol::{
-    chat::{GiftWrapBudget, SIGNED_MAX_BYTES, nip44_v2_payload_len},
+    chat::{GiftWrapBudget, SIGNED_MAX_BYTES},
     nip01::WireError,
+    nip59::nip44_v2_payload_len,
 };
 
 #[test]

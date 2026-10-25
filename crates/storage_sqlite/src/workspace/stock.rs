@@ -17,6 +17,8 @@ pub use inventory::acceptance::{
     StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
 };
 mod ledger;
+pub(in crate::workspace) mod signing_plan;
+pub use signing_plan::{StockBoundSigningPlan, StockSigningPlanOutcome, StockSigningPlanRequest};
 pub(in crate::workspace) mod public_source;
 pub use public_source::{
     StockListingCapture, StockListingOutcome, StockListingReceipt, StockListingSnapshot,
@@ -421,10 +423,10 @@ struct AuthorityV8 {
 }
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
-        if !matches!(self.catalog, 8 | 9) && self.public_sources.is_some() {
+        if !matches!(self.catalog, 8..=10) && self.public_sources.is_some() {
             return Err(WorkspaceError::RecoveryRequired);
         }
-        if matches!(self.catalog, 8 | 9) {
+        if matches!(self.catalog, 8..=10) {
             let public_sources = self
                 .public_sources
                 .ok_or(WorkspaceError::RecoveryRequired)?;
@@ -676,7 +678,7 @@ impl Authority {
                     public_sources: None,
                 }
             }
-            8 | 9 => {
+            8..=10 => {
                 let value: AuthorityV8 = closed_record(bytes)?;
                 value.public_sources.validate()?;
                 if i64::from(value.version) != catalog
@@ -806,7 +808,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=9")
+            sqlx::query("PRAGMA user_version=10")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;

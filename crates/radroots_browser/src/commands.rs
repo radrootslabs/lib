@@ -5,7 +5,7 @@ use radroots_execution::session::{
     command::{CommandIo, capture_dm_route, selected_dm_targets},
 };
 use radroots_nostr::signing::gift_wrap::{randomized_past_time, wrap_retained_seal};
-use radroots_protocol::chat::CapturedDmRoute;
+use radroots_protocol::nip59::CapturedDmRoute;
 use radroots_signing::provider::{NonceSource, ProviderError};
 use radroots_storage::command::{EnvelopeCandidate, OperationError, PublicationWork};
 use radroots_transport::{

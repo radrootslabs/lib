@@ -4,7 +4,8 @@ mod cases {
     use crate::workspace::tests::issuance_records::delivery_data;
     use nostr::JsonUtil;
     use radroots_domain::EnvelopeEventId;
-    use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
+    use radroots_protocol::chat::{ChatRumor, ChatSeal, ChatSigningPlan};
+    use radroots_protocol::nip59::CapturedDmRoute;
     use radroots_transport::{Target, TargetSet};
 
     fn route_plan(

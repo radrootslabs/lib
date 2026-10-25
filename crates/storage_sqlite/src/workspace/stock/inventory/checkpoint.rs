@@ -64,7 +64,7 @@ impl MinimumProof {
                 let related: Option<Vec<u8>> = row
                     .try_get(2)
                     .map_err(|_| OperationError::RecoveryRequired)?;
-                if !(0..=2).contains(&family) {
+                if !(0..=3).contains(&family) {
                     return Err(OperationError::RecoveryRequired);
                 }
                 let subject: Option<Vec<u8>> = row
@@ -107,7 +107,7 @@ pub(super) async fn authenticate_order_absence(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    if authority.catalog != 9 {
+    if !matches!(authority.catalog, 9 | 10) {
         return Err(OperationError::UnsupportedOperation);
     }
     let upper = current.revision.get();
@@ -159,6 +159,10 @@ pub(in crate::workspace::stock) enum IdentityTarget {
         subject: GrantId,
         expected: Option<EntryIdentity>,
     },
+    SigningPlan {
+        operation: OperationId,
+        expected: Option<EntryIdentity>,
+    },
 }
 pub(in crate::workspace::stock) async fn authenticate_identity(
     connection: &mut SqliteConnection,
@@ -171,7 +175,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    let multipart = matches!(authority.catalog, 7..=9);
+    let multipart = matches!(authority.catalog, 7..=10);
     let upper = current.revision.get();
     let mut previous = current.head;
     let mut hash = history_hash(multipart);
@@ -182,7 +186,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
             id.try_into()
                 .map_err(|_| OperationError::RecoveryRequired)?,
         );
-        let (identity, predecessor, natural) = if multipart {
+        let (identity, predecessor, natural, signing_plan) = if multipart {
             let entry = super::super::ledger::history(
                 connection, input, crypto, binding, authority, operation,
             )
@@ -208,6 +212,11 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
                 } else {
                     None
                 },
+                if entry.header.family == super::super::ledger::Family::SigningPlan {
+                    entry.header.related_operation
+                } else {
+                    None
+                },
             )
         } else {
             let entry = read_operation(connection, input, crypto, binding, operation)
@@ -227,6 +236,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
                 },
                 entry.previous_head,
                 None,
+                None,
             )
         };
         let (matched, expected) = match &target {
@@ -236,6 +246,10 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
                 subject,
                 expected,
             } => (natural == Some((*wanted, *subject)), *expected),
+            IdentityTarget::SigningPlan {
+                operation: wanted,
+                expected,
+            } => (signing_plan == Some(*wanted), *expected),
         };
         if matched {
             if expected != Some(identity) {
@@ -251,9 +265,9 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
         previous = predecessor;
     }
     let expected = match target {
-        IdentityTarget::Operation(_, expected) | IdentityTarget::Consent { expected, .. } => {
-            expected
-        }
+        IdentityTarget::Operation(_, expected)
+        | IdentityTarget::Consent { expected, .. }
+        | IdentityTarget::SigningPlan { expected, .. } => expected,
     };
     if previous.is_some() || expected.is_some() {
         return Err(OperationError::RecoveryRequired);
@@ -284,7 +298,7 @@ pub(super) async fn authenticate_minimum(
     }
     let lower = minimum.revision().get().max(1);
     let upper = current.revision.get();
-    let multipart = matches!(authority.catalog, 7..=9);
+    let multipart = matches!(authority.catalog, 7..=10);
     let mut hash = history_hash(multipart);
     let mut expected = current.head;
     for revision in (lower..=upper).rev() {
@@ -532,7 +546,7 @@ async fn authenticate_projected(
         .ok_or(OperationError::UnsupportedOperation)?;
     let upper = current.revision.get();
     let mut expected = current.head;
-    let multipart = matches!(authority.catalog, 7..=9);
+    let multipart = matches!(authority.catalog, 7..=10);
     let mut hash = history_hash(multipart);
     for revision in (1..=upper).rev() {
         let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32").bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;

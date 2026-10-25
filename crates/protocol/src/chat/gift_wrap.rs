@@ -1,5 +1,5 @@
-use super::{MAX_TIME, SIGNED_MAX_BYTES, nip44_v2_payload_len};
 use crate::nip01::{EventFields, WireError, signed_json_len};
+use crate::nip59::{MAX_TIME, SIGNED_MAX_BYTES, nip44_v2_payload_len};
 use alloc::{string::String, vec};
 use radroots_domain::PublicKey;
 

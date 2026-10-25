@@ -46,6 +46,10 @@ pub mod intent;
 #[cfg(feature = "nip01")]
 pub mod nip01;
 
+/// Shared exact NIP44/NIP59 seal data and complete nested budgets.
+#[cfg(any(feature = "chat", feature = "commerce"))]
+pub mod nip59;
+
 /// Bounded known-kind private-chat data; no admission or route authority.
 #[cfg(feature = "chat")]
 pub mod chat;

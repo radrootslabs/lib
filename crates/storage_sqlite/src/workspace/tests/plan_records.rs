@@ -3,9 +3,10 @@ use crate::workspace::{operation, plan as plan_store};
 use nostr::{JsonUtil, nips::nip44};
 use radroots_domain::{CommandContextData, EnvelopeEventId, OperationId};
 use radroots_protocol::{
-    chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan},
+    chat::{ChatRumor, ChatSeal, ChatSigningPlan},
     command::{CapturedChatCommand, InquireInput},
-    plan::SigningReplay,
+    intent::SigningReplay,
+    nip59::CapturedDmRoute,
 };
 use radroots_storage::command::{
     AdmissionOutcome, AdmissionRequest, OperationJournal, PlanBindingOutcome,

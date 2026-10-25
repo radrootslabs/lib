@@ -120,7 +120,7 @@ pub(super) fn encode_operation(
         String::from_utf8(clear.to_vec()).map_err(|_| OperationError::StorageFailure)?,
     )
     .map_err(|_| OperationError::StorageFailure)?;
-    if matches!(catalog, 5..=9) {
+    if matches!(catalog, 5..=10) {
         return super::encode(&OperationV4 {
             version: 4,
             authorization: authorization.ok_or(OperationError::RecoveryRequired)?,
@@ -158,7 +158,7 @@ fn decode_inner(
     catalog: i64,
     allow_mapping: bool,
 ) -> Result<(InventoryRequest, OperationData), OperationError> {
-    if matches!(catalog, 5..=9) {
+    if matches!(catalog, 5..=10) {
         let decoded: OperationV4<'_> =
             super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
         if decoded.version != 4 {

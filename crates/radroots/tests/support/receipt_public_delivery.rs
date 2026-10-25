@@ -6,7 +6,7 @@ use radroots_nostr::{
     key::parse_secret_key,
     signing::{LocalSigner, OsNonceSource},
 };
-use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
+use radroots_protocol::{intent::SigningReplay, listing::PublicSigningPlan};
 use radroots_signing::{
     issuance::{OutcomeKind, SigningIntent},
     provider::{ParticipantProvider, ProviderCall},

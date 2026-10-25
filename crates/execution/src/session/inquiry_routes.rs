@@ -1,7 +1,7 @@
 //! Shared authenticated route selection; hosts supply only their explicit policy.
 use alloc::{borrow::ToOwned, vec::Vec};
 use radroots_domain::PublicKey;
-use radroots_protocol::chat::CapturedDmRoute;
+use radroots_protocol::nip59::CapturedDmRoute;
 use radroots_storage::command::{OperationError, SignedDmRelaySource};
 use radroots_transport::TargetSet;
 

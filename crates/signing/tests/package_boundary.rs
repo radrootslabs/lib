@@ -34,7 +34,7 @@ fn manifest_has_final_identity_features_and_dependencies() {
     }
     assert_eq!(
         table_keys(MANIFEST, "[features]"),
-        BTreeSet::from(["artifacts", "chat", "default", "serde", "std"])
+        BTreeSet::from(["artifacts", "chat", "commerce", "default", "serde", "std"])
     );
     assert_eq!(
         table_keys(MANIFEST, "[dependencies]"),

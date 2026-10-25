@@ -75,7 +75,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 9,
+    "schema_version": 10,
     "retained_enrollment_versions": [
       1
     ],
@@ -86,9 +86,10 @@
       5,
       6,
       7,
-      8
+      8,
+      9
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v9",
+    "authority_payload_schema": "radroots.seller_stock.authority.v10",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -132,7 +133,10 @@
     },
     "business_consent_payload_version": 1,
     "business_consent_action": "orders.accept",
-    "business_consent_modes": ["execute_and_recover", "recover_only"],
+    "business_consent_modes": [
+      "execute_and_recover",
+      "recover_only"
+    ],
     "business_consent_admin_issuance_required": true,
     "business_consent_binds_exact_command_and_subject_grant": true,
     "business_consent_issuance_has_order_or_stock_effects": false,
@@ -200,7 +204,21 @@
     "causal_history_transaction_witnesses_required": true,
     "causal_history_implies_business_permission": false,
     "source_carrier_max_bytes": 65536,
-    "source_chunk_max_bytes": 16384
+    "source_chunk_max_bytes": 16384,
+    "signing_plan_binding": {
+      "payload_version": 1,
+      "journal_family": 3,
+      "worker_charge_bytes": 1048576,
+      "complete_recipient_count": 2,
+      "crypto_and_route_verification_required": true,
+      "original_t0_rumor_required": true,
+      "exact_intent_digests_retained": true,
+      "protected_identity_presence_and_absence_required": true,
+      "current_issued_consent_required": true,
+      "final_permission_and_clock_witnesses_required": true,
+      "signer_invoked": false,
+      "agreement_installed": false
+    }
   },
   "provenance": {
     "app_behavior_implementation": "independent_reimplementation",

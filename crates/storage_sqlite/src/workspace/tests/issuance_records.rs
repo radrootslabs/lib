@@ -8,9 +8,10 @@ use radroots_domain::{
     CommandContextData, EnvelopeEventId, OperationId, SigningAttemptId, TransactionId,
 };
 use radroots_protocol::{
-    chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan},
+    chat::{ChatRumor, ChatSeal, ChatSigningPlan},
     command::{CapturedChatCommand, InquireInput},
-    plan::SigningReplay,
+    intent::SigningReplay,
+    nip59::CapturedDmRoute,
 };
 use radroots_storage::command::{
     AdmissionOutcome, AdmissionRequest, ArtifactEvidence, BoundSigningPlan, ClaimAttemptOutcome,
@@ -135,7 +136,7 @@ pub(in crate::workspace) async fn delivery_data() -> DeliveryData {
 #[cfg(test)]
 pub(in crate::workspace) async fn public_delivery_data() -> DeliveryData {
     use radroots_domain::{ActorRef, ActorRole, IssuanceWindow, Sequence};
-    use radroots_protocol::{listing::PublicSigningPlan, plan::SigningReplay};
+    use radroots_protocol::{intent::SigningReplay, listing::PublicSigningPlan};
     use radroots_storage::{
         command::{
             DeliveryAttempt, DeliveryIntent, EvidenceReceipt, ListingInstallation,

@@ -84,26 +84,10 @@ pub const radroots_protocol::capability::v1::SCHEMAS: &[radroots_protocol::schem
 pub fn radroots_protocol::capability::v1::schema_registry() -> core::result::Result<radroots_protocol::schema::Registry, radroots_protocol::schema::Error>
 pub fn radroots_protocol::capability::v1::validate_catalog(&[radroots_protocol::capability::v1::TransportDescriptor]) -> core::result::Result<(), radroots_protocol::capability::v1::Error>
 pub mod radroots_protocol::chat
-pub struct radroots_protocol::chat::CapturedDmRoute
-impl radroots_protocol::chat::CapturedDmRoute
-pub fn radroots_protocol::chat::CapturedDmRoute::from_observed_descriptor(radroots_identity::key::PublicKey, radroots_domain::identifier::EnvelopeEventId, &str, &[alloc::string::String]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
-pub const fn radroots_protocol::chat::CapturedDmRoute::participant(&self) -> radroots_identity::key::PublicKey
-pub fn radroots_protocol::chat::CapturedDmRoute::raw_json(&self) -> &str
-pub fn radroots_protocol::chat::CapturedDmRoute::selected_relays(&self) -> &[alloc::boxed::Box<str>]
-pub const fn radroots_protocol::chat::CapturedDmRoute::source_id(&self) -> radroots_domain::identifier::EnvelopeEventId
-impl core::fmt::Debug for radroots_protocol::chat::CapturedDmRoute
-pub fn radroots_protocol::chat::CapturedDmRoute::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct radroots_protocol::chat::ChatBudget
-impl radroots_protocol::chat::ChatBudget
-pub const fn radroots_protocol::chat::ChatBudget::envelope_ciphertext_max_bytes(self) -> usize
-pub fn radroots_protocol::chat::ChatBudget::for_rumor(usize, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
-pub const fn radroots_protocol::chat::ChatBudget::rumor_ciphertext_bytes(self) -> usize
-pub const fn radroots_protocol::chat::ChatBudget::signed_envelope_max_bytes(self) -> usize
-pub const fn radroots_protocol::chat::ChatBudget::signed_seal_max_bytes(self) -> usize
 pub struct radroots_protocol::chat::ChatRumor
 impl radroots_protocol::chat::ChatRumor
 pub const fn radroots_protocol::chat::ChatRumor::author(&self) -> radroots_identity::key::PublicKey
-pub const fn radroots_protocol::chat::ChatRumor::budget(&self) -> radroots_protocol::chat::ChatBudget
+pub const fn radroots_protocol::chat::ChatRumor::budget(&self) -> radroots_protocol::nip59::PrivateEnvelopeBudget
 pub const fn radroots_protocol::chat::ChatRumor::created_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_protocol::chat::ChatRumor::from_command(&radroots_protocol::command::CapturedChatCommand, radroots_domain::context::UnixSeconds) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub fn radroots_protocol::chat::ChatRumor::json(&self) -> &str
@@ -128,25 +112,17 @@ pub const fn radroots_protocol::chat::ChatSigningPlan::command_digest(&self) -> 
 pub const fn radroots_protocol::chat::ChatSigningPlan::created_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_protocol::chat::ChatSigningPlan::digest(&self) -> &[u8; 32]
 pub const fn radroots_protocol::chat::ChatSigningPlan::message_id(&self) -> radroots_domain::identifier::MessageId
-pub fn radroots_protocol::chat::ChatSigningPlan::new(&radroots_protocol::command::CapturedChatCommand, radroots_domain::context::UnixSeconds, alloc::vec::Vec<radroots_protocol::chat::ChatSeal>, alloc::vec::Vec<radroots_protocol::chat::CapturedDmRoute>, radroots_protocol::plan::SigningReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::chat::ChatSigningPlan::new(&radroots_protocol::command::CapturedChatCommand, radroots_domain::context::UnixSeconds, alloc::vec::Vec<radroots_protocol::chat::ChatSeal>, alloc::vec::Vec<radroots_protocol::nip59::CapturedDmRoute>, radroots_protocol::intent::SigningReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub const fn radroots_protocol::chat::ChatSigningPlan::operation_id(&self) -> radroots_domain::identifier::OperationId
 pub fn radroots_protocol::chat::ChatSigningPlan::parse(&radroots_protocol::command::CapturedChatCommand, &[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub fn radroots_protocol::chat::ChatSigningPlan::protected_wire(&self) -> &[u8]
-pub const fn radroots_protocol::chat::ChatSigningPlan::replay(&self) -> radroots_protocol::plan::SigningReplay
-pub fn radroots_protocol::chat::ChatSigningPlan::routes(&self) -> &[radroots_protocol::chat::CapturedDmRoute]
+pub const fn radroots_protocol::chat::ChatSigningPlan::replay(&self) -> radroots_protocol::intent::SigningReplay
+pub fn radroots_protocol::chat::ChatSigningPlan::routes(&self) -> &[radroots_protocol::nip59::CapturedDmRoute]
 pub fn radroots_protocol::chat::ChatSigningPlan::seals(&self) -> &[radroots_protocol::chat::ChatSeal]
 impl core::convert::From<radroots_protocol::chat::ChatSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
 pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::chat::ChatSigningPlan) -> Self
 impl core::fmt::Debug for radroots_protocol::chat::ChatSigningPlan
 pub fn radroots_protocol::chat::ChatSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct radroots_protocol::chat::DmRelayAdvertisement
-impl radroots_protocol::chat::DmRelayAdvertisement
-pub fn radroots_protocol::chat::DmRelayAdvertisement::advertised_relays(&self) -> &[alloc::boxed::Box<str>]
-pub const fn radroots_protocol::chat::DmRelayAdvertisement::created_at(&self) -> radroots_domain::context::UnixSeconds
-pub fn radroots_protocol::chat::DmRelayAdvertisement::from_tags(radroots_identity::key::PublicKey, radroots_domain::context::UnixSeconds, &[alloc::vec::Vec<alloc::string::String>]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
-pub const fn radroots_protocol::chat::DmRelayAdvertisement::participant(&self) -> radroots_identity::key::PublicKey
-impl core::fmt::Debug for radroots_protocol::chat::DmRelayAdvertisement
-pub fn radroots_protocol::chat::DmRelayAdvertisement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::chat::GiftWrapBudget
 impl radroots_protocol::chat::GiftWrapBudget
 pub const fn radroots_protocol::chat::GiftWrapBudget::ciphertext_bytes(self) -> usize
@@ -155,7 +131,6 @@ pub const fn radroots_protocol::chat::GiftWrapBudget::signed_max_bytes(self) -> 
 pub const radroots_protocol::chat::PLAN_MAX_BYTES: usize
 pub const radroots_protocol::chat::RUMOR_MAX_BYTES: usize
 pub const radroots_protocol::chat::SIGNED_MAX_BYTES: usize
-pub fn radroots_protocol::chat::nip44_v2_payload_len(usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub mod radroots_protocol::command
 pub use radroots_protocol::command::CHAT_MAX_BYTES
 pub enum radroots_protocol::command::CapturedCommand
@@ -400,6 +375,31 @@ pub const fn radroots_protocol::commerce::CapturedCausalCoverage::checkpoint(&se
 pub fn radroots_protocol::commerce::CapturedCausalCoverage::into_parts(self) -> (radroots_domain::commerce::causal::CausalAnalysis, core::option::Option<radroots_domain::context::CheckpointRef>)
 impl core::fmt::Debug for radroots_protocol::commerce::CapturedCausalCoverage
 pub fn radroots_protocol::commerce::CapturedCausalCoverage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::commerce::CommerceSeal
+impl radroots_protocol::commerce::CommerceSeal
+pub const fn radroots_protocol::commerce::CommerceSeal::command_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::commerce::CommerceSeal::event_id(&self) -> [u8; 32]
+pub fn radroots_protocol::commerce::CommerceSeal::fields(&self) -> radroots_protocol::nip01::EventFields<'_>
+pub fn radroots_protocol::commerce::CommerceSeal::new(radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, &radroots_protocol::commerce::EncodedCommerceRumor, radroots_identity::key::PublicKey, radroots_domain::context::UnixSeconds, &str) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::commerce::CommerceSeal::operation_id(&self) -> radroots_domain::identifier::OperationId
+pub const fn radroots_protocol::commerce::CommerceSeal::recipient(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_protocol::commerce::CommerceSeal::record_id(&self) -> radroots_domain::identifier::RecordId
+pub const fn radroots_protocol::commerce::CommerceSeal::rumor_id(&self) -> radroots_domain::identifier::RumorEventId
+impl core::fmt::Debug for radroots_protocol::commerce::CommerceSeal
+pub fn radroots_protocol::commerce::CommerceSeal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::commerce::CommerceSigningPlan
+impl radroots_protocol::commerce::CommerceSigningPlan
+pub const fn radroots_protocol::commerce::CommerceSigningPlan::command_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::commerce::CommerceSigningPlan::digest(&self) -> &[u8; 32]
+pub fn radroots_protocol::commerce::CommerceSigningPlan::new(radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, &radroots_protocol::commerce::EncodedCommerceRumor, [radroots_protocol::commerce::CommerceSeal; 2], [radroots_protocol::nip59::CapturedDmRoute; 2], radroots_protocol::intent::SigningReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::commerce::CommerceSigningPlan::operation_id(&self) -> radroots_domain::identifier::OperationId
+pub fn radroots_protocol::commerce::CommerceSigningPlan::parse(radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, &radroots_protocol::commerce::EncodedCommerceRumor, &[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::commerce::CommerceSigningPlan::protected_wire(&self) -> &[u8]
+pub const fn radroots_protocol::commerce::CommerceSigningPlan::replay(&self) -> radroots_protocol::intent::SigningReplay
+pub const fn radroots_protocol::commerce::CommerceSigningPlan::routes(&self) -> &[radroots_protocol::nip59::CapturedDmRoute; 2]
+pub const fn radroots_protocol::commerce::CommerceSigningPlan::seals(&self) -> &[radroots_protocol::commerce::CommerceSeal; 2]
+impl core::fmt::Debug for radroots_protocol::commerce::CommerceSigningPlan
+pub fn radroots_protocol::commerce::CommerceSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::commerce::DecodedRecord
 impl radroots_protocol::commerce::DecodedRecord
 pub fn radroots_protocol::commerce::DecodedRecord::check_rumor_fields(&self, radroots_identity::key::PublicKey, u64, u16) -> core::result::Result<(), radroots_protocol::commerce::RecordWireError>
@@ -409,9 +409,13 @@ impl core::fmt::Debug for radroots_protocol::commerce::DecodedRecord
 pub fn radroots_protocol::commerce::DecodedRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::commerce::EncodedCommerceRumor
 impl radroots_protocol::commerce::EncodedCommerceRumor
+pub const fn radroots_protocol::commerce::EncodedCommerceRumor::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_protocol::commerce::EncodedCommerceRumor::budget(&self) -> radroots_protocol::nip59::PrivateEnvelopeBudget
 pub fn radroots_protocol::commerce::EncodedCommerceRumor::capture(&radroots_domain::commerce::CommerceContent) -> core::result::Result<Self, radroots_protocol::commerce::RecordWireError>
+pub const fn radroots_protocol::commerce::EncodedCommerceRumor::created_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_protocol::commerce::EncodedCommerceRumor::event_id(&self) -> radroots_domain::identifier::RumorEventId
 pub fn radroots_protocol::commerce::EncodedCommerceRumor::protected_wire(&self) -> &str
+pub const fn radroots_protocol::commerce::EncodedCommerceRumor::recipients(&self) -> &[radroots_identity::key::PublicKey; 2]
 pub const fn radroots_protocol::commerce::EncodedCommerceRumor::record_id(&self) -> radroots_domain::identifier::RecordId
 impl core::fmt::Debug for radroots_protocol::commerce::EncodedCommerceRumor
 pub fn radroots_protocol::commerce::EncodedCommerceRumor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -425,7 +429,9 @@ pub fn radroots_protocol::commerce::EncodedRecord::retained_bytes(&self) -> usiz
 impl core::fmt::Debug for radroots_protocol::commerce::EncodedRecord
 pub fn radroots_protocol::commerce::EncodedRecord::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_protocol::commerce::RECORD_MAX_BYTES: usize
+pub const radroots_protocol::commerce::SIGNING_PLAN_MAX_BYTES: usize
 pub fn radroots_protocol::commerce::decode(&[u8]) -> core::result::Result<radroots_protocol::commerce::DecodedRecord, radroots_protocol::commerce::RecordWireError>
+pub fn radroots_protocol::commerce::initial_commitment_rumor(&radroots_protocol::command::CapturedOrderAcceptance, &radroots_protocol::commerce::DecodedRecord, core::option::Option<(radroots_domain::identifier::RecordId, radroots_domain::context::Sequence)>, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_protocol::commerce::EncodedCommerceRumor, radroots_protocol::commerce::RecordWireError>
 pub mod radroots_protocol::error
 pub mod radroots_protocol::error::v1
 pub enum radroots_protocol::error::v1::Class
@@ -684,6 +690,10 @@ pub mod radroots_protocol::intent
 pub radroots_protocol::intent::ArtifactRole::BusinessSeal
 pub radroots_protocol::intent::ArtifactRole::GiftWrap
 pub radroots_protocol::intent::ArtifactRole::PublicEvent
+pub enum radroots_protocol::intent::SigningReplay
+pub radroots_protocol::intent::SigningReplay::ExactReplayByRequestId
+pub radroots_protocol::intent::SigningReplay::LocalReplaySafe
+pub radroots_protocol::intent::SigningReplay::NonReplayable
 pub struct radroots_protocol::intent::IntentBinding
 impl radroots_protocol::intent::IntentBinding
 pub const fn radroots_protocol::intent::IntentBinding::command_digest(&self) -> &[u8; 32]
@@ -720,7 +730,7 @@ impl core::fmt::Debug for radroots_protocol::listing::ListingEvent
 pub fn radroots_protocol::listing::ListingEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::listing::PublicSigningPlan
 impl radroots_protocol::listing::PublicSigningPlan
-pub fn radroots_protocol::listing::PublicSigningPlan::capture(&radroots_protocol::listing::CapturedListingCommand, radroots_domain::context::UnixSeconds, &[alloc::string::String], radroots_protocol::plan::SigningReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub fn radroots_protocol::listing::PublicSigningPlan::capture(&radroots_protocol::listing::CapturedListingCommand, radroots_domain::context::UnixSeconds, &[alloc::string::String], radroots_protocol::intent::SigningReplay) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub const fn radroots_protocol::listing::PublicSigningPlan::command_digest(&self) -> radroots_domain::identifier::CommandDigest
 pub const fn radroots_protocol::listing::PublicSigningPlan::created_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_protocol::listing::PublicSigningPlan::digest(&self) -> &[u8; 32]
@@ -728,7 +738,7 @@ pub const fn radroots_protocol::listing::PublicSigningPlan::event(&self) -> &rad
 pub const fn radroots_protocol::listing::PublicSigningPlan::operation_id(&self) -> radroots_domain::identifier::OperationId
 pub fn radroots_protocol::listing::PublicSigningPlan::parse(&radroots_protocol::listing::CapturedListingCommand, &[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub fn radroots_protocol::listing::PublicSigningPlan::protected_wire(&self) -> &[u8]
-pub const fn radroots_protocol::listing::PublicSigningPlan::replay(&self) -> radroots_protocol::plan::SigningReplay
+pub const fn radroots_protocol::listing::PublicSigningPlan::replay(&self) -> radroots_protocol::intent::SigningReplay
 pub fn radroots_protocol::listing::PublicSigningPlan::selected_targets(&self) -> &[alloc::boxed::Box<str>]
 impl core::convert::From<radroots_protocol::listing::PublicSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
 pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::listing::PublicSigningPlan) -> Self
@@ -778,6 +788,42 @@ pub fn radroots_protocol::nip01::UnsignedEvent::fmt(&self, &mut core::fmt::Forma
 pub fn radroots_protocol::nip01::canonical_preimage(&radroots_protocol::nip01::EventFields<'_>) -> alloc::string::String
 pub fn radroots_protocol::nip01::preimage_len(&radroots_protocol::nip01::EventFields<'_>, usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub fn radroots_protocol::nip01::signed_json_len(&radroots_protocol::nip01::EventFields<'_>, usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
+pub mod radroots_protocol::nip59
+pub struct radroots_protocol::nip59::CapturedDmRoute
+impl radroots_protocol::nip59::CapturedDmRoute
+pub fn radroots_protocol::nip59::CapturedDmRoute::from_observed_descriptor(radroots_identity::key::PublicKey, radroots_domain::identifier::EnvelopeEventId, &str, &[alloc::string::String]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::nip59::CapturedDmRoute::participant(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_protocol::nip59::CapturedDmRoute::raw_json(&self) -> &str
+pub fn radroots_protocol::nip59::CapturedDmRoute::selected_relays(&self) -> &[alloc::boxed::Box<str>]
+pub const fn radroots_protocol::nip59::CapturedDmRoute::source_id(&self) -> radroots_domain::identifier::EnvelopeEventId
+impl core::fmt::Debug for radroots_protocol::nip59::CapturedDmRoute
+pub fn radroots_protocol::nip59::CapturedDmRoute::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::nip59::DmRelayAdvertisement
+impl radroots_protocol::nip59::DmRelayAdvertisement
+pub fn radroots_protocol::nip59::DmRelayAdvertisement::advertised_relays(&self) -> &[alloc::boxed::Box<str>]
+pub const fn radroots_protocol::nip59::DmRelayAdvertisement::created_at(&self) -> radroots_domain::context::UnixSeconds
+pub fn radroots_protocol::nip59::DmRelayAdvertisement::from_tags(radroots_identity::key::PublicKey, radroots_domain::context::UnixSeconds, &[alloc::vec::Vec<alloc::string::String>]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::nip59::DmRelayAdvertisement::participant(&self) -> radroots_identity::key::PublicKey
+impl core::fmt::Debug for radroots_protocol::nip59::DmRelayAdvertisement
+pub fn radroots_protocol::nip59::DmRelayAdvertisement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::nip59::PrivateEnvelopeBudget
+impl radroots_protocol::nip59::PrivateEnvelopeBudget
+pub const fn radroots_protocol::nip59::PrivateEnvelopeBudget::envelope_ciphertext_max_bytes(self) -> usize
+pub fn radroots_protocol::nip59::PrivateEnvelopeBudget::for_rumor(usize, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::nip59::PrivateEnvelopeBudget::rumor_ciphertext_bytes(self) -> usize
+pub const fn radroots_protocol::nip59::PrivateEnvelopeBudget::signed_envelope_max_bytes(self) -> usize
+pub const fn radroots_protocol::nip59::PrivateEnvelopeBudget::signed_seal_max_bytes(self) -> usize
+pub struct radroots_protocol::nip59::PrivateSeal
+impl radroots_protocol::nip59::PrivateSeal
+pub const fn radroots_protocol::nip59::PrivateSeal::event_id(&self) -> [u8; 32]
+pub fn radroots_protocol::nip59::PrivateSeal::fields(&self) -> radroots_protocol::nip01::EventFields<'_>
+pub fn radroots_protocol::nip59::PrivateSeal::new(radroots_identity::key::PublicKey, radroots_identity::key::PublicKey, radroots_domain::context::UnixSeconds, radroots_domain::context::UnixSeconds, usize, &str) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
+pub const fn radroots_protocol::nip59::PrivateSeal::recipient(&self) -> radroots_identity::key::PublicKey
+impl core::fmt::Debug for radroots_protocol::nip59::PrivateSeal
+pub fn radroots_protocol::nip59::PrivateSeal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const radroots_protocol::nip59::RUMOR_MAX_BYTES: usize
+pub const radroots_protocol::nip59::SIGNED_MAX_BYTES: usize
+pub fn radroots_protocol::nip59::nip44_v2_payload_len(usize) -> core::result::Result<usize, radroots_protocol::nip01::WireError>
 pub mod radroots_protocol::plan
 pub enum radroots_protocol::plan::CapturedSigningPlan
 pub radroots_protocol::plan::CapturedSigningPlan::Chat(radroots_protocol::chat::ChatSigningPlan)
@@ -792,7 +838,7 @@ pub const fn radroots_protocol::plan::CapturedSigningPlan::listing(&self) -> cor
 pub const fn radroots_protocol::plan::CapturedSigningPlan::operation_id(&self) -> radroots_domain::identifier::OperationId
 pub fn radroots_protocol::plan::CapturedSigningPlan::parse(&radroots_protocol::command::CapturedCommand, &[u8]) -> core::result::Result<Self, radroots_protocol::nip01::WireError>
 pub fn radroots_protocol::plan::CapturedSigningPlan::protected_wire(&self) -> &[u8]
-pub const fn radroots_protocol::plan::CapturedSigningPlan::replay(&self) -> radroots_protocol::plan::SigningReplay
+pub const fn radroots_protocol::plan::CapturedSigningPlan::replay(&self) -> radroots_protocol::intent::SigningReplay
 impl core::convert::From<radroots_protocol::chat::ChatSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
 pub fn radroots_protocol::plan::CapturedSigningPlan::from(radroots_protocol::chat::ChatSigningPlan) -> Self
 impl core::convert::From<radroots_protocol::listing::PublicSigningPlan> for radroots_protocol::plan::CapturedSigningPlan
@@ -808,10 +854,6 @@ pub fn radroots_protocol::plan::SigningArtifact<'_>::fields(&self) -> radroots_p
 pub fn radroots_protocol::plan::SigningArtifact<'_>::target(&self) -> radroots_protocol::plan::SigningTarget
 impl core::fmt::Debug for radroots_protocol::plan::SigningArtifact<'_>
 pub fn radroots_protocol::plan::SigningArtifact<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum radroots_protocol::plan::SigningReplay
-pub radroots_protocol::plan::SigningReplay::ExactReplayByRequestId
-pub radroots_protocol::plan::SigningReplay::LocalReplaySafe
-pub radroots_protocol::plan::SigningReplay::NonReplayable
 pub enum radroots_protocol::plan::SigningTarget
 pub radroots_protocol::plan::SigningTarget::BusinessSeal(radroots_identity::key::PublicKey)
 pub radroots_protocol::plan::SigningTarget::PublicEvent

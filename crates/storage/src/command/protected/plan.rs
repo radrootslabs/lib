@@ -144,8 +144,9 @@ mod tests {
     use crate::command::ChatSigningPlan;
     use crate::command::protected::tests::request;
     use radroots_domain::{EnvelopeEventId, IssuanceWindow, Sequence};
-    use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal};
-    use radroots_protocol::plan::SigningReplay;
+    use radroots_protocol::chat::{ChatRumor, ChatSeal};
+    use radroots_protocol::intent::SigningReplay;
+    use radroots_protocol::nip59::CapturedDmRoute;
     use serde_json::json;
 
     fn make_prepared() -> PreparedOperation {

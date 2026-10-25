@@ -64,6 +64,7 @@ pub struct StockAcceptanceReceipt {
     allocations: usize,
     observed: UnixSeconds,
     issue_before: UnixSeconds,
+    rumor: std::sync::Arc<radroots_protocol::commerce::EncodedCommerceRumor>,
 }
 impl StockAcceptanceReceipt {
     pub const fn attempt(&self) -> CommitAttempt {
@@ -93,6 +94,11 @@ impl StockAcceptanceReceipt {
     }
     pub const fn first_issue_deadline(&self) -> UnixSeconds {
         self.issue_before
+    }
+    /// Exact initial commitment derived from the original protected preparation.
+    /// This is unsigned data and supplies no permission or T1 completion proof.
+    pub fn rumor(&self) -> &radroots_protocol::commerce::EncodedCommerceRumor {
+        &self.rumor
     }
 }
 impl std::fmt::Debug for StockAcceptanceReceipt {
@@ -242,7 +248,7 @@ fn head(header: &ledger::Header, body: &[u8]) -> CheckpointDigest {
     h.update(Sha256::digest(body));
     CheckpointDigest::from_bytes(h.finalize().into())
 }
-fn check_consent(
+pub(in crate::workspace::stock) fn check_consent(
     access: &Access,
     scope: &consent::Retained,
     command: &CapturedOrderAcceptance,
@@ -281,7 +287,7 @@ fn check_consent(
     }
     Ok(())
 }
-async fn current_consent(
+pub(in crate::workspace::stock) async fn current_consent(
     turn: &mut Turn<'_>,
     access: &Access,
     command: &CapturedOrderAcceptance,
@@ -330,7 +336,7 @@ pub(in crate::workspace) async fn admit(
     let access = turn
         .access(&request.binding, request.minimum, &proof)
         .await?;
-    if access.authority.catalog != 9 {
+    if !matches!(access.authority.catalog, 9 | 10) {
         return Err(OperationError::UnsupportedOperation);
     }
     let command = &request.command;
@@ -721,7 +727,7 @@ pub(in crate::workspace) async fn admit(
     });
     let root = turn
         .crypto
-        .seal_stock_root(turn.selected, 9, &next.encode()?)
+        .seal_stock_root(turn.selected, next.catalog, &next.encode()?)
         .await?;
     let receipt = codec::receipt(turn.selected, &header, &body, command)?;
     let mut tx = turn

@@ -43,8 +43,9 @@ numbers embedded in wire and schema contracts.
 | `private_rumor` (`private_rumor` feature) | closed protected unsigned data, bounded decoded text/tags and original NIP-01 RumorEventId recomputation; no cryptographic carrier admission |
 | `command` (`commands` feature) | bounded closed v1 inquiry/reply data codec and exact command/approval-intent hashes |
 | `nip01` (`nip01` feature) | exact bounded canonical preimages, IDs and complete-event sizes |
-| `intent` (`intent` feature) | exact v1 signing commitment data without execution authority |
-| `chat` (`chat` feature) | bounded kind-14/13 data, complete immutable signing-plan codec and observed DM route descriptors |
+| `intent` (`intent` feature) | exact v1 signing commitments and passive replay declarations without execution authority |
+| `nip59` (`chat` or `commerce` feature) | shared complete nesting budgets, exact seal data and bounded DM route descriptors |
+| `chat` (`chat` feature) | bounded kind-14/13 data and complete immutable chat signing-plan codec |
 | `listing` (`listing` feature) | closed sale-option inputs and bounded kind-30402/profile-v1 preimages without execution or publication authority |
 
 Versioned DTOs live below an explicit generation module. The command codec
@@ -214,3 +215,11 @@ commit. The executor must verify source evidence, approved targets and current
 access, then retain this complete plan through its qualified protected journal
 before any business signing invocation. A stored replay declaration alone never
 permits uncertain reissue.
+
+`commerce::initial_commitment_rumor` derives initial agreement data from a
+captured acceptance, original request and declared seller author head.
+`CommerceSigningPlan` retains both exact peer/self seals, original route sources
+and selected targets within256KiB. It uses the shared `nip59` bounds and
+`intent::SigningReplay` declarations. Concrete hosts must compare these claims
+with retained T0, verify ciphertext/plaintext and route evidence, and commit T1
+before signing. These constructors provide no permission or durable proof.

@@ -165,7 +165,7 @@ impl WorkspaceFixture {
             public.command().listing().unwrap(),
             UnixSeconds::new(1000).unwrap(),
             &["wss://public-plan.fixture.example/a".to_string()],
-            radroots_protocol::plan::SigningReplay::NonReplayable,
+            radroots_protocol::intent::SigningReplay::NonReplayable,
         )
         .unwrap();
         match self

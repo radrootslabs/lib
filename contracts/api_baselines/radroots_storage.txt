@@ -1188,7 +1188,7 @@ pub const fn radroots_storage::command::SignedDmRelaySource::event_id(&self) -> 
 pub const fn radroots_storage::command::SignedDmRelaySource::participant(&self) -> radroots_identity::key::PublicKey
 pub fn radroots_storage::command::SignedDmRelaySource::raw_json(&self) -> &str
 pub fn radroots_storage::command::SignedDmRelaySource::relay_uris(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
-pub fn radroots_storage::command::SignedDmRelaySource::validate_capture(&self, &radroots_protocol::chat::routes::CapturedDmRoute) -> core::result::Result<(), radroots_storage::command::OperationError>
+pub fn radroots_storage::command::SignedDmRelaySource::validate_capture(&self, &radroots_protocol::nip59::routes::CapturedDmRoute) -> core::result::Result<(), radroots_storage::command::OperationError>
 pub fn radroots_storage::command::SignedDmRelaySource::verify(&str) -> core::result::Result<Self, radroots_storage::command::OperationError>
 impl core::fmt::Debug for radroots_storage::command::SignedDmRelaySource
 pub fn radroots_storage::command::SignedDmRelaySource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

@@ -1,7 +1,14 @@
 #![cfg(feature = "chat")]
 
 use radroots_domain::{PublicKey, UnixSeconds};
-use radroots_protocol::{chat::*, command::CapturedChatCommand, nip01::*, plan::SigningReplay};
+use radroots_protocol::nip59::{PrivateEnvelopeBudget, nip44_v2_payload_len};
+use radroots_protocol::{
+    chat::*,
+    command::CapturedChatCommand,
+    intent::SigningReplay,
+    nip01::*,
+    nip59::{CapturedDmRoute, DmRelayAdvertisement},
+};
 use serde_json::Value;
 
 fn vectors() -> Value {
@@ -63,7 +70,8 @@ fn complete_nested_budget_and_padding_match_independent_serialized_objects() {
     let key = PublicKey::from_hex(text(&data["canonical"][0], "author")).unwrap();
     for row in data["budgets"].as_array().unwrap() {
         let budget =
-            ChatBudget::for_rumor(row["rumor_bytes"].as_u64().unwrap() as usize, key).unwrap();
+            PrivateEnvelopeBudget::for_rumor(row["rumor_bytes"].as_u64().unwrap() as usize, key)
+                .unwrap();
         assert_eq!(
             budget.rumor_ciphertext_bytes() as u64,
             row["rumor_ciphertext_bytes"].as_u64().unwrap()
@@ -90,9 +98,12 @@ fn complete_nested_budget_and_padding_match_independent_serialized_objects() {
     for size in [0, 65_536, usize::MAX] {
         assert_eq!(nip44_v2_payload_len(size), Err(WireError::InvalidInput));
     }
-    assert_eq!(ChatBudget::for_rumor(0, key), Err(WireError::InvalidInput));
     assert_eq!(
-        ChatBudget::for_rumor(RUMOR_MAX_BYTES + 1, key),
+        PrivateEnvelopeBudget::for_rumor(0, key),
+        Err(WireError::InvalidInput)
+    );
+    assert_eq!(
+        PrivateEnvelopeBudget::for_rumor(RUMOR_MAX_BYTES + 1, key),
         Err(WireError::LimitExceeded)
     );
 }

@@ -180,6 +180,7 @@ pub fn radroots_signing::issuance::SigningIntent::author(&self) -> radroots_iden
 pub const fn radroots_signing::issuance::SigningIntent::binding(&self) -> radroots_protocol::intent::IntentBinding
 pub fn radroots_signing::issuance::SigningIntent::check_before_effect(&self, radroots_identity::key::PublicKey, u64) -> core::result::Result<(), radroots_signing::provider::ProviderError>
 pub fn radroots_signing::issuance::SigningIntent::from_chat_seal(radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, &radroots_protocol::chat::ChatSeal, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+pub fn radroots_signing::issuance::SigningIntent::from_commerce_seal(&radroots_protocol::commerce::seal::CommerceSeal, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
 pub fn radroots_signing::issuance::SigningIntent::from_plan(&radroots_protocol::plan::CapturedSigningPlan, radroots_protocol::plan::SigningTarget, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
 pub fn radroots_signing::issuance::SigningIntent::new(radroots_domain::identifier::OperationId, [u8; 32], radroots_event_codec::authoring::AuthoredEventPlan, radroots_protocol::intent::ArtifactRole, core::option::Option<radroots_identity::key::PublicKey>, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
 pub const fn radroots_signing::issuance::SigningIntent::recipient(&self) -> core::option::Option<radroots_identity::key::PublicKey>
@@ -199,8 +200,8 @@ pub const fn radroots_signing::issuance::SigningOutcome::not_dispatched(radroots
 pub const fn radroots_signing::issuance::SigningOutcome::unknown(radroots_protocol::intent::IntentBinding, radroots_signing::provider::ProviderError) -> Self
 pub struct radroots_signing::issuance::VerifiedDmRelayAdvertisement
 impl radroots_signing::issuance::VerifiedDmRelayAdvertisement
-pub const fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::advertisement(&self) -> &radroots_protocol::chat::routes::DmRelayAdvertisement
-pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::capture_route(&self, &[alloc::string::String]) -> core::result::Result<radroots_protocol::chat::routes::CapturedDmRoute, radroots_signing::provider::ProviderError>
+pub const fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::advertisement(&self) -> &radroots_protocol::nip59::routes::DmRelayAdvertisement
+pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::capture_route(&self, &[alloc::string::String]) -> core::result::Result<radroots_protocol::nip59::routes::CapturedDmRoute, radroots_signing::provider::ProviderError>
 pub const fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
 pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::raw_json(&self) -> &str
 pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::verify(&str, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_signing::provider::ProviderError>

@@ -42,7 +42,7 @@ listing = ["commands", "nip01", "intent"]
 advertisement = ["commands"]
 terms = ["commands"]
 private_rumor = ["commands", "nip01"]
-commerce = ["terms", "private_rumor"]
+commerce = ["terms", "private_rumor", "intent"]
 
 [dependencies]
 radroots_identity = { workspace = true, default-features = false, optional = true }

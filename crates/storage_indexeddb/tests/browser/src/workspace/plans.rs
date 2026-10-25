@@ -8,8 +8,9 @@ use nostr::{
     prelude::rand::{CryptoRng, Error, RngCore},
 };
 use radroots_domain::{EnvelopeEventId, UnixSeconds};
-use radroots_protocol::chat::{CapturedDmRoute, ChatRumor, ChatSeal, ChatSigningPlan};
-use radroots_protocol::plan::SigningReplay;
+use radroots_protocol::chat::{ChatRumor, ChatSeal, ChatSigningPlan};
+use radroots_protocol::nip59::{CapturedDmRoute};
+use radroots_protocol::intent::SigningReplay;
 use radroots_storage::command::{BoundSigningPlan, PlanBindingOutcome};
 use radroots_storage::workspace::WorkspaceStore;
 use wasm_bindgen::{JsCast, prelude::*};

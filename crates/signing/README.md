@@ -210,6 +210,9 @@ secret material in it.
 | --- | --- | --- |
 | `std` | yes | Uses `std` collections and permits preserved native error sources; no runtime, I/O, or global initialization is added. |
 | `serde` | yes | Adds serialization for explicitly passive public values and deserialization only where validated reconstruction is safe. |
+| `chat` | no | Adds bounded chat-seal conversion and authenticated DM advertisements. |
+| `commerce` | no | Adds exact structured-commerce seal conversion and authenticated DM advertisements. |
+| `artifacts` | no | Adds captured chat/public-listing artifact conversion. |
 
 Features are additive. `--no-default-features` provides the `no_std + alloc`
 core, and `serde` is supported independently of `std`.

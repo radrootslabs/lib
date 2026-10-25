@@ -6,7 +6,7 @@ use radroots_event::{
     wire::{EventWireLimits, Nip01EventWire},
 };
 use radroots_event_codec::verify::{self, Nip01SignatureVerifier, RawEvent};
-use radroots_protocol::chat::CapturedDmRoute;
+use radroots_protocol::nip59::CapturedDmRoute;
 use radroots_transport::target::EndpointUri;
 use std::fmt;
 

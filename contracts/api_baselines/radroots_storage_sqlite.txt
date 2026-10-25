@@ -389,6 +389,9 @@ pub radroots_storage_sqlite::workspace::StockListingOutcome::Committed(alloc::bo
 pub radroots_storage_sqlite::workspace::StockListingOutcome::Unknown
 pub radroots_storage_sqlite::workspace::StockListingOutcome::Unknown::listing: radroots_domain::listing::reference::ListingRevision
 pub radroots_storage_sqlite::workspace::StockListingOutcome::Unknown::transaction: radroots_domain::identifier::TransactionId
+pub enum radroots_storage_sqlite::workspace::StockSigningPlanOutcome
+pub radroots_storage_sqlite::workspace::StockSigningPlanOutcome::Bound(alloc::boxed::Box<radroots_storage_sqlite::workspace::StockBoundSigningPlan>)
+pub radroots_storage_sqlite::workspace::StockSigningPlanOutcome::Unknown(radroots_storage::command::CommitAttempt)
 pub enum radroots_storage_sqlite::workspace::StockSourceOutcome
 pub radroots_storage_sqlite::workspace::StockSourceOutcome::Committed(radroots_storage_sqlite::workspace::StockSourceReceipt)
 pub radroots_storage_sqlite::workspace::StockSourceOutcome::Unknown
@@ -405,6 +408,9 @@ pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::close(&self) -
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::initialize_local_outbox(&std::path::Path, radroots_storage::workspace::local_outbox::LocalOutboxConfig, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<(Self, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof), radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::open_existing(&std::path::Path, radroots_storage::workspace::AttachmentInput, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::revoke(&self, radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
+impl radroots_storage_sqlite::workspace::NativeWorkspace
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::bind_stock_signing_intents(&self, radroots_storage_sqlite::workspace::StockSigningPlanRequest, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockSigningPlanOutcome, radroots_storage::command::OperationError>
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_signing_plan(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<core::option::Option<radroots_storage_sqlite::workspace::StockBoundSigningPlan>, radroots_storage::command::OperationError>
 impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::enroll_stock_grant(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &radroots_storage::workspace::AttachmentProof, &radroots_storage_sqlite::workspace::StockGrantEnrollment) -> core::result::Result<radroots_storage_sqlite::workspace::StockGrantOutcome, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::revoke_stock_grant(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &radroots_storage::workspace::AttachmentProof, radroots_domain::identifier::TransactionId, radroots_domain::identifier::GrantId) -> core::result::Result<radroots_storage_sqlite::workspace::StockGrantOutcome, radroots_storage::workspace::WorkspaceError>
@@ -462,6 +468,7 @@ pub fn radroots_storage_sqlite::workspace::StockAcceptanceReceipt::held_pools(&s
 pub const fn radroots_storage_sqlite::workspace::StockAcceptanceReceipt::order_id(&self) -> radroots_domain::identifier::OrderId
 pub const fn radroots_storage_sqlite::workspace::StockAcceptanceReceipt::prepared_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_storage_sqlite::workspace::StockAcceptanceReceipt::request(&self) -> radroots_domain::identifier::RecordId
+pub fn radroots_storage_sqlite::workspace::StockAcceptanceReceipt::rumor(&self) -> &radroots_protocol::commerce::rumor::EncodedCommerceRumor
 pub const fn radroots_storage_sqlite::workspace::StockAcceptanceReceipt::terms_digest(&self) -> radroots_domain::identifier::TermsDigest
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockAcceptanceReceipt
 pub fn radroots_storage_sqlite::workspace::StockAcceptanceReceipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -478,6 +485,16 @@ pub const fn radroots_storage_sqlite::workspace::StockAuthorityReceipt::listing_
 pub const fn radroots_storage_sqlite::workspace::StockAuthorityReceipt::revocation_generation(&self) -> radroots_domain::context::Sequence
 pub const fn radroots_storage_sqlite::workspace::StockAuthorityReceipt::source_checkpoint(&self) -> core::option::Option<radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef>
 pub const fn radroots_storage_sqlite::workspace::StockAuthorityReceipt::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+pub struct radroots_storage_sqlite::workspace::StockBoundSigningPlan
+impl radroots_storage_sqlite::workspace::StockBoundSigningPlan
+pub const fn radroots_storage_sqlite::workspace::StockBoundSigningPlan::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage_sqlite::workspace::StockBoundSigningPlan::bound_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_storage_sqlite::workspace::StockBoundSigningPlan::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub const fn radroots_storage_sqlite::workspace::StockBoundSigningPlan::intent_digests(&self) -> &[[u8; 32]; 2]
+pub const fn radroots_storage_sqlite::workspace::StockBoundSigningPlan::plan(&self) -> &radroots_protocol::commerce::signing_plan::CommerceSigningPlan
+pub const fn radroots_storage_sqlite::workspace::StockBoundSigningPlan::preparation(&self) -> &radroots_storage_sqlite::workspace::StockAcceptanceReceipt
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockBoundSigningPlan
+pub fn radroots_storage_sqlite::workspace::StockBoundSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockConsentCapture
 impl radroots_storage_sqlite::workspace::StockConsentCapture
 pub fn radroots_storage_sqlite::workspace::StockConsentCapture::command(&self) -> &radroots_protocol::command::order_acceptance::CapturedOrderAcceptance
@@ -571,6 +588,11 @@ pub fn radroots_storage_sqlite::workspace::StockRequestSnapshot::terms(&self) ->
 pub const fn radroots_storage_sqlite::workspace::StockRequestSnapshot::terms_digest(&self) -> radroots_domain::identifier::TermsDigest
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockRequestSnapshot
 pub fn radroots_storage_sqlite::workspace::StockRequestSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_sqlite::workspace::StockSigningPlanRequest
+impl radroots_storage_sqlite::workspace::StockSigningPlanRequest
+pub fn radroots_storage_sqlite::workspace::StockSigningPlanRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_nostr::commerce::signing_plan::VerifiedCommerceSigningPlan) -> core::result::Result<Self, radroots_storage::command::OperationError>
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockSigningPlanRequest
+pub fn radroots_storage_sqlite::workspace::StockSigningPlanRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockSourceCapture
 impl radroots_storage_sqlite::workspace::StockSourceCapture
 pub const fn radroots_storage_sqlite::workspace::StockSourceCapture::envelope_id(&self) -> radroots_domain::identifier::EnvelopeEventId

@@ -1,7 +1,7 @@
 //! Common immutable signing-plan data, with explicit artifact families.
 use crate::{
     command::CapturedCommand,
-    intent::ArtifactRole,
+    intent::{ArtifactRole, SigningReplay},
     nip01::{EventFields, WireError},
 };
 use alloc::vec::Vec;
@@ -107,36 +107,6 @@ impl SigningArtifact<'_> {
 impl fmt::Debug for SigningArtifact<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("SigningArtifact(<redacted>)")
-    }
-}
-
-/// Captured provider declaration. Execution must independently verify current
-/// support before any reissue; this data authenticates no provider guarantee.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SigningReplay {
-    /// Uncertain invocation requires reconciliation, never automatic reissue.
-    NonReplayable,
-    /// The actual local provider independently qualifies safe exact reissue.
-    LocalReplaySafe,
-    /// The actual provider independently binds exact replay to request identity.
-    ExactReplayByRequestId,
-}
-#[cfg(feature = "listing")]
-impl SigningReplay {
-    pub(crate) const fn code(self) -> u8 {
-        match self {
-            Self::NonReplayable => 0,
-            Self::LocalReplaySafe => 1,
-            Self::ExactReplayByRequestId => 2,
-        }
-    }
-    pub(crate) fn from_code(code: u8) -> Result<Self, WireError> {
-        match code {
-            0 => Ok(Self::NonReplayable),
-            1 => Ok(Self::LocalReplaySafe),
-            2 => Ok(Self::ExactReplayByRequestId),
-            _ => Err(WireError::InvalidInput),
-        }
     }
 }
 

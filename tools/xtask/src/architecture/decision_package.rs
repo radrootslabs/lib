@@ -150,6 +150,7 @@ struct NativeSellerStockAuthority {
     operation_part_max_count: u16,
     operation_identity_requires_protected_ancestry: bool,
     acceptance_preparation: AcceptancePreparation,
+    signing_plan_binding: SigningPlanBinding,
     business_consent_payload_version: u16,
     business_consent_action: String,
     business_consent_modes: Vec<String>,
@@ -202,6 +203,23 @@ struct AcceptancePreparation {
     atomic_holds_and_order_fence_required: bool,
     current_issued_consent_required: bool,
     final_source_counts_and_witnesses_required: bool,
+    signer_invoked: bool,
+    agreement_installed: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SigningPlanBinding {
+    payload_version: u16,
+    journal_family: u16,
+    worker_charge_bytes: u32,
+    complete_recipient_count: u16,
+    crypto_and_route_verification_required: bool,
+    original_t0_rumor_required: bool,
+    exact_intent_digests_retained: bool,
+    protected_identity_presence_and_absence_required: bool,
+    current_issued_consent_required: bool,
+    final_permission_and_clock_witnesses_required: bool,
     signer_invoked: bool,
     agreement_installed: bool,
 }
@@ -381,10 +399,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 9
+            && stock.schema_version == 10
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v9"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v10"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -433,6 +451,24 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .final_source_counts_and_witnesses_required
             && !stock.acceptance_preparation.signer_invoked
             && !stock.acceptance_preparation.agreement_installed
+            && stock.signing_plan_binding.payload_version == 1
+            && stock.signing_plan_binding.journal_family == 3
+            && stock.signing_plan_binding.worker_charge_bytes == 1048576
+            && stock.signing_plan_binding.complete_recipient_count == 2
+            && stock
+                .signing_plan_binding
+                .crypto_and_route_verification_required
+            && stock.signing_plan_binding.original_t0_rumor_required
+            && stock.signing_plan_binding.exact_intent_digests_retained
+            && stock
+                .signing_plan_binding
+                .protected_identity_presence_and_absence_required
+            && stock.signing_plan_binding.current_issued_consent_required
+            && stock
+                .signing_plan_binding
+                .final_permission_and_clock_witnesses_required
+            && !stock.signing_plan_binding.signer_invoked
+            && !stock.signing_plan_binding.agreement_installed
             && stock.business_consent_payload_version == 1
             && stock.business_consent_action == "orders.accept"
             && stock.business_consent_modes == ["execute_and_recover", "recover_only"]
@@ -1064,6 +1100,39 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn signing_plans_require_complete_original_qualified_intents_before_any_signing() {
+        for (field, bad) in [
+            ("payload_version", json!(2)),
+            ("journal_family", json!(2)),
+            ("worker_charge_bytes", json!(524288)),
+            ("complete_recipient_count", json!(1)),
+            ("crypto_and_route_verification_required", json!(false)),
+            ("original_t0_rumor_required", json!(false)),
+            ("exact_intent_digests_retained", json!(false)),
+            (
+                "protected_identity_presence_and_absence_required",
+                json!(false),
+            ),
+            ("current_issued_consent_required", json!(false)),
+            (
+                "final_permission_and_clock_witnesses_required",
+                json!(false),
+            ),
+            ("signer_invoked", json!(true)),
+            ("agreement_installed", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/signing_plan_binding/{field}"),
                     bad
                 ))
                 .is_err(),

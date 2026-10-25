@@ -44,6 +44,7 @@ radroots_event_codec = { workspace = true, default-features = false, features = 
 ] }
 radroots_nostr = { workspace = true, default-features = false, features = ["commerce", "public_ingress"] }
 radroots_protocol = { workspace = true, default-features = false, features = ["commerce"] }
+radroots_signing = { workspace = true, default-features = false, features = ["commerce"] }
 radroots_secrets = { workspace = true, default-features = false }
 radroots_storage = { workspace = true, default-features = false, features = [
   "serde",

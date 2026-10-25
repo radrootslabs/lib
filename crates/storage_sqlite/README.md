@@ -316,7 +316,7 @@ protected credential and original creation transaction ID without touching the
 namespace. Retain those values through protected host handling before awaiting
 `NativeWorkspace::initialize_seller_stock`. This explicit factory uses
 `stock_execution_v1.sqlite` and `.stock_execution_v1.lock` in a new owner-only
-directory. Its exact version-1 catalog has separate protected authority and
+directory. Its exact version-10 catalog has separate protected authority and
 grant records. Grant scope, route, genesis, credential and AEAD context are
 separate from ordinary outboxes. The same bounded native worker owns the
 connection, admitted work, close completion and persistent writer lock.
@@ -340,12 +340,12 @@ ordinary outbox journal jobs are refused on the stock namespace.
 
 ## Owner-private inventory transactions
 
-The current stock factory creates exact catalog version3 and protected authority
-payload version3. Retained enrollment-only version1 still authenticates and
+The current stock factory creates exact catalog version10 and protected authority
+payload version10. Retained enrollment-only version1 still authenticates and
 revokes with its original codec; its inventory ports refuse unsupported work.
 Retained inventory version2 keeps its original pool-creation records and refuses
-new correction commands. Current operation/movement payloads use explicit
-version2 codecs; retained version2 stores keep their exact version1 codecs.
+new correction commands. Catalogs1–9 retain their exact original codecs and
+capabilities; current multipart operation framing uses version5.
 No namespace is automatically migrated. Ordinary outbox catalogs are separate.
 
 `InventoryStore` admits `InventoryRequest` with the exact captured command,
@@ -374,8 +374,8 @@ protected pool/operation/movement records and advances the protected root.
 No signer or network work occurs. An empty pool has zero stock and no physical
 movement. Replay returns the original effect before fresh deadline checks.
 Known failures confirm rollback; unknown completion fences the owner until
-reopen and reconciliation by its original operation and digest. Firm holds,
-allocation, held-stock correction/deficit policy, commerce and transfer are still pending.
+reopen and reconciliation by its original operation and digest. Firm commitments,
+held-stock correction/deficit policy, complete commerce and transfer remain pending.
 
 `stock.adjust` captures an explicit add/remove direction and `stock.spoil`
 captures physical waste. Both retain a positive exact amount, expected pool
@@ -392,3 +392,21 @@ and advances protected progress. Replay reauthenticates and returns that origina
 effect before comparing fresh versions or deadlines. Catalog identity is
 rechecked with protected snapshots inside the transaction, after provider IO.
 The ordinary facade and complete commerce behavior remain in implementation.
+
+## Initial native acceptance and signing-plan retention
+
+`prepare_stock_acceptance` retains the exact authorized command, original
+request/quote/Terms and causal observation. Current issued consent is required.
+Complete automatic or explicit allocation, preparatory pool holds and the order
+decision fence commit atomically; only explicit future promises have no hold.
+Original recovery precedes fresh allocation and deadline checks. Its receipt
+exposes the original unsigned commitment rumor without implying signing.
+
+`bind_stock_signing_intents` accepts a cryptographically qualified complete
+peer/self plan and compares it with that protected T0. It retains both exact
+intent digests and all original plan bytes in one protected journal advance,
+with final permission, deadline and row-witness checks. Stock does not move
+again. `stock_signing_plan` reads the original plan through current consent;
+replacement RecoverOnly access cannot create missing intents. Uncertain commit
+requires drain/reopen and original-identity reconciliation. Durable stock
+signing claims, S capture, agreement installation and delivery remain pending.

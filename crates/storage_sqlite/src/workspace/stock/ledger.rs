@@ -18,6 +18,7 @@ pub(super) enum Family {
     Inventory,
     Consent,
     Acceptance,
+    SigningPlan,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -64,7 +65,8 @@ impl Header {
             || (self.revision.get() == 1) != self.previous.is_none()
             || (self.family == Family::Inventory) != self.pool.is_some()
             || (self.family == Family::Inventory) != self.order.is_none()
-            || (self.family == Family::Consent) != self.related_operation.is_some()
+            || matches!(self.family, Family::Consent | Family::SigningPlan)
+                != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
             || self.bytes as usize > BODY_MAX_BYTES
@@ -299,6 +301,7 @@ impl Family {
             Self::Inventory => 0,
             Self::Consent => 1,
             Self::Acceptance => 2,
+            Self::SigningPlan => 3,
         }
     }
 }
@@ -485,13 +488,19 @@ pub(super) async fn history(
                 movements: vec![],
             }))
         }
-        Some(2) if authority.catalog == 9 => Ok(Some(
+        Some(2) if matches!(authority.catalog, 9 | 10) => Ok(Some(
             super::inventory::acceptance::codec::read(connection, input, crypto, operation)
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?
                 .into_history(),
         )),
         Some(2) => Err(OperationError::UnsupportedOperation),
+        Some(3) if authority.catalog == 10 => {
+            let retained = super::signing_plan::read_entry(connection, input, crypto, operation)
+                .await?
+                .ok_or(OperationError::RecoveryRequired)?;
+            Ok(Some(retained.into_history()))
+        }
         Some(_) => Err(OperationError::RecoveryRequired),
     }
 }

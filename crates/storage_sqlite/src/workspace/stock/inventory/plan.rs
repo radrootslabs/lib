@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn record_version(catalog: i64) -> Result<u8, OperationError> {
     match catalog {
         2 => Ok(1),
-        3..=9 => Ok(2),
+        3..=10 => Ok(2),
         _ => Err(OperationError::RecoveryRequired),
     }
 }

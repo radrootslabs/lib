@@ -17,6 +17,12 @@ pub(in crate::workspace::stock) struct Retained {
     order_cipher: Vec<u8>,
 }
 impl Retained {
+    pub fn command(&self) -> Result<CapturedOrderAcceptance, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        CapturedOrderAcceptance::parse(body.command.get().as_bytes())
+            .map_err(|_| OperationError::RecoveryRequired)
+    }
     pub fn identity(&self) -> checkpoint::EntryIdentity {
         checkpoint::EntryIdentity {
             operation: self.frame.header.operation,
@@ -82,7 +88,21 @@ pub(super) fn receipt(
     body: &Body,
     command: &CapturedOrderAcceptance,
 ) -> Result<StockAcceptanceReceipt, OperationError> {
+    let request = radroots_protocol::commerce::decode(body.original_request.get().as_bytes())
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    if body.seller_author_head.is_none() != (body.seller_author_sequence.get() == 0) {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let rumor = radroots_protocol::commerce::initial_commitment_rumor(
+        command,
+        &request,
+        body.seller_author_head
+            .map(|head| (head, body.seller_author_sequence)),
+        body.observed_at,
+    )
+    .map_err(|_| OperationError::RecoveryRequired)?;
     Ok(StockAcceptanceReceipt {
+        rumor: std::sync::Arc::new(rumor),
         attempt: CommitAttempt::new(
             input.workspace_id(),
             header.operation,

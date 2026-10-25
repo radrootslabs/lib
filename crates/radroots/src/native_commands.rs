@@ -8,7 +8,7 @@ use radroots_nostr::signing::{
     OsNonceSource,
     gift_wrap::{randomized_past_time, wrap_retained_seal},
 };
-use radroots_protocol::chat::CapturedDmRoute;
+use radroots_protocol::nip59::CapturedDmRoute;
 use radroots_signing::provider::NonceSource;
 use radroots_storage::command::{EnvelopeCandidate, OperationError, PublicationWork};
 use radroots_transport::{

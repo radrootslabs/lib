@@ -33,6 +33,7 @@ name = "radroots_signing"
 [features]
 default = ["std", "serde"]
 chat = ["radroots_protocol/chat"]
+commerce = ["radroots_protocol/commerce"]
 artifacts = ["radroots_protocol/chat", "radroots_protocol/listing"]
 std = [
   "radroots_domain/std",

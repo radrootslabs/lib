@@ -8,7 +8,7 @@ use radroots_event::{
     wire::{EventWireLimits, Nip01EventWire},
 };
 use radroots_event_codec::verify::{self, Nip01SignatureVerifier, RawEvent};
-use radroots_protocol::chat::DmRelayAdvertisement;
+use radroots_protocol::nip59::DmRelayAdvertisement;
 
 /// Actual ID/signature-verified kind-10050 observation. This verifies the
 /// participant's advertisement only, not its global freshness, routability,
@@ -81,7 +81,7 @@ impl VerifiedDmRelayAdvertisement {
     pub fn capture_route(
         &self,
         selected: &[String],
-    ) -> Result<radroots_protocol::chat::CapturedDmRoute, ProviderError> {
+    ) -> Result<radroots_protocol::nip59::CapturedDmRoute, ProviderError> {
         if selected.iter().any(|target| {
             !self
                 .advertisement
@@ -91,7 +91,7 @@ impl VerifiedDmRelayAdvertisement {
         }) {
             return Err(ProviderError::InvalidInput);
         }
-        radroots_protocol::chat::CapturedDmRoute::from_observed_descriptor(
+        radroots_protocol::nip59::CapturedDmRoute::from_observed_descriptor(
             self.advertisement.participant(),
             self.event_id,
             &self.raw_json,
