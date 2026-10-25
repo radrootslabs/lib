@@ -109,7 +109,7 @@ impl std::fmt::Debug for StockAcceptanceReceipt {
 #[derive(Debug)]
 pub enum StockAcceptanceOutcome {
     Prepared(Box<StockAcceptanceReceipt>),
-    Aborted(Box<super::abort::StockAbortReceipt>),
+    Aborted(Box<radroots_storage::inventory::StockAbortReceipt>),
     Unknown(CommitAttempt),
 }
 

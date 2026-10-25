@@ -469,6 +469,10 @@ stock or complete ordinary caller orchestration.
 Fresh installation also refuses an observed time before its original bound
 plan, before any write; recovery of an existing installation remains historical.
 
+Cleanup request/result types belong to `radroots_storage::inventory`.
+The `InventoryStore` transaction/query ports dispatch to this same native owner;
+the former native workspace type exports have been removed.
+
 `abort_proven_unissued` explicitly releases an original preparation only after
 authenticating absence of both recipient claims through protected history. T1
 may be absent or bound. A claim, unknown dispatch, obtained artifact or installed

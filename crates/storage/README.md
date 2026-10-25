@@ -89,6 +89,16 @@ bindings retain that exact scope. Neither scope grants firm stock, delegation,
 organization access or recovery of old obligations. Scope separates route,
 genesis and credential commitments; changing an actor cannot upgrade a grant.
 Concrete native/browser hosts share these rules and exact envelope context.
+Shared `inventory::StockAbortRequest`, `StockAbortOutcome` and `StockAbortReceipt`
+carry explicit original-preparation cleanup selectors and reports.
+`InventoryStore::abort_proven_unissued` and `stock_preparation_abort` are typed
+transaction/query ports; unsupported hosts return `UnsupportedOperation`, whose
+stable code is `capability_unavailable`.
+Report reconstruction checks namespace, committed anchor, progress and bounded
+canonical after-images, and supplies no credential, absence or commit proof.
+Qualified stores must authenticate all original claims and exact release effects
+inside their owned atomic transaction. The native implementation uses its same
+bounded connection owner; ordinary outboxes acquire no stock authority.
 The codec's Serde wire stays private; decoding enforces the 16 KiB limit and
 validates current scope. Enrollment takes qualified host identities and proof
 without acquiring a backend or establishing durable authority. Concrete hosts

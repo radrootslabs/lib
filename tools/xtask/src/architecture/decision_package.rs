@@ -217,6 +217,10 @@ struct AcceptancePreparation {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PreparationAbort {
+    shared_storage_port: String,
+    shared_model_owner: String,
+    native_workspace_type_aliases: bool,
+    unsupported_hosts_return: String,
     payload_version: u32,
     journal_family: u32,
     worker_charge_bytes: u32,
@@ -575,6 +579,11 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.preparation_abort.payload_version == 1
             && stock.preparation_abort.journal_family == 7
             && stock.preparation_abort.worker_charge_bytes == 1048576
+            && stock.preparation_abort.shared_storage_port
+                == "radroots_storage.inventory.InventoryStore"
+            && stock.preparation_abort.shared_model_owner == "radroots_storage.inventory"
+            && !stock.preparation_abort.native_workspace_type_aliases
+            && stock.preparation_abort.unsupported_hosts_return == "capability_unavailable"
             && stock.preparation_abort.all_recipient_claims_must_be_absent
             && !stock
                 .preparation_abort
@@ -1311,6 +1320,10 @@ mod tests {
     #[test]
     fn abort_requires_protected_absence_exact_original_release_and_retained_preparations() {
         for (field, bad) in [
+            ("shared_storage_port", json!("native_only")),
+            ("shared_model_owner", json!("radroots_storage_sqlite")),
+            ("native_workspace_type_aliases", json!(true)),
+            ("unsupported_hosts_return", json!("aborted")),
             ("payload_version", json!(2)),
             ("journal_family", json!(6)),
             ("worker_charge_bytes", json!(1048577)),

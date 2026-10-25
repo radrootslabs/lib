@@ -13,13 +13,15 @@ pub use consent::{
     StockConsentCapture, StockConsentMode, StockConsentOutcome, StockConsentReceipt,
 };
 pub(in crate::workspace) mod grants;
-pub use inventory::abort::{StockAbortOutcome, StockAbortReceipt, StockAbortRequest};
 pub use inventory::acceptance::{
     StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
 };
 pub use inventory::installation::{
     StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,
     StockPublicationWork,
+};
+pub(in crate::workspace) use radroots_storage::inventory::{
+    StockAbortOutcome, StockAbortReceipt, StockAbortRequest,
 };
 pub(in crate::workspace) mod issuance;
 mod ledger;
@@ -1099,6 +1101,26 @@ async fn unchanged(
 }
 
 impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
+    fn abort_proven_unissued(
+        &self,
+        request: StockAbortRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<StockAbortOutcome, radroots_storage::command::OperationError>,
+    > {
+        Box::pin(self.worker.abort_proven_unissued(request, proof))
+    }
+    fn stock_preparation_abort(
+        &self,
+        request: StockAbortRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<Option<StockAbortReceipt>, radroots_storage::command::OperationError>,
+    > {
+        Box::pin(self.worker.stock_preparation_abort(request, proof))
+    }
     fn option_mapping(
         &self,
         binding: WorkspaceBinding,

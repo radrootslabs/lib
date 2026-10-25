@@ -2,82 +2,11 @@
 use super::super::{issuance::claim, ledger, order_state, signing_plan};
 use super::*;
 use checkpoint::{EntryIdentity, IdentityTarget};
-use radroots_domain::{OrderId, stock::StockTicks};
+use radroots_domain::stock::StockTicks;
 mod codec;
 mod projection;
 pub(in crate::workspace::stock) use codec::read_entry;
 pub(in crate::workspace::stock) use projection::{Projection, raw_projection};
-
-/// Original-operation selectors; this value supplies no nonissuance proof.
-pub struct StockAbortRequest {
-    binding: WorkspaceBinding,
-    minimum: radroots_storage::inventory::InventoryCheckpointRef,
-    operation: OperationId,
-    digest: CommandDigest,
-}
-impl StockAbortRequest {
-    pub const fn new(
-        binding: WorkspaceBinding,
-        minimum: radroots_storage::inventory::InventoryCheckpointRef,
-        operation: OperationId,
-        digest: CommandDigest,
-    ) -> Self {
-        Self {
-            binding,
-            minimum,
-            operation,
-            digest,
-        }
-    }
-    pub(in crate::workspace) fn attempt(&self) -> CommitAttempt {
-        CommitAttempt::new(
-            self.binding.input().workspace_id(),
-            self.operation,
-            self.digest,
-            None,
-        )
-    }
-}
-impl std::fmt::Debug for StockAbortRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("StockAbortRequest(<redacted>)")
-    }
-}
-/// Confirmed original cleanup, distinct from business cancellation or delivery.
-pub struct StockAbortReceipt {
-    attempt: CommitAttempt,
-    order: OrderId,
-    at: UnixSeconds,
-    checkpoint: radroots_storage::inventory::InventoryCheckpointRef,
-    pools: Vec<PoolSnapshot>,
-}
-impl StockAbortReceipt {
-    pub const fn attempt(&self) -> CommitAttempt {
-        self.attempt
-    }
-    pub const fn order_id(&self) -> OrderId {
-        self.order
-    }
-    pub const fn aborted_at(&self) -> UnixSeconds {
-        self.at
-    }
-    pub const fn checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef {
-        self.checkpoint
-    }
-    pub fn released_pools(&self) -> &[PoolSnapshot] {
-        &self.pools
-    }
-}
-impl std::fmt::Debug for StockAbortReceipt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("StockAbortReceipt(<redacted>)")
-    }
-}
-#[derive(Debug)]
-pub enum StockAbortOutcome {
-    Aborted(Box<StockAbortReceipt>),
-    Unknown(CommitAttempt),
-}
 
 #[derive(Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -213,17 +142,17 @@ pub(in crate::workspace) async fn abort(
 ) -> Result<StockAbortOutcome, OperationError> {
     let auth = Box::pin(signing_plan::load(
         turn,
-        &request.binding,
-        request.minimum,
-        request.operation,
-        request.digest,
+        request.binding(),
+        request.minimum_checkpoint(),
+        request.operation_id(),
+        request.command_digest(),
         &proof,
     ))
     .await?;
     if auth.access.authority.catalog != 13 {
         return Err(OperationError::UnsupportedOperation);
     }
-    let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation)).await?;
+    let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation_id())).await?;
     if let Some(old) = old {
         Box::pin(confirm_read(turn, &auth, &identity, Some(&old), &proof)).await?;
         return Ok(StockAbortOutcome::Aborted(Box::new(old.receipt)));
@@ -247,14 +176,19 @@ pub(in crate::workspace) async fn abort(
     ))
     .await?;
     if current.witness.expected.is_none_or(|value| {
-        value.phase != order_state::Phase::Prepared || value.operation != request.operation
+        value.phase != order_state::Phase::Prepared || value.operation != request.operation_id()
     }) {
         return Err(OperationError::StaleState);
     }
     let mut claims = Vec::with_capacity(2);
     for recipient in auth.original.receipt.rumor().recipients() {
-        let (claim, witness) =
-            Box::pin(claim::existing(turn, &auth, request.operation, *recipient)).await?;
+        let (claim, witness) = Box::pin(claim::existing(
+            turn,
+            &auth,
+            request.operation_id(),
+            *recipient,
+        ))
+        .await?;
         if claim.is_some() {
             return Err(OperationError::RecoveryRequired);
         }
@@ -263,7 +197,7 @@ pub(in crate::workspace) async fn abort(
     no_claims(
         turn.connection,
         turn.selected.participant(),
-        request.operation,
+        request.operation_id(),
     )
     .await?;
     let backing = Box::pin(super::backing::read(
@@ -303,7 +237,7 @@ pub(in crate::workspace) async fn abort(
     .map_err(|_| WorkspaceError::Capacity)?;
     let body = Body {
         version: 1,
-        operation: request.operation,
+        operation: request.operation_id(),
         original_head: auth.original.frame.header.head,
         plan: auth.plan.as_ref().map(|plan| Plan {
             entry: plan.frame.header.operation,
@@ -329,14 +263,14 @@ pub(in crate::workspace) async fn abort(
         namespace: SellerAuthoritySelection::from_attachment(turn.selected),
         actor: auth.access.current.actor(),
         operation: entry,
-        digest: request.digest,
+        digest: request.command_digest(),
         transaction,
         revision,
         previous: before.head,
         head: CheckpointDigest::from_bytes([0; 32]),
         pool: None,
         order: Some(auth.original.receipt.order_id()),
-        related_operation: Some(request.operation),
+        related_operation: Some(request.operation_id()),
         subject_grant: None,
         bytes: 0,
         parts: 0,
@@ -372,8 +306,8 @@ pub(in crate::workspace) async fn abort(
                     &encode(&codec::Movement {
                         version: 1,
                         operation: entry,
-                        digest: request.digest,
-                        original: request.operation,
+                        digest: request.command_digest(),
+                        original: request.operation_id(),
                         effect: *effect,
                     })?,
                 )
@@ -398,7 +332,7 @@ pub(in crate::workspace) async fn abort(
         .crypto
         .seal_stock_root(turn.selected, next.catalog, &next.encode()?)
         .await?;
-    let anchor = receipt.attempt;
+    let anchor = receipt.attempt();
     let mut tx = turn
         .connection
         .begin_with("BEGIN IMMEDIATE")
@@ -407,7 +341,7 @@ pub(in crate::workspace) async fn abort(
     let changed:Result<(),OperationError>=async {
         Box::pin(identity.confirm(&mut tx)).await?;
         for claim in &claims {Box::pin(claim.confirm(&mut tx)).await?;}
-        no_claims(&mut tx,turn.selected.participant(),request.operation).await?;
+        no_claims(&mut tx,turn.selected.participant(),request.operation_id()).await?;
         let checked=Box::pin(auth.confirm(&mut tx,turn.namespace,turn.clock,&proof,false)).await?;
         if checked.observed_at()<at {return Err(WorkspaceError::Unavailable.into());}
         for pool in &backing {Box::pin(pool.confirm(&mut tx)).await?;}
@@ -448,17 +382,17 @@ pub(in crate::workspace) async fn read(
 ) -> Result<Option<StockAbortReceipt>, OperationError> {
     let auth = Box::pin(signing_plan::load(
         turn,
-        &request.binding,
-        request.minimum,
-        request.operation,
-        request.digest,
+        request.binding(),
+        request.minimum_checkpoint(),
+        request.operation_id(),
+        request.command_digest(),
         &proof,
     ))
     .await?;
     if auth.access.authority.catalog != 13 {
         return Err(OperationError::UnsupportedOperation);
     }
-    let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation)).await?;
+    let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation_id())).await?;
     Box::pin(confirm_read(turn, &auth, &identity, old.as_ref(), &proof)).await?;
     Ok(old.map(|value| value.receipt))
 }

@@ -52,23 +52,24 @@ pub(super) fn receipt(
     header: &ledger::Header,
     body: &Body,
 ) -> Result<StockAbortReceipt, OperationError> {
-    Ok(StockAbortReceipt {
-        attempt: CommitAttempt::new(
+    StockAbortReceipt::from_committed_store(
+        input,
+        CommitAttempt::new(
             input.workspace_id(),
             body.operation,
             header.digest,
             Some(header.transaction),
         ),
-        order: header.order.ok_or(OperationError::RecoveryRequired)?,
-        at: body.aborted_at,
-        checkpoint: radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
+        header.order.ok_or(OperationError::RecoveryRequired)?,
+        body.aborted_at,
+        radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
             input.authority(),
             header.revision,
             Some(header.head),
         )?
         .with_authorization(body.authorization),
-        pools: body.effects.iter().map(|effect| effect.after).collect(),
-    })
+        body.effects.iter().map(|effect| effect.after).collect(),
+    )
 }
 async fn plan_selector(
     connection: &mut SqliteConnection,
@@ -299,7 +300,7 @@ impl Retained {
             header: self.frame.header,
             protected: self.frame.protected,
             parts_witness: self.frame.parts_witness,
-            pools: self.receipt.pools,
+            pools: self.receipt.into_released_pools(),
             mapping: None,
             movements: self.movements,
         }

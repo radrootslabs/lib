@@ -5,6 +5,9 @@ use radroots_domain::{
 use radroots_storage::workspace::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceError,
 };
+#[cfg(feature = "protected_outbox")]
+#[path = "workspace/inventory_abort.rs"]
+mod inventory_abort;
 fn key() -> PublicKey {
     PublicKey::from_hex("79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798").unwrap()
 }

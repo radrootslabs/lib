@@ -540,6 +540,8 @@ async fn unsafe_links_permissions_and_schema_are_refused_without_repair() {
     ));
 }
 
+#[path = "support/stock_abort_port.rs"]
+mod stock_abort_port;
 #[path = "support/stock_authority.rs"]
 mod stock_authority;
 

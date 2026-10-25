@@ -5,7 +5,9 @@ use super::super::super::super::super::{
     consent as acceptance_consent, inspect_named, request as acceptance_request,
 };
 use super::*;
-use crate::workspace::{StockAbortOutcome, StockAbortReceipt, StockAbortRequest};
+use radroots_storage::inventory::{
+    InventoryStore, StockAbortOutcome, StockAbortReceipt, StockAbortRequest,
+};
 #[path = "abort_failures_tests.rs"]
 mod failures;
 
@@ -21,8 +23,14 @@ pub(super) async fn abort(
     r: &Rig,
     receipt: &StockAcceptanceReceipt,
 ) -> Result<StockAbortOutcome, OperationError> {
-    r.store
-        .abort_proven_unissued(abort_request(r, receipt).await, r.enrollment.proof())
+    let store: &dyn InventoryStore = &r.store;
+    store
+        .abort_proven_unissued(
+            abort_request(r, receipt).await,
+            r.enrollment
+                .proof()
+                .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?,
+        )
         .await
 }
 pub(super) fn released(value: StockAbortOutcome) -> StockAbortReceipt {
@@ -41,6 +49,19 @@ async fn unclaimed_preparation_aborts_before_or_after_t1_and_originals_survive_n
         }
         let before = inventory_minimum(&r).await;
         let first = released(abort(&r, &receipt).await.unwrap());
+        let shared: &dyn InventoryStore = &r.store;
+        let retained = shared
+            .stock_preparation_abort(
+                abort_request(&r, &receipt).await,
+                r.enrollment
+                    .proof()
+                    .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained.attempt(), first.attempt());
         assert_eq!(
             first.attempt().operation_id(),
             receipt.attempt().operation_id()

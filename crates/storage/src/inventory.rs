@@ -7,6 +7,8 @@ use crate::{
 use radroots_domain::{CommandDigest, OperationId, PoolId, TransactionId, stock::PoolSnapshot};
 pub use radroots_protocol::command::{CapturedInventoryCommand, InventoryCommandKind};
 use radroots_transport::BoxFuture;
+mod abort;
+pub use abort::{StockAbortOutcome, StockAbortReceipt, StockAbortRequest};
 
 /// Exact captured owner-private inventory command and original authenticated observation.
 pub struct InventoryRequest {
@@ -262,6 +264,25 @@ pub enum InventoryOutcome {
 /// Native and browser hosts enforce these same atomic rules, never a memory
 /// success placeholder. No signing or network work occurs in these methods.
 pub trait InventoryStore: WorkspaceStore {
+    /// Explicit original-preparation cleanup. The concrete store must prove
+    /// every original claim absent and retain the exact release atomically.
+    /// Neither this port nor an unsupported host supplies an absence proof.
+    fn abort_proven_unissued(
+        &self,
+        _request: StockAbortRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<StockAbortOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Reads original cleanup under current access; absence is not permission
+    /// to retry issuance or release. Unsupported hosts refuse explicitly.
+    fn stock_preparation_abort(
+        &self,
+        _request: StockAbortRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<StockAbortReceipt>, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
     /// Reads current owner-private configuration after authenticating retained
     /// progress. Physical inventory scopes confer no configuration access.
     fn option_mapping(

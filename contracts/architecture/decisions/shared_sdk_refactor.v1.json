@@ -276,7 +276,11 @@
       "later_initial_requires_original_abort": true,
       "fresh_signing_after_abort": false,
       "unknown_commit_fences_owner": true,
-      "signer_or_transport_invoked": false
+      "signer_or_transport_invoked": false,
+      "shared_storage_port": "radroots_storage.inventory.InventoryStore",
+      "shared_model_owner": "radroots_storage.inventory",
+      "native_workspace_type_aliases": false,
+      "unsupported_hosts_return": "capability_unavailable"
     }
   },
   "provenance": {

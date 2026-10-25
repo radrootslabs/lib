@@ -196,7 +196,7 @@ async fn stock_process_child() {
                 aborts::released(
                     store
                         .abort_proven_unissued(
-                            crate::workspace::StockAbortRequest::new(
+                            radroots_storage::inventory::StockAbortRequest::new(
                                 binding,
                                 minimum,
                                 control.operation,
