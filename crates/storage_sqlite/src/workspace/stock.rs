@@ -23,8 +23,8 @@ use grants::StockRecord;
 pub use grants::{StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt};
 use serde::{Deserialize, Serialize};
 pub use source::{
-    StockSourceCapture, StockSourceOutcome, StockSourceProfile, StockSourceReceipt,
-    StockSourceSnapshot,
+    StockHistorySnapshot, StockSourceCapture, StockSourceOutcome, StockSourceProfile,
+    StockSourceReceipt, StockSourceSnapshot,
 };
 use sqlx::{Connection, SqliteConnection};
 use std::{

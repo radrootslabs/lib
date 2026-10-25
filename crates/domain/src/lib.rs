@@ -32,6 +32,7 @@ pub use agreement::{
     SupplyCommitment, Terms, TermsError,
 };
 pub use amount::{AmountError, Decimal, PositiveDecimal};
+pub use commerce::causal;
 pub use commerce::{
     AgreementCommitment, CancellationProposal, CommerceContent, CommerceError, CommerceHeader,
     CommercePayload, CommerceType, FinalMeasurement, HandoverClaim, IssueCode, IssueReport,

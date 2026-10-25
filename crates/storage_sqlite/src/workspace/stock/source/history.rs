@@ -1,0 +1,377 @@
+//! Complete protected local scoped causal coverage. This read supplies no
+//! request permission, current-offer permission, installed order or stock hold.
+use super::*;
+use radroots_domain::{
+    SourceId, UnixSeconds,
+    causal::{self, CausalAnalysis, CausalRecord, CausalScope},
+};
+use radroots_protocol::{commerce::DecodedRecord, private_rumor::DecodedRumor};
+use radroots_storage::workspace::seller_stock::StockListingCheckpointRef;
+use sqlx::Row;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Checked retained local causal coverage at independently acknowledged private
+/// and public checkpoints. This grants no request, agreement or stock authority.
+pub struct StockHistorySnapshot {
+    pub(super) scope: CausalScope,
+    pub(super) analysis: CausalAnalysis,
+    pub(super) sources: StockSourceCheckpointRef,
+    pub(super) listings: StockListingCheckpointRef,
+    pub(super) observed_at: UnixSeconds,
+    pub(super) records: usize,
+}
+impl StockHistorySnapshot {
+    /// Returns the exact selected participant/thread/order scope.
+    pub const fn scope(&self) -> CausalScope {
+        self.scope
+    }
+    /// Borrows the deterministic local graph classification and exact gaps.
+    pub const fn analysis(&self) -> &CausalAnalysis {
+        &self.analysis
+    }
+    /// Returns all private-source progress included in this checked snapshot.
+    pub const fn source_checkpoint(&self) -> StockSourceCheckpointRef {
+        self.sources
+    }
+    /// Returns public-source progress checked for original source existence.
+    /// This is not current-head or offer actionability permission.
+    pub const fn listing_checkpoint(&self) -> StockListingCheckpointRef {
+        self.listings
+    }
+    /// Returns the usable clock observation of the final transaction access check.
+    pub const fn observed_at(&self) -> UnixSeconds {
+        self.observed_at
+    }
+    /// Returns unique known records in the selected order and null quote scopes.
+    pub const fn known_records(&self) -> usize {
+        self.records
+    }
+}
+impl std::fmt::Debug for StockHistorySnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("StockHistorySnapshot(<private coverage>)")
+    }
+}
+pub(super) struct Prepared {
+    pub records: BTreeMap<RecordId, DecodedRecord>,
+    pub analysis: CausalAnalysis,
+    ancestry: checkpoint::Proof,
+    public: super::super::public_source::history::Witness,
+    revision: u64,
+    known: [u8; 32],
+    unknown: [u8; 32],
+}
+fn hash(label: &[u8]) -> Sha256 {
+    let mut value = Sha256::new();
+    value.update(label);
+    value
+}
+fn known_hash() -> Sha256 {
+    hash(b"radroots.seller_stock.causal_known_snapshot.v1\0")
+}
+fn unknown_hash() -> Sha256 {
+    hash(b"radroots.seller_stock.causal_unknown_snapshot.v1\0")
+}
+fn known_row(hash: &mut Sha256, revision: u64, id: RecordId, protected: &[u8]) {
+    hash.update(revision.to_be_bytes());
+    hash.update(id.as_bytes());
+    hash.update((protected.len() as u64).to_be_bytes());
+    hash.update(protected);
+}
+fn unknown_row(
+    hash: &mut Sha256,
+    revision: u64,
+    envelope: EnvelopeEventId,
+    part: u8,
+    protected: &[u8],
+) {
+    hash.update(revision.to_be_bytes());
+    hash.update(envelope.as_bytes());
+    hash.update([part]);
+    hash.update((protected.len() as u64).to_be_bytes());
+    hash.update(protected);
+}
+async fn header_at(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    revision: u64,
+) -> Result<record::RetainedHeader, OperationError> {
+    let id: Vec<u8> = sqlx::query_scalar(
+        "SELECT envelope_id FROM stock_source_evidence WHERE revision=? AND length(envelope_id)=32",
+    )
+    .bind(revision as i64)
+    .fetch_optional(&mut *connection)
+    .await
+    .map_err(|_| OperationError::RecoveryRequired)?
+    .ok_or(OperationError::RecoveryRequired)?;
+    let envelope = EnvelopeEventId::from_bytes(
+        id.try_into()
+            .map_err(|_| OperationError::RecoveryRequired)?,
+    );
+    let header = record::read(connection, input, crypto, envelope)
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
+    if header.header.revision.get() != revision {
+        return Err(OperationError::RecoveryRequired);
+    }
+    Ok(header)
+}
+async fn rumor_part(
+    connection: &mut SqliteConnection,
+    envelope: EnvelopeEventId,
+    part: u8,
+) -> Result<Option<Vec<u8>>, OperationError> {
+    sqlx::query_scalar::<_,Option<Vec<u8>>>("SELECT CASE WHEN length(protected) BETWEEN 1 AND 262144 THEN protected END FROM stock_source_parts WHERE envelope_id=? AND role=2 AND part=?")
+        .bind(envelope.as_bytes().as_slice()).bind(i64::from(part)).fetch_optional(connection).await.map_err(|_|OperationError::RecoveryRequired)?
+        .map(|value|value.ok_or(OperationError::RecoveryRequired)).transpose()
+}
+async fn original_rumor(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    header: &record::Header,
+    hash: &mut Sha256,
+) -> Result<DecodedRumor, OperationError> {
+    let envelope = header.manifest.envelope;
+    let piece = header.manifest.pieces[2];
+    let mut raw = Zeroizing::new(Vec::new());
+    for part in 0..piece.parts {
+        let protected = rumor_part(connection, envelope, part)
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?;
+        unknown_row(hash, header.revision.get(), envelope, part, &protected);
+        let clear = crypto
+            .open_stock_record(
+                input,
+                "source_part",
+                &record::part_id(envelope, 2, part),
+                &protected,
+            )
+            .await?;
+        clear.expose_secret(|bytes| {
+            let length = if part + 1 == piece.parts {
+                piece.bytes as usize - (usize::from(piece.parts) - 1) * 16 * 1024
+            } else {
+                16 * 1024
+            };
+            if bytes.len() != length {
+                return Err(OperationError::RecoveryRequired);
+            }
+            raw.extend_from_slice(bytes);
+            Ok(())
+        })?;
+    }
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM stock_source_parts WHERE envelope_id=? AND role=2",
+    )
+    .bind(envelope.as_bytes().as_slice())
+    .fetch_one(connection)
+    .await
+    .map_err(|_| OperationError::RecoveryRequired)?;
+    if count != i64::from(piece.parts)
+        || raw.len() != piece.bytes as usize
+        || <[u8; 32]>::from(Sha256::digest(&*raw)) != piece.digest
+    {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let rumor = DecodedRumor::decode(&raw).map_err(|_| OperationError::RecoveryRequired)?;
+    if rumor.event_id() != header.manifest.rumor {
+        return Err(OperationError::RecoveryRequired);
+    }
+    Ok(rumor)
+}
+pub(super) async fn prepare(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    authority: &Authority,
+    scope: CausalScope,
+    listing_minimum: StockListingCheckpointRef,
+) -> Result<Prepared, OperationError> {
+    if scope.seller() != input.participant() {
+        return Err(OperationError::Unauthorized);
+    }
+    let progress = authority
+        .sources
+        .ok_or(OperationError::UnsupportedOperation)?;
+    let revision = progress.revision.get();
+    let genesis = StockSourceCheckpointRef::from_host_metadata(
+        input.authority(),
+        Sequence::new(0).map_err(|_| OperationError::RecoveryRequired)?,
+        None,
+    )?;
+    let ancestry = checkpoint::authenticate(
+        connection,
+        input,
+        crypto,
+        progress,
+        checkpoint::Target::Minimum(genesis),
+    )
+    .await?;
+    let mut records = BTreeMap::new();
+    let mut known = known_hash();
+    for revision in 1..=revision {
+        let retained = header_at(connection, input, crypto, revision).await?;
+        if let Some(id) = retained.header.manifest.record {
+            let (raw, protected) = record::canonical(connection, input, crypto, id)
+                .await?
+                .ok_or(OperationError::RecoveryRequired)?;
+            if Some(<[u8; 32]>::from(Sha256::digest(&*raw)))
+                != retained.header.manifest.canonical_digest
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+            known_row(&mut known, revision, id, &protected);
+            let decoded = radroots_protocol::commerce::decode(&raw)
+                .map_err(|_| OperationError::RecoveryRequired)?;
+            if scope.contains(decoded.content()) {
+                records.insert(id, decoded);
+                if records.len() > causal::MAX_CAUSAL_RECORDS {
+                    return Err(WorkspaceError::Capacity.into());
+                }
+            }
+        }
+    }
+    let mut wanted: BTreeSet<_> = records
+        .values()
+        .flat_map(|record| record.content().header().parents().iter().copied())
+        .collect();
+    for id in records.keys() {
+        wanted.remove(&SourceId::from_bytes(id.into_bytes()));
+    }
+    let mut external = BTreeSet::new();
+    let mut uninterpreted = BTreeSet::new();
+    let mut unknown = unknown_hash();
+    for revision in 1..=revision {
+        let retained = header_at(connection, input, crypto, revision).await?;
+        if let Some(id) = retained.header.manifest.record {
+            if wanted.contains(&SourceId::from_bytes(id.into_bytes())) {
+                return Err(OperationError::InvalidEvidence);
+            }
+            continue;
+        }
+        let rumor =
+            original_rumor(connection, input, crypto, &retained.header, &mut unknown).await?;
+        if rumor.author() != scope.buyer() && rumor.author() != scope.seller() {
+            continue;
+        }
+        let source = SourceId::from_bytes(rumor.event_id().into_bytes());
+        if rumor.kind() == radroots_protocol::profile::COMMERCE_KIND {
+            // Unknown content cannot supply trustworthy thread/order semantics.
+            // Conservatively block this participant pair rather than assuming
+            // it is unrelated and resurrecting an older actionable record.
+            uninterpreted.insert(source);
+            if uninterpreted.len() > causal::MAX_CAUSAL_SOURCES {
+                return Err(WorkspaceError::Capacity.into());
+            }
+        } else if rumor.kind() == 14 && wanted.contains(&source) {
+            external.insert(source);
+        }
+    }
+    for source in &external {
+        wanted.remove(source);
+    }
+    let public = super::super::public_source::history::prepare(
+        connection,
+        input,
+        crypto,
+        authority,
+        listing_minimum,
+        &wanted,
+    )
+    .await?;
+    external.extend(public.present());
+    let nodes: Vec<_> = records
+        .iter()
+        .map(|(id, record)| CausalRecord::new(*id, record.content()))
+        .collect();
+    let analysis = causal::analyze(
+        scope,
+        &nodes,
+        &external.into_iter().collect::<Vec<_>>(),
+        &uninterpreted.into_iter().collect::<Vec<_>>(),
+    )
+    .map_err(|error| match error {
+        causal::CausalError::LimitExceeded => OperationError::Workspace(WorkspaceError::Capacity),
+        causal::CausalError::InvalidScope => OperationError::InvalidEvidence,
+        _ => OperationError::RecoveryRequired,
+    })?;
+    Ok(Prepared {
+        records,
+        analysis,
+        ancestry,
+        public,
+        revision,
+        known: known.finalize().into(),
+        unknown: unknown.finalize().into(),
+    })
+}
+impl Prepared {
+    pub(super) async fn confirm(
+        &self,
+        connection: &mut SqliteConnection,
+    ) -> Result<(), OperationError> {
+        self.ancestry.confirm(connection).await?;
+        let mut known = known_hash();
+        let mut unknown = unknown_hash();
+        for revision in 1..=self.revision {
+            let row = sqlx::query(
+                "SELECT envelope_id,record_id FROM stock_source_evidence WHERE revision=?",
+            )
+            .bind(revision as i64)
+            .fetch_optional(&mut *connection)
+            .await
+            .map_err(|_| OperationError::RecoveryRequired)?
+            .ok_or(OperationError::RecoveryRequired)?;
+            let envelope: Vec<u8> = row
+                .try_get(0)
+                .map_err(|_| OperationError::RecoveryRequired)?;
+            let envelope = EnvelopeEventId::from_bytes(
+                envelope
+                    .try_into()
+                    .map_err(|_| OperationError::RecoveryRequired)?,
+            );
+            let id: Option<Vec<u8>> = row
+                .try_get(1)
+                .map_err(|_| OperationError::RecoveryRequired)?;
+            if let Some(id) = id {
+                let id = RecordId::from_bytes(
+                    id.try_into()
+                        .map_err(|_| OperationError::RecoveryRequired)?,
+                );
+                let protected:Option<Vec<u8>>=sqlx::query_scalar("SELECT CASE WHEN length(protected) BETWEEN 1 AND 262144 THEN protected END FROM stock_source_records WHERE record_id=?").bind(id.as_bytes().as_slice()).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.flatten();
+                known_row(
+                    &mut known,
+                    revision,
+                    id,
+                    &protected.ok_or(OperationError::RecoveryRequired)?,
+                );
+            } else {
+                let mut count = 0;
+                for part in 0..4 {
+                    if let Some(protected) = rumor_part(connection, envelope, part).await? {
+                        unknown_row(&mut unknown, revision, envelope, part, &protected);
+                        count += 1;
+                    }
+                }
+                let actual: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM stock_source_parts WHERE envelope_id=? AND role=2",
+                )
+                .bind(envelope.as_bytes().as_slice())
+                .fetch_one(&mut *connection)
+                .await
+                .map_err(|_| OperationError::RecoveryRequired)?;
+                if count == 0 || count != actual {
+                    return Err(OperationError::RecoveryRequired);
+                }
+            }
+        }
+        if <[u8; 32]>::from(known.finalize()) != self.known
+            || <[u8; 32]>::from(unknown.finalize()) != self.unknown
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        self.public.confirm(connection).await
+    }
+}

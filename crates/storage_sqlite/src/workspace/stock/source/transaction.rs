@@ -66,7 +66,7 @@ impl Access {
         namespace: &Namespace,
         clock: &dyn WorkspaceClock,
         proof: &AttachmentProof,
-    ) -> Result<(), OperationError> {
+    ) -> Result<WorkspaceBinding, OperationError> {
         namespace.validate()?;
         super::super::unchanged(
             connection,
@@ -101,8 +101,63 @@ impl Access {
         if !self.record.administrator() {
             return Err(OperationError::Unauthorized);
         }
-        Ok(())
+        Ok(current)
     }
+}
+pub(in crate::workspace) async fn history(
+    turn: &mut Turn<'_>,
+    binding: WorkspaceBinding,
+    minimum: StockSourceCheckpointRef,
+    listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+    scope: radroots_domain::causal::CausalScope,
+    proof: AttachmentProof,
+) -> Result<StockHistorySnapshot, OperationError> {
+    let access = access(turn, &binding, minimum, &proof).await?;
+    if access.authority.catalog != 8 {
+        return Err(OperationError::UnsupportedOperation);
+    }
+    let prepared = super::history::prepare(
+        turn.connection,
+        turn.selected,
+        turn.crypto,
+        &access.authority,
+        scope,
+        listing_minimum,
+    )
+    .await?;
+    let mut tx = turn
+        .connection
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|_| OperationError::StorageFailure)?;
+    let checked: Result<_, OperationError> = async {
+        // The complete cryptographic/row witness may span a large local
+        // history. Check usable current permission/time after that work.
+        prepared.confirm(&mut tx).await?;
+        let current = access
+            .confirm(&mut tx, turn.namespace, turn.clock, &proof)
+            .await?;
+        Ok(current.observed_at())
+    }
+    .await;
+    if tx.rollback().await.is_err() {
+        *turn.uncertain = true;
+        return Err(OperationError::RecoveryRequired);
+    }
+    let observed_at = checked?;
+    let private = access
+        .authority
+        .sources
+        .ok_or(OperationError::RecoveryRequired)?;
+    let public = access
+        .authority
+        .public_sources
+        .ok_or(OperationError::RecoveryRequired)?;
+    Ok(StockHistorySnapshot {
+        scope,records:prepared.records.len(),analysis:prepared.analysis,observed_at,
+        sources:StockSourceCheckpointRef::from_host_metadata(turn.selected.authority(),private.revision,private.head)?.with_optional_authorization(access.authority.authorization),
+        listings:radroots_storage::workspace::seller_stock::StockListingCheckpointRef::from_host_metadata(turn.selected.authority(),public.revision,public.head)?.with_optional_authorization(access.authority.authorization),
+    })
 }
 struct Observation {
     ancestry: Proof,

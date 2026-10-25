@@ -4,6 +4,7 @@ use crate::{OrderId, PublicKey, RecordId, Sequence, SourceId, Terms, ThreadId, U
 use alloc::{boxed::Box, vec::Vec};
 use core::fmt;
 
+pub mod causal;
 mod value;
 pub use value::{FinalMeasurement, IssueCode, IssueReport, LineQuantity, Resolution};
 mod payload;

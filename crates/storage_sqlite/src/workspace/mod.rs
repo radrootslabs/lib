@@ -25,9 +25,9 @@ mod stock;
 pub use stock::{
     SellerStockConfig, StockAuthorityReceipt, StockConsentCapture, StockConsentMode,
     StockConsentOutcome, StockConsentReceipt, StockEnrollment, StockGrantEnrollment,
-    StockGrantOutcome, StockGrantReceipt, StockListingCapture, StockListingOutcome,
-    StockListingReceipt, StockListingSnapshot, StockSourceCapture, StockSourceOutcome,
-    StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
+    StockGrantOutcome, StockGrantReceipt, StockHistorySnapshot, StockListingCapture,
+    StockListingOutcome, StockListingReceipt, StockListingSnapshot, StockSourceCapture,
+    StockSourceOutcome, StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
 };
 mod worker;
 

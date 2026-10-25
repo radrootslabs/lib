@@ -9,6 +9,8 @@ mod time;
 #[path = "support/agreement.rs"]
 mod agreement;
 
+#[path = "support/causal.rs"]
+mod causal;
 #[path = "support/commerce.rs"]
 mod commerce;
 

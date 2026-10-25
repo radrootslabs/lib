@@ -418,6 +418,7 @@ pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_listing_
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_listing_source(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_domain::listing::reference::ListingRevision, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<core::option::Option<radroots_storage_sqlite::workspace::StockListingSnapshot>, radroots_storage::command::OperationError>
 impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::retain_stock_source(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, &radroots_storage_sqlite::workspace::StockSourceCapture, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockSourceOutcome, radroots_storage::command::OperationError>
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_order_history(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_domain::commerce::causal::CausalScope, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockHistorySnapshot, radroots_storage::command::OperationError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_source(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_domain::identifier::EnvelopeEventId, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<core::option::Option<radroots_storage_sqlite::workspace::StockSourceSnapshot>, radroots_storage::command::OperationError>
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::NativeWorkspace
 pub fn radroots_storage_sqlite::workspace::NativeWorkspace::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -498,6 +499,16 @@ impl radroots_storage_sqlite::workspace::StockGrantReceipt
 pub const fn radroots_storage_sqlite::workspace::StockGrantReceipt::authorization(&self) -> radroots_storage::workspace::seller_stock::authorization::StockAuthorizationRef
 pub const fn radroots_storage_sqlite::workspace::StockGrantReceipt::grant_id(&self) -> radroots_domain::identifier::GrantId
 pub const fn radroots_storage_sqlite::workspace::StockGrantReceipt::transaction_id(&self) -> radroots_domain::identifier::TransactionId
+pub struct radroots_storage_sqlite::workspace::StockHistorySnapshot
+impl radroots_storage_sqlite::workspace::StockHistorySnapshot
+pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::analysis(&self) -> &radroots_domain::commerce::causal::CausalAnalysis
+pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::known_records(&self) -> usize
+pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::listing_checkpoint(&self) -> radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef
+pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::observed_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::scope(&self) -> radroots_domain::commerce::causal::CausalScope
+pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::source_checkpoint(&self) -> radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockHistorySnapshot
+pub fn radroots_storage_sqlite::workspace::StockHistorySnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockListingCapture
 impl radroots_storage_sqlite::workspace::StockListingCapture
 pub const fn radroots_storage_sqlite::workspace::StockListingCapture::listing_revision(&self) -> radroots_domain::listing::reference::ListingRevision

@@ -109,6 +109,11 @@ struct NativeSellerStockAuthority {
     inventory_scope_grants_source_access: bool,
     source_checkpoint_independent: bool,
     source_profile_implies_actionability: bool,
+    causal_history_current_administrator_required: bool,
+    causal_history_complete_local_scope_required: bool,
+    causal_history_uninterpreted_policy: String,
+    causal_history_transaction_witnesses_required: bool,
+    causal_history_implies_business_permission: bool,
     source_carrier_max_bytes: u32,
     source_chunk_max_bytes: u32,
     mapping_payload_schema: String,
@@ -403,6 +408,12 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !stock.inventory_scope_grants_source_access
             && stock.source_checkpoint_independent
             && !stock.source_profile_implies_actionability
+            && stock.causal_history_current_administrator_required
+            && stock.causal_history_complete_local_scope_required
+            && stock.causal_history_uninterpreted_policy
+                == "conservative_authenticated_participant_pair_barrier"
+            && stock.causal_history_transaction_witnesses_required
+            && !stock.causal_history_implies_business_permission
             && stock.source_carrier_max_bytes == 65536
             && stock.source_chunk_max_bytes == 16384
             && stock.mapping_owner_administration_required
@@ -725,6 +736,8 @@ fn validate_values(v: &Values, limits: &BTreeMap<String, u64>) -> Result<(), Str
         ("order_lines", 32),
         ("listing_options", 16),
         ("parent_records", 8),
+        ("causal_records_per_scope", 1_000),
+        ("causal_source_identities_per_collection", 8_000),
         ("read_page_events", 1_000),
         ("unknown_quarantine_events_per_scope", 1_024),
         ("live_queue_events", 256),
@@ -1057,6 +1070,35 @@ mod tests {
     }
 
     #[test]
+    fn causal_history_contract_requires_current_access_full_scope_and_non_actionability() {
+        for (field, bad) in [
+            (
+                "causal_history_current_administrator_required",
+                json!(false),
+            ),
+            ("causal_history_complete_local_scope_required", json!(false)),
+            (
+                "causal_history_uninterpreted_policy",
+                json!("ignore_unknown_scope"),
+            ),
+            (
+                "causal_history_transaction_witnesses_required",
+                json!(false),
+            ),
+            ("causal_history_implies_business_permission", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
     fn source_retention_contract_requires_provenance_bounds_and_separate_authority() {
         for (field, bad) in [
             ("schema_version", json!(5)),
@@ -1152,6 +1194,8 @@ mod tests {
             ("/limits/public_event_bytes", json!(65537)),
             ("/limits/live_queue_bytes", json!(0)),
             ("/limits/order_lines", json!(33)),
+            ("/limits/causal_records_per_scope", json!(1001)),
+            ("/limits/causal_source_identities_per_collection", json!(0)),
             ("/values/count_quantities_integral", json!(false)),
             ("/values/currency_exponent_max", json!(5)),
             ("/values/rounding", json!("away_from_zero")),

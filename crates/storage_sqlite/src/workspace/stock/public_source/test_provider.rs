@@ -1,4 +1,6 @@
 use super::*;
+#[path = "history_tests.rs"]
+mod history;
 use radroots_secrets::{
     Error,
     file::FileProvider,

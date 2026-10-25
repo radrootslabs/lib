@@ -1,5 +1,46 @@
 pub mod radroots_domain
 pub use radroots_domain::PublicKey
+pub mod radroots_domain::causal
+#[non_exhaustive] pub enum radroots_domain::causal::CausalError
+pub radroots_domain::causal::CausalError::IdentityConflict
+pub radroots_domain::causal::CausalError::InvalidScope
+pub radroots_domain::causal::CausalError::LimitExceeded
+impl core::error::Error for radroots_domain::causal::CausalError
+impl core::fmt::Display for radroots_domain::causal::CausalError
+pub fn radroots_domain::causal::CausalError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_domain::causal::CausalReadiness
+pub radroots_domain::causal::CausalReadiness::Complete
+pub radroots_domain::causal::CausalReadiness::Conflicted
+pub radroots_domain::causal::CausalReadiness::MissingHistory
+pub radroots_domain::causal::CausalReadiness::Uninterpreted
+pub struct radroots_domain::causal::CausalAnalysis
+impl radroots_domain::causal::CausalAnalysis
+pub const fn radroots_domain::causal::CausalAnalysis::buyer_head(&self) -> core::option::Option<radroots_domain::RecordId>
+pub fn radroots_domain::causal::CausalAnalysis::conflicts(&self) -> &[radroots_domain::RecordId]
+pub const fn radroots_domain::causal::CausalAnalysis::has_cycle(&self) -> bool
+pub fn radroots_domain::causal::CausalAnalysis::missing(&self) -> &[radroots_domain::SourceId]
+pub const fn radroots_domain::causal::CausalAnalysis::quote_head(&self) -> core::option::Option<radroots_domain::RecordId>
+pub const fn radroots_domain::causal::CausalAnalysis::readiness(&self) -> radroots_domain::causal::CausalReadiness
+pub const fn radroots_domain::causal::CausalAnalysis::seller_head(&self) -> core::option::Option<radroots_domain::RecordId>
+pub fn radroots_domain::causal::CausalAnalysis::uninterpreted(&self) -> &[radroots_domain::SourceId]
+impl core::fmt::Debug for radroots_domain::causal::CausalAnalysis
+pub fn radroots_domain::causal::CausalAnalysis::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::causal::CausalRecord<'a>
+impl<'a> radroots_domain::causal::CausalRecord<'a>
+pub const fn radroots_domain::causal::CausalRecord<'a>::new(radroots_domain::RecordId, &'a radroots_domain::CommerceContent) -> Self
+impl core::fmt::Debug for radroots_domain::causal::CausalRecord<'_>
+pub fn radroots_domain::causal::CausalRecord<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::causal::CausalScope
+impl radroots_domain::causal::CausalScope
+pub const fn radroots_domain::causal::CausalScope::buyer(self) -> radroots_identity::key::PublicKey
+pub fn radroots_domain::causal::CausalScope::contains(self, &radroots_domain::CommerceContent) -> bool
+pub fn radroots_domain::causal::CausalScope::new(radroots_domain::ThreadId, radroots_domain::OrderId, radroots_identity::key::PublicKey, radroots_identity::key::PublicKey) -> core::result::Result<Self, radroots_domain::causal::CausalError>
+pub const fn radroots_domain::causal::CausalScope::order_id(self) -> radroots_domain::OrderId
+pub const fn radroots_domain::causal::CausalScope::seller(self) -> radroots_identity::key::PublicKey
+pub const fn radroots_domain::causal::CausalScope::thread_id(self) -> radroots_domain::ThreadId
+pub const radroots_domain::causal::MAX_CAUSAL_RECORDS: usize
+pub const radroots_domain::causal::MAX_CAUSAL_SOURCES: usize
+pub fn radroots_domain::causal::analyze(radroots_domain::causal::CausalScope, &[radroots_domain::causal::CausalRecord<'_>], &[radroots_domain::SourceId], &[radroots_domain::SourceId]) -> core::result::Result<radroots_domain::causal::CausalAnalysis, radroots_domain::causal::CausalError>
 pub mod radroots_domain::listing
 pub enum radroots_domain::listing::FulfillmentMode
 pub radroots_domain::listing::FulfillmentMode::Delivery

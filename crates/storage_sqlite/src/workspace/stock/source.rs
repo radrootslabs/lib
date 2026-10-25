@@ -9,8 +9,11 @@ use radroots_storage::{
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 mod checkpoint;
+mod history;
+pub use history::StockHistorySnapshot;
 mod record;
 mod transaction;
+pub(in crate::workspace) use transaction::history as query_history;
 pub(in crate::workspace) use transaction::{query, retain};
 
 /// Authenticated carrier/profile disposition, without causal actionability.
@@ -247,6 +250,25 @@ impl std::fmt::Debug for StockSourceSnapshot {
     }
 }
 impl NativeWorkspace {
+    /// Reads complete retained local causal coverage for one bilateral scope.
+    /// Current administrator access is required. This neither authorizes a new
+    /// request nor reports an installed agreement, global history or stock hold.
+    /// Uninterpreted commerce from either party conservatively blocks that pair
+    /// because its future header cannot yet be scoped. Ordinary chat remains a
+    /// separate source and never becomes a structured record by interpretation.
+    pub async fn stock_order_history(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: StockSourceCheckpointRef,
+        listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        scope: radroots_domain::causal::CausalScope,
+        proof: &AttachmentProof,
+    ) -> Result<StockHistorySnapshot, OperationError> {
+        let proof = proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
+        self.worker
+            .stock_order_history(binding, minimum, listing_minimum, scope, proof)
+            .await
+    }
     /// Retains original authenticated evidence on the selected owner worker.
     /// Borrowed capture/proof remain available after error or observer loss.
     pub async fn retain_stock_source(

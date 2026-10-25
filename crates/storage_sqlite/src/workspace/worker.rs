@@ -38,6 +38,14 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    StockOrderHistory(
+        Box<WorkspaceBinding>,
+        radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        radroots_domain::causal::CausalScope,
+        AttachmentProof,
+        Reply<stock::StockHistorySnapshot, OperationError>,
+    ),
     RetainStockListing(
         Box<WorkspaceBinding>,
         radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
@@ -218,6 +226,9 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::StockOrderHistory(_, _, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::RetainStockListing(_, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -455,6 +466,7 @@ impl Handle {
                                         | Job::OptionMapping(..)
                                         | Job::RetainStockSource(..)
                                         | Job::StockSource(..)
+                                        | Job::StockOrderHistory(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -663,6 +675,36 @@ impl Handle {
                                             *binding,
                                             minimum,
                                             *capture,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockOrderHistory(
+                                    binding,
+                                    minimum,
+                                    listings,
+                                    scope,
+                                    proof,
+                                    reply,
+                                ) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::source::query_history(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            listings,
+                                            scope,
                                             proof,
                                         )
                                         .await
@@ -1226,6 +1268,25 @@ impl Handle {
             reply,
         ))?;
         result.await.unwrap_or(Ok(anchor))
+    }
+    pub(super) async fn stock_order_history(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        listings: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        scope: radroots_domain::causal::CausalScope,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockHistorySnapshot, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockOrderHistory(
+            Box::new(binding),
+            minimum,
+            listings,
+            scope,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
     pub(super) async fn stock_source(
         &self,
