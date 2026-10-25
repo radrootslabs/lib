@@ -66,6 +66,21 @@ const wrongPrevious=record('withdrawal_requested',{authorization:requested.recor
 const unrelated=record('issue',{code:'other',description:'Independent unrelated scope',lines:[],source_records:[]},2,1,null,[]);
 unrelated.thread_id='73'.repeat(32);delete unrelated.record_id;unrelated.record_id=sha(Buffer.concat([Buffer.from('radroots.record.v1\0'),Buffer.from(canonical(unrelated))]));
 const rows=[chat,enclose('quote',quoted,3),enclose('request',requested,2),enclose('request_rewrapped',requested,2),enclose('withdrawal',withdrawn,2),enclose('buyer_fork',fork,2),enclose('decline',declined,3),enclose('missing_predecessor',gap,2),enclose('wrong_predecessor',wrongPrevious,2),enclose('unrelated',unrelated,2),enclose('future_commerce',canonical({profile:'radroots.commerce',version:2,type:'future_record',private_future:'Unknown authenticated statement'}),2)];
+const direct=record('request',{terms:complete,expires_at:'240',quote:null},2,1,null,[listing.id]);
+const wrongSnapshot=structuredClone(complete);wrongSnapshot.lines[0].option.label='Changed copied option snapshot';
+const wrongTerms=structuredClone(complete);wrongTerms.fulfillment[0].terms.instructions+=' Changed exact quote terms.';
+const promise=structuredClone(complete);promise.supply={type:'future_promise',expected_window:{start:'300',end:'400',timezone:'Etc/UTC'},risk_disclosure:'Weather and future supply may change.'};
+const variable=structuredClone(complete);variable.lines[0].price={type:'variable_weight',measurement_unit:'kg',minimum:'1',maximum:'2',rate:{currency:'CAD',exponent:2,minor:'150'},basis:'1',maximum_total:{currency:'CAD',exponent:2,minor:'300'}};
+variable.lines[0].maximum_line_total={currency:'CAD',exponent:2,minor:'300'};variable.maximum_total={currency:'CAD',exponent:2,minor:'325'};
+for(const [name,content] of [
+  ['request_no_quote',direct],
+  ['request_wrong_snapshot',record('request',{terms:wrongSnapshot,expires_at:'240',quote:null},2,1,null,[listing.id])],
+  ['request_wrong_quote_terms',record('request',{terms:wrongTerms,expires_at:'240',quote:quoted.record_id},2,1,null,[listing.id,quoted.record_id])],
+  ['request_early_expiry',record('request',{terms:complete,expires_at:'151',quote:quoted.record_id},2,1,null,[listing.id,quoted.record_id])],
+  ['request_other_order',record('request',{terms:complete,expires_at:'240',quote:null},2,1,null,[listing.id],'74'.repeat(32))],
+  ['request_future_promise',record('request',{terms:promise,expires_at:'240',quote:null},2,1,null,[listing.id])],
+  ['request_variable_weight',record('request',{terms:variable,expires_at:'240',quote:null},2,1,null,[listing.id])],
+])rows.push(enclose(name,content,2));
 const output={schema_version:1,scope:{thread,order,buyer,seller},listing_raw:listingRaw,listing_id:listing.id,quote:quoted.record_id,request:requested.record_id,withdrawal:withdrawn.record_id,buyer_fork:fork.record_id,decline:declined.record_id,missing,producer:{library:'nostr-tools@2.23.5',curve:'@noble/curves@2.0.1',bip340_primary_vector_zero_matched:true,script_sha256:sha(readFileSync(new URL(import.meta.url))),package_lock_sha256:sha(read('tools/protocol_oracle/package-lock.json')),redistribution_provenance_sha256:sha(read('tools/protocol_oracle/provenance.v1.json')),record_template_path:recordPath,record_template_sha256:sha(read(recordPath)),public_source_path:publicPath,public_source_sha256:sha(read(publicPath)),synthetic_only:true,production_entropy_claimed:false},sources:rows};
 const bytes=JSON.stringify(output,null,2)+'\n';
 const target=new URL('crates/storage_sqlite/tests/fixtures/stock_history.v1.json',root);

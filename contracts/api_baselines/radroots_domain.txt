@@ -13,6 +13,22 @@ pub radroots_domain::causal::CausalReadiness::Complete
 pub radroots_domain::causal::CausalReadiness::Conflicted
 pub radroots_domain::causal::CausalReadiness::MissingHistory
 pub radroots_domain::causal::CausalReadiness::Uninterpreted
+#[non_exhaustive] pub enum radroots_domain::causal::RequestClaimError
+pub radroots_domain::causal::RequestClaimError::ClockAhead
+pub radroots_domain::causal::RequestClaimError::Conflicted
+pub radroots_domain::causal::RequestClaimError::ConflictingAuthorizations
+pub radroots_domain::causal::RequestClaimError::Declined
+pub radroots_domain::causal::RequestClaimError::Expired
+pub radroots_domain::causal::RequestClaimError::InvalidGraph
+pub radroots_domain::causal::RequestClaimError::MissingHistory
+pub radroots_domain::causal::RequestClaimError::QuoteMismatch
+pub radroots_domain::causal::RequestClaimError::RequiresReconciliation
+pub radroots_domain::causal::RequestClaimError::Uninterpreted
+pub radroots_domain::causal::RequestClaimError::Withdrawn
+pub radroots_domain::causal::RequestClaimError::WrongRequest
+impl core::error::Error for radroots_domain::causal::RequestClaimError
+impl core::fmt::Display for radroots_domain::causal::RequestClaimError
+pub fn radroots_domain::causal::RequestClaimError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::causal::CausalAnalysis
 impl radroots_domain::causal::CausalAnalysis
 pub const fn radroots_domain::causal::CausalAnalysis::buyer_head(&self) -> core::option::Option<radroots_domain::RecordId>
@@ -27,7 +43,9 @@ impl core::fmt::Debug for radroots_domain::causal::CausalAnalysis
 pub fn radroots_domain::causal::CausalAnalysis::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::causal::CausalRecord<'a>
 impl<'a> radroots_domain::causal::CausalRecord<'a>
+pub const fn radroots_domain::causal::CausalRecord<'a>::content(self) -> &'a radroots_domain::CommerceContent
 pub const fn radroots_domain::causal::CausalRecord<'a>::new(radroots_domain::RecordId, &'a radroots_domain::CommerceContent) -> Self
+pub const fn radroots_domain::causal::CausalRecord<'a>::record_id(self) -> radroots_domain::RecordId
 impl core::fmt::Debug for radroots_domain::causal::CausalRecord<'_>
 pub fn radroots_domain::causal::CausalRecord<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::causal::CausalScope
@@ -38,9 +56,18 @@ pub fn radroots_domain::causal::CausalScope::new(radroots_domain::ThreadId, radr
 pub const fn radroots_domain::causal::CausalScope::order_id(self) -> radroots_domain::OrderId
 pub const fn radroots_domain::causal::CausalScope::seller(self) -> radroots_identity::key::PublicKey
 pub const fn radroots_domain::causal::CausalScope::thread_id(self) -> radroots_domain::ThreadId
+pub struct radroots_domain::causal::InitialRequestClaim<'a>
+impl radroots_domain::causal::InitialRequestClaim<'_>
+pub const fn radroots_domain::causal::InitialRequestClaim<'_>::expires_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::causal::InitialRequestClaim<'_>::quote(&self) -> core::option::Option<radroots_domain::RecordId>
+pub const fn radroots_domain::causal::InitialRequestClaim<'_>::request(&self) -> radroots_domain::RecordId
+pub const fn radroots_domain::causal::InitialRequestClaim<'_>::terms(&self) -> &radroots_domain::Terms
+impl core::fmt::Debug for radroots_domain::causal::InitialRequestClaim<'_>
+pub fn radroots_domain::causal::InitialRequestClaim<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_domain::causal::MAX_CAUSAL_RECORDS: usize
 pub const radroots_domain::causal::MAX_CAUSAL_SOURCES: usize
 pub fn radroots_domain::causal::analyze(radroots_domain::causal::CausalScope, &[radroots_domain::causal::CausalRecord<'_>], &[radroots_domain::SourceId], &[radroots_domain::SourceId]) -> core::result::Result<radroots_domain::causal::CausalAnalysis, radroots_domain::causal::CausalError>
+pub fn radroots_domain::causal::prepare_initial_request<'a>(radroots_domain::causal::CausalScope, radroots_domain::RecordId, &[radroots_domain::causal::CausalRecord<'a>], &[radroots_domain::SourceId], &[radroots_domain::SourceId], radroots_domain::UnixSeconds) -> core::result::Result<radroots_domain::causal::InitialRequestClaim<'a>, radroots_domain::causal::RequestClaimError>
 pub mod radroots_domain::listing
 pub enum radroots_domain::listing::FulfillmentMode
 pub radroots_domain::listing::FulfillmentMode::Delivery
@@ -160,6 +187,7 @@ pub const fn radroots_domain::listing::ListingTerms::fulfillment(&self) -> &radr
 pub fn radroots_domain::listing::ListingTerms::media(&self) -> &[radroots_domain::listing::Media]
 pub fn radroots_domain::listing::ListingTerms::new(radroots_domain::listing::ListingState, radroots_domain::listing::Product, radroots_domain::ListingOptionId, alloc::vec::Vec<radroots_domain::listing::ListingOption>, radroots_domain::listing::PublicFulfillment, core::option::Option<radroots_domain::AuthorityRef>, alloc::vec::Vec<radroots_domain::listing::Media>) -> core::result::Result<Self, radroots_domain::listing::ListingError>
 pub fn radroots_domain::listing::ListingTerms::options(&self) -> &[radroots_domain::listing::ListingOption]
+pub const fn radroots_domain::listing::ListingTerms::product(&self) -> &radroots_domain::listing::Product
 pub const fn radroots_domain::listing::ListingTerms::state(&self) -> radroots_domain::listing::ListingState
 impl core::fmt::Debug for radroots_domain::listing::ListingTerms
 pub fn radroots_domain::listing::ListingTerms::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -204,6 +232,14 @@ pub fn radroots_domain::listing::SaleUnit::package_unspecified(&str) -> core::re
 impl core::fmt::Debug for radroots_domain::listing::SaleUnit
 pub fn radroots_domain::listing::SaleUnit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_domain::stock
+#[non_exhaustive] pub enum radroots_domain::stock::AllocationPlanError
+pub radroots_domain::stock::AllocationPlanError::Capacity
+pub radroots_domain::stock::AllocationPlanError::InvalidInput
+pub radroots_domain::stock::AllocationPlanError::StaleState
+pub radroots_domain::stock::AllocationPlanError::Unsupported
+impl core::error::Error for radroots_domain::stock::AllocationPlanError
+impl core::fmt::Display for radroots_domain::stock::AllocationPlanError
+pub fn radroots_domain::stock::AllocationPlanError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_domain::stock::AvailableStockCorrection
 pub radroots_domain::stock::AvailableStockCorrection::Add
 pub radroots_domain::stock::AvailableStockCorrection::Remove
@@ -235,6 +271,15 @@ pub fn radroots_domain::stock::MappingError::from(radroots_domain::stock::StockE
 impl core::error::Error for radroots_domain::stock::StockError
 impl core::fmt::Display for radroots_domain::stock::StockError
 pub fn radroots_domain::stock::StockError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::stock::AllocationClaim
+impl radroots_domain::stock::AllocationClaim
+pub const fn radroots_domain::stock::AllocationClaim::expected_pool_version(self) -> radroots_domain::Sequence
+pub const fn radroots_domain::stock::AllocationClaim::line_id(self) -> radroots_domain::AgreementLineId
+pub fn radroots_domain::stock::AllocationClaim::new(radroots_domain::AgreementLineId, radroots_domain::PoolId, radroots_domain::Quantity, radroots_domain::Sequence) -> core::result::Result<Self, radroots_domain::stock::AllocationPlanError>
+pub const fn radroots_domain::stock::AllocationClaim::pool_id(self) -> radroots_domain::PoolId
+pub const fn radroots_domain::stock::AllocationClaim::quantity(self) -> radroots_domain::Quantity
+impl core::fmt::Debug for radroots_domain::stock::AllocationClaim
+pub fn radroots_domain::stock::AllocationClaim::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::stock::OptionMappingKey
 impl radroots_domain::stock::OptionMappingKey
 pub const fn radroots_domain::stock::OptionMappingKey::listing(self) -> radroots_domain::listing::ListingCoordinate
@@ -287,6 +332,16 @@ impl serde_core::ser::Serialize for radroots_domain::stock::PoolBalances
 pub fn radroots_domain::stock::PoolBalances::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PoolBalances
 pub fn radroots_domain::stock::PoolBalances::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub struct radroots_domain::stock::PoolHoldProposal
+impl radroots_domain::stock::PoolHoldProposal
+pub const fn radroots_domain::stock::PoolHoldProposal::after(self) -> radroots_domain::stock::PoolSnapshot
+pub const fn radroots_domain::stock::PoolHoldProposal::before(self) -> radroots_domain::stock::PoolSnapshot
+pub fn radroots_domain::stock::PoolHoldProposal::new(radroots_domain::stock::PoolSnapshot, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::AllocationPlanError>
+pub const fn radroots_domain::stock::PoolHoldProposal::quantity(self) -> radroots_domain::stock::StockTicks
+impl core::fmt::Debug for radroots_domain::stock::PoolHoldProposal
+pub fn radroots_domain::stock::PoolHoldProposal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PoolHoldProposal
+pub fn radroots_domain::stock::PoolHoldProposal::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::PoolSnapshot
 impl radroots_domain::stock::PoolSnapshot
 pub const fn radroots_domain::stock::PoolSnapshot::balances(self) -> radroots_domain::stock::PoolBalances
@@ -317,6 +372,16 @@ pub fn radroots_domain::stock::PoolView::new(&str, radroots_domain::stock::PoolS
 pub const fn radroots_domain::stock::PoolView::snapshot(&self) -> radroots_domain::stock::PoolSnapshot
 impl core::fmt::Debug for radroots_domain::stock::PoolView
 pub fn radroots_domain::stock::PoolView::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::stock::StockAllocation
+impl radroots_domain::stock::StockAllocation
+pub const fn radroots_domain::stock::StockAllocation::line_id(self) -> radroots_domain::AgreementLineId
+pub fn radroots_domain::stock::StockAllocation::new(radroots_domain::AgreementLineId, radroots_domain::PoolId, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::AllocationPlanError>
+pub const fn radroots_domain::stock::StockAllocation::pool_id(self) -> radroots_domain::PoolId
+pub const fn radroots_domain::stock::StockAllocation::ticks(self) -> radroots_domain::stock::StockTicks
+impl core::fmt::Debug for radroots_domain::stock::StockAllocation
+pub fn radroots_domain::stock::StockAllocation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::StockAllocation
+pub fn radroots_domain::stock::StockAllocation::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::StockTicks(_)
 impl radroots_domain::stock::StockTicks
 pub const radroots_domain::stock::StockTicks::MAX: Self
@@ -336,6 +401,7 @@ impl serde_core::ser::Serialize for radroots_domain::stock::StockTicks
 pub fn radroots_domain::stock::StockTicks::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::StockTicks
 pub fn radroots_domain::stock::StockTicks::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+pub fn radroots_domain::stock::plan_allocations(&radroots_domain::Terms, &[radroots_domain::stock::OptionPoolMapping], &[radroots_domain::stock::PoolSnapshot], core::option::Option<&[radroots_domain::stock::AllocationClaim]>) -> core::result::Result<(alloc::vec::Vec<radroots_domain::stock::StockAllocation>, alloc::vec::Vec<radroots_domain::stock::PoolHoldProposal>), radroots_domain::stock::AllocationPlanError>
 #[non_exhaustive] pub enum radroots_domain::ActorRole
 pub radroots_domain::ActorRole::Buyer
 pub radroots_domain::ActorRole::Coordinator

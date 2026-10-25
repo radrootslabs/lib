@@ -8,12 +8,15 @@ use radroots_storage::{
 };
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
-mod checkpoint;
-mod history;
+pub(in crate::workspace::stock) mod checkpoint;
+pub(in crate::workspace::stock) mod history;
+pub(in crate::workspace::stock) mod request;
 pub use history::StockHistorySnapshot;
+pub use request::StockRequestSnapshot;
 mod record;
 mod transaction;
 pub(in crate::workspace) use transaction::history as query_history;
+pub(in crate::workspace) use transaction::inspect_request;
 pub(in crate::workspace) use transaction::{query, retain};
 
 /// Authenticated carrier/profile disposition, without causal actionability.
@@ -250,6 +253,22 @@ impl std::fmt::Debug for StockSourceSnapshot {
     }
 }
 impl NativeWorkspace {
+    /// Inspects original initial request, quote, source snapshots and deadlines
+    /// under current administrative read access. This acquires no execution
+    /// permission, pending order fence, signature or physical stock hold.
+    pub async fn stock_order_request(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: StockSourceCheckpointRef,
+        listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        request: RecordId,
+        proof: &AttachmentProof,
+    ) -> Result<StockRequestSnapshot, OperationError> {
+        let proof = proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
+        self.worker
+            .stock_order_request(binding, minimum, listing_minimum, request, proof)
+            .await
+    }
     /// Reads complete retained local causal coverage for one bilateral scope.
     /// Current administrator access is required. This neither authorizes a new
     /// request nor reports an installed agreement, global history or stock hold.

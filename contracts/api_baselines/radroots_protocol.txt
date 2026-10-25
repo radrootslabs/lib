@@ -392,6 +392,14 @@ pub fn radroots_protocol::commerce::RecordWireError::from(radroots_protocol::ter
 impl core::error::Error for radroots_protocol::commerce::RecordWireError
 impl core::fmt::Display for radroots_protocol::commerce::RecordWireError
 pub fn radroots_protocol::commerce::RecordWireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::commerce::CapturedCausalCoverage
+impl radroots_protocol::commerce::CapturedCausalCoverage
+pub const fn radroots_protocol::commerce::CapturedCausalCoverage::analysis(&self) -> &radroots_domain::commerce::causal::CausalAnalysis
+pub fn radroots_protocol::commerce::CapturedCausalCoverage::capture(radroots_domain::commerce::causal::CausalScope, &[radroots_domain::commerce::causal::CausalRecord<'_>], &[radroots_domain::identifier::SourceId], &[radroots_domain::identifier::SourceId]) -> core::result::Result<Self, radroots_protocol::commerce::RecordWireError>
+pub const fn radroots_protocol::commerce::CapturedCausalCoverage::checkpoint(&self) -> core::option::Option<&radroots_domain::context::CheckpointRef>
+pub fn radroots_protocol::commerce::CapturedCausalCoverage::into_parts(self) -> (radroots_domain::commerce::causal::CausalAnalysis, core::option::Option<radroots_domain::context::CheckpointRef>)
+impl core::fmt::Debug for radroots_protocol::commerce::CapturedCausalCoverage
+pub fn radroots_protocol::commerce::CapturedCausalCoverage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::commerce::DecodedRecord
 impl radroots_protocol::commerce::DecodedRecord
 pub fn radroots_protocol::commerce::DecodedRecord::check_rumor_fields(&self, radroots_identity::key::PublicKey, u64, u16) -> core::result::Result<(), radroots_protocol::commerce::RecordWireError>

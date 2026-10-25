@@ -10,7 +10,9 @@ use radroots_domain::{CommerceContent, PublicKey, RecordId};
 use sha2::{Digest as _, Sha256};
 use zeroize::Zeroizing;
 
+mod coverage;
 mod decode;
+pub use coverage::CapturedCausalCoverage;
 mod payload;
 pub use decode::{DecodedRecord, decode};
 mod rumor;

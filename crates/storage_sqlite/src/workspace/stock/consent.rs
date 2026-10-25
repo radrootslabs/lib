@@ -266,9 +266,10 @@ pub(super) struct Retained {
     pub subject: GrantId,
     pub expires: UnixSeconds,
     pub authorization: StockAuthorizationRef,
+    pub subject_digest: [u8; 32],
 }
 impl Retained {
-    fn identity(&self) -> inventory::checkpoint::EntryIdentity {
+    pub(super) fn identity(&self) -> inventory::checkpoint::EntryIdentity {
         inventory::checkpoint::EntryIdentity {
             operation: self.frame.header.operation,
             revision: self.frame.header.revision,
@@ -383,6 +384,7 @@ pub(super) async fn read(
     let subject = body.subject;
     let expires = body.expires;
     let authorization = body.authorization;
+    let subject_digest = body.subject_digest;
     Ok(Some(Retained {
         frame,
         command,
@@ -391,10 +393,11 @@ pub(super) async fn read(
         subject,
         expires,
         authorization,
+        subject_digest,
     }))
 }
 
-async fn natural(
+pub(super) async fn natural(
     connection: &mut SqliteConnection,
     participant: radroots_domain::PublicKey,
     operation: OperationId,
@@ -419,7 +422,7 @@ pub(in crate::workspace) async fn issue(
     proof: AttachmentProof,
 ) -> Result<StockConsentOutcome, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7 | 8) {
+    if !matches!(access.authority.catalog, 7..=9) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()
@@ -680,7 +683,7 @@ pub(in crate::workspace) async fn query(
     proof: AttachmentProof,
 ) -> Result<Option<StockConsentReceipt>, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7 | 8) {
+    if !matches!(access.authority.catalog, 7..=9) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator() && access.current.input().grant_id() != subject {

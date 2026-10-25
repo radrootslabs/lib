@@ -149,6 +149,7 @@ struct NativeSellerStockAuthority {
     operation_part_max_bytes: u32,
     operation_part_max_count: u16,
     operation_identity_requires_protected_ancestry: bool,
+    acceptance_preparation: AcceptancePreparation,
     business_consent_payload_version: u16,
     business_consent_action: String,
     business_consent_modes: Vec<String>,
@@ -183,6 +184,26 @@ struct NativeSellerStockAuthority {
     automatic_outbox_migration: bool,
     historical_obligations_recovered: bool,
     business_effects_qualified: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AcceptancePreparation {
+    planner_owner: String,
+    payload_version: u32,
+    order_payload_schema: String,
+    movement_payload_schema: String,
+    worker_charge_bytes: u32,
+    max_allocations: u32,
+    max_pool_observations: u32,
+    max_first_issue_window_seconds: u32,
+    original_replay_before_fresh_planning: bool,
+    complete_allocation_required: bool,
+    atomic_holds_and_order_fence_required: bool,
+    current_issued_consent_required: bool,
+    final_source_counts_and_witnesses_required: bool,
+    signer_invoked: bool,
+    agreement_installed: bool,
 }
 
 #[derive(Deserialize)]
@@ -360,10 +381,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 8
+            && stock.schema_version == 9
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v8"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v9"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -389,6 +410,29 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.operation_part_max_bytes == 16384
             && stock.operation_part_max_count == 16
             && stock.operation_identity_requires_protected_ancestry
+            && stock.acceptance_preparation.planner_owner == "radroots_domain"
+            && stock.acceptance_preparation.payload_version == 1
+            && stock.acceptance_preparation.order_payload_schema
+                == "radroots.seller_stock.order.v1"
+            && stock.acceptance_preparation.movement_payload_schema
+                == "radroots.seller_stock.acceptance_movement.v1"
+            && stock.acceptance_preparation.worker_charge_bytes == 524288
+            && stock.acceptance_preparation.max_allocations == 64
+            && stock.acceptance_preparation.max_pool_observations == 96
+            && stock.acceptance_preparation.max_first_issue_window_seconds == 120
+            && stock
+                .acceptance_preparation
+                .original_replay_before_fresh_planning
+            && stock.acceptance_preparation.complete_allocation_required
+            && stock
+                .acceptance_preparation
+                .atomic_holds_and_order_fence_required
+            && stock.acceptance_preparation.current_issued_consent_required
+            && stock
+                .acceptance_preparation
+                .final_source_counts_and_witnesses_required
+            && !stock.acceptance_preparation.signer_invoked
+            && !stock.acceptance_preparation.agreement_installed
             && stock.business_consent_payload_version == 1
             && stock.business_consent_action == "orders.accept"
             && stock.business_consent_modes == ["execute_and_recover", "recover_only"]
@@ -1020,6 +1064,36 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn acceptance_requires_complete_atomic_preparation_without_signing_or_installation() {
+        for (field, bad) in [
+            ("payload_version", json!(2)),
+            ("planner_owner", json!("radroots_storage_sqlite")),
+            ("order_payload_schema", json!("unsupported")),
+            ("movement_payload_schema", json!("unsupported")),
+            ("worker_charge_bytes", json!(524289)),
+            ("max_allocations", json!(65)),
+            ("max_pool_observations", json!(97)),
+            ("max_first_issue_window_seconds", json!(121)),
+            ("original_replay_before_fresh_planning", json!(false)),
+            ("complete_allocation_required", json!(false)),
+            ("atomic_holds_and_order_fence_required", json!(false)),
+            ("current_issued_consent_required", json!(false)),
+            ("final_source_counts_and_witnesses_required", json!(false)),
+            ("signer_invoked", json!(true)),
+            ("agreement_installed", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/acceptance_preparation/{field}"),
                     bad
                 ))
                 .is_err(),

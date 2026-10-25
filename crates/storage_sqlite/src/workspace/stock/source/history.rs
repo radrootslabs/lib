@@ -19,8 +19,14 @@ pub struct StockHistorySnapshot {
     pub(super) listings: StockListingCheckpointRef,
     pub(super) observed_at: UnixSeconds,
     pub(super) records: usize,
+    pub(super) checkpoint: Option<radroots_domain::CheckpointRef>,
 }
 impl StockHistorySnapshot {
+    /// Borrows complete local causal coverage data. This is not an installed
+    /// order, pending-decision fence or permission to accept the request.
+    pub fn checkpoint(&self) -> Option<&radroots_domain::CheckpointRef> {
+        self.checkpoint.as_ref()
+    }
     /// Returns the exact selected participant/thread/order scope.
     pub const fn scope(&self) -> CausalScope {
         self.scope
@@ -52,9 +58,12 @@ impl std::fmt::Debug for StockHistorySnapshot {
         f.write_str("StockHistorySnapshot(<private coverage>)")
     }
 }
-pub(super) struct Prepared {
+pub(in crate::workspace::stock) struct Prepared {
     pub records: BTreeMap<RecordId, DecodedRecord>,
     pub analysis: CausalAnalysis,
+    pub checkpoint: Option<radroots_domain::CheckpointRef>,
+    pub external: Vec<SourceId>,
+    pub uninterpreted: Vec<SourceId>,
     ancestry: checkpoint::Proof,
     public: super::super::public_source::history::Witness,
     revision: u64,
@@ -181,7 +190,7 @@ async fn original_rumor(
     }
     Ok(rumor)
 }
-pub(super) async fn prepare(
+pub(in crate::workspace::stock) async fn prepare(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,
@@ -286,20 +295,30 @@ pub(super) async fn prepare(
         .iter()
         .map(|(id, record)| CausalRecord::new(*id, record.content()))
         .collect();
-    let analysis = causal::analyze(
+    let external: Vec<_> = external.into_iter().collect();
+    let uninterpreted: Vec<_> = uninterpreted.into_iter().collect();
+    let coverage = radroots_protocol::commerce::CapturedCausalCoverage::capture(
         scope,
         &nodes,
-        &external.into_iter().collect::<Vec<_>>(),
-        &uninterpreted.into_iter().collect::<Vec<_>>(),
+        &external,
+        &uninterpreted,
     )
     .map_err(|error| match error {
-        causal::CausalError::LimitExceeded => OperationError::Workspace(WorkspaceError::Capacity),
-        causal::CausalError::InvalidScope => OperationError::InvalidEvidence,
+        radroots_protocol::commerce::RecordWireError::LimitExceeded => {
+            OperationError::Workspace(WorkspaceError::Capacity)
+        }
+        radroots_protocol::commerce::RecordWireError::InvalidInput => {
+            OperationError::InvalidEvidence
+        }
         _ => OperationError::RecoveryRequired,
     })?;
+    let (analysis, checkpoint) = coverage.into_parts();
     Ok(Prepared {
         records,
         analysis,
+        checkpoint,
+        external,
+        uninterpreted,
         ancestry,
         public,
         revision,
@@ -308,7 +327,7 @@ pub(super) async fn prepare(
     })
 }
 impl Prepared {
-    pub(super) async fn confirm(
+    pub(in crate::workspace::stock) async fn confirm(
         &self,
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {

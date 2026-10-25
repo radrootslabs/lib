@@ -590,6 +590,10 @@ impl ListingTerms {
     pub const fn state(&self) -> ListingState {
         self.state
     }
+    /// Borrows the exact public product snapshot without any live source proof.
+    pub const fn product(&self) -> &Product {
+        &self.product
+    }
     /// Borrows the bounded, unique public choices.
     pub fn options(&self) -> &[ListingOption] {
         &self.options

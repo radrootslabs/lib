@@ -8,6 +8,7 @@ use radroots_domain::{
 use radroots_event::envelope::event_head::EventHeadCoordinate;
 use radroots_nostr::public_ingress::ObservedHead;
 use zeroize::Zeroizing;
+pub(in crate::workspace::stock) mod admission;
 mod checkpoint;
 pub(in crate::workspace::stock) mod history;
 mod record;

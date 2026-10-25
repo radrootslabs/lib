@@ -13,6 +13,9 @@ pub use consent::{
     StockConsentCapture, StockConsentMode, StockConsentOutcome, StockConsentReceipt,
 };
 pub(in crate::workspace) mod grants;
+pub use inventory::acceptance::{
+    StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
+};
 mod ledger;
 pub(in crate::workspace) mod public_source;
 pub use public_source::{
@@ -23,8 +26,8 @@ use grants::StockRecord;
 pub use grants::{StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt};
 use serde::{Deserialize, Serialize};
 pub use source::{
-    StockHistorySnapshot, StockSourceCapture, StockSourceOutcome, StockSourceProfile,
-    StockSourceReceipt, StockSourceSnapshot,
+    StockHistorySnapshot, StockRequestSnapshot, StockSourceCapture, StockSourceOutcome,
+    StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
 };
 use sqlx::{Connection, SqliteConnection};
 use std::{
@@ -418,17 +421,17 @@ struct AuthorityV8 {
 }
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
-        if self.catalog != 8 && self.public_sources.is_some() {
+        if !matches!(self.catalog, 8 | 9) && self.public_sources.is_some() {
             return Err(WorkspaceError::RecoveryRequired);
         }
-        if self.catalog == 8 {
+        if matches!(self.catalog, 8 | 9) {
             let public_sources = self
                 .public_sources
                 .ok_or(WorkspaceError::RecoveryRequired)?;
             public_sources.validate()?;
             let bytes = zeroize::Zeroizing::new(
                 serde_json::to_vec(&AuthorityV8 {
-                    version: 8,
+                    version: self.catalog as u8,
                     namespace: SellerAuthoritySelection::from_attachment(&self.input),
                     administrator: self.input.grant_id(),
                     transaction: self.transaction,
@@ -673,10 +676,10 @@ impl Authority {
                     public_sources: None,
                 }
             }
-            8 => {
+            8 | 9 => {
                 let value: AuthorityV8 = closed_record(bytes)?;
                 value.public_sources.validate()?;
-                if value.version != 8
+                if i64::from(value.version) != catalog
                     || value.authorization.generation() != value.revocation
                     || (value.inventory.revision.get() == 0) != value.inventory.head.is_none()
                     || value.inventory.orders.get() > value.inventory.revision.get()
@@ -803,7 +806,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=8")
+            sqlx::query("PRAGMA user_version=9")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;

@@ -3,7 +3,11 @@
 
 use crate::{PoolId, Quantity, Sequence, listing::MeasurementUnit};
 use core::{fmt, str::FromStr};
+mod allocation;
 mod mapping;
+pub use allocation::{
+    AllocationClaim, AllocationPlanError, PoolHoldProposal, StockAllocation, plan_allocations,
+};
 pub use mapping::{MappingError, OptionMappingKey, OptionPoolMapping};
 
 /// A bounded, input-free stock value failure.

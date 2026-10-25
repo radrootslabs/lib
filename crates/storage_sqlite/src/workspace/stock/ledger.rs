@@ -485,6 +485,12 @@ pub(super) async fn history(
                 movements: vec![],
             }))
         }
+        Some(2) if authority.catalog == 9 => Ok(Some(
+            super::inventory::acceptance::codec::read(connection, input, crypto, operation)
+                .await?
+                .ok_or(OperationError::RecoveryRequired)?
+                .into_history(),
+        )),
         Some(2) => Err(OperationError::UnsupportedOperation),
         Some(_) => Err(OperationError::RecoveryRequired),
     }

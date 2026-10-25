@@ -1,6 +1,6 @@
 use super::*;
 use sqlx::Row;
-pub(super) enum Target {
+pub(in crate::workspace::stock) enum Target {
     Minimum(StockSourceCheckpointRef),
     Envelope(
         EnvelopeEventId,
@@ -8,7 +8,7 @@ pub(super) enum Target {
     ),
     Record(RecordId, Option<[u8; 32]>),
 }
-pub(super) struct Proof {
+pub(in crate::workspace::stock) struct Proof {
     lower: u64,
     upper: u64,
     digest: [u8; 32],
@@ -83,7 +83,7 @@ impl Proof {
         Ok(())
     }
 }
-pub(super) async fn authenticate(
+pub(in crate::workspace::stock) async fn authenticate(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,

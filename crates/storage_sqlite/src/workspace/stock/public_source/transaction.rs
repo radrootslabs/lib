@@ -31,7 +31,7 @@ async fn access(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, binding.input(), turn.crypto).await?;
-    if authority.catalog != 8 || authority.public_sources.is_none() {
+    if !matches!(authority.catalog, 8 | 9) || authority.public_sources.is_none() {
         return Err(OperationError::UnsupportedOperation);
     }
     let current = record.authenticate(binding.input(), proof, turn.clock.now()?)?;
@@ -282,7 +282,7 @@ pub(in crate::workspace) async fn retain(
     });
     let root = turn
         .crypto
-        .seal_stock_root(turn.selected, 8, &next.encode()?)
+        .seal_stock_root(turn.selected, next.catalog, &next.encode()?)
         .await?;
     turn.namespace.validate()?;
     let mut tx = turn

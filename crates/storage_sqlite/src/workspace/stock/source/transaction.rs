@@ -28,7 +28,7 @@ async fn access(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, binding.input(), turn.crypto).await?;
-    if !(6..=8).contains(&authority.catalog) {
+    if !(6..=9).contains(&authority.catalog) {
         return Err(OperationError::UnsupportedOperation);
     }
     let current = record.authenticate(binding.input(), proof, turn.clock.now()?)?;
@@ -113,7 +113,7 @@ pub(in crate::workspace) async fn history(
     proof: AttachmentProof,
 ) -> Result<StockHistorySnapshot, OperationError> {
     let access = access(turn, &binding, minimum, &proof).await?;
-    if access.authority.catalog != 8 {
+    if !matches!(access.authority.catalog, 8 | 9) {
         return Err(OperationError::UnsupportedOperation);
     }
     let prepared = super::history::prepare(
@@ -154,7 +154,72 @@ pub(in crate::workspace) async fn history(
         .public_sources
         .ok_or(OperationError::RecoveryRequired)?;
     Ok(StockHistorySnapshot {
-        scope,records:prepared.records.len(),analysis:prepared.analysis,observed_at,
+        scope,records:prepared.records.len(),analysis:prepared.analysis,checkpoint:prepared.checkpoint,observed_at,
+        sources:StockSourceCheckpointRef::from_host_metadata(turn.selected.authority(),private.revision,private.head)?.with_optional_authorization(access.authority.authorization),
+        listings:radroots_storage::workspace::seller_stock::StockListingCheckpointRef::from_host_metadata(turn.selected.authority(),public.revision,public.head)?.with_optional_authorization(access.authority.authorization),
+    })
+}
+pub(in crate::workspace) async fn inspect_request(
+    turn: &mut Turn<'_>,
+    binding: WorkspaceBinding,
+    minimum: StockSourceCheckpointRef,
+    listing_minimum: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+    selected: RecordId,
+    proof: AttachmentProof,
+) -> Result<StockRequestSnapshot, OperationError> {
+    let access = access(turn, &binding, minimum, &proof).await?;
+    if !matches!(access.authority.catalog, 8 | 9) {
+        return Err(OperationError::UnsupportedOperation);
+    }
+    let prepared = super::request::prepare(
+        turn.connection,
+        turn.selected,
+        turn.crypto,
+        &access.authority,
+        selected,
+        listing_minimum,
+        access.current.observed_at(),
+    )
+    .await;
+    let mut tx = turn
+        .connection
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(|_| OperationError::StorageFailure)?;
+    let checked: Result<_, OperationError> = async {
+        let witnessed = match &prepared {
+            Ok(value) => value.confirm(&mut tx).await,
+            Err(_) => Ok(()),
+        };
+        // Do not disclose even a detailed source denial under expired/revoked
+        // access. All provider work and row witnesses precede this final check.
+        let current = access
+            .confirm(&mut tx, turn.namespace, turn.clock, &proof)
+            .await?;
+        witnessed?;
+        if let Ok(value) = &prepared {
+            value.validate_at(current.observed_at())?;
+        }
+        Ok(current.observed_at())
+    }
+    .await;
+    if tx.rollback().await.is_err() {
+        *turn.uncertain = true;
+        return Err(OperationError::RecoveryRequired);
+    }
+    let observed_at = checked?;
+    let prepared = prepared?;
+    let private = access
+        .authority
+        .sources
+        .ok_or(OperationError::RecoveryRequired)?;
+    let public = access
+        .authority
+        .public_sources
+        .ok_or(OperationError::RecoveryRequired)?;
+    Ok(StockRequestSnapshot {
+        scope:prepared.scope,request:prepared.request,terms:Box::new(prepared.terms()?.clone()),digest:prepared.digest,
+        expires:prepared.expires,quote:prepared.quote,checkpoint:prepared.history.checkpoint.clone().ok_or(OperationError::RecoveryRequired)?,observed_at,
         sources:StockSourceCheckpointRef::from_host_metadata(turn.selected.authority(),private.revision,private.head)?.with_optional_authorization(access.authority.authorization),
         listings:radroots_storage::workspace::seller_stock::StockListingCheckpointRef::from_host_metadata(turn.selected.authority(),public.revision,public.head)?.with_optional_authorization(access.authority.authorization),
     })

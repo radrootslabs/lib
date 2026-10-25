@@ -1,6 +1,10 @@
 //! Real NIP59/NIP44 source admission and actual native causal coverage. The
 //! independent producer does not call a Radroots record/envelope constructor.
 use super::*;
+#[path = "acceptance_tests.rs"]
+mod acceptance;
+#[path = "request_tests.rs"]
+mod requests;
 use radroots_domain::{
     RecordId, SourceId,
     causal::{CausalReadiness, CausalScope},
@@ -143,6 +147,7 @@ async fn real_original_missing_sources_become_complete_only_after_exact_history_
     let mut r = Rig::new().await;
     retain(&r, "request").await;
     let missing = history(&r).await;
+    assert!(missing.checkpoint().is_none());
     assert_eq!(
         missing.analysis().readiness(),
         CausalReadiness::MissingHistory
@@ -159,6 +164,8 @@ async fn real_original_missing_sources_become_complete_only_after_exact_history_
     r.retain(&r.capture("listing_fixed")).await;
     let before = minima(&r).await;
     let complete = history(&r).await;
+    let coverage = complete.checkpoint().unwrap().clone();
+    assert_eq!(coverage.sequence().get(), 4);
     assert_eq!(complete.analysis().readiness(), CausalReadiness::Complete);
     assert_eq!(complete.analysis().buyer_head(), Some(identity("request")));
     assert_eq!(complete.analysis().quote_head(), Some(identity("quote")));
@@ -170,6 +177,7 @@ async fn real_original_missing_sources_become_complete_only_after_exact_history_
     assert_eq!(minima(&r).await, before);
     retain(&r, "request_rewrapped").await;
     retain(&r, "unrelated").await;
+    assert_eq!(history(&r).await.checkpoint(), Some(&coverage));
     assert_eq!(history(&r).await.analysis(), complete.analysis());
     assert_eq!(history(&r).await.known_records(), 2);
     r.store.close().await.unwrap();
@@ -196,8 +204,13 @@ async fn actual_withdrawal_and_authenticated_author_fork_are_exposed_without_tim
         .await
         .unwrap()
         .inventory_checkpoint();
+    let original_coverage = history(&r).await.checkpoint().unwrap().clone();
     retain(&r, "withdrawal").await;
     let withdrawal = history(&r).await;
+    assert_ne!(
+        withdrawal.checkpoint().unwrap().digest(),
+        original_coverage.digest()
+    );
     assert_eq!(withdrawal.analysis().readiness(), CausalReadiness::Complete);
     assert_eq!(
         withdrawal.analysis().buyer_head(),
@@ -205,6 +218,7 @@ async fn actual_withdrawal_and_authenticated_author_fork_are_exposed_without_tim
     );
     retain(&r, "buyer_fork").await;
     let fork = history(&r).await;
+    assert!(fork.checkpoint().is_none());
     assert_eq!(fork.analysis().readiness(), CausalReadiness::Conflicted);
     assert_eq!(fork.analysis().buyer_head(), Some(identity("request")));
     let mut expected = vec![identity("withdrawal"), identity("buyer_fork")];
@@ -259,6 +273,7 @@ async fn ordinary_chat_is_a_source_but_uninterpretable_authenticated_commerce_bl
         CausalReadiness::Uninterpreted
     );
     assert_eq!(result.analysis().uninterpreted().len(), 1);
+    assert!(result.checkpoint().is_none());
     assert!(result.analysis().missing().is_empty());
     assert_eq!(result.analysis().buyer_head(), Some(identity("request")));
     r.store.close().await.unwrap();

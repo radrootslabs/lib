@@ -10,6 +10,8 @@ use alloc::{
     vec::Vec,
 };
 use core::fmt;
+mod request;
+pub use request::{InitialRequestClaim, RequestClaimError, prepare_initial_request};
 
 /// One exact bilateral order scope, including seller quotes in its null-order
 /// author chain. The scope itself is untrusted data, not evidence coverage.
@@ -73,6 +75,14 @@ pub struct CausalRecord<'a> {
     content: &'a CommerceContent,
 }
 impl<'a> CausalRecord<'a> {
+    /// Returns the asserted identity, without checking its canonical hash.
+    pub const fn record_id(self) -> RecordId {
+        self.id
+    }
+    /// Borrows the original complete content claim without authenticating it.
+    pub const fn content(self) -> &'a CommerceContent {
+        self.content
+    }
     /// Borrows the complete content so duplicate identity comparisons cannot
     /// accidentally ignore a changed payload. No source bytes are copied.
     pub const fn new(id: RecordId, content: &'a CommerceContent) -> Self {

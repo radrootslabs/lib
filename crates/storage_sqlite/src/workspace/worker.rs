@@ -38,6 +38,19 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    PrepareStockAcceptance(
+        Box<stock::StockAcceptanceRequest>,
+        AttachmentProof,
+        Reply<stock::StockAcceptanceOutcome, OperationError>,
+    ),
+    StockOrderRequest(
+        Box<WorkspaceBinding>,
+        radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        radroots_domain::RecordId,
+        AttachmentProof,
+        Reply<stock::StockRequestSnapshot, OperationError>,
+    ),
     StockOrderHistory(
         Box<WorkspaceBinding>,
         radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
@@ -226,6 +239,12 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::PrepareStockAcceptance(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockOrderRequest(_, _, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::StockOrderHistory(_, _, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -467,6 +486,8 @@ impl Handle {
                                         | Job::RetainStockSource(..)
                                         | Job::StockSource(..)
                                         | Job::StockOrderHistory(..)
+                                        | Job::StockOrderRequest(..)
+                                        | Job::PrepareStockAcceptance(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -675,6 +696,56 @@ impl Handle {
                                             *binding,
                                             minimum,
                                             *capture,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::PrepareStockAcceptance(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::inventory::acceptance::admit(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockOrderRequest(
+                                    binding,
+                                    minimum,
+                                    listings,
+                                    selected,
+                                    proof,
+                                    reply,
+                                ) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        stock::source::inspect_request(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *binding,
+                                            minimum,
+                                            listings,
+                                            selected,
                                             proof,
                                         )
                                         .await
@@ -1269,6 +1340,35 @@ impl Handle {
         ))?;
         result.await.unwrap_or(Ok(anchor))
     }
+    pub(super) async fn prepare_stock_acceptance(
+        &self,
+        request: stock::StockAcceptanceRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockAcceptanceOutcome, OperationError> {
+        let unknown = stock::StockAcceptanceOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::PrepareStockAcceptance(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_order_request(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        listings: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        selected: radroots_domain::RecordId,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockRequestSnapshot, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockOrderRequest(
+            Box::new(binding),
+            minimum,
+            listings,
+            selected,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn stock_order_history(
         &self,
         binding: WorkspaceBinding,
@@ -1336,7 +1436,7 @@ impl Handle {
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
             Job::RetainStockListing(..) => 256 * 1024,
-            Job::IssueStockConsent(..) => 512 * 1024,
+            Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,
             Job::RetainStockSource(..) => 256 * 1024,
             Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,

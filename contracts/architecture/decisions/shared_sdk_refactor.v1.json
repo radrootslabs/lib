@@ -75,7 +75,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 8,
+    "schema_version": 9,
     "retained_enrollment_versions": [
       1
     ],
@@ -85,9 +85,10 @@
       4,
       5,
       6,
-      7
+      7,
+      8
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v8",
+    "authority_payload_schema": "radroots.seller_stock.authority.v9",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -112,6 +113,23 @@
     "operation_part_max_bytes": 16384,
     "operation_part_max_count": 16,
     "operation_identity_requires_protected_ancestry": true,
+    "acceptance_preparation": {
+      "payload_version": 1,
+      "planner_owner": "radroots_domain",
+      "order_payload_schema": "radroots.seller_stock.order.v1",
+      "movement_payload_schema": "radroots.seller_stock.acceptance_movement.v1",
+      "worker_charge_bytes": 524288,
+      "max_allocations": 64,
+      "max_pool_observations": 96,
+      "max_first_issue_window_seconds": 120,
+      "original_replay_before_fresh_planning": true,
+      "complete_allocation_required": true,
+      "atomic_holds_and_order_fence_required": true,
+      "current_issued_consent_required": true,
+      "final_source_counts_and_witnesses_required": true,
+      "signer_invoked": false,
+      "agreement_installed": false
+    },
     "business_consent_payload_version": 1,
     "business_consent_action": "orders.accept",
     "business_consent_modes": ["execute_and_recover", "recover_only"],
