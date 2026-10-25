@@ -323,7 +323,7 @@ async fn lost_claim_observer_drains_and_reopens_as_existing_without_a_permit() {
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v11", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
     let mut pending = Box::pin(
         r.store
             .claim_stock_signing_attempt(request, r.enrollment.proof()),
@@ -400,7 +400,7 @@ async fn claim_rechecks_original_plan_projection_grant_root_and_clock_after_prov
         let mut raw = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v11", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
         let mut pending = Box::pin(
             r.store
                 .claim_stock_signing_attempt(request, r.enrollment.proof()),

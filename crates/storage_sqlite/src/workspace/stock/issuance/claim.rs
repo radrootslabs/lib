@@ -256,7 +256,7 @@ pub(in crate::workspace) async fn claim(
         &proof,
     )
     .await?;
-    if auth.access.authority.catalog != 11 {
+    if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
     let plan = auth.plan.as_ref().ok_or(OperationError::StaleState)?;
@@ -415,7 +415,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     )
     .await?;
-    if auth.access.authority.catalog != 11 {
+    if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
     let plan = auth.plan.as_ref().ok_or(OperationError::StaleState)?;

@@ -169,7 +169,7 @@ pub(in crate::workspace) async fn page(
         &proof,
     )
     .await?;
-    if auth.access.authority.catalog != 11 {
+    if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
     let minimum = InventoryCheckpointRef::from_host_metadata(
@@ -262,7 +262,7 @@ pub(in crate::workspace) async fn capture(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, input, turn.crypto).await?;
-    if authority.catalog != 11 {
+    if authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
@@ -456,7 +456,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     )
     .await?;
-    if auth.access.authority.catalog != 11 {
+    if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
     let claim = claim::existing(turn, &auth, request.operation, request.recipient).await?;

@@ -148,12 +148,17 @@ pub(in crate::workspace::stock) async fn load(
     proof: &AttachmentProof,
 ) -> Result<Authorized, OperationError> {
     let access = turn.access(binding, minimum, proof).await?;
-    if !matches!(access.authority.catalog, 10 | 11) {
+    if !matches!(access.authority.catalog, 10..=12) {
         return Err(OperationError::UnsupportedOperation);
     }
-    let original = acceptance::codec::read(turn.connection, turn.selected, turn.crypto, operation)
-        .await?
-        .ok_or(OperationError::StaleState)?;
+    let original = Box::pin(acceptance::codec::read(
+        turn.connection,
+        turn.selected,
+        turn.crypto,
+        operation,
+    ))
+    .await?
+    .ok_or(OperationError::StaleState)?;
     if original.frame.header.digest != digest {
         return Err(OperationError::IdempotencyConflict);
     }

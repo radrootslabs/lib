@@ -1,5 +1,7 @@
 //! Obtained-byte capture executes on the same real native stock owner.
 use super::*;
+#[path = "installation_tests.rs"]
+mod installations;
 #[path = "snapshot_tests.rs"]
 mod snapshots;
 use crate::workspace::{StockEvidenceCapture, StockEvidenceOutcome, StockEvidenceReceipt};
@@ -340,7 +342,7 @@ async fn lost_capture_observer_drains_owned_input_and_reopens_the_exact_original
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v11", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
     let mut pending = Box::pin(
         r.store
             .capture_stock_signing_evidence(&evidence, r.enrollment.proof()),
@@ -428,7 +430,7 @@ async fn capture_rechecks_original_claim_plan_root_and_grant_after_provider_io()
         let mut rawdb = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v11", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v12", 0);
         let mut pending = Box::pin(
             r.store
                 .capture_stock_signing_evidence(&evidence, r.enrollment.proof()),

@@ -38,6 +38,16 @@ const QUEUE_MAX_BYTES: usize = 4 * 1024 * 1024;
 const QUEUE_CAPACITY: usize = 32;
 type Reply<T, E = WorkspaceError> = oneshot::Sender<Result<T, E>>;
 enum Job {
+    InstallStockAgreement(
+        Box<stock::StockInstallationRequest>,
+        AttachmentProof,
+        Reply<stock::StockInstallationOutcome, OperationError>,
+    ),
+    StockAgreementInstallation(
+        Box<stock::StockInstallationRequest>,
+        AttachmentProof,
+        Reply<Option<stock::StockInstallationReceipt>, OperationError>,
+    ),
     StockSnapshot(
         Box<stock::StockSnapshotRequest>,
         AttachmentProof,
@@ -284,6 +294,12 @@ enum Job {
 impl Job {
     fn reject_recovery(self) {
         match self {
+            Self::InstallStockAgreement(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockAgreementInstallation(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::StockSnapshot(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -565,6 +581,8 @@ impl Handle {
                                         | Job::StockEvidence(..)
                                         | Job::StockEvidencePage(..)
                                         | Job::StockSnapshot(..)
+                                        | Job::InstallStockAgreement(..)
+                                        | Job::StockAgreementInstallation(..)
                                         | Job::Revoke(..)
                                         | Job::StockAuthority(..)
                                 )
@@ -775,6 +793,46 @@ impl Handle {
                                             *capture,
                                             proof,
                                         )
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::InstallStockAgreement(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::inventory::installation::install(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockAgreementInstallation(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::inventory::installation::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
                                         .await
                                     } else {
                                         Err(OperationError::UnsupportedOperation)
@@ -1589,6 +1647,29 @@ impl Handle {
         ))?;
         result.await.unwrap_or(Ok(anchor))
     }
+    pub(super) async fn install_stock_agreement(
+        &self,
+        request: stock::StockInstallationRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockInstallationOutcome, OperationError> {
+        let unknown = stock::StockInstallationOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::InstallStockAgreement(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_agreement_installation(
+        &self,
+        request: stock::StockInstallationRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockInstallationReceipt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockAgreementInstallation(
+            Box::new(request),
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn stock_operation_snapshot(
         &self,
         request: stock::StockSnapshotRequest,
@@ -1777,9 +1858,11 @@ impl Handle {
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
             Job::RetainStockListing(..) | Job::CaptureStockEvidence(..) => 256 * 1024,
-            Job::StockEvidence(..) | Job::StockEvidencePage(..) | Job::StockSnapshot(..) => {
-                1024 * 1024
-            }
+            Job::StockEvidence(..)
+            | Job::StockEvidencePage(..)
+            | Job::StockSnapshot(..)
+            | Job::InstallStockAgreement(..)
+            | Job::StockAgreementInstallation(..) => 1024 * 1024,
             Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,
             Job::BindStockSigningPlan(..)
             | Job::StockSigningPlan(..)

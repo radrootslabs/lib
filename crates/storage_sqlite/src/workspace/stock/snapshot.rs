@@ -108,8 +108,12 @@ pub struct StockOperationSnapshot {
     plan: Option<StockBoundSigningPlan>,
     checkpoint: InventoryCheckpointRef,
     recipients: [StockRecipientSnapshot; 2],
+    installation: Option<super::StockInstallationReceipt>,
 }
 impl StockOperationSnapshot {
+    pub fn installation(&self) -> Option<&super::StockInstallationReceipt> {
+        self.installation.as_ref()
+    }
     pub const fn preparation(&self) -> &StockAcceptanceReceipt {
         &self.preparation
     }
@@ -134,16 +138,16 @@ pub(in crate::workspace) async fn read(
     request: StockSnapshotRequest,
     proof: AttachmentProof,
 ) -> Result<StockOperationSnapshot, OperationError> {
-    let auth = signing_plan::load(
+    let auth = Box::pin(signing_plan::load(
         turn,
         &request.binding,
         request.minimum,
         request.operation,
         request.digest,
         &proof,
-    )
+    ))
     .await?;
-    if auth.access.authority.catalog != 11 {
+    if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
     let mut reports = Vec::with_capacity(2);
@@ -151,7 +155,7 @@ pub(in crate::workspace) async fn read(
     let mut summaries = Vec::with_capacity(2);
     for recipient in auth.original.receipt.rumor().recipients() {
         let (retained, claim_proof) =
-            claim::existing(turn, &auth, request.operation, *recipient).await?;
+            Box::pin(claim::existing(turn, &auth, request.operation, *recipient)).await?;
         let reference = retained.as_ref().map(|value| StockClaimReference {
             id: value.report.attempt_id(),
             transaction: value.report.transaction_id(),
@@ -167,14 +171,14 @@ pub(in crate::workspace) async fn read(
         .await?;
         let first = if let Some(selected) = summary.first {
             Some(
-                selection::open(
+                Box::pin(selection::open(
                     turn.connection,
                     turn.selected,
                     turn.crypto,
                     request.operation,
                     *recipient,
                     selected,
-                )
+                ))
                 .await?
                 .value
                 .receipt(),
@@ -207,6 +211,18 @@ pub(in crate::workspace) async fn read(
         claims.push(claim_proof);
         summaries.push(summary);
     }
+    let installation = if auth.access.authority.catalog == 12 {
+        Some(
+            Box::pin(super::inventory::installation::existing(
+                turn,
+                &auth,
+                request.operation,
+            ))
+            .await?,
+        )
+    } else {
+        None
+    };
     let before = auth
         .access
         .authority
@@ -217,14 +233,14 @@ pub(in crate::workspace) async fn read(
         Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
         None,
     )?;
-    let witness = checkpoint::authenticate_minimum(
+    let witness = Box::pin(checkpoint::authenticate_minimum(
         turn.connection,
         turn.selected,
         turn.crypto,
         &auth.access.current,
         &auth.access.authority,
         minimum,
-    )
+    ))
     .await?;
     let mut tx = turn
         .connection
@@ -233,6 +249,12 @@ pub(in crate::workspace) async fn read(
         .map_err(|_| OperationError::StorageFailure)?;
     let checked: Result<(), OperationError> = async {
         witness.confirm(&mut tx).await?;
+        if let Some((retained, identity)) = &installation {
+            identity.confirm(&mut tx).await?;
+            if let Some(retained) = retained {
+                retained.confirm(&mut tx).await?;
+            }
+        }
         for (index, report) in reports.iter().enumerate() {
             claims[index].confirm(&mut tx).await?;
             summaries[index]
@@ -244,8 +266,7 @@ pub(in crate::workspace) async fn read(
                 )
                 .await?;
         }
-        auth.confirm(&mut tx, turn.namespace, turn.clock, &proof, false)
-            .await?;
+        Box::pin(auth.confirm(&mut tx, turn.namespace, turn.clock, &proof, false)).await?;
         Ok(())
     }
     .await;
@@ -266,6 +287,7 @@ pub(in crate::workspace) async fn read(
             .ok_or(OperationError::RecoveryRequired)?,
     );
     Ok(StockOperationSnapshot {
+        installation: installation.and_then(|(retained, _)| retained.map(|value| value.receipt)),
         preparation: auth.original.receipt,
         plan: auth.plan.map(|value| value.bound),
         checkpoint,

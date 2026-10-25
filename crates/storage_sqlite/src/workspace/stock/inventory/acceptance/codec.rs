@@ -17,6 +17,17 @@ pub(in crate::workspace::stock) struct Retained {
     order_cipher: Vec<u8>,
 }
 impl Retained {
+    pub(in crate::workspace::stock) fn held_allocations(
+        &self,
+    ) -> Result<Vec<(PoolId, radroots_domain::stock::StockTicks)>, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        Ok(body
+            .effects
+            .iter()
+            .map(|effect| (effect.before().id(), effect.quantity()))
+            .collect())
+    }
     pub fn command(&self) -> Result<CapturedOrderAcceptance, OperationError> {
         let body: Body = super::super::super::closed_record(&self.frame.body)
             .map_err(|_| OperationError::RecoveryRequired)?;
@@ -73,6 +84,7 @@ impl Retained {
     }
     pub fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            installation: None,
             signing: None,
             header: self.frame.header,
             protected: self.frame.protected,

@@ -8,6 +8,55 @@ fn ticks(value: u64) -> StockTicks {
 }
 
 #[test]
+fn installation_moves_only_exact_preparatory_backing_and_preserves_all_other_categories() {
+    let physical = PhysicalBalances {
+        available: ticks(30),
+        preparatory_hold: ticks(10),
+        committed_hold: ticks(20),
+        physical_quarantine: ticks(5),
+        consumed: ticks(15),
+        waste: ticks(10),
+        removed: ticks(10),
+    };
+    let original = PoolBalances::new(ticks(100), physical).unwrap();
+    let installed = original.install_preparatory(ticks(3)).unwrap();
+    assert_eq!(installed.introduced(), ticks(100));
+    assert_eq!(
+        installed.physical(),
+        PhysicalBalances {
+            preparatory_hold: ticks(7),
+            committed_hold: ticks(23),
+            ..physical
+        }
+    );
+    assert_eq!(
+        original.install_preparatory(ticks(11)),
+        Err(StockError::Underflow)
+    );
+    assert_eq!(
+        original.install_preparatory(StockTicks::ZERO),
+        Err(StockError::ZeroMovement)
+    );
+    let maximum = PoolBalances::new(
+        StockTicks::MAX,
+        PhysicalBalances {
+            preparatory_hold: StockTicks::MAX,
+            ..PhysicalBalances::ZERO
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        maximum
+            .install_preparatory(StockTicks::MAX)
+            .unwrap()
+            .physical()
+            .committed_hold,
+        StockTicks::MAX
+    );
+    assert_eq!(original.physical(), physical);
+}
+
+#[test]
 fn proposed_holds_conserve_stock_and_cannot_borrow_other_physical_categories() {
     let physical = PhysicalBalances {
         available: ticks(30),

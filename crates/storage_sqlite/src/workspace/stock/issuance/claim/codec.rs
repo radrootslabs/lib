@@ -142,6 +142,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            installation: None,
             header: self.frame.header,
             protected: self.frame.protected,
             parts_witness: self.frame.parts_witness,

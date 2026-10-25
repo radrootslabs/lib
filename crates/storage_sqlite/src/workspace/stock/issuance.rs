@@ -27,9 +27,17 @@ pub(super) async fn check_counts(connection: &mut SqliteConnection) -> Result<()
         return Ok(());
     }
     let (claims, entries): (i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM stock_signing_claims),(SELECT count(*) FROM stock_operations WHERE family=4)").fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
-    let (evidence, captures): (i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM stock_signing_evidence),(SELECT count(*) FROM stock_operations WHERE family=5)").fetch_one(connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
+    let (evidence, captures): (i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM stock_signing_evidence),(SELECT count(*) FROM stock_operations WHERE family=5)").fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
     if claims != entries || evidence != captures {
         return Err(WorkspaceError::RecoveryRequired);
+    }
+    if catalog >= 12 {
+        let (agreements, installs, work):(i64,i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM stock_agreements),(SELECT count(*) FROM stock_operations WHERE family=6),(SELECT count(*) FROM stock_publication_work)").fetch_one(connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
+        if agreements != installs
+            || work != installs.checked_mul(2).ok_or(WorkspaceError::Capacity)?
+        {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
     }
     Ok(())
 }

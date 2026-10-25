@@ -21,6 +21,7 @@ pub(super) enum Family {
     SigningPlan,
     SigningClaim,
     SigningEvidence,
+    Installation,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -73,6 +74,7 @@ impl Header {
                     | Family::SigningPlan
                     | Family::SigningClaim
                     | Family::SigningEvidence
+                    | Family::Installation
             ) != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
@@ -325,6 +327,7 @@ impl Family {
             Self::SigningPlan => 3,
             Self::SigningClaim => 4,
             Self::SigningEvidence => 5,
+            Self::Installation => 6,
         }
     }
 }
@@ -439,6 +442,7 @@ pub(super) struct HistoryEntry {
     pub mapping: Option<radroots_domain::stock::OptionPoolMapping>,
     pub movements: Vec<MovementWitness>,
     pub signing: Option<super::issuance::Projection>,
+    pub installation: Option<super::inventory::installation::Projection>,
 }
 pub(super) async fn history(
     connection: &mut SqliteConnection,
@@ -458,10 +462,11 @@ pub(super) async fn history(
     match family {
         None => Ok(None),
         Some(0) => {
-            let retained =
-                super::inventory::read_operation(connection, input, crypto, binding, operation)
-                    .await?
-                    .ok_or(OperationError::RecoveryRequired)?;
+            let retained = Box::pin(super::inventory::read_operation(
+                connection, input, crypto, binding, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?;
             let (header, parts_witness) = retained.frame.ok_or(OperationError::RecoveryRequired)?;
             let movements = match (retained.movement, retained.movement_protected) {
                 (Some(id), Some(protected)) => vec![MovementWitness {
@@ -474,6 +479,7 @@ pub(super) async fn history(
                 _ => return Err(OperationError::RecoveryRequired),
             };
             Ok(Some(HistoryEntry {
+                installation: None,
                 signing: None,
                 header,
                 protected: retained.protected,
@@ -484,13 +490,13 @@ pub(super) async fn history(
             }))
         }
         Some(1) => {
-            let retained = super::consent::read(
+            let retained = Box::pin(super::consent::read(
                 connection,
                 input,
                 crypto,
                 authority.input.grant_id(),
                 operation,
-            )
+            ))
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
             let count: i64 = sqlx::query_scalar(
@@ -505,6 +511,7 @@ pub(super) async fn history(
                 return Err(OperationError::RecoveryRequired);
             }
             Ok(Some(HistoryEntry {
+                installation: None,
                 signing: None,
                 header: retained.frame.header,
                 protected: retained.frame.protected,
@@ -514,20 +521,24 @@ pub(super) async fn history(
                 movements: vec![],
             }))
         }
-        Some(2) if matches!(authority.catalog, 9..=11) => Ok(Some(
-            super::inventory::acceptance::codec::read(connection, input, crypto, operation)
-                .await?
-                .ok_or(OperationError::RecoveryRequired)?
-                .into_history(),
+        Some(2) if matches!(authority.catalog, 9..=12) => Ok(Some(
+            Box::pin(super::inventory::acceptance::codec::read(
+                connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
         )),
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10 | 11) => {
-            let retained = super::signing_plan::read_entry(connection, input, crypto, operation)
-                .await?
-                .ok_or(OperationError::RecoveryRequired)?;
+        Some(3) if matches!(authority.catalog, 10..=12) => {
+            let retained = Box::pin(super::signing_plan::read_entry(
+                connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?;
             Ok(Some(retained.into_history()))
         }
-        Some(4) if authority.catalog == 11 => Ok(Some(
+        Some(4) if authority.catalog >= 11 => Ok(Some(
             Box::pin(super::issuance::read_entry(
                 connection, input, crypto, operation,
             ))
@@ -535,8 +546,16 @@ pub(super) async fn history(
             .ok_or(OperationError::RecoveryRequired)?
             .into_history(),
         )),
-        Some(5) if authority.catalog == 11 => Ok(Some(
+        Some(5) if authority.catalog >= 11 => Ok(Some(
             Box::pin(super::issuance::evidence::read_entry(
+                connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
+        )),
+        Some(6) if authority.catalog == 12 => Ok(Some(
+            Box::pin(super::inventory::installation::read_entry(
                 connection, input, crypto, operation,
             ))
             .await?
@@ -601,6 +620,15 @@ impl HistoryEntry {
                 return Err(OperationError::RecoveryRequired);
             }
             (_, Some(_)) => return Err(OperationError::RecoveryRequired),
+            (_, None) => {}
+        }
+        match (header.family, self.installation) {
+            (Family::Installation, Some(projection)) => {
+                hash.update(projection.digest(header.actor.participant(), header.operation))
+            }
+            (Family::Installation, None) | (_, Some(_)) => {
+                return Err(OperationError::RecoveryRequired);
+            }
             (_, None) => {}
         }
         if self.movements.len() > 64

@@ -391,6 +391,9 @@ pub radroots_storage_sqlite::workspace::StockEvidenceOutcome::Unknown(radroots_s
 pub enum radroots_storage_sqlite::workspace::StockGrantOutcome
 pub radroots_storage_sqlite::workspace::StockGrantOutcome::Committed(radroots_storage_sqlite::workspace::StockGrantReceipt)
 pub radroots_storage_sqlite::workspace::StockGrantOutcome::Unknown(radroots_domain::identifier::TransactionId)
+pub enum radroots_storage_sqlite::workspace::StockInstallationOutcome
+pub radroots_storage_sqlite::workspace::StockInstallationOutcome::Installed(alloc::boxed::Box<radroots_storage_sqlite::workspace::StockInstallationReceipt>)
+pub radroots_storage_sqlite::workspace::StockInstallationOutcome::Unknown(radroots_storage::command::CommitAttempt)
 pub enum radroots_storage_sqlite::workspace::StockListingOutcome
 pub radroots_storage_sqlite::workspace::StockListingOutcome::Committed(alloc::boxed::Box<radroots_storage_sqlite::workspace::StockListingReceipt>)
 pub radroots_storage_sqlite::workspace::StockListingOutcome::Unknown
@@ -437,6 +440,9 @@ impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::initialize_seller_stock(&std::path::Path, &radroots_storage_sqlite::workspace::StockEnrollment, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::open_seller_stock(&std::path::Path, radroots_storage::workspace::AttachmentInput, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_authority(&self, radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockAuthorityReceipt, radroots_storage::workspace::WorkspaceError>
+impl radroots_storage_sqlite::workspace::NativeWorkspace
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::install_stock_agreement(&self, radroots_storage_sqlite::workspace::StockInstallationRequest, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockInstallationOutcome, radroots_storage::command::OperationError>
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_agreement_installation(&self, radroots_storage_sqlite::workspace::StockInstallationRequest, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<core::option::Option<radroots_storage_sqlite::workspace::StockInstallationReceipt>, radroots_storage::command::OperationError>
 impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::issue_stock_consent(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, &radroots_storage_sqlite::workspace::StockConsentCapture, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockConsentOutcome, radroots_storage::command::OperationError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_consent(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::GrantId, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<core::option::Option<radroots_storage_sqlite::workspace::StockConsentReceipt>, radroots_storage::command::OperationError>
@@ -613,6 +619,22 @@ pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::scope(&se
 pub const fn radroots_storage_sqlite::workspace::StockHistorySnapshot::source_checkpoint(&self) -> radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockHistorySnapshot
 pub fn radroots_storage_sqlite::workspace::StockHistorySnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_sqlite::workspace::StockInstallationReceipt
+impl radroots_storage_sqlite::workspace::StockInstallationReceipt
+pub const fn radroots_storage_sqlite::workspace::StockInstallationReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage_sqlite::workspace::StockInstallationReceipt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub const fn radroots_storage_sqlite::workspace::StockInstallationReceipt::installed_at(&self) -> radroots_domain::context::UnixSeconds
+pub fn radroots_storage_sqlite::workspace::StockInstallationReceipt::installed_pools(&self) -> &[radroots_domain::stock::PoolSnapshot]
+pub const fn radroots_storage_sqlite::workspace::StockInstallationReceipt::order_id(&self) -> radroots_domain::identifier::OrderId
+pub const fn radroots_storage_sqlite::workspace::StockInstallationReceipt::publication_work(&self) -> &[radroots_storage_sqlite::workspace::StockPublicationWork; 2]
+pub const fn radroots_storage_sqlite::workspace::StockInstallationReceipt::record_id(&self) -> radroots_domain::identifier::RecordId
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockInstallationReceipt
+pub fn radroots_storage_sqlite::workspace::StockInstallationReceipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_sqlite::workspace::StockInstallationRequest
+impl radroots_storage_sqlite::workspace::StockInstallationRequest
+pub const fn radroots_storage_sqlite::workspace::StockInstallationRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> Self
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockInstallationRequest
+pub fn radroots_storage_sqlite::workspace::StockInstallationRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockListingCapture
 impl radroots_storage_sqlite::workspace::StockListingCapture
 pub const fn radroots_storage_sqlite::workspace::StockListingCapture::listing_revision(&self) -> radroots_domain::listing::reference::ListingRevision
@@ -639,11 +661,19 @@ pub fn radroots_storage_sqlite::workspace::StockListingSnapshot::fmt(&self, &mut
 pub struct radroots_storage_sqlite::workspace::StockOperationSnapshot
 impl radroots_storage_sqlite::workspace::StockOperationSnapshot
 pub const fn radroots_storage_sqlite::workspace::StockOperationSnapshot::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub fn radroots_storage_sqlite::workspace::StockOperationSnapshot::installation(&self) -> core::option::Option<&radroots_storage_sqlite::workspace::StockInstallationReceipt>
 pub const fn radroots_storage_sqlite::workspace::StockOperationSnapshot::preparation(&self) -> &radroots_storage_sqlite::workspace::StockAcceptanceReceipt
 pub const fn radroots_storage_sqlite::workspace::StockOperationSnapshot::recipients(&self) -> &[radroots_storage_sqlite::workspace::StockRecipientSnapshot; 2]
 pub const fn radroots_storage_sqlite::workspace::StockOperationSnapshot::signing_plan(&self) -> core::option::Option<&radroots_storage_sqlite::workspace::StockBoundSigningPlan>
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockOperationSnapshot
 pub fn radroots_storage_sqlite::workspace::StockOperationSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_sqlite::workspace::StockPublicationWork
+impl radroots_storage_sqlite::workspace::StockPublicationWork
+pub const fn radroots_storage_sqlite::workspace::StockPublicationWork::evidence_digest(&self) -> core::option::Option<&[u8; 32]>
+pub const fn radroots_storage_sqlite::workspace::StockPublicationWork::recipient(self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage_sqlite::workspace::StockPublicationWork::seal_id(&self) -> &[u8; 32]
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockPublicationWork
+pub fn radroots_storage_sqlite::workspace::StockPublicationWork::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockRecipientSnapshot
 impl radroots_storage_sqlite::workspace::StockRecipientSnapshot
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::claim(&self) -> core::option::Option<radroots_storage_sqlite::workspace::StockClaimReference>

@@ -323,6 +323,7 @@ pub struct radroots_domain::stock::PoolBalances
 impl radroots_domain::stock::PoolBalances
 pub fn radroots_domain::stock::PoolBalances::correct_available(self, radroots_domain::stock::AvailableStockCorrection, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub fn radroots_domain::stock::PoolBalances::hold_available(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::install_preparatory(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub const fn radroots_domain::stock::PoolBalances::introduced(self) -> radroots_domain::stock::StockTicks
 pub fn radroots_domain::stock::PoolBalances::new(radroots_domain::stock::StockTicks, radroots_domain::stock::PhysicalBalances) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub const fn radroots_domain::stock::PoolBalances::physical(self) -> radroots_domain::stock::PhysicalBalances

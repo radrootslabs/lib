@@ -152,6 +152,7 @@ struct NativeSellerStockAuthority {
     acceptance_preparation: AcceptancePreparation,
     signing_plan_binding: SigningPlanBinding,
     signing_issuance: SigningIssuance,
+    initial_agreement_installation: InitialAgreementInstallation,
     business_consent_payload_version: u16,
     business_consent_action: String,
     business_consent_modes: Vec<String>,
@@ -206,6 +207,24 @@ struct AcceptancePreparation {
     final_source_counts_and_witnesses_required: bool,
     signer_invoked: bool,
     agreement_installed: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InitialAgreementInstallation {
+    payload_version: u32,
+    journal_family: u32,
+    worker_charge_bytes: u32,
+    required_peer_evidence: bool,
+    missing_self_copy_blocks_installation: bool,
+    original_order_fence_immutable: bool,
+    exact_original_hold_quantities_required: bool,
+    current_exact_recovery_consent_required: bool,
+    atomic_pool_agreement_and_work_required: bool,
+    recipient_work_count: u32,
+    unknown_commit_fences_owner: bool,
+    signer_or_transport_invoked: bool,
+    relay_delivery_claimed: bool,
 }
 
 #[derive(Deserialize)]
@@ -424,10 +443,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 11
+            && stock.schema_version == 12
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v11"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v12"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -529,6 +548,33 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .signing_issuance
                 .capture_retains_distinct_valid_encodings
             && !stock.signing_issuance.agreement_installed
+            && stock.initial_agreement_installation.payload_version == 1
+            && stock.initial_agreement_installation.journal_family == 6
+            && stock.initial_agreement_installation.worker_charge_bytes == 1048576
+            && stock.initial_agreement_installation.required_peer_evidence
+            && !stock
+                .initial_agreement_installation
+                .missing_self_copy_blocks_installation
+            && stock
+                .initial_agreement_installation
+                .original_order_fence_immutable
+            && stock
+                .initial_agreement_installation
+                .exact_original_hold_quantities_required
+            && stock
+                .initial_agreement_installation
+                .current_exact_recovery_consent_required
+            && stock
+                .initial_agreement_installation
+                .atomic_pool_agreement_and_work_required
+            && stock.initial_agreement_installation.recipient_work_count == 2
+            && stock
+                .initial_agreement_installation
+                .unknown_commit_fences_owner
+            && !stock
+                .initial_agreement_installation
+                .signer_or_transport_invoked
+            && !stock.initial_agreement_installation.relay_delivery_claimed
             && stock.business_consent_payload_version == 1
             && stock.business_consent_action == "orders.accept"
             && stock.business_consent_modes == ["execute_and_recover", "recover_only"]
@@ -1169,6 +1215,36 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/native_seller_stock_authority/signing_issuance/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn initial_installation_requires_peer_evidence_exact_conservation_and_atomic_recipient_work() {
+        for (field, bad) in [
+            ("payload_version", json!(2)),
+            ("journal_family", json!(7)),
+            ("worker_charge_bytes", json!(1048577)),
+            ("required_peer_evidence", json!(false)),
+            ("missing_self_copy_blocks_installation", json!(true)),
+            ("original_order_fence_immutable", json!(false)),
+            ("exact_original_hold_quantities_required", json!(false)),
+            ("current_exact_recovery_consent_required", json!(false)),
+            ("atomic_pool_agreement_and_work_required", json!(false)),
+            ("recipient_work_count", json!(3)),
+            ("unknown_commit_fences_owner", json!(false)),
+            ("signer_or_transport_invoked", json!(true)),
+            ("relay_delivery_claimed", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!(
+                        "/native_seller_stock_authority/initial_agreement_installation/{field}"
+                    ),
                     bad
                 ))
                 .is_err(),

@@ -316,7 +316,7 @@ protected credential and original creation transaction ID without touching the
 namespace. Retain those values through protected host handling before awaiting
 `NativeWorkspace::initialize_seller_stock`. This explicit factory uses
 `stock_execution_v1.sqlite` and `.stock_execution_v1.lock` in a new owner-only
-directory. Its exact version-11 catalog has separate protected authority and
+directory. Its exact version-12 catalog has separate protected authority and
 grant records. Grant scope, route, genesis, credential and AEAD context are
 separate from ordinary outboxes. The same bounded native worker owns the
 connection, admitted work, close completion and persistent writer lock.
@@ -340,11 +340,11 @@ ordinary outbox journal jobs are refused on the stock namespace.
 
 ## Owner-private inventory transactions
 
-The current stock factory creates exact catalog version11 and protected authority
-payload version11. Retained enrollment-only version1 still authenticates and
+The current stock factory creates exact catalog version12 and protected authority
+payload version12. Retained enrollment-only version1 still authenticates and
 revokes with its original codec; its inventory ports refuse unsupported work.
 Retained inventory version2 keeps its original pool-creation records and refuses
-new correction commands. Catalogs1–10 retain their exact original codecs and
+new correction commands. Catalogs1–11 retain their exact original codecs and
 capabilities; current multipart operation framing uses version5.
 No namespace is automatically migrated. Ordinary outbox catalogs are separate.
 
@@ -435,3 +435,20 @@ from installation. Current RecoverOnly consent can inspect original progress
 after the first-issue deadline. Evidence selectors, page row sets, counts and
 absence facts are compared again after provider work inside the final read
 transaction. A recovery view never returns a fresh dispatch permit.
+
+
+Initial seller agreement installation uses `install_stock_agreement` on the same
+bounded native owner. Exact catalog/root12 retains formats1–11 without upgrading
+them. The original preparation fence remains immutable. Separate authenticated
+agreement and per-recipient work indexes bind original T0/T1 and retained S.
+Installation requires actual peer seal evidence; a missing self copy remains
+waiting work and cannot justify releasing the peer obligation. One transaction
+converts only the original allocation quantities from preparatory to committed
+holds, appends movements, installs the original record and creates both work
+references. Current exact recovery consent and all original/current pool and
+identity witnesses are confirmed after provider IO. No signer or transport runs
+under the transaction. Replaying or reopening returns the original installation;
+uncertain commit fences the owner until drain/reopen. `stock_operation_snapshot`
+reports installation separately from signing and delivery facts. This initial
+primitive does not implement amendments, handovers, releases, deficits, browser
+stock or complete ordinary caller orchestration.

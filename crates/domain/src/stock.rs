@@ -271,6 +271,19 @@ impl PoolBalances {
         physical.preparatory_hold = physical.preparatory_hold.checked_add(quantity)?;
         Self::new(self.introduced, physical)
     }
+    /// Proposes conversion of this exact positive preparatory quantity into
+    /// installed physical backing. Other orders' holds and lifetime introduced
+    /// stock remain unchanged. The executor must authenticate original allocation
+    /// and peer evidence and commit every affected pool with installation.
+    pub fn install_preparatory(self, quantity: StockTicks) -> Result<Self, StockError> {
+        if quantity == StockTicks::ZERO {
+            return Err(StockError::ZeroMovement);
+        }
+        let mut physical = self.physical;
+        physical.preparatory_hold = physical.preparatory_hold.checked_sub(quantity)?;
+        physical.committed_hold = physical.committed_hold.checked_add(quantity)?;
+        Self::new(self.introduced, physical)
+    }
     /// Proposes a nonzero, exact correction against available backing only.
     /// Held or quarantined stock is never silently substituted for available
     /// stock. Depleting it needs a separate obligation/deficit transition.

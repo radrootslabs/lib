@@ -64,7 +64,7 @@ impl MinimumProof {
                 let related: Option<Vec<u8>> = row
                     .try_get(2)
                     .map_err(|_| OperationError::RecoveryRequired)?;
-                if !(0..=5).contains(&family) {
+                if !(0..=6).contains(&family) {
                     return Err(OperationError::RecoveryRequired);
                 }
                 let subject: Option<Vec<u8>> = row
@@ -84,6 +84,21 @@ impl MinimumProof {
                             connection, &actor, &operation, family,
                         )
                         .await?,
+                    );
+                }
+            }
+            if self.multipart {
+                let family: i64 = sqlx::query_scalar(
+                    "SELECT family FROM stock_operations WHERE actor=? AND operation_id=?",
+                )
+                .bind(actor.as_slice())
+                .bind(operation.as_slice())
+                .fetch_one(&mut *connection)
+                .await
+                .map_err(|_| OperationError::RecoveryRequired)?;
+                if family == 6 {
+                    hash.update(
+                        super::installation::raw_projection(connection, &actor, &operation).await?,
                     );
                 }
             }
@@ -115,7 +130,7 @@ pub(super) async fn authenticate_order_absence(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    if !matches!(authority.catalog, 9..=11) {
+    if !matches!(authority.catalog, 9..=12) {
         return Err(OperationError::UnsupportedOperation);
     }
     let upper = current.revision.get();
@@ -128,10 +143,11 @@ pub(super) async fn authenticate_order_absence(
             id.try_into()
                 .map_err(|_| OperationError::RecoveryRequired)?,
         );
-        let entry =
-            super::super::ledger::history(connection, input, crypto, binding, authority, operation)
-                .await?
-                .ok_or(OperationError::RecoveryRequired)?;
+        let entry = Box::pin(super::super::ledger::history(
+            connection, input, crypto, binding, authority, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
         if entry.header.revision.get() != revision || Some(entry.header.head) != previous {
             return Err(OperationError::RecoveryRequired);
         }
@@ -171,6 +187,10 @@ pub(in crate::workspace::stock) enum IdentityTarget {
         operation: OperationId,
         expected: Option<EntryIdentity>,
     },
+    Installation {
+        operation: OperationId,
+        expected: Option<EntryIdentity>,
+    },
     SigningClaim {
         operation: OperationId,
         recipient: radroots_domain::PublicKey,
@@ -188,7 +208,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    let multipart = matches!(authority.catalog, 7..=11);
+    let multipart = matches!(authority.catalog, 7..=12);
     let upper = current.revision.get();
     let mut previous = current.head;
     let mut hash = history_hash(multipart);
@@ -199,67 +219,70 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
             id.try_into()
                 .map_err(|_| OperationError::RecoveryRequired)?,
         );
-        let (identity, predecessor, natural, signing_plan, signing_claim) = if multipart {
-            let entry = super::super::ledger::history(
-                connection, input, crypto, binding, authority, operation,
-            )
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?;
-            if entry.header.revision.get() != revision || Some(entry.header.head) != previous {
-                return Err(OperationError::RecoveryRequired);
-            }
-            entry.hash(&mut hash)?;
-            (
-                EntryIdentity {
-                    operation,
-                    revision: entry.header.revision,
-                    head: entry.header.head,
-                    protected_digest: Sha256::digest(&entry.protected).into(),
-                },
-                entry.header.previous,
-                if entry.header.family == super::super::ledger::Family::Consent {
-                    entry
-                        .header
-                        .related_operation
-                        .zip(entry.header.subject_grant)
-                } else {
-                    None
-                },
-                if entry.header.family == super::super::ledger::Family::SigningPlan {
-                    entry.header.related_operation
-                } else {
-                    None
-                },
-                if entry.header.family == super::super::ledger::Family::SigningClaim {
-                    entry
-                        .signing
-                        .map(|value| (value.operation, value.recipient))
-                } else {
-                    None
-                },
-            )
-        } else {
-            let entry = read_operation(connection, input, crypto, binding, operation)
+        let (identity, predecessor, natural, signing_plan, signing_claim, installation) =
+            if multipart {
+                let entry = Box::pin(super::super::ledger::history(
+                    connection, input, crypto, binding, authority, operation,
+                ))
                 .await?
                 .ok_or(OperationError::RecoveryRequired)?;
-            let checkpoint = entry.receipt.checkpoint();
-            if checkpoint.revision().get() != revision || checkpoint.head() != previous {
-                return Err(OperationError::RecoveryRequired);
-            }
-            hash_retained(&mut hash, revision, binding, operation, &entry)?;
-            (
-                EntryIdentity {
-                    operation,
-                    revision: checkpoint.revision(),
-                    head: checkpoint.head().ok_or(OperationError::RecoveryRequired)?,
-                    protected_digest: Sha256::digest(&entry.protected).into(),
-                },
-                entry.previous_head,
-                None,
-                None,
-                None,
-            )
-        };
+                if entry.header.revision.get() != revision || Some(entry.header.head) != previous {
+                    return Err(OperationError::RecoveryRequired);
+                }
+                entry.hash(&mut hash)?;
+                (
+                    EntryIdentity {
+                        operation,
+                        revision: entry.header.revision,
+                        head: entry.header.head,
+                        protected_digest: Sha256::digest(&entry.protected).into(),
+                    },
+                    entry.header.previous,
+                    if entry.header.family == super::super::ledger::Family::Consent {
+                        entry
+                            .header
+                            .related_operation
+                            .zip(entry.header.subject_grant)
+                    } else {
+                        None
+                    },
+                    if entry.header.family == super::super::ledger::Family::SigningPlan {
+                        entry.header.related_operation
+                    } else {
+                        None
+                    },
+                    if entry.header.family == super::super::ledger::Family::SigningClaim {
+                        entry
+                            .signing
+                            .map(|value| (value.operation, value.recipient))
+                    } else {
+                        None
+                    },
+                    entry.installation.map(|value| value.operation),
+                )
+            } else {
+                let entry = read_operation(connection, input, crypto, binding, operation)
+                    .await?
+                    .ok_or(OperationError::RecoveryRequired)?;
+                let checkpoint = entry.receipt.checkpoint();
+                if checkpoint.revision().get() != revision || checkpoint.head() != previous {
+                    return Err(OperationError::RecoveryRequired);
+                }
+                hash_retained(&mut hash, revision, binding, operation, &entry)?;
+                (
+                    EntryIdentity {
+                        operation,
+                        revision: checkpoint.revision(),
+                        head: checkpoint.head().ok_or(OperationError::RecoveryRequired)?,
+                        protected_digest: Sha256::digest(&entry.protected).into(),
+                    },
+                    entry.previous_head,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+            };
         let (matched, expected) = match &target {
             IdentityTarget::Operation(wanted, expected) => (*wanted == operation, *expected),
             IdentityTarget::Consent {
@@ -271,6 +294,10 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
                 operation: wanted,
                 expected,
             } => (signing_plan == Some(*wanted), *expected),
+            IdentityTarget::Installation {
+                operation: wanted,
+                expected,
+            } => (installation == Some(*wanted), *expected),
             IdentityTarget::SigningClaim {
                 operation: wanted,
                 recipient,
@@ -294,7 +321,8 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
         IdentityTarget::Operation(_, expected)
         | IdentityTarget::Consent { expected, .. }
         | IdentityTarget::SigningPlan { expected, .. }
-        | IdentityTarget::SigningClaim { expected, .. } => expected,
+        | IdentityTarget::SigningClaim { expected, .. }
+        | IdentityTarget::Installation { expected, .. } => expected,
     };
     if previous.is_some() || expected.is_some() {
         return Err(OperationError::RecoveryRequired);
@@ -325,7 +353,7 @@ pub(in crate::workspace::stock) async fn authenticate_minimum(
     }
     let lower = minimum.revision().get().max(1);
     let upper = current.revision.get();
-    let multipart = matches!(authority.catalog, 7..=11);
+    let multipart = matches!(authority.catalog, 7..=12);
     let mut hash = history_hash(multipart);
     let mut expected = current.head;
     for revision in (lower..=upper).rev() {
@@ -336,9 +364,9 @@ pub(in crate::workspace::stock) async fn authenticate_minimum(
                 .map_err(|_| OperationError::RecoveryRequired)?,
         );
         if multipart {
-            let retained = super::super::ledger::history(
+            let retained = Box::pin(super::super::ledger::history(
                 connection, input, crypto, binding, authority, operation,
-            )
+            ))
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
             if retained.header.revision.get() != revision || Some(retained.header.head) != expected
@@ -573,7 +601,7 @@ async fn authenticate_projected(
         .ok_or(OperationError::UnsupportedOperation)?;
     let upper = current.revision.get();
     let mut expected = current.head;
-    let multipart = matches!(authority.catalog, 7..=11);
+    let multipart = matches!(authority.catalog, 7..=12);
     let mut hash = history_hash(multipart);
     for revision in (1..=upper).rev() {
         let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32").bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
@@ -582,9 +610,9 @@ async fn authenticate_projected(
                 .map_err(|_| OperationError::RecoveryRequired)?,
         );
         if multipart {
-            let retained = super::super::ledger::history(
+            let retained = Box::pin(super::super::ledger::history(
                 connection, input, crypto, binding, authority, operation,
-            )
+            ))
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
             if retained.header.revision.get() != revision || Some(retained.header.head) != expected
