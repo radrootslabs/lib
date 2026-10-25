@@ -1,6 +1,9 @@
 //! Real T2 transactions over original T0/T1 and authenticated peer evidence.
 #[path = "local_history_tests.rs"]
 mod local_history;
+#[cfg(unix)]
+#[path = "process_death_tests.rs"]
+mod process_death;
 use super::*;
 use crate::workspace::{
     StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,
