@@ -62,13 +62,20 @@ impl CloseReceipt {
     }
 }
 
+// These are views of one configured owner, never separately selected stores.
+#[derive(Clone)]
+struct WorkspaceResource {
+    journal: Shared<dyn radroots_storage::command::OperationJournal>,
+    inventory: Shared<dyn radroots_storage::inventory::InventoryStore>,
+}
+
 /// Explicit native public-cache opening, without participant/stock authority.
 /// Participant protected-workspace opening requires the separate authenticated
 /// workspace/authority contract and is not inferred from cache generations.
 #[cfg(feature = "native")]
 pub struct NativeConfig {
     options: radroots_storage_sqlite::OpenOptions,
-    workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
+    workspace: Option<WorkspaceResource>,
     #[cfg(not(target_arch = "wasm32"))]
     commands: Option<Shared<crate::native_commands::NativeCommands>>,
 }
@@ -91,7 +98,11 @@ impl NativeConfig {
         mut self,
         workspace: radroots_storage_sqlite::workspace::NativeWorkspace,
     ) -> Self {
-        self.workspace = Some(Shared::new(workspace));
+        let owner = Shared::new(workspace);
+        self.workspace = Some(WorkspaceResource {
+            journal: owner.clone(),
+            inventory: owner,
+        });
         self
     }
     /// Selects explicit relay destinations and a relay-acceptance criterion.
@@ -128,7 +139,7 @@ impl TargetRuntime {
 }
 pub(crate) struct StoreHost {
     store: Shared<dyn Storage>,
-    workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
+    workspace: Option<WorkspaceResource>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
     runtime: TargetRuntime,
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
@@ -208,6 +219,7 @@ impl SessionHost for StoreHost {
             }
             if let Some(workspace) = &self.workspace {
                 workspace
+                    .journal
                     .close_workspace()
                     .await
                     .map_err(|_| STORAGE_FAILURE)?;
@@ -231,7 +243,7 @@ impl SessionHost for StoreHost {
 pub struct Client {
     pub(crate) session: ClientSession<StoreHost>,
     store: Shared<dyn Storage>,
-    workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
+    workspace: Option<WorkspaceResource>,
     closed: Shared<Mutex<Option<CloseReceipt>>>,
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
     native_commands: Option<Shared<crate::native_commands::NativeCommands>>,
@@ -240,7 +252,7 @@ impl Client {
     #[cfg(any(feature = "client", feature = "native"))]
     fn from_store(
         store: Shared<dyn Storage>,
-        workspace: Option<Shared<dyn radroots_storage::command::OperationJournal>>,
+        workspace: Option<WorkspaceResource>,
         runtime: TargetRuntime,
         #[cfg(all(feature = "native", not(target_arch = "wasm32")))] native_commands: Option<
             Shared<crate::native_commands::NativeCommands>,
@@ -330,7 +342,26 @@ impl Client {
     pub(crate) fn journal(
         &self,
     ) -> crate::Result<Shared<dyn radroots_storage::command::OperationJournal>> {
-        self.workspace.clone().ok_or(MISSING_WORKSPACE)
+        self.workspace
+            .as_ref()
+            .map(|workspace| workspace.journal.clone())
+            .ok_or(MISSING_WORKSPACE)
+    }
+    pub(crate) fn inventory(
+        &self,
+    ) -> crate::Result<Shared<dyn radroots_storage::inventory::InventoryStore>> {
+        self.workspace
+            .as_ref()
+            .map(|workspace| workspace.inventory.clone())
+            .ok_or(MISSING_WORKSPACE)
+    }
+    /// Selects owner-private stock operations through this client's explicit
+    /// authenticated attachment. Access alone creates no authority or work.
+    pub fn stock(
+        &self,
+        scope: &radroots_execution::workspace::WorkspaceSession,
+    ) -> crate::stock::Stock<'_> {
+        crate::stock::Stock::new(self, scope.clone())
     }
     /// Accesses private inquiry execution. Access alone performs no work.
     pub const fn inbox(&self) -> crate::inbox::Inbox<'_> {
@@ -392,7 +423,9 @@ impl Client {
         proof: radroots_storage::workspace::AttachmentProof,
     ) -> crate::Result<radroots_execution::workspace::WorkspaceSession> {
         let workspace = self.workspace.clone().ok_or(MISSING_WORKSPACE)?;
-        self.session.attach_workspace(workspace, input, proof).await
+        self.session
+            .attach_workspace(workspace.journal, input, proof)
+            .await
     }
     /// Permanently stops admission, drains resources and scoped callbacks, then
     /// closes the actual store last. Failed/cancelled closure must be resumed.

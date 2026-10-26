@@ -108,7 +108,19 @@ through an explicitly selected client-owned scope, independently of the old
 first-issue deadline. The qualified concrete bounded worker owns accepted native
 admission through observer loss; its close must drain accepted work.
 
-Package upload is not authorized. Inventory authority, complete listing revision
+`ClientSession` routes explicit private inventory creation, corrections, mapping,
+original-effect reads and proven-unissued cleanup through the supplied inventory
+port and this client's exact owned attachment. These calls require a bounded
+`TaskHost`; no inline fallback starts them. The existing resource permit and live
+byte reservation move into each accepted task until the store settles, including
+after observer loss. Close drains these tasks before disposal. The concrete store
+must still authenticate current scope, independently retained minima and actual
+protected effects. A custom port or a missing query result proves no authority,
+safe nonissuance or commit. These paths construct no signer or transport.
+An accepted admission task lost before replying reports unknown initial admission
+with its original operation ID and manual reconciliation, never known failure.
+
+Package upload is not authorized. Full commerce authority, complete listing revision
 behavior, final browser qualification and new bindings remain separate
 requirements. Revalidating a context is not durable admission;
 the authoritative transaction must recheck its scope.

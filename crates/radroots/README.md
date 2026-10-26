@@ -94,7 +94,7 @@ Its `OperationReceipt<domain::Listing>` contains a business result only after
 actual installation. Text and exact terms come from the captured command;
 author, revision and event time come from its retained public signing plan and
 obtained evidence. An existing coordinate cannot be replaced by publishing it
-again. Revision editing, pause/withdraw and stock remain separate requirements.
+again. Revision editing, pause/withdraw and full stock commitments remain separate requirements.
 
 Public planning uses the configured public relay targets and exact-event
 signing. It performs no private-route query, encryption or wrapping. Delivery
@@ -104,6 +104,23 @@ Reopening, reading and command replay do not redispatch retained work; explicit
 resume preserves the original bytes, criterion, targets and retry budget.
 
 ## Values and retained capabilities
+
+`client.stock(&scope)` selects this client's authenticated attachment for private
+pool creation, exact available-stock adjustment/spoilage, private option mapping,
+pool/mapping reads and original-effect recovery. Inputs are typed; each call
+requires an independently retained inventory minimum. The native configuration
+retains journal and inventory views of the same explicitly opened workspace,
+and close drains the same bounded task owner before closing that workspace.
+Public-cache and preview construction cannot adopt a foreign stock attachment.
+An ordinary outbox cannot become a stock owner through these calls.
+
+`client.operations(&scope).abort_proven_unissued(minimum, operation, digest)`
+explicitly requests the store's proven original-preparation cleanup; its selectors
+assert no nonissuance proof. `preparation_abort` reads the original result and
+absence authorizes nothing. Claims and unknown issuance remain nonspendable.
+These calls neither sign nor publish, and cleanup is separate from business
+cancellation or stopping delivery. Full commerce orchestration, qualified claimed
+attempt reconciliation and the final common receipt/binding surface remain open.
 
 `radroots::domain` provides exact decimals and distinct order, thread, workspace,
 executor and operation identities. `radroots::OperationId` is the 256-bit

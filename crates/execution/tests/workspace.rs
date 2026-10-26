@@ -384,3 +384,6 @@ fn close_invalidates_clones_and_an_already_pending_context_revalidation() {
 
 #[path = "support/workspace_commands.rs"]
 mod commands;
+
+#[path = "support/workspace_inventory.rs"]
+mod inventory;

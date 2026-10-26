@@ -14,6 +14,7 @@ pub mod listing;
 pub mod listings;
 pub mod operations;
 pub mod signing;
+pub mod stock;
 pub mod storage;
 pub mod sync;
 pub mod trade;

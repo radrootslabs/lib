@@ -362,6 +362,7 @@ struct Values {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Execution {
+    ordinary_inventory_owner: OrdinaryInventoryOwner,
     phases: Vec<String>,
     selected_executor_required_for_stock: bool,
     fresh_same_key_cache_can_allocate: bool,
@@ -376,6 +377,19 @@ struct Execution {
     handover_consumes_once: bool,
     buyer_receipt_moves_stock: bool,
     private_causal_heads_use_timestamp_lww: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OrdinaryInventoryOwner {
+    execution: String,
+    facade: String,
+    selected_workspace_views_share_owner: bool,
+    exact_owned_attachment_required: bool,
+    bounded_task_host_required: bool,
+    observer_loss_cancels_accepted_work: bool,
+    close_drains_before_workspace_disposal: bool,
+    stock_signer_or_transport_constructed: bool,
 }
 
 #[derive(Deserialize)]
@@ -1009,7 +1023,21 @@ fn validate_values(v: &Values, limits: &BTreeMap<String, u64>) -> Result<(), Str
 
 fn validate_execution(e: &Execution, p: &Protocol, c: &Cutover) -> Result<(), String> {
     require(
-        e.phases == ["T0", "T1", "S", "T2", "D"]
+        e.ordinary_inventory_owner.execution == "radroots_execution.ClientSession"
+            && e.ordinary_inventory_owner.facade == "radroots.Client"
+            && e.ordinary_inventory_owner
+                .selected_workspace_views_share_owner
+            && e.ordinary_inventory_owner.exact_owned_attachment_required
+            && e.ordinary_inventory_owner.bounded_task_host_required
+            && !e
+                .ordinary_inventory_owner
+                .observer_loss_cancels_accepted_work
+            && e.ordinary_inventory_owner
+                .close_drains_before_workspace_disposal
+            && !e
+                .ordinary_inventory_owner
+                .stock_signer_or_transport_constructed
+            && e.phases == ["T0", "T1", "S", "T2", "D"]
             && e.selected_executor_required_for_stock
             && !e.fresh_same_key_cache_can_allocate
             && !e.shared_route_local_fallback_allowed
@@ -1341,6 +1369,29 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/native_seller_stock_authority/preparation_abort/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_inventory_keeps_selected_owner_and_accepted_task_lifetime() {
+        for (field, bad) in [
+            ("execution", json!("application")),
+            ("facade", json!("native_backend")),
+            ("selected_workspace_views_share_owner", json!(false)),
+            ("exact_owned_attachment_required", json!(false)),
+            ("bounded_task_host_required", json!(false)),
+            ("observer_loss_cancels_accepted_work", json!(true)),
+            ("close_drains_before_workspace_disposal", json!(false)),
+            ("stock_signer_or_transport_constructed", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/execution/ordinary_inventory_owner/{field}"),
                     bad
                 ))
                 .is_err(),

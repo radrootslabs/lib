@@ -10,6 +10,10 @@ use std::{
 #[path = "client_commands.rs"]
 mod commands;
 
+#[cfg(feature = "workspace_session")]
+#[path = "client_inventory.rs"]
+mod inventory;
+
 struct Resources<H> {
     host: H,
     signer: Shared<Mutex<Option<SignerSession>>>,

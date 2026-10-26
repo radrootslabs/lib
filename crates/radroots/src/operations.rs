@@ -8,6 +8,44 @@ pub struct Operations<'a> {
     scope: WorkspaceSession,
 }
 impl<'a> Operations<'a> {
+    /// Explicitly requests original preparation cleanup. Only the selected
+    /// store can prove all original claims absent and release the exact hold.
+    /// This is separate from business cancellation and stopping delivery.
+    pub async fn abort_proven_unissued(
+        &self,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        operation: OperationId,
+        digest: CommandDigest,
+    ) -> Result<radroots_storage::inventory::StockAbortOutcome> {
+        self.client
+            .session
+            .abort_proven_unissued(
+                self.client.inventory()?,
+                &self.scope,
+                minimum,
+                operation,
+                digest,
+            )
+            .await
+    }
+    /// Reads original cleanup. Absence never permits issuance or release.
+    pub async fn preparation_abort(
+        &self,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        operation: OperationId,
+        digest: CommandDigest,
+    ) -> Result<Option<radroots_storage::inventory::StockAbortReceipt>> {
+        self.client
+            .session
+            .stock_preparation_abort(
+                self.client.inventory()?,
+                &self.scope,
+                minimum,
+                operation,
+                digest,
+            )
+            .await
+    }
     /// Explicitly resumes one original command. Retained signing claims never
     /// permit reissuance. Delivery retries use the original exact artifact and
     /// criterion, preserving accepted targets and the original business result.

@@ -772,6 +772,16 @@
     "first_issuance_seconds": 120
   },
   "execution": {
+    "ordinary_inventory_owner": {
+      "execution": "radroots_execution.ClientSession",
+      "facade": "radroots.Client",
+      "selected_workspace_views_share_owner": true,
+      "exact_owned_attachment_required": true,
+      "bounded_task_host_required": true,
+      "observer_loss_cancels_accepted_work": false,
+      "close_drains_before_workspace_disposal": true,
+      "stock_signer_or_transport_constructed": false
+    },
     "phases": [
       "T0",
       "T1",

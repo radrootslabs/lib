@@ -40,6 +40,7 @@ pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::start(&self, radroots_execution::session::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
 pub fn radroots::client::Client::state(&self) -> radroots_execution::session::SessionState
+pub fn radroots::client::Client::stock(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::stock::Stock<'_>
 pub async fn radroots::client::Client::storage_status(&self) -> radroots_execution::Result<radroots_storage::status::StorageStatus>
 pub struct radroots::client::CloseReceipt
 impl radroots::client::CloseReceipt
@@ -146,8 +147,10 @@ pub async fn radroots::listings::Listings<'a>::publish(&self, radroots_execution
 pub mod radroots::operations
 pub struct radroots::operations::Operations<'a>
 impl<'a> radroots::operations::Operations<'a>
+pub async fn radroots::operations::Operations<'a>::abort_proven_unissued(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_storage::inventory::abort::StockAbortOutcome>
 pub async fn radroots::operations::Operations<'a>::get(&self, radroots_domain::identifier::OperationId) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationStatus>>
 pub async fn radroots::operations::Operations<'a>::get_matching(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationStatus>>
+pub async fn radroots::operations::Operations<'a>::preparation_abort(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<core::option::Option<radroots_storage::inventory::abort::StockAbortReceipt>>
 pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::receipt::OperationStatus>
 pub mod radroots::signing
 pub use radroots::signing::ArtifactRole
@@ -163,6 +166,22 @@ pub use radroots::signing::SignedArtifact
 pub use radroots::signing::SigningIntent
 pub use radroots::signing::SigningOutcome
 pub use radroots::signing::blossom_upload_request
+pub mod radroots::stock
+pub use radroots::stock::CreatePoolInput
+pub use radroots::stock::InventoryCheckpointRef
+pub use radroots::stock::InventoryOutcome
+pub use radroots::stock::InventoryReceipt
+pub use radroots::stock::MapOptionInput
+pub use radroots::stock::PoolCorrectionInput
+pub struct radroots::stock::Stock<'a>
+impl<'a> radroots::stock::Stock<'a>
+pub async fn radroots::stock::Stock<'a>::adjust(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock_correction::PoolCorrectionInput) -> radroots_execution::Result<radroots_storage::inventory::InventoryOutcome>
+pub async fn radroots::stock::Stock<'a>::create_pool(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock::CreatePoolInput) -> radroots_execution::Result<radroots_storage::inventory::InventoryOutcome>
+pub async fn radroots::stock::Stock<'a>::map_option(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock_mapping::MapOptionInput) -> radroots_execution::Result<radroots_storage::inventory::InventoryOutcome>
+pub async fn radroots::stock::Stock<'a>::operation(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_storage::inventory::InventoryReceipt>>
+pub async fn radroots::stock::Stock<'a>::option_mapping(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::stock::mapping::OptionMappingKey) -> radroots_execution::Result<core::option::Option<radroots_domain::stock::mapping::OptionPoolMapping>>
+pub async fn radroots::stock::Stock<'a>::pool(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::PoolId) -> radroots_execution::Result<core::option::Option<radroots_domain::stock::PoolView>>
+pub async fn radroots::stock::Stock<'a>::spoil(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock_correction::PoolCorrectionInput) -> radroots_execution::Result<radroots_storage::inventory::InventoryOutcome>
 pub mod radroots::storage
 pub use radroots::storage::IntegrityStatus
 pub use radroots::storage::Operations
@@ -232,6 +251,7 @@ pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::start(&self, radroots_execution::session::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
 pub fn radroots::client::Client::state(&self) -> radroots_execution::session::SessionState
+pub fn radroots::client::Client::stock(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::stock::Stock<'_>
 pub async fn radroots::client::Client::storage_status(&self) -> radroots_execution::Result<radroots_storage::status::StorageStatus>
 pub struct radroots::CloseReceipt
 impl radroots::client::CloseReceipt
