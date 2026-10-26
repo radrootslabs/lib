@@ -206,3 +206,24 @@ the existing single-call capacity. No legacy or first-signing method is invoked.
 The shared Signing proof preserves original bytes and deadline without granting
 T1 or stock authority. The composing executor still owns the complete task and
 subsequent durable boundaries after caller cancellation.
+
+`ClientSession::accept_stock_order` owns captured acceptance through actual T0,
+complete original peer/self route and encryption checks, T1, confirmed claims,
+exact scoped signing, retained S and initial T2. The shared `CommandRuntime`
+contains this algorithm; `session::commerce::AcceptanceStore` supplies typed
+target transactions and authenticated read-only snapshots. Host adapters select
+no new business inputs or policy. Native facade views use the same configured
+owner as inventory, with no second database or executor.
+
+The peer commitment runs first and confirmed peer S installs the agreement
+before self-history work. Missing IO or signing leaves explicit pending facts.
+`resume_stock_acceptance` uses only original inputs; existing non-replayable
+claims never obtain a first-dispatch permit, and qualified local recovery needs
+both retained policy and a current concrete permit. Obtained bytes enter the
+retained evidence owner before persistence. Verified signer bytes enter that
+owner before fallible request conversion; conversion refusal retains exact bytes,
+credentials and the original byte lease. Accepted tasks outlive caller waits,
+and close retains callback roots through settlement and durable capture. Query
+facts keep preparation, recipient evidence, installation and actual abort
+separate. This path performs no outer wrapping, relay publication, stock release
+or proof of original nonissuance; full commerce/accounting closure remains open.

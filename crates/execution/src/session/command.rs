@@ -93,7 +93,7 @@ struct PendingObservation {
 /// Shared workflow and obtained-material owner. Its lifecycle host must call
 /// `drain` before releasing work permits, callbacks or protected storage.
 pub struct CommandRuntime {
-    io: Shared<dyn CommandIo>,
+    pub(super) io: Shared<dyn CommandIo>,
     pending: Mutex<Vec<Shared<PendingCapture>>>,
     observations: Mutex<Vec<Shared<PendingObservation>>>,
     draining: futures::lock::Mutex<()>,

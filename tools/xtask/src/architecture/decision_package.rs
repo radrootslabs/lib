@@ -324,6 +324,14 @@ struct SigningIssuance {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SigningPlanBinding {
+    ordinary_acceptance_owner: String,
+    ordinary_acceptance_facade: String,
+    ordinary_peer_installed_before_self_work: bool,
+    ordinary_accepted_task_survives_observer_loss: bool,
+    ordinary_obtained_owned_before_descriptor_conversion: bool,
+    ordinary_existing_claim_grants_first_dispatch: bool,
+    ordinary_replay_requires_original_policy_and_current_permit: bool,
+    ordinary_acceptance_implies_delivery: bool,
     crypto_verifier_owner: String,
     scoped_crypto_verification: String,
     predecessor_nostr_verifier_alias: bool,
@@ -601,6 +609,27 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .final_source_counts_and_witnesses_required
             && !stock.acceptance_preparation.signer_invoked
             && !stock.acceptance_preparation.agreement_installed
+            && stock.signing_plan_binding.ordinary_acceptance_owner
+                == "radroots_execution.CommandRuntime"
+            && stock.signing_plan_binding.ordinary_acceptance_facade == "radroots.Orders.accept"
+            && stock
+                .signing_plan_binding
+                .ordinary_peer_installed_before_self_work
+            && stock
+                .signing_plan_binding
+                .ordinary_accepted_task_survives_observer_loss
+            && stock
+                .signing_plan_binding
+                .ordinary_obtained_owned_before_descriptor_conversion
+            && !stock
+                .signing_plan_binding
+                .ordinary_existing_claim_grants_first_dispatch
+            && stock
+                .signing_plan_binding
+                .ordinary_replay_requires_original_policy_and_current_permit
+            && !stock
+                .signing_plan_binding
+                .ordinary_acceptance_implies_delivery
             && stock.signing_plan_binding.crypto_verifier_owner == "radroots_signing.commerce"
             && stock.signing_plan_binding.scoped_crypto_verification
                 == "SignerSession.verify_commerce_plan"
@@ -1693,6 +1722,23 @@ mod tests {
     #[test]
     fn signing_plans_require_complete_original_qualified_intents_before_any_signing() {
         for (field, bad) in [
+            (
+                "ordinary_obtained_owned_before_descriptor_conversion",
+                json!(false),
+            ),
+            ("ordinary_acceptance_owner", json!("application")),
+            ("ordinary_acceptance_facade", json!("radroots_sdk")),
+            ("ordinary_peer_installed_before_self_work", json!(false)),
+            (
+                "ordinary_accepted_task_survives_observer_loss",
+                json!(false),
+            ),
+            ("ordinary_existing_claim_grants_first_dispatch", json!(true)),
+            (
+                "ordinary_replay_requires_original_policy_and_current_permit",
+                json!(false),
+            ),
+            ("ordinary_acceptance_implies_delivery", json!(true)),
             ("crypto_verifier_owner", json!("radroots_nostr.commerce")),
             (
                 "scoped_crypto_verification",

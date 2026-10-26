@@ -7,6 +7,9 @@ use radroots_storage::{
     workspace::AttachmentProof,
 };
 use std::{sync::Mutex, vec::Vec};
+#[path = "stock_obtained.rs"]
+mod obtained;
+pub(super) use obtained::{ObtainedContext, RetainedObtained};
 
 pub(super) struct Pending {
     store: Shared<dyn InventoryStore>,
@@ -17,17 +20,23 @@ pub(super) struct Pending {
 }
 #[derive(Default)]
 pub(super) struct Owner {
+    unmapped: Mutex<Vec<Shared<RetainedObtained>>>,
     pending: Mutex<Vec<Shared<Pending>>>,
     serial: futures::lock::Mutex<()>,
 }
 impl Owner {
     pub(super) fn ensure_ready(&self) -> Result<(), OperationError> {
-        if self
+        // Hold both views together: conversion inserts pending before removing
+        // unmapped material, so a split observation must not miss that transfer.
+        let pending = self
             .pending
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .is_empty()
-        {
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let unmapped = self
+            .unmapped
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if pending.is_empty() && unmapped.is_empty() {
             Ok(())
         } else {
             Err(OperationError::RecoveryRequired)
@@ -139,6 +148,16 @@ impl Owner {
     }
     pub(super) async fn drain(&self) -> crate::Result<()> {
         let _serial = self.serial.lock().await;
+        loop {
+            let entry = self
+                .unmapped
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .first()
+                .cloned();
+            let Some(entry) = entry else { break };
+            self.map_obtained(&entry)?;
+        }
         loop {
             let entry = self
                 .pending

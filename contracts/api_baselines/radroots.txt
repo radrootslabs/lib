@@ -36,6 +36,7 @@ pub const fn radroots::client::Client::inbox(&self) -> radroots::inbox::Inbox<'_
 pub const fn radroots::client::Client::listings(&self) -> radroots::listings::Listings<'_>
 pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
 pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
+pub fn radroots::client::Client::orders(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::orders::Orders<'_>
 pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::start(&self, radroots_execution::session::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>
@@ -152,6 +153,16 @@ pub async fn radroots::operations::Operations<'a>::get(&self, radroots_domain::i
 pub async fn radroots::operations::Operations<'a>::get_matching(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationStatus>>
 pub async fn radroots::operations::Operations<'a>::preparation_abort(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<core::option::Option<radroots_storage::inventory::abort::StockAbortReceipt>>
 pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::receipt::OperationStatus>
+pub mod radroots::orders
+pub use radroots::orders::AcceptOrderInput
+pub use radroots::orders::AcceptanceRecipient
+pub use radroots::orders::AcceptanceStatus
+pub use radroots::orders::InstalledAcceptance
+pub struct radroots::orders::Orders<'a>
+impl<'a> radroots::orders::Orders<'a>
+pub async fn radroots::orders::Orders<'a>::accept(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_protocol::command::order_acceptance::AcceptOrderInput) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots::orders::Orders<'a>::acceptance_status(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots::orders::Orders<'a>::resume_acceptance(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
 pub mod radroots::signing
 pub use radroots::signing::ArtifactRole
 pub use radroots::signing::AuthorizationHeader
@@ -256,6 +267,7 @@ pub const fn radroots::client::Client::inbox(&self) -> radroots::inbox::Inbox<'_
 pub const fn radroots::client::Client::listings(&self) -> radroots::listings::Listings<'_>
 pub async fn radroots::client::Client::open(radroots::client::NativeConfig) -> radroots_execution::Result<Self>
 pub fn radroots::client::Client::operations(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::operations::Operations<'_>
+pub fn radroots::client::Client::orders(&self, &radroots_execution::workspace::WorkspaceSession) -> radroots::orders::Orders<'_>
 pub fn radroots::client::Client::preview() -> Self
 pub fn radroots::client::Client::signer_session(&self) -> core::option::Option<radroots_execution::session::signer::SignerSession>
 pub async fn radroots::client::Client::start(&self, radroots_execution::session::StartMode) -> radroots_execution::Result<radroots::client::SessionStatus>

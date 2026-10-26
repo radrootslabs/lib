@@ -1,4 +1,7 @@
 //! Explicit preview/native resource opening and owned session lifecycle.
+#[cfg(all(test, feature = "native", unix))]
+#[path = "native_commerce_tests.rs"]
+mod commerce_tests;
 #[cfg(any(feature = "client", feature = "native"))]
 use core::num::NonZeroU16;
 use radroots_execution::{
@@ -67,6 +70,7 @@ impl CloseReceipt {
 struct WorkspaceResource {
     journal: Shared<dyn radroots_storage::command::OperationJournal>,
     inventory: Shared<dyn radroots_storage::inventory::InventoryStore>,
+    commerce: Option<Shared<dyn radroots_execution::session::commerce::AcceptanceStore>>,
 }
 
 /// Explicit native public-cache opening, without participant/stock authority.
@@ -101,7 +105,8 @@ impl NativeConfig {
         let owner = Shared::new(workspace);
         self.workspace = Some(WorkspaceResource {
             journal: owner.clone(),
-            inventory: owner,
+            inventory: owner.clone(),
+            commerce: Some(Shared::new(crate::native_commerce::NativeCommerce(owner))),
         });
         self
     }
@@ -362,6 +367,20 @@ impl Client {
         scope: &radroots_execution::workspace::WorkspaceSession,
     ) -> crate::stock::Stock<'_> {
         crate::stock::Stock::new(self, scope.clone())
+    }
+
+    /// Selects ordinary order workflows through this client's attachment.
+    /// Constructing the view establishes no stock or signing permission.
+    pub fn orders(&self, scope: &crate::WorkspaceSession) -> crate::orders::Orders<'_> {
+        crate::orders::Orders::new(self, scope.clone())
+    }
+    pub(crate) fn acceptance_store(
+        &self,
+    ) -> crate::Result<Shared<dyn radroots_execution::session::commerce::AcceptanceStore>> {
+        self.workspace
+            .as_ref()
+            .and_then(|v| v.commerce.clone())
+            .ok_or(MISSING_WORKSPACE)
     }
     /// Accesses private inquiry execution. Access alone performs no work.
     pub const fn inbox(&self) -> crate::inbox::Inbox<'_> {

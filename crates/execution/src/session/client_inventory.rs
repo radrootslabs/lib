@@ -339,7 +339,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         .await
     }
 
-    async fn run_stock<T: HostBound + 'static>(
+    pub(super) async fn run_stock<T: HostBound + 'static>(
         &self,
         scope: &WorkspaceSession,
         proposed: OperationContext,

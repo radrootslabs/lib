@@ -11,6 +11,9 @@ pub mod tasks;
 pub mod command;
 
 #[cfg(feature = "workspace_session")]
+pub mod commerce;
+
+#[cfg(feature = "workspace_session")]
 mod stock_evidence;
 
 #[cfg(feature = "client_session")]

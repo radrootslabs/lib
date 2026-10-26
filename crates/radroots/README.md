@@ -122,6 +122,20 @@ These calls neither sign nor publish, and cleanup is separate from business
 cancellation or stopping delivery. Full commerce orchestration, qualified claimed
 attempt reconciliation and the final common receipt/binding surface remain open.
 
+`client.orders(&scope).accept(context, minimum, sources, listings, input)` owns
+the captured acceptance through the same native stock owner's T0/T1/S and
+initial T2. Core verifies the complete original peer/self routes and ciphertexts
+before signing, captures peer evidence and installs its agreement before
+self-copy work. Inspect `AcceptanceStatus` for independent recipient and
+installation facts. Preparation alone is pending; this path claims no wrapping
+or relay delivery. `acceptance_status` reads original facts and
+`resume_acceptance` explicitly continues original retained work. Existing claims
+never provide a fresh signing permit. Qualified recovery requires the retained
+policy, actual current host permit and original window. Caller wait loss cannot
+discard accepted work or obtained material. Application migrations, full order
+transitions/accounting, original negative reconciliation and final qualification
+remain separate required work.
+
 `radroots::domain` provides exact decimals and distinct order, thread, workspace,
 executor and operation identities. `radroots::OperationId` is the 256-bit
 retained identity. These values alone perform no authorization or transaction.

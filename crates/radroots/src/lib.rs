@@ -13,6 +13,7 @@ pub mod knowledge;
 pub mod listing;
 pub mod listings;
 pub mod operations;
+pub mod orders;
 pub mod signing;
 pub mod stock;
 pub mod storage;
@@ -25,6 +26,9 @@ mod native_tasks;
 
 #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
 mod native_commands;
+
+#[cfg(all(feature = "native", unix))]
+mod native_commerce;
 
 #[cfg(feature = "native")]
 pub use client::NativeConfig;

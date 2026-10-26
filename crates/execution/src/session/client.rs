@@ -14,6 +14,10 @@ mod commands;
 #[path = "client_inventory.rs"]
 mod inventory;
 
+#[cfg(feature = "workspace_session")]
+#[path = "client_commerce.rs"]
+mod commerce;
+
 struct Resources<H> {
     host: H,
     signer: Shared<Mutex<Option<SignerSession>>>,
