@@ -34,6 +34,7 @@ pub use stock::{
     StockRequestSnapshot, StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest,
     StockSigningProgress, StockSnapshotRequest, StockSourceCapture, StockSourceOutcome,
     StockSourceProfile, StockSourceReceipt, StockSourceSnapshot, StockUnissuedInvocation,
+    StockUnissuedOutcome, StockUnissuedReceipt,
 };
 mod worker;
 

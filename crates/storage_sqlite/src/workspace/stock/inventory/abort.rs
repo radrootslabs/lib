@@ -149,7 +149,7 @@ pub(in crate::workspace) async fn abort(
         &proof,
     ))
     .await?;
-    if auth.access.authority.catalog != 13 {
+    if !matches!(auth.access.authority.catalog, 13..=14) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation_id())).await?;
@@ -389,7 +389,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if auth.access.authority.catalog != 13 {
+    if !matches!(auth.access.authority.catalog, 13..=14) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation_id())).await?;

@@ -4,7 +4,22 @@ use super::*;
 pub(in crate::workspace::stock) struct Projection {
     pub operation: OperationId,
     pub recipient: PublicKey,
-    pub evidence: Option<[u8; 32]>,
+    pub kind: ProjectionKind,
+}
+#[derive(Clone, Copy)]
+pub(in crate::workspace::stock) enum ProjectionKind {
+    Claim,
+    Obtained([u8; 32]),
+    OriginalUnissued(u8),
+}
+impl ProjectionKind {
+    fn family(self) -> i64 {
+        match self {
+            Self::Claim => 4,
+            Self::Obtained(_) => 5,
+            Self::OriginalUnissued(_) => 8,
+        }
+    }
 }
 impl Projection {
     pub fn digest(self, actor: PublicKey, entry: OperationId) -> [u8; 32] {
@@ -14,9 +29,16 @@ impl Projection {
         hash.update(entry.as_bytes());
         hash.update(self.operation.as_bytes());
         hash.update(self.recipient.as_bytes());
-        hash.update([u8::from(self.evidence.is_some())]);
-        if let Some(value) = self.evidence {
-            hash.update(value);
+        match self.kind {
+            ProjectionKind::Claim => hash.update([0]),
+            ProjectionKind::Obtained(value) => {
+                hash.update([1]);
+                hash.update(value);
+            }
+            ProjectionKind::OriginalUnissued(reason) => {
+                hash.update([2]);
+                hash.update([reason]);
+            }
         }
         hash.finalize().into()
     }
@@ -30,7 +52,7 @@ impl Projection {
             connection,
             actor.as_bytes(),
             entry.as_bytes(),
-            if self.evidence.is_some() { 5 } else { 4 },
+            self.kind.family(),
         )
         .await?;
         if actual != self.digest(actor, entry) {
@@ -48,6 +70,7 @@ pub(in crate::workspace::stock) async fn raw_projection(
     let row = match family {
         4 => sqlx::query("SELECT CASE WHEN length(operation_id)=32 THEN operation_id END,CASE WHEN length(recipient)=32 THEN recipient END,NULL FROM stock_signing_claims WHERE actor=? AND entry_id=?").bind(actor.as_slice()).bind(entry.as_slice()).fetch_optional(connection).await,
         5 => sqlx::query("SELECT CASE WHEN length(operation_id)=32 THEN operation_id END,CASE WHEN length(recipient)=32 THEN recipient END,CASE WHEN length(evidence_digest)=32 THEN evidence_digest END FROM stock_signing_evidence WHERE actor=? AND entry_id=?").bind(actor.as_slice()).bind(entry.as_slice()).fetch_optional(connection).await,
+        8 => sqlx::query("SELECT CASE WHEN length(operation_id)=32 THEN operation_id END,CASE WHEN length(recipient)=32 THEN recipient END,reason FROM stock_original_unissued WHERE actor=? AND entry_id=?").bind(actor.as_slice()).bind(entry.as_slice()).fetch_optional(connection).await,
         _ => return Err(OperationError::RecoveryRequired),
     }.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
     let field = |index| {
@@ -61,7 +84,20 @@ pub(in crate::workspace::stock) async fn raw_projection(
         operation: OperationId::from_bytes(field(0)?),
         recipient: PublicKey::from_bytes(field(1)?)
             .map_err(|_| OperationError::RecoveryRequired)?,
-        evidence: if family == 5 { Some(field(2)?) } else { None },
+        kind: match family {
+            4 => ProjectionKind::Claim,
+            5 => ProjectionKind::Obtained(field(2)?),
+            8 => {
+                let reason: u8 = row
+                    .try_get::<i64, _>(2)
+                    .ok()
+                    .and_then(|v| v.try_into().ok())
+                    .filter(|v| (1..=9).contains(v))
+                    .ok_or(OperationError::RecoveryRequired)?;
+                ProjectionKind::OriginalUnissued(reason)
+            }
+            _ => return Err(OperationError::RecoveryRequired),
+        },
     };
     Ok(projection.digest(
         PublicKey::from_bytes(*actor).map_err(|_| OperationError::RecoveryRequired)?,

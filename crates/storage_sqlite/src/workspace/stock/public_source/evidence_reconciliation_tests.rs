@@ -78,7 +78,8 @@ async fn same_owner_capture_reconciliation_resolves_real_rollback_and_unknown_co
         writer_remains_owned(&r).await;
         remove_fault(&mut database, unknown).await;
         let original_clock = r.clock.0.load(Ordering::SeqCst);
-        r.clock.0.store(0, Ordering::SeqCst);
+        r.clock.0.store(u64::MAX, Ordering::SeqCst);
+        assert!(r.clock.now().is_err());
         let retained = committed(reconcile(&r, &request).await.unwrap());
         assert_eq!(retained.signing_attempt_id(), report.attempt_id());
         assert_eq!(retained.observed_at_unix_ms(), None);
@@ -127,13 +128,13 @@ async fn refused_stock_recovery_preflight_keeps_writer_and_cached_original_autho
     remove_fault(&mut database, true).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v13", 0);
+        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v14", 0);
     let mut recovery = Box::pin(reconcile(&r, &request));
     assert!(futures::poll!(recovery.as_mut()).is_pending());
     provider.gate.entered();
     // The authorized old snapshot has already been read. Future schema then
     // refuses read-only preflight after close; no migration or repair occurs.
-    sqlx::raw_sql("PRAGMA user_version=14")
+    sqlx::raw_sql("PRAGMA user_version=15")
         .execute(&mut database)
         .await
         .unwrap();
@@ -145,7 +146,7 @@ async fn refused_stock_recovery_preflight_keeps_writer_and_cached_original_autho
             .fetch_one(&mut database)
             .await
             .unwrap(),
-        14
+        15
     );
     let wrong = AttachmentProof::from_protected_input(&[99; 32]).unwrap();
     assert!(
@@ -154,7 +155,7 @@ async fn refused_stock_recovery_preflight_keeps_writer_and_cached_original_autho
             .is_err()
     );
     request.with_json(|value| assert_eq!(value, raw));
-    sqlx::raw_sql("PRAGMA user_version=13")
+    sqlx::raw_sql("PRAGMA user_version=14")
         .execute(&mut database)
         .await
         .unwrap();
@@ -183,7 +184,7 @@ async fn lost_reconciliation_observer_drains_the_actual_replacement_and_original
     remove_fault(&mut database, true).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v13", 0);
+        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v14", 0);
     let mut recovery = Box::pin(reconcile(&r, &request));
     assert!(futures::poll!(recovery.as_mut()).is_pending());
     provider.gate.entered();

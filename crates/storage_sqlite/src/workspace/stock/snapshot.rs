@@ -227,7 +227,7 @@ pub(in crate::workspace) async fn read(
     } else {
         None
     };
-    let aborted = if auth.access.authority.catalog == 13 {
+    let aborted = if auth.access.authority.catalog >= 13 {
         Some(
             Box::pin(super::inventory::abort::existing(
                 turn,
@@ -246,7 +246,7 @@ pub(in crate::workspace) async fn read(
     {
         return Err(OperationError::RecoveryRequired);
     }
-    let current_order = if auth.access.authority.catalog == 13 {
+    let current_order = if auth.access.authority.catalog >= 13 {
         Some(
             Box::pin(super::inventory::checkpoint::authenticate_order_state(
                 turn.connection,

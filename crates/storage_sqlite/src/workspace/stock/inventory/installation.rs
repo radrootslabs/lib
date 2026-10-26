@@ -222,7 +222,7 @@ pub(in crate::workspace) async fn install(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12 | 13) {
+    if !matches!(auth.access.authority.catalog, 12..=14) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;
@@ -234,7 +234,7 @@ pub(in crate::workspace) async fn install(
     if auth.access.current.observed_at() < plan.bound.bound_at() {
         return Err(WorkspaceError::Unavailable.into());
     }
-    let current_order = if auth.access.authority.catalog == 13 {
+    let current_order = if auth.access.authority.catalog >= 13 {
         let checked = Box::pin(super::checkpoint::authenticate_order_state(
             turn.connection,
             turn.selected,
@@ -481,7 +481,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12 | 13) {
+    if !matches!(auth.access.authority.catalog, 12..=14) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (retained, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;

@@ -316,7 +316,7 @@ protected credential and original creation transaction ID without touching the
 namespace. Retain those values through protected host handling before awaiting
 `NativeWorkspace::initialize_seller_stock`. This explicit factory uses
 `stock_execution_v1.sqlite` and `.stock_execution_v1.lock` in a new owner-only
-directory. Its exact version-13 catalog has separate protected authority and
+directory. Its exact version-14 catalog has separate protected authority and
 grant records. Grant scope, route, genesis, credential and AEAD context are
 separate from ordinary outboxes. The same bounded native worker owns the
 connection, admitted work, close completion and persistent writer lock.
@@ -340,11 +340,11 @@ ordinary outbox journal jobs are refused on the stock namespace.
 
 ## Owner-private inventory transactions
 
-The current stock factory creates exact catalog version13 and protected authority
-payload version13. Retained enrollment-only version1 still authenticates and
+The current stock factory creates exact catalog version14 and protected authority
+payload version14. Retained enrollment-only version1 still authenticates and
 revokes with its original codec; its inventory ports refuse unsupported work.
 Retained inventory version2 keeps its original pool-creation records and refuses
-new correction commands. Catalogs1–12 retain their exact original codecs and
+new correction commands. Catalogs1–13 retain their exact original codecs and
 capabilities; current multipart operation framing uses version5.
 No namespace is automatically migrated. Ordinary outbox catalogs are separate.
 
@@ -451,8 +451,8 @@ transaction. A recovery view never returns a fresh dispatch permit.
 
 
 Initial seller agreement installation uses `install_stock_agreement` on the same
-bounded native owner. Catalog12 introduced this transition; current catalog13
-retains formats1–12 without upgrading them. The original preparation fence remains
+bounded native owner. Catalog12 introduced this transition; current catalog14
+retains formats1–13 without upgrading them. The original preparation fence remains
 immutable. Separate authenticated
 agreement and per-recipient work indexes bind original T0/T1 and retained S.
 Installation requires actual peer seal evidence; a missing self copy remains
@@ -499,7 +499,7 @@ complete ordinary caller workflow, claimed-attempt reconciliation, amendments,
 fulfillment, browser stock or platform resource qualification.
 
 `authorize_stock_exact_replay` returns a non-cloneable `StockExactReplayPermit`
-only for an existing protected catalog13 claim whose retained T1 permits local
+only for an existing protected catalog13/14 claim whose retained T1 permits local
 exact replay. A short read transaction rechecks current ExecuteAndRecover
 consent, original actor/resources, acknowledged minimum, original window and
 non-regressing time, order eligibility, backing and raw/root/grant/claim witnesses.
@@ -556,7 +556,20 @@ implementation supplies no execution evidence or guarantee about unrelated
 root-key use. The predecessor intent-extraction method consumes the same permit
 and supplies no unissued observation while its composing callers await cutover.
 
-This live observation is not persisted and cannot authorize abort or release.
-Catalog13, protected formats and the absent-claims-only abort rule are unchanged.
-Retained/durable original negative capture and the composing caller cutover
-remain required before claimed-attempt reconciliation can release stock.
+The live observation alone is not durable evidence and cannot authorize release.
+Catalog14 adds a separate protected original-refusal journal family. Its105-byte
+body binds the actual original claim entry, transaction, head and fixed reason;
+its SQL projection is independently authenticated in the protected ancestry.
+`capture_stock_original_unissued` borrows the owned observation and retained
+credential; failed writes leave that observation available. It requires no
+fresh clock, grant or issuance window. `reconcile_stock_original_unissued`
+resolves uncertainty through the same retained namespace owner, and
+`stock_original_unissued` reads authenticated original facts. Reports distinguish
+confirmed append from transaction uncertainty; duplicates preserve the original
+receipt. Old catalogs/root contexts1–13 are retained without automatic upgrade.
+
+The original refusal does not prove operation-wide nonissuance or prevent later
+valid S from being retained. It has no stock effect. The absent-claims-only abort
+rule remains conservative. Shared caller retention/cutover, predecessor removal
+and safe claimed-abort/late-S reconciliation remain required before releasing
+claimed preparatory stock.

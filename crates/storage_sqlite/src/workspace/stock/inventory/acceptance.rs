@@ -236,7 +236,7 @@ pub(in crate::workspace) async fn admit(
     let access = turn
         .access(request.binding(), request.minimum_checkpoint(), &proof)
         .await?;
-    if !matches!(access.authority.catalog, 9..=13) {
+    if !matches!(access.authority.catalog, 9..=14) {
         return Err(OperationError::UnsupportedOperation);
     }
     let command = request.command();
@@ -271,7 +271,7 @@ pub(in crate::workspace) async fn admit(
                 return Err(OperationError::Unauthorized);
             }
         }
-        let aborted = if access.authority.catalog == 13 {
+        let aborted = if access.authority.catalog >= 13 {
             Some(Box::pin(super::abort::existing(turn, &access, operation)).await?)
         } else {
             None
@@ -361,7 +361,7 @@ pub(in crate::workspace) async fn admit(
     {
         return Err(OperationError::StaleState);
     }
-    let current_order = if access.authority.catalog == 13 {
+    let current_order = if access.authority.catalog >= 13 {
         let checked = Box::pin(checkpoint::authenticate_order_state(
             turn.connection,
             turn.selected,

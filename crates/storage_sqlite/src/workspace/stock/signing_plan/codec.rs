@@ -103,7 +103,7 @@ pub(in crate::workspace::stock) async fn read_entry(
         take(&frame.body, &mut offset)?,
         take(&frame.body, &mut offset)?,
     ];
-    let original = acceptance::codec::read(connection, input, crypto, related)
+    let original = Box::pin(acceptance::codec::read(connection, input, crypto, related))
         .await?
         .ok_or(OperationError::RecoveryRequired)?;
     if header.related_operation != Some(related)

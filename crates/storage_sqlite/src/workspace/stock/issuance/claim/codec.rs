@@ -54,9 +54,14 @@ pub(in crate::workspace::stock) async fn read_entry(
     }
     let body: Body = super::super::super::closed_record(&frame.body)
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let plan = signing_plan::read_entry(connection, input, crypto, body.plan_entry)
-        .await?
-        .ok_or(OperationError::RecoveryRequired)?;
+    let plan = Box::pin(signing_plan::read_entry(
+        connection,
+        input,
+        crypto,
+        body.plan_entry,
+    ))
+    .await?
+    .ok_or(OperationError::RecoveryRequired)?;
     let selected = intent(&plan.bound, body.recipient, CancellationSignal::new())?;
     let header = &frame.header;
     if body.version != 1
@@ -80,7 +85,7 @@ pub(in crate::workspace::stock) async fn read_entry(
     let projection = Projection {
         operation: body.operation,
         recipient: body.recipient,
-        evidence: None,
+        kind: ProjectionKind::Claim,
     };
     let report = StockSigningAttempt {
         bound: Arc::new(plan.bound),

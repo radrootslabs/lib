@@ -211,7 +211,10 @@ async fn already_obtained_bytes_survive_expiry_revocation_cancellation_and_missi
                 rawdb.close().await.unwrap();
             }
             "expired" => r.clock.0.store(350, Ordering::SeqCst),
-            "clock_unavailable" => r.clock.0.store(0, Ordering::SeqCst),
+            "clock_unavailable" => {
+                r.clock.0.store(u64::MAX, Ordering::SeqCst);
+                assert!(r.clock.now().is_err());
+            }
             "revoked" => {
                 r.store
                     .revoke_stock_grant(
@@ -439,7 +442,7 @@ async fn lost_capture_observer_drains_owned_input_and_reopens_the_exact_original
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v14", 0);
     let mut pending = Box::pin(
         r.store
             .capture_stock_signing_evidence(&evidence, r.enrollment.proof()),
@@ -527,7 +530,7 @@ async fn capture_rechecks_original_claim_plan_root_and_grant_after_provider_io()
         let mut rawdb = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v13", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v14", 0);
         let mut pending = Box::pin(
             r.store
                 .capture_stock_signing_evidence(&evidence, r.enrollment.proof()),

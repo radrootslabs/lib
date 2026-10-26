@@ -108,7 +108,7 @@ pub(in crate::workspace::stock) async fn read_entry(
         return Err(OperationError::RecoveryRequired);
     }
     let raw = std::str::from_utf8(&body[PREFIX..]).map_err(|_| OperationError::RecoveryRequired)?;
-    let original = claim::read_entry(connection, input, crypto, claim)
+    let original = Box::pin(claim::read_entry(connection, input, crypto, claim))
         .await?
         .ok_or(OperationError::RecoveryRequired)?;
     let header = &frame.header;
@@ -148,7 +148,7 @@ pub(in crate::workspace::stock) async fn read_entry(
     let projection = Projection {
         operation: original.report.bound_plan().plan().operation_id(),
         recipient: original.report.recipient(),
-        evidence: Some(digest),
+        kind: ProjectionKind::Obtained(digest),
     };
     let receipt = StockEvidenceReceipt::from_committed_store(
         CommitAttempt::new(

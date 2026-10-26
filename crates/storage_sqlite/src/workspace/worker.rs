@@ -74,6 +74,21 @@ enum Job {
         AttachmentProof,
         Reply<stock::StockEvidenceOutcome, OperationError>,
     ),
+    CaptureStockUnissued(
+        Box<stock::issuance::unissued::Request>,
+        AttachmentProof,
+        Reply<stock::StockUnissuedOutcome, OperationError>,
+    ),
+    RecoverStockUnissued(
+        Box<stock::issuance::unissued::Request>,
+        AttachmentProof,
+        Reply<stock::StockUnissuedOutcome, OperationError>,
+    ),
+    StockUnissued(
+        Box<stock::StockClaimRequest>,
+        AttachmentProof,
+        Reply<Option<stock::StockUnissuedReceipt>, OperationError>,
+    ),
     CaptureStockEvidence(
         Box<radroots_storage::inventory::StockEvidenceRequest>,
         AttachmentProof,
@@ -334,6 +349,12 @@ impl Job {
             Self::StockEvidencePage(_, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
+            Self::CaptureStockUnissued(_, _, reply) | Self::RecoverStockUnissued(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockUnissued(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::CaptureStockEvidence(_, _, reply) | Self::RecoverStockEvidence(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -537,7 +558,7 @@ impl Handle {
                         return;
                     }
                 };
-                let result = runtime.block_on(async {
+                let result = runtime.block_on(Box::pin(async {
                     if !creating {
                         let preflight = preflight_existing(&namespace, &input, &crypto).await;
                         if let Err(error) = preflight {
@@ -609,6 +630,9 @@ impl Handle {
                                         | Job::ClaimStockSigning(..)
                                         | Job::StockSigningAttempt(..)
                                         | Job::AuthorizeStockExactReplay(..)
+                                        | Job::CaptureStockUnissued(..)
+                                        | Job::RecoverStockUnissued(..)
+                                        | Job::StockUnissued(..)
                                         | Job::CaptureStockEvidence(..)
                                         | Job::RecoverStockEvidence(..)
                                         | Job::StockEvidence(..)
@@ -626,6 +650,24 @@ impl Handle {
                                 continue;
                             }
                             let job = match job {
+                                Job::RecoverStockUnissued(request, proof, reply) => {
+                                    let result = Box::pin(
+                                        super::recovery::RecoveryTurn {
+                                            connection: &mut connection,
+                                            cached_grant: &mut cached_grant,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                            options: &options,
+                                        }
+                                        .capture_unissued(*request, proof),
+                                    )
+                                    .await;
+                                    let _ = reply.send(result);
+                                    continue;
+                                }
                                 Job::RecoverStockEvidence(request, proof, reply) => {
                                     let result = Box::pin(
                                         super::recovery::RecoveryTurn {
@@ -973,6 +1015,46 @@ impl Handle {
                                     };
                                     let _ = reply.send(result);
                                 }
+                                Job::CaptureStockUnissued(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::issuance::unissued::capture(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockUnissued(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::issuance::unissued::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
                                 Job::CaptureStockEvidence(evidence, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
                                         Box::pin(stock::issuance::evidence::capture(
@@ -1285,9 +1367,9 @@ impl Handle {
                                     }
                                     let _ = reply.send(result);
                                 }
-                                job @ (Job::RecoverCapture(..) | Job::RecoverStockEvidence(..)) => {
-                                    job.reject_recovery()
-                                }
+                                job @ (Job::RecoverCapture(..)
+                                | Job::RecoverStockEvidence(..)
+                                | Job::RecoverStockUnissued(..)) => job.reject_recovery(),
                                 Job::CaptureDeliveryObservation(
                                     binding,
                                     proof,
@@ -1582,7 +1664,7 @@ impl Handle {
                         .await
                         .map_err(|_| WorkspaceError::StorageFailure);
                     checked.and(closed).and_then(|()| namespace.validate())
-                });
+                }));
                 drop(namespace);
                 let _ = completion.send(Some(result));
             })
@@ -1832,6 +1914,30 @@ impl Handle {
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
+    pub(super) async fn capture_stock_original_unissued(
+        &self,
+        request: stock::issuance::unissued::Request,
+        proof: AttachmentProof,
+        reconcile: bool,
+    ) -> Result<stock::StockUnissuedOutcome, OperationError> {
+        let unknown = stock::StockUnissuedOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(if reconcile {
+            Job::RecoverStockUnissued(Box::new(request), proof, reply)
+        } else {
+            Job::CaptureStockUnissued(Box::new(request), proof, reply)
+        })?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_original_unissued(
+        &self,
+        request: stock::StockClaimRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<stock::StockUnissuedReceipt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockUnissued(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn reconcile_stock_evidence(
         &self,
         request: radroots_storage::inventory::StockEvidenceRequest,
@@ -2023,9 +2129,12 @@ impl Handle {
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
             Job::RetainStockListing(..)
+            | Job::CaptureStockUnissued(..)
+            | Job::RecoverStockUnissued(..)
             | Job::CaptureStockEvidence(..)
             | Job::RecoverStockEvidence(..) => 256 * 1024,
             Job::StockEvidence(..)
+            | Job::StockUnissued(..)
             | Job::StockEvidencePage(..)
             | Job::StockSnapshot(..)
             | Job::InstallStockAgreement(..)

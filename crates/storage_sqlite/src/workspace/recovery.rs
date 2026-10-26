@@ -38,18 +38,21 @@ pub(super) struct RecoveryAuthorization {
 enum Material {
     Outbox(Box<(AttachmentInput, ArtifactEvidence)>),
     Stock(Box<StockEvidenceRequest>),
+    Unissued(Box<stock::issuance::unissued::Request>),
 }
 impl Material {
     fn input(&self) -> &AttachmentInput {
         match self {
             Self::Outbox(value) => &value.0,
             Self::Stock(value) => value.binding().input(),
+            Self::Unissued(value) => value.binding.input(),
         }
     }
 }
 enum Captured {
     Outbox(EvidenceCaptureOutcome),
     Stock(StockEvidenceOutcome),
+    Unissued(stock::StockUnissuedOutcome),
 }
 impl Captured {
     fn committed(&self) -> bool {
@@ -57,6 +60,7 @@ impl Captured {
             self,
             Self::Outbox(EvidenceCaptureOutcome::Committed(_))
                 | Self::Stock(StockEvidenceOutcome::Committed(_))
+                | Self::Unissued(stock::StockUnissuedOutcome::Committed(_))
         )
     }
 }
@@ -112,6 +116,27 @@ impl RecoveryTurn<'_> {
             _ => Err(OperationError::RecoveryRequired),
         }
     }
+    pub(super) async fn capture_unissued(
+        &mut self,
+        request: stock::issuance::unissued::Request,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockUnissuedOutcome, OperationError> {
+        if self.namespace.kind() != Kind::SellerStock {
+            return Err(OperationError::UnsupportedOperation);
+        }
+        if !SellerAuthoritySelection::from_attachment(self.selected)
+            .matches_attachment(request.binding.input())
+        {
+            return Err(OperationError::Unauthorized);
+        }
+        match self
+            .recover(Material::Unissued(Box::new(request)), proof)
+            .await?
+        {
+            Captured::Unissued(value) => Ok(value),
+            _ => Err(OperationError::RecoveryRequired),
+        }
+    }
     async fn recover(
         &mut self,
         material: Material,
@@ -146,6 +171,20 @@ impl RecoveryTurn<'_> {
                 .await
                 .map(Captured::Outbox)
             }
+            Material::Unissued(request) => Box::pin(stock::issuance::unissued::capture(
+                &mut stock::inventory::Turn {
+                    connection,
+                    namespace: self.namespace,
+                    selected: self.selected,
+                    crypto: self.crypto,
+                    clock: self.clock,
+                    uncertain: uncertainty,
+                },
+                *request,
+                proof,
+            ))
+            .await
+            .map(Captured::Unissued),
             Material::Stock(request) => Box::pin(stock::issuance::evidence::capture(
                 &mut stock::inventory::Turn {
                     connection,

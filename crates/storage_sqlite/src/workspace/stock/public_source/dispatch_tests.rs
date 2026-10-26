@@ -9,6 +9,8 @@ use radroots_signing::{
 use std::sync::atomic::{AtomicUsize, Ordering};
 static CLOCK_MODE: AtomicUsize = AtomicUsize::new(0);
 static CLOCK_CALLS: AtomicUsize = AtomicUsize::new(0);
+#[path = "unissued_tests.rs"]
+mod retained;
 fn clock() -> Result<u64, radroots_signing::Error> {
     CLOCK_CALLS.fetch_add(1, Ordering::SeqCst);
     match CLOCK_MODE.load(Ordering::SeqCst) {

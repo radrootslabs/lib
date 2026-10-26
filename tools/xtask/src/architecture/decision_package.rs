@@ -349,6 +349,18 @@ struct SigningPlanBinding {
     browser_failure_boundary: String,
     browser_failure_preserves_signer_rejection: bool,
     browser_failure_max_bytes: u16,
+    original_unissued_capture_owner: String,
+    original_unissued_payload_version: u32,
+    original_unissued_journal_family: u32,
+    original_unissued_capture_requires_owned_observation: bool,
+    original_unissued_capture_borrows_observation: bool,
+    original_unissued_capture_rechecks_original_claim: bool,
+    original_unissued_capture_requires_fresh_permission: bool,
+    original_unissued_capture_requires_fresh_clock: bool,
+    original_unissued_capture_releases_stock: bool,
+    original_unissued_reconciliation_same_owner: bool,
+    original_unissued_late_evidence_retained: bool,
+    original_unissued_worker_charge_bytes: u32,
     original_unissued_live_observation_owner: String,
     original_unissued_observation_is_durable: bool,
     original_unissued_observation_releases_stock: bool,
@@ -575,10 +587,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 13
+            && stock.schema_version == 14
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v13"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v14"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -697,6 +709,38 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !stock
                 .signing_plan_binding
                 .recovery_refusal_creates_original_unissued_observation
+            && stock.signing_plan_binding.original_unissued_capture_owner
+                == "NativeWorkspace.capture_stock_original_unissued"
+            && stock.signing_plan_binding.original_unissued_payload_version == 1
+            && stock.signing_plan_binding.original_unissued_journal_family == 8
+            && stock
+                .signing_plan_binding
+                .original_unissued_capture_requires_owned_observation
+            && stock
+                .signing_plan_binding
+                .original_unissued_capture_borrows_observation
+            && stock
+                .signing_plan_binding
+                .original_unissued_capture_rechecks_original_claim
+            && !stock
+                .signing_plan_binding
+                .original_unissued_capture_requires_fresh_permission
+            && !stock
+                .signing_plan_binding
+                .original_unissued_capture_requires_fresh_clock
+            && !stock
+                .signing_plan_binding
+                .original_unissued_capture_releases_stock
+            && stock
+                .signing_plan_binding
+                .original_unissued_reconciliation_same_owner
+            && stock
+                .signing_plan_binding
+                .original_unissued_late_evidence_retained
+            && stock
+                .signing_plan_binding
+                .original_unissued_worker_charge_bytes
+                == 262144
             && !stock
                 .signing_plan_binding
                 .ordinary_existing_claim_grants_first_dispatch
@@ -809,7 +853,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
             && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
-            && stock.qualified_local_recovery.native_catalog == 13
+            && stock.qualified_local_recovery.native_catalog == 14
             && stock.qualified_local_recovery.worker_charge_bytes == 1048576
             && stock
                 .qualified_local_recovery
@@ -1831,6 +1875,36 @@ mod tests {
                 "original_unissued_live_observation_owner",
                 json!("caller_assertion"),
             ),
+            (
+                "original_unissued_capture_owner",
+                json!("caller_certificate"),
+            ),
+            ("original_unissued_payload_version", json!(2)),
+            ("original_unissued_journal_family", json!(5)),
+            (
+                "original_unissued_capture_requires_owned_observation",
+                json!(false),
+            ),
+            (
+                "original_unissued_capture_borrows_observation",
+                json!(false),
+            ),
+            (
+                "original_unissued_capture_rechecks_original_claim",
+                json!(false),
+            ),
+            (
+                "original_unissued_capture_requires_fresh_permission",
+                json!(true),
+            ),
+            (
+                "original_unissued_capture_requires_fresh_clock",
+                json!(true),
+            ),
+            ("original_unissued_capture_releases_stock", json!(true)),
+            ("original_unissued_reconciliation_same_owner", json!(false)),
+            ("original_unissued_late_evidence_retained", json!(false)),
+            ("original_unissued_worker_charge_bytes", json!(1)),
             ("original_unissued_observation_is_durable", json!(true)),
             ("original_unissued_observation_releases_stock", json!(true)),
             (

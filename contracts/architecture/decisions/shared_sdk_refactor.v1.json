@@ -82,7 +82,7 @@
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
       "captured_replay": "local_replay_safe",
-      "native_catalog": 13,
+      "native_catalog": 14,
       "worker_charge_bytes": 1048576,
       "existing_protected_claim_required": true,
       "current_execute_consent_required": true,
@@ -98,7 +98,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 13,
+    "schema_version": 14,
     "retained_enrollment_versions": [
       1
     ],
@@ -113,9 +113,10 @@
       9,
       10,
       11,
-      12
+      12,
+      13
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v13",
+    "authority_payload_schema": "radroots.seller_stock.authority.v14",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -288,7 +289,19 @@
       "current_issued_consent_required": true,
       "final_permission_and_clock_witnesses_required": true,
       "signer_invoked": false,
-      "agreement_installed": false
+      "agreement_installed": false,
+      "original_unissued_capture_owner": "NativeWorkspace.capture_stock_original_unissued",
+      "original_unissued_payload_version": 1,
+      "original_unissued_journal_family": 8,
+      "original_unissued_capture_requires_owned_observation": true,
+      "original_unissued_capture_borrows_observation": true,
+      "original_unissued_capture_rechecks_original_claim": true,
+      "original_unissued_capture_requires_fresh_permission": false,
+      "original_unissued_capture_requires_fresh_clock": false,
+      "original_unissued_capture_releases_stock": false,
+      "original_unissued_reconciliation_same_owner": true,
+      "original_unissued_late_evidence_retained": true,
+      "original_unissued_worker_charge_bytes": 262144
     },
     "signing_issuance": {
       "shared_capture_port": "InventoryStore.capture_stock_evidence",
