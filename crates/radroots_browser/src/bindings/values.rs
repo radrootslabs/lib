@@ -73,6 +73,7 @@ impl ListingValue {
             Error::UnsupportedState {
                 axis: "listing_terms".into(),
                 operation_id: None,
+                signer_rejection: None,
             }
             .into()
         })
@@ -107,6 +108,7 @@ impl ChatValue {
             _ => Err(Error::UnsupportedState {
                 axis: "chat_relation".into(),
                 operation_id: None,
+                signer_rejection: None,
             }
             .into()),
         }
@@ -118,6 +120,7 @@ impl ChatValue {
             _ => Err(Error::UnsupportedState {
                 axis: "chat_relation".into(),
                 operation_id: None,
+                signer_rejection: None,
             }
             .into()),
         }
@@ -129,6 +132,7 @@ impl ChatValue {
             _ => Err(Error::UnsupportedState {
                 axis: "chat_relation".into(),
                 operation_id: None,
+                signer_rejection: None,
             }
             .into()),
         }

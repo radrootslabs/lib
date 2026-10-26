@@ -266,6 +266,7 @@ fn production_sources_publish_only_the_approved_traits_and_no_host_stack() {
         public_traits,
         [
             "CurrentAuthoringAuthority",
+            "ExactIssuer",
             "HostBound",
             "NonceSource",
             "ParticipantProvider",

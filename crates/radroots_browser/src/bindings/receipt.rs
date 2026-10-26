@@ -214,6 +214,7 @@ fn project_inner<T>(
     let context = || Error::UnsupportedState {
         axis: "receipt_data".to_owned(),
         operation_id: Some(value.context().operation_id().to_string()),
+        signer_rejection: None,
     };
     let artifacts = value
         .artifacts()

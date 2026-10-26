@@ -255,3 +255,8 @@ through resume and close, including when another operation encounters that
 retained obligation. Observation append failures likewise retain their original
 operation. A failed conversion is cached without discarding its signed input;
 neither a new caller nor close may relabel it as a successful capture.
+
+The observed `SignerSession` implements Signing's narrow `ExactIssuer` port
+through the existing scoped exact call, preserving actual current identity,
+capability, single-call admission, callback lifetime and bound-result checks.
+The port itself supplies no fresh claim or durable nonissuance authority.

@@ -18,6 +18,15 @@ struct Binding {
     callbacks: Shared<dyn SignerCallbacks>,
 }
 
+impl radroots_signing::issuance::ExactIssuer for SignerSession {
+    fn issue_exact(
+        &self,
+        intent: radroots_signing::issuance::SigningIntent,
+    ) -> radroots_signing::signer::BoxFuture<'_, radroots_signing::issuance::SigningOutcome> {
+        Box::pin(self.sign_exact(intent))
+    }
+}
+
 impl Binding {
     fn shared_copy(&self) -> Self {
         Self {

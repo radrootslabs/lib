@@ -97,14 +97,17 @@ impl SignerCallbacks for Callbacks {
 fn signer_clock() -> Result<u64, radroots_signing::Error> {
     Ok(js_sys::Date::now() as u64)
 }
-async fn signer(client: &Client) -> Result<Rc<Callbacks>, JsValue> {
-    let signer = LocalSigner::with_clock(
+fn local_signer() -> LocalSigner {
+    LocalSigner::with_clock(
         parse_secret_key("0000000000000000000000000000000000000000000000000000000000000001")
             .unwrap(),
         signer_clock,
     )
     .unwrap()
-    .with_nonce_source(Rc::new(BrowserNonceSource));
+    .with_nonce_source(Rc::new(BrowserNonceSource))
+}
+async fn signer(client: &Client) -> Result<Rc<Callbacks>, JsValue> {
+    let signer = local_signer();
     let callbacks = Rc::new(Callbacks {
         quiesced: Cell::new(0),
         closed: Cell::new(0),

@@ -107,7 +107,7 @@ try{
     worker.onerror=event=>{worker.terminate();reject(Error(event.message));};
     worker.onmessage=event=>{worker.terminate();event.data.error?reject(Error(event.data.error)):resolve(event.data);};worker.postMessage(base);
   }),base);
-  assert.equal(main.passed.length,6);assert.deepEqual(main.passed,dedicated.passed);assert.deepEqual(errors,[]);
+  assert.equal(main.passed.length,7);assert.deepEqual(main.passed,dedicated.passed);assert.deepEqual(errors,[]);
   for(const context of ['main','worker']){
     const publications=observed.filter(item=>item.route==='/'+context&&item.message[0]==='EVENT');
     assert.equal(publications.length,2);assert.equal(new Set(publications.map(item=>item.message[1].id)).size,2);

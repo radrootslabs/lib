@@ -25,15 +25,15 @@ mod stock;
 pub use stock::{
     SellerStockConfig, StockAuthorityReceipt, StockBoundSigningPlan, StockCapturedEvidence,
     StockClaimOutcome, StockClaimReference, StockClaimRequest, StockConsentCapture,
-    StockConsentMode, StockConsentOutcome, StockConsentReceipt, StockDispatchPermit,
-    StockEnrollment, StockEvidenceCapture, StockEvidencePage, StockExactReplayPermit,
-    StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt, StockHistorySnapshot,
-    StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,
-    StockListingCapture, StockListingOutcome, StockListingReceipt, StockListingSnapshot,
-    StockOperationSnapshot, StockPublicationWork, StockRecipientSnapshot, StockRequestSnapshot,
-    StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest, StockSigningProgress,
-    StockSnapshotRequest, StockSourceCapture, StockSourceOutcome, StockSourceProfile,
-    StockSourceReceipt, StockSourceSnapshot,
+    StockConsentMode, StockConsentOutcome, StockConsentReceipt, StockDispatchOutcome,
+    StockDispatchPermit, StockEnrollment, StockEvidenceCapture, StockEvidencePage,
+    StockExactReplayPermit, StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt,
+    StockHistorySnapshot, StockInstallationOutcome, StockInstallationReceipt,
+    StockInstallationRequest, StockListingCapture, StockListingOutcome, StockListingReceipt,
+    StockListingSnapshot, StockOperationSnapshot, StockPublicationWork, StockRecipientSnapshot,
+    StockRequestSnapshot, StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest,
+    StockSigningProgress, StockSnapshotRequest, StockSourceCapture, StockSourceOutcome,
+    StockSourceProfile, StockSourceReceipt, StockSourceSnapshot, StockUnissuedInvocation,
 };
 mod worker;
 

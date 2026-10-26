@@ -294,3 +294,10 @@ decryption, signs nothing and retains the original call deadline. The proof
 grants no workspace consent, T1 commit, dispatch, stock or network authority.
 This portable verifier is shared by scoped execution and concrete native T1;
 the predecessor Nostr export is removed without an alias.
+
+`issuance::ExactIssuer` is the narrow target-aware exact-signature IO port.
+Participant providers delegate to their existing exact method; an observed
+execution scope can supply the same port while retaining identity, capability
+and callback lifecycle checks. The port grants no first-dispatch authority or
+adapter qualification. A caller-created outcome is not proof of an original
+invocation: the concrete executor must own its fresh permit through that call.

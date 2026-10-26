@@ -382,6 +382,17 @@ pub radroots_storage_sqlite::workspace::StockConsentOutcome::Unknown::command_op
 pub radroots_storage_sqlite::workspace::StockConsentOutcome::Unknown::control_operation: radroots_domain::identifier::OperationId
 pub radroots_storage_sqlite::workspace::StockConsentOutcome::Unknown::subject: radroots_domain::identifier::GrantId
 pub radroots_storage_sqlite::workspace::StockConsentOutcome::Unknown::transaction: radroots_domain::identifier::TransactionId
+pub enum radroots_storage_sqlite::workspace::StockDispatchOutcome
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Obtained
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Obtained::artifact: radroots_signing::issuance::SignedArtifact
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Obtained::attempt: radroots_storage_sqlite::workspace::StockSigningAttempt
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Rejected
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Rejected::attempt: radroots_storage_sqlite::workspace::StockSigningAttempt
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Rejected::rejection: radroots_signing::issuance::RejectedArtifact
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Unissued(radroots_storage_sqlite::workspace::StockUnissuedInvocation)
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Unknown
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Unknown::attempt: radroots_storage_sqlite::workspace::StockSigningAttempt
+pub radroots_storage_sqlite::workspace::StockDispatchOutcome::Unknown::reason: radroots_signing::provider::ProviderError
 pub enum radroots_storage_sqlite::workspace::StockGrantOutcome
 pub radroots_storage_sqlite::workspace::StockGrantOutcome::Committed(radroots_storage_sqlite::workspace::StockGrantReceipt)
 pub radroots_storage_sqlite::workspace::StockGrantOutcome::Unknown(radroots_domain::identifier::TransactionId)
@@ -549,6 +560,8 @@ pub fn radroots_storage_sqlite::workspace::StockConsentReceipt::resources(&self)
 pub const fn radroots_storage_sqlite::workspace::StockConsentReceipt::subject_grant(&self) -> radroots_domain::identifier::GrantId
 pub const fn radroots_storage_sqlite::workspace::StockConsentReceipt::transaction_id(&self) -> radroots_domain::identifier::TransactionId
 pub struct radroots_storage_sqlite::workspace::StockDispatchPermit
+impl radroots_storage_sqlite::workspace::StockDispatchPermit
+pub fn radroots_storage_sqlite::workspace::StockDispatchPermit::dispatch(self, &dyn radroots_signing::issuance::ExactIssuer, radroots_signing::request::CancellationSignal) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_storage_sqlite::workspace::StockDispatchOutcome, radroots_storage::command::OperationError>>
 impl radroots_storage_sqlite::workspace::StockDispatchPermit
 pub fn radroots_storage_sqlite::workspace::StockDispatchPermit::into_signing_intent(self, radroots_signing::request::CancellationSignal) -> core::result::Result<(radroots_signing::issuance::SigningIntent, radroots_storage_sqlite::workspace::StockSigningAttempt), radroots_storage::command::OperationError>
 pub const fn radroots_storage_sqlite::workspace::StockDispatchPermit::report(&self) -> &radroots_storage_sqlite::workspace::StockSigningAttempt
@@ -731,6 +744,12 @@ pub fn radroots_storage_sqlite::workspace::StockSourceSnapshot::protected_seal(&
 pub const fn radroots_storage_sqlite::workspace::StockSourceSnapshot::receipt(&self) -> &radroots_storage_sqlite::workspace::StockSourceReceipt
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockSourceSnapshot
 pub fn radroots_storage_sqlite::workspace::StockSourceSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage_sqlite::workspace::StockUnissuedInvocation
+impl radroots_storage_sqlite::workspace::StockUnissuedInvocation
+pub const fn radroots_storage_sqlite::workspace::StockUnissuedInvocation::attempt(&self) -> &radroots_storage_sqlite::workspace::StockSigningAttempt
+pub const fn radroots_storage_sqlite::workspace::StockUnissuedInvocation::reason(&self) -> radroots_signing::provider::ProviderError
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockUnissuedInvocation
+pub fn radroots_storage_sqlite::workspace::StockUnissuedInvocation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::WorkspaceCrypto
 impl radroots_storage_sqlite::workspace::WorkspaceCrypto
 pub fn radroots_storage_sqlite::workspace::WorkspaceCrypto::new(alloc::sync::Arc<dyn radroots_secrets::provider::SecretProvider>, radroots_secrets::id::SecretRef, radroots_secrets::wrapping::SecretMaterial, radroots_secrets::provider::AccessPolicy) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>

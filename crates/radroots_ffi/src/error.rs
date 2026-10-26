@@ -1,4 +1,4 @@
-use crate::Admission;
+use crate::{Admission, SignerRejection};
 
 /// Pure command-parser failures retained across the native boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, uniffi::Enum)]
@@ -21,13 +21,16 @@ pub enum Error {
         retry: String,
         operation_id: Option<String>,
         admission: Admission,
+        signer_rejection: Option<Box<SignerRejection>>,
     },
     #[error("unsupported boundary state {axis}")]
     UnsupportedState {
         axis: String,
         operation_id: Option<String>,
+        signer_rejection: Option<Box<SignerRejection>>,
     },
 }
+const _: () = assert!(core::mem::size_of::<Error>() <= 128);
 impl Error {
     pub(crate) fn command(field: &'static str, error: radroots::CommandError) -> Self {
         let kind = match error {
@@ -39,6 +42,7 @@ impl Error {
                 return Self::UnsupportedState {
                     axis: "command_input".to_owned(),
                     operation_id: None,
+                    signer_rejection: None,
                 };
             }
         };
@@ -54,16 +58,19 @@ impl Error {
     }
     pub(crate) fn with_operation(self, id: String) -> Self {
         match self {
-            Self::UnsupportedState { axis, .. } => Self::UnsupportedState {
+            Self::UnsupportedState {
+                axis,
+                signer_rejection,
+                ..
+            } => Self::UnsupportedState {
                 axis,
                 operation_id: Some(id),
+                signer_rejection,
             },
             value => value,
         }
     }
-}
-impl From<radroots::Error> for Error {
-    fn from(value: radroots::Error) -> Self {
+    fn operation(value: radroots::Error, signer_rejection: Option<Box<SignerRejection>>) -> Self {
         let operation_id = value.context().operation_id().map(|v| v.to_string());
         match Admission::try_from(value.context().admission()) {
             Ok(admission) => Self::Operation {
@@ -71,11 +78,31 @@ impl From<radroots::Error> for Error {
                 retry: value.retry().as_str().to_owned(),
                 operation_id,
                 admission,
+                signer_rejection,
             },
-            Err(Self::UnsupportedState { axis, .. }) => {
-                Self::UnsupportedState { axis, operation_id }
-            }
-            Err(other) => other,
+            Err(Self::UnsupportedState { axis, .. }) => Self::UnsupportedState {
+                axis,
+                operation_id,
+                signer_rejection,
+            },
+            Err(_) => Self::UnsupportedState {
+                axis: "admission".to_owned(),
+                operation_id,
+                signer_rejection,
+            },
         }
+    }
+}
+impl From<radroots::Error> for Error {
+    fn from(value: radroots::Error) -> Self {
+        Self::operation(value, None)
+    }
+}
+impl From<radroots::ExecutionFailure> for Error {
+    fn from(value: radroots::ExecutionFailure) -> Self {
+        Self::operation(
+            value.error(),
+            value.signer_rejection().map(|v| Box::new(v.into())),
+        )
     }
 }

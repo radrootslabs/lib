@@ -1,4 +1,4 @@
-use super::Admission;
+use super::{Admission, SignerRejection};
 use wasm_bindgen::prelude::*;
 
 /// Pure command-parser failures retained across the native boundary.
@@ -24,12 +24,15 @@ pub enum Error {
         retry: String,
         operation_id: Option<String>,
         admission: Admission,
+        signer_rejection: Option<Box<SignerRejection>>,
     },
     UnsupportedState {
         axis: String,
         operation_id: Option<String>,
+        signer_rejection: Option<Box<SignerRejection>>,
     },
 }
+const _: () = assert!(core::mem::size_of::<Error>() <= 128);
 impl Error {
     pub(crate) fn command(
         field: &'static str,
@@ -48,6 +51,7 @@ impl Error {
                 return Self::UnsupportedState {
                     axis: "command_input".to_owned(),
                     operation_id: None,
+                    signer_rejection: None,
                 };
             }
         };
@@ -63,16 +67,22 @@ impl Error {
     }
     pub(crate) fn with_operation(self, id: String) -> Self {
         match self {
-            Self::UnsupportedState { axis, .. } => Self::UnsupportedState {
+            Self::UnsupportedState {
+                axis,
+                signer_rejection,
+                ..
+            } => Self::UnsupportedState {
                 axis,
                 operation_id: Some(id),
+                signer_rejection,
             },
             value => value,
         }
     }
-}
-impl From<radroots_execution::Error> for Error {
-    fn from(value: radroots_execution::Error) -> Self {
+    fn operation(
+        value: radroots_execution::Error,
+        signer_rejection: Option<Box<SignerRejection>>,
+    ) -> Self {
         let operation_id = value.context().operation_id().map(|v| v.to_string());
         match Admission::try_from(value.context().admission()) {
             Ok(admission) => Self::Operation {
@@ -80,12 +90,32 @@ impl From<radroots_execution::Error> for Error {
                 retry: value.retry().as_str().to_owned(),
                 operation_id,
                 admission,
+                signer_rejection,
             },
-            Err(Self::UnsupportedState { axis, .. }) => {
-                Self::UnsupportedState { axis, operation_id }
-            }
-            Err(other) => other,
+            Err(Self::UnsupportedState { axis, .. }) => Self::UnsupportedState {
+                axis,
+                operation_id,
+                signer_rejection,
+            },
+            Err(_) => Self::UnsupportedState {
+                axis: "admission".into(),
+                operation_id,
+                signer_rejection,
+            },
         }
+    }
+}
+impl From<radroots_execution::Error> for Error {
+    fn from(value: radroots_execution::Error) -> Self {
+        Self::operation(value, None)
+    }
+}
+impl From<radroots_execution::ExecutionFailure> for Error {
+    fn from(value: radroots_execution::ExecutionFailure) -> Self {
+        Self::operation(
+            value.error(),
+            value.signer_rejection().map(|v| Box::new(v.into())),
+        )
     }
 }
 
@@ -103,6 +133,8 @@ pub struct Failure {
     pub admission: Option<Admission>,
     #[wasm_bindgen(readonly, getter_with_clone)]
     pub field: Option<String>,
+    #[wasm_bindgen(readonly, getter_with_clone)]
+    pub signer_rejection: Option<SignerRejection>,
 }
 impl From<Error> for Failure {
     fn from(value: Error) -> Self {
@@ -113,6 +145,7 @@ impl From<Error> for Failure {
                 operation_id: None,
                 admission: None,
                 field: Some(field),
+                signer_rejection: None,
             },
             Error::CommandInput { field, kind } => Self {
                 code: match kind {
@@ -125,25 +158,33 @@ impl From<Error> for Failure {
                 operation_id: None,
                 admission: None,
                 field: Some(field),
+                signer_rejection: None,
             },
             Error::Operation {
                 code,
                 retry,
                 operation_id,
                 admission,
+                signer_rejection,
             } => Self {
                 code,
                 retry: Some(retry),
                 operation_id,
                 admission: Some(admission),
                 field: None,
+                signer_rejection: signer_rejection.map(|v| *v),
             },
-            Error::UnsupportedState { axis, operation_id } => Self {
+            Error::UnsupportedState {
+                axis,
+                operation_id,
+                signer_rejection,
+            } => Self {
                 code: "UnsupportedState".into(),
                 retry: None,
                 operation_id,
                 admission: None,
                 field: Some(axis),
+                signer_rejection: signer_rejection.map(|v| *v),
             },
         }
     }

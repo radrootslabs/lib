@@ -158,6 +158,50 @@ private suspend fun cancelledObservers() = coroutineScope {
     close(host, next)
 }
 
+
+private suspend fun rejectedSignerFlow() {
+    data class Case(val mode: FixtureRejection, val reason: SignerRejectionReason, val covered: String?, val total: String?, val digest: String?)
+    val cases = listOf(
+        Case(FixtureRejection.MALFORMED, SignerRejectionReason.INVALID_ARTIFACT,
+            "synthetic private rejection canary".toByteArray().size.toString(), "synthetic private rejection canary".toByteArray().size.toString(),
+            "ba883ea08dff4c078672a055dd2be042d9debb5b22c66527e4499c068011879d"),
+        Case(FixtureRejection.OVERSIZED, SignerRejectionReason.TOO_LARGE,
+            "65536", "65537", "d2d5af5c0316f5c2b119635386239edc87abce035f851c3f6ee127e6c3cbf435"),
+        Case(FixtureRejection.FOREIGN, SignerRejectionReason.BINDING_MISMATCH, null, null, null)
+    )
+    for (case in cases) {
+        val host = Host.open(seller = true, unknownSigning = false, pauseAfterSigning = false)
+        host.setRejectedSigning(case.mode)
+        val session = host.session(); session.client.start(StartMode.ONLINE)
+        val context = request(host, "18")
+        var refused = false
+        try {
+            session.client.publishListing(session.workspace, context, listing(host, "18"))
+        } catch (error: RadrootsException.Operation) {
+            refused = true
+            check(error.code == "signer_tampering" && error.retry == "manual_reconciliation")
+            check(error.operationId == context.operationId && error.admission == Admission.CONFIRMED)
+            val diagnostic = checkNotNull(error.signerRejection)
+            check(diagnostic.reason == case.reason)
+            val fingerprint = diagnostic.fingerprint
+            if (fingerprint != null) {
+                check(fingerprint.coveredBytes == case.covered && fingerprint.totalBytes == case.total)
+                check(fingerprint.sha256.size == 32)
+                check(fingerprint.sha256.joinToString("") { "%02x".format(it.toInt() and 255) } == case.digest)
+            } else {
+                check(case.digest == null)
+            }
+        }
+        check(refused)
+        val facts = session.client.operation(session.workspace, context.operationId, null)
+        check(facts?.businessInstallation == BusinessInstallation.NOT_INSTALLED)
+        val measured = host.measurements()
+        check(measured.signingCalls == "1" && measured.legacySigningCalls == "0" && measured.originalSignedEvents.isEmpty())
+        close(host, session)
+    }
+}
+
+
 fun main(args: Array<String>) = runBlocking {
     if ("--plain-panic" in args) {
         var caught = false
@@ -173,5 +217,6 @@ fun main(args: Array<String>) = runBlocking {
     privateFlowAndErrors()
     unknownFlow()
     cancelledObservers()
-    println("{\"language\":\"kotlin\",\"state\":\"passed\",\"actual_workflows\":4,\"result_panic_caught\":true}")
+    rejectedSignerFlow()
+    println("{\"language\":\"kotlin\",\"state\":\"passed\",\"actual_workflows\":5,\"result_panic_caught\":true}")
 }

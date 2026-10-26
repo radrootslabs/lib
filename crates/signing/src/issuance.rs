@@ -36,6 +36,19 @@ pub use exact_recovery::{
     ExactRecoveryCapability, ExactRecoveryKind, ExactRecoveryOutcome, ExactRecoveryRequest,
 };
 
+/// Narrow exact-signature IO boundary, with native or browser-local futures.
+/// Implementations must preserve obtained material and honestly distinguish a
+/// pre-dispatch refusal from uncertainty. The port and its response confer no
+/// first-dispatch authority, durable evidence or adapter qualification.
+pub trait ExactIssuer: crate::host::HostBound {
+    fn issue_exact(&self, intent: SigningIntent) -> crate::signer::BoxFuture<'_, SigningOutcome>;
+}
+impl<T: crate::provider::ParticipantProvider + ?Sized> ExactIssuer for T {
+    fn issue_exact(&self, intent: SigningIntent) -> crate::signer::BoxFuture<'_, SigningOutcome> {
+        crate::provider::ParticipantProvider::sign_exact(self, intent)
+    }
+}
+
 /// Bounded exact preimage and immutable provenance. It is neither an
 /// authenticated command context nor evidence of T0/T1 admission.
 /// It has no automatic input-bearing diagnostics or serialization.

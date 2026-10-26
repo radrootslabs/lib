@@ -104,7 +104,8 @@ func privateFlowAndErrors() async throws {
     do {
         _ = try await session.client.inquire(workspace: other.workspace, request: request(host, "13"), input: input)
         throw SmokeFailure.failed("foreign scope accepted")
-    } catch Error.Operation(_, _, let operation, let admission) {
+    } catch Error.Operation(_, _, let operation, let admission, let rejected) {
+        try check(rejected == nil, "foreign admission has no signer diagnostic")
         try check(operation == String(repeating: "13", count: 32) && admission == .notAdmitted, "retained safe error context")
     }
     try check(try host.measurements().signingCalls == before.signingCalls, "refusal has no signature")
@@ -113,7 +114,8 @@ func privateFlowAndErrors() async throws {
     do {
         _ = try await session.client.inquire(workspace: session.workspace, request: request(host, "16"), input: input)
         throw SmokeFailure.failed("closed attachment accepted")
-    } catch Error.Operation(_, _, _, let admission) {
+    } catch Error.Operation(_, _, _, let admission, let rejected) {
+        try check(rejected == nil, "closed admission has no signer diagnostic")
         try check(admission == .notAdmitted, "actual attachment close releases authority")
     }
     try check(try host.measurements().signingCalls == before.signingCalls, "closed scope has no signature")
@@ -169,6 +171,44 @@ func cancelledObservers() async throws {
     try await close(host, next)
 }
 
+
+func rejectedSignerFlow() async throws {
+    let cases: [(FixtureRejection, SignerRejectionReason, String?, String?, String?)] = [
+        (.malformed, .invalidArtifact, String("synthetic private rejection canary".utf8.count), String("synthetic private rejection canary".utf8.count), "ba883ea08dff4c078672a055dd2be042d9debb5b22c66527e4499c068011879d"),
+        (.oversized, .tooLarge, "65536", "65537", "d2d5af5c0316f5c2b119635386239edc87abce035f851c3f6ee127e6c3cbf435"),
+        (.foreign, .bindingMismatch, nil, nil, nil)
+    ]
+    for (mode, reason, covered, total, digest) in cases {
+        let host = try await Host.open(seller: true, unknownSigning: false, pauseAfterSigning: false)
+        host.setRejectedSigning(mode: mode)
+        let session = host.session(); _ = try await session.client.start(mode: .online)
+        let context = try request(host, "18")
+        do {
+            _ = try await session.client.publishListing(workspace: session.workspace, request: context, input: listing(host, "18"))
+            throw SmokeFailure.failed("rejected signer accepted")
+        } catch Error.Operation(let code, let retry, let operation, let admission, let diagnostic) {
+            try check(code == "signer_tampering" && retry == "manual_reconciliation", "original rejection code/retry")
+            try check(operation == context.operationId && admission == .confirmed, "original confirmed command")
+            guard let diagnostic else { throw SmokeFailure.failed("lost bounded signer metadata") }
+            try check(diagnostic.reason == reason, "fixed rejection reason")
+            if let fingerprint = diagnostic.fingerprint {
+                try check(fingerprint.coveredBytes == covered && fingerprint.totalBytes == total, "exact prefix coverage")
+                try check(fingerprint.sha256.count == 32, "bounded SHA-256")
+                let actual = fingerprint.sha256.map { String(format: "%02x", $0) }.joined()
+                try check(actual == digest, "actual original prefix hash")
+            } else {
+                try check(digest == nil, "no fabricated/missing fingerprint")
+            }
+        }
+        let facts = try await session.client.operation(workspace: session.workspace, operationId: context.operationId, expectedDigest: nil)
+        try check(facts?.businessInstallation == .notInstalled, "rejection is no business success")
+        let measured = try host.measurements()
+        try check(measured.signingCalls == "1" && measured.legacySigningCalls == "0" && measured.originalSignedEvents.isEmpty, "no signature or legacy fallback")
+        try await close(host, session)
+    }
+}
+
+
 @main enum NativeSmoke {
     static func main() async throws {
         if CommandLine.arguments.contains("--plain-panic") { _ = fixturePanicProbe(); throw SmokeFailure.failed("plain panic returned") }
@@ -191,6 +231,7 @@ func cancelledObservers() async throws {
         try await privateFlowAndErrors(); trace("swift private workflow passed")
         try await unknownFlow(); trace("swift unknown workflow passed")
         try await cancelledObservers(); trace("swift cancellation workflow passed")
-        print("{\"language\":\"swift\",\"state\":\"passed\",\"actual_workflows\":4,\"result_panic_caught\":true}")
+        try await rejectedSignerFlow(); trace("swift bounded rejection workflow passed")
+        print("{\"language\":\"swift\",\"state\":\"passed\",\"actual_workflows\":5,\"result_panic_caught\":true}")
     }
 }

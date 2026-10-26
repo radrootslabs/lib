@@ -13,6 +13,8 @@ use radroots_signing::{
     request::CancellationSignal,
 };
 use std::{num::NonZeroU64, sync::Arc};
+mod dispatch;
+pub use dispatch::{StockDispatchOutcome, StockUnissuedInvocation};
 pub(in crate::workspace::stock) mod codec;
 pub(in crate::workspace::stock) use codec::read_entry;
 

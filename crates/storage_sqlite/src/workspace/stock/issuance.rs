@@ -14,7 +14,10 @@ pub(in crate::workspace) mod evidence;
 mod projection;
 pub(in crate::workspace) mod recovery;
 pub(super) use claim::read_entry;
-pub use claim::{StockClaimOutcome, StockClaimRequest, StockDispatchPermit, StockSigningAttempt};
+pub use claim::{
+    StockClaimOutcome, StockClaimRequest, StockDispatchOutcome, StockDispatchPermit,
+    StockSigningAttempt, StockUnissuedInvocation,
+};
 pub use evidence::{StockCapturedEvidence, StockEvidenceCapture, StockEvidencePage};
 pub(super) use projection::{Projection, raw_projection};
 pub use recovery::StockExactReplayPermit;

@@ -339,6 +339,20 @@ struct SigningPlanBinding {
     rejected_signer_report_is_nonissuance: bool,
     generic_peer_installed_before_rejected_self_return: bool,
     unknown_installation_blocks_delivery: bool,
+    native_first_dispatch_owns_issuer_invocation: bool,
+    exact_issuer_port: String,
+    native_failure_boundary: String,
+    native_failure_preserves_signer_rejection: bool,
+    native_failure_fingerprint_bytes: u8,
+    native_failure_coverage: String,
+    native_failure_max_bytes: u16,
+    browser_failure_boundary: String,
+    browser_failure_preserves_signer_rejection: bool,
+    browser_failure_max_bytes: u16,
+    original_unissued_live_observation_owner: String,
+    original_unissued_observation_is_durable: bool,
+    original_unissued_observation_releases_stock: bool,
+    recovery_refusal_creates_original_unissued_observation: bool,
     ordinary_existing_claim_grants_first_dispatch: bool,
     ordinary_replay_requires_original_policy_and_current_permit: bool,
     ordinary_acceptance_implies_delivery: bool,
@@ -652,6 +666,37 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock
                 .signing_plan_binding
                 .unknown_installation_blocks_delivery
+            && stock
+                .signing_plan_binding
+                .native_first_dispatch_owns_issuer_invocation
+            && stock.signing_plan_binding.exact_issuer_port
+                == "radroots_signing.issuance.ExactIssuer"
+            && stock.signing_plan_binding.native_failure_boundary == "radroots_ffi.Error"
+            && stock
+                .signing_plan_binding
+                .native_failure_preserves_signer_rejection
+            && stock.signing_plan_binding.native_failure_fingerprint_bytes == 32
+            && stock.signing_plan_binding.native_failure_coverage == "canonical_decimal_strings"
+            && stock.signing_plan_binding.native_failure_max_bytes == 128
+            && stock.signing_plan_binding.browser_failure_boundary
+                == "radroots_browser.bindings.Failure"
+            && stock
+                .signing_plan_binding
+                .browser_failure_preserves_signer_rejection
+            && stock.signing_plan_binding.browser_failure_max_bytes == 128
+            && stock
+                .signing_plan_binding
+                .original_unissued_live_observation_owner
+                == "radroots_storage_sqlite.workspace.StockUnissuedInvocation"
+            && !stock
+                .signing_plan_binding
+                .original_unissued_observation_is_durable
+            && !stock
+                .signing_plan_binding
+                .original_unissued_observation_releases_stock
+            && !stock
+                .signing_plan_binding
+                .recovery_refusal_creates_original_unissued_observation
             && !stock
                 .signing_plan_binding
                 .ordinary_existing_claim_grants_first_dispatch
@@ -1772,6 +1817,26 @@ mod tests {
                 json!(false),
             ),
             ("unknown_installation_blocks_delivery", json!(false)),
+            ("native_first_dispatch_owns_issuer_invocation", json!(false)),
+            ("exact_issuer_port", json!("legacy_signer_fallback")),
+            ("native_failure_boundary", json!("discarded_primitive")),
+            ("native_failure_preserves_signer_rejection", json!(false)),
+            ("native_failure_fingerprint_bytes", json!(64)),
+            ("native_failure_coverage", json!("floating_point")),
+            ("native_failure_max_bytes", json!(256)),
+            ("browser_failure_boundary", json!("discarded_primitive")),
+            ("browser_failure_preserves_signer_rejection", json!(false)),
+            ("browser_failure_max_bytes", json!(256)),
+            (
+                "original_unissued_live_observation_owner",
+                json!("caller_assertion"),
+            ),
+            ("original_unissued_observation_is_durable", json!(true)),
+            ("original_unissued_observation_releases_stock", json!(true)),
+            (
+                "recovery_refusal_creates_original_unissued_observation",
+                json!(true),
+            ),
             (
                 "ordinary_obtained_owned_before_descriptor_conversion",
                 json!(false),

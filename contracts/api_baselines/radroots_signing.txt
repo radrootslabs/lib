@@ -241,6 +241,10 @@ impl core::fmt::Debug for radroots_signing::issuance::VerifiedDmRelayAdvertiseme
 pub fn radroots_signing::issuance::VerifiedDmRelayAdvertisement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_signing::issuance::MAX_EVENT_UNIX_SECONDS: u64
 pub const radroots_signing::issuance::SIGNED_EVENT_MAX_BYTES: usize
+pub trait radroots_signing::issuance::ExactIssuer: radroots_signing::host::HostBound
+pub fn radroots_signing::issuance::ExactIssuer::issue_exact(&self, radroots_signing::issuance::SigningIntent) -> radroots_signing::signer::BoxFuture<'_, radroots_signing::issuance::SigningOutcome>
+impl<T: radroots_signing::provider::ParticipantProvider + ?core::marker::Sized> radroots_signing::issuance::ExactIssuer for T
+pub fn T::issue_exact(&self, radroots_signing::issuance::SigningIntent) -> radroots_signing::signer::BoxFuture<'_, radroots_signing::issuance::SigningOutcome>
 pub mod radroots_signing::provider
 pub enum radroots_signing::provider::PrivateCryptoCapability
 pub radroots_signing::provider::PrivateCryptoCapability::Nip44V2

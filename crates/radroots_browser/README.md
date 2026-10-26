@@ -12,6 +12,16 @@ and uses configured public write targets. Public results remain typed Listings;
 they acquire no private recipient, wrapping or stock authority. Scoped operation
 reads and explicit retry retain original signing and publication evidence.
 
+Effectful methods return the shared `ExecutionResult`; queries/resources retain
+compact errors. Generated `Failure` values preserve actual code/retry and
+original operation/admission with optional fixed signer rejection and exact
+SHA-256 prefix coverage. Byte counts are canonical decimal strings. No raw
+signer payload crosses the boundary. Unknown projection retains diagnostics,
+and drain/close preserve the original pending operation. Native and browser
+boundary errors keep a128-byte stack limit by boxing optional diagnostics;
+generated callers still receive typed values. Caller diagnostics grant no
+business, original nonissuance or stock-release authority.
+
 Accepted commands belong to a bounded local Rust task owner independently of
 their observation futures. Close permanently stops admission, drains original
 obtained evidence, disconnects the shared session, disposes original socket and

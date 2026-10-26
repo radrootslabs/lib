@@ -13,7 +13,7 @@ use radroots_signing::{
 };
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
 };
 use tokio::sync::Notify;
 
@@ -22,6 +22,7 @@ pub(crate) struct MeasuredSigner {
     pub calls: AtomicU64,
     pub legacy_calls: AtomicU64,
     pub unknown: AtomicBool,
+    pub rejection: AtomicUsize,
     pub pause_next: AtomicBool,
     pub paused: AtomicBool,
     release: Notify,
@@ -40,6 +41,7 @@ impl MeasuredSigner {
             calls: AtomicU64::new(0),
             legacy_calls: AtomicU64::new(0),
             unknown: AtomicBool::new(unknown),
+            rejection: AtomicUsize::new(0),
             pause_next: AtomicBool::new(pause),
             paused: AtomicBool::new(false),
             release: Notify::new(),
@@ -70,6 +72,29 @@ impl ParticipantProvider for MeasuredSigner {
     fn sign_exact(&self, intent: SigningIntent) -> BoxFuture<'_, SigningOutcome> {
         Box::pin(async move {
             self.calls.fetch_add(1, Ordering::SeqCst);
+            match self.rejection.load(Ordering::SeqCst) {
+                1 => {
+                    return SigningOutcome::capture(
+                        &intent,
+                        "synthetic private rejection canary".into(),
+                        None,
+                    );
+                }
+                2 => return SigningOutcome::capture(&intent, "X".repeat(65537), None),
+                3 => {
+                    let foreign = radroots_signing::issuance::IntentBinding::from_components(
+                        radroots_domain::OperationId::from_bytes([0xf1; 32]),
+                        [0xf2; 32],
+                        [0xf3; 32],
+                        radroots_signing::issuance::ArtifactRole::PublicEvent,
+                        None,
+                        std::num::NonZeroU64::new(1).unwrap(),
+                    )
+                    .unwrap();
+                    return SigningOutcome::not_dispatched(foreign, ProviderError::Cancelled);
+                }
+                _ => {}
+            }
             if self.unknown.load(Ordering::SeqCst) {
                 return SigningOutcome::unknown(intent.binding(), ProviderError::ProviderFailure);
             }

@@ -10,6 +10,15 @@ boundary owns language conversion, with exact identifiers and integer/decimal
 strings, explicit optional values and tagged business results. It does not
 implement a second command engine, storage adapter, signer or retry policy.
 
+Effectful command errors preserve the shared execution failure's actual code,
+retry class, original operation and admission. Optional `SignerRejection` carries
+a fixed reason and optional SHA-256 fingerprint with exact covered/total byte
+counts as canonical decimal strings. A prefix digest does not claim full
+coverage. No raw signer response or private input enters these diagnostics.
+Future unsupported reasons remain explicit, and unsupported state projection
+retains any bounded diagnostic. The generated error schema changes with this
+contract; source-owned Swift and Kotlin fixtures regenerate and execute it.
+
 Host injection is distinct from a general foreign-language open/enrollment
 factory, platform custody and callback qualification. These additional surfaces
 must be implemented and exercised before they are advertised. This package is

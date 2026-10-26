@@ -549,12 +549,13 @@ fn exact_intent(second: bool, operation: u8) -> radroots_signing::issuance::Sign
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn exact_issuance_requires_successful_observation_actual_support_and_the_frozen_key() {
+    use radroots_signing::issuance::ExactIssuer;
     use radroots_signing::issuance::OutcomeKind;
     let Fixture {
         session, control, ..
     } = scope();
     assert!(matches!(
-        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        block_on(ExactIssuer::issue_exact(&session, exact_intent(false, 1))).kind(),
         OutcomeKind::NotDispatched(ProviderError::CapabilityUnavailable)
     ));
     block_on(session.observe()).unwrap();
@@ -572,7 +573,7 @@ fn exact_issuance_requires_successful_observation_actual_support_and_the_frozen_
     ));
     assert!(!session.identity_changed());
     assert!(matches!(
-        block_on(session.sign_exact(exact_intent(false, 1))).kind(),
+        block_on(ExactIssuer::issue_exact(&session, exact_intent(false, 1))).kind(),
         OutcomeKind::Unknown(_)
     ));
     assert_eq!(control.sign_calls.load(Ordering::SeqCst), 1);
@@ -607,6 +608,7 @@ fn exact_issuance_requires_successful_observation_actual_support_and_the_frozen_
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn pending_exact_issuance_retains_callbacks_until_its_bound_outcome_is_observed() {
+    use radroots_signing::issuance::ExactIssuer;
     use radroots_signing::issuance::{OutcomeKind, SigningOutcome};
     let Fixture {
         session,
@@ -621,7 +623,7 @@ fn pending_exact_issuance_retains_callbacks_until_its_bound_outcome_is_observed(
     let binding = input.binding();
     let (send, receive) = oneshot::channel();
     *control.sign_response.lock().unwrap() = Some(receive);
-    let mut issue = Box::pin(session.sign_exact(input));
+    let mut issue = ExactIssuer::issue_exact(&session, input);
     let mut cx = Context::from_waker(noop_waker_ref());
     assert!(issue.as_mut().poll(&mut cx).is_pending());
     let mut close = Box::pin(session.close());

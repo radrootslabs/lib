@@ -1,4 +1,5 @@
 //! Real host/kernel effects through the same production objects used by languages.
+
 use nostr::JsonUtil;
 use radroots_ffi::{
     Admission, BusinessInstallation, CommandRequest, InquiryInput, Issuance, ListingInput,
@@ -449,4 +450,101 @@ async fn lost_observers_preserve_actual_obtained_signature_through_close_and_reo
     );
     assert_eq!(host.measurements().unwrap().signing_calls, "1");
     close(&host, &reopened).await;
+}
+
+#[tokio::test]
+async fn rejected_command_metadata_crosses_the_actual_native_boundary_without_raw_payloads() {
+    use radroots_ffi::{Error, SignerRejectionReason};
+    use radroots_native_binding_fixture::FixtureRejection;
+    for (mode, reason, expected) in [
+        (
+            FixtureRejection::Malformed,
+            SignerRejectionReason::InvalidArtifact,
+            Some((
+                "synthetic private rejection canary".len().to_string(),
+                "synthetic private rejection canary".len().to_string(),
+                "ba883ea08dff4c078672a055dd2be042d9debb5b22c66527e4499c068011879d",
+            )),
+        ),
+        (
+            FixtureRejection::Oversized,
+            SignerRejectionReason::TooLarge,
+            Some((
+                "65536".into(),
+                "65537".into(),
+                "d2d5af5c0316f5c2b119635386239edc87abce035f851c3f6ee127e6c3cbf435",
+            )),
+        ),
+        (
+            FixtureRejection::Foreign,
+            SignerRejectionReason::BindingMismatch,
+            None,
+        ),
+    ] {
+        let host = Host::open(true, false, false).await.unwrap();
+        host.set_rejected_signing(mode);
+        let session = host.session();
+        session.client.start(StartMode::Online).await.unwrap();
+        let context = request(&host, 70);
+        let operation = context.operation_id.clone();
+        let error = session
+            .client
+            .publish_listing(session.workspace.clone(), context, listing(&host, 70))
+            .await
+            .err()
+            .expect("actual rejected callback");
+        assert!(!format!("{error:?} {error}").contains("synthetic private rejection canary"));
+        let Error::Operation {
+            code,
+            retry,
+            operation_id,
+            admission,
+            signer_rejection: Some(rejected),
+        } = error
+        else {
+            panic!("bounded original command diagnostic must cross the generated component")
+        };
+        assert_eq!(code, "signer_tampering");
+        assert_eq!(retry, "manual_reconciliation");
+        assert_eq!(operation_id.as_deref(), Some(operation.as_str()));
+        assert_eq!(admission, Admission::Confirmed);
+        assert_eq!(rejected.reason, reason);
+        match (rejected.fingerprint, expected) {
+            (None, None) => {}
+            (Some(actual), Some((covered, total, digest))) => {
+                assert_eq!(actual.covered_bytes, covered);
+                assert_eq!(actual.total_bytes, total);
+                assert_eq!(actual.sha256.len(), 32);
+                // Independent Python hashlib vectors, not the producing Rust hash.
+                assert_eq!(
+                    actual
+                        .sha256
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>(),
+                    digest
+                );
+            }
+            _ => panic!("fingerprint presence must survive without fabrication"),
+        }
+        let facts = session
+            .client
+            .operation(session.workspace.clone(), operation, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            facts.business_installation,
+            BusinessInstallation::NotInstalled
+        );
+        assert_eq!(host.measurements().unwrap().signing_calls, "1");
+        assert_eq!(host.measurements().unwrap().legacy_signing_calls, "0");
+        assert!(
+            host.measurements()
+                .unwrap()
+                .original_signed_events
+                .is_empty()
+        );
+        close(&host, &session).await;
+    }
 }

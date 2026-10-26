@@ -5,6 +5,7 @@ mod client;
 mod error;
 mod inputs;
 mod receipt;
+mod signer_rejection;
 mod states;
 mod values;
 
@@ -12,6 +13,7 @@ pub use client::{BrowserClient, Workspace};
 pub use error::{Error, Failure, InputFailure};
 pub use inputs::{CommandRequest, InquiryInput, ListingInput, ListingReference};
 pub use receipt::{Artifact, DeliveryAttempt, Observation, Receipt, Target, TargetPolicy};
+pub use signer_rejection::{SignerFingerprint, SignerRejection, SignerRejectionReason};
 pub use states::{
     Admission, ArtifactRole, BusinessInstallation, Delivery, Issuance, OperationKind,
     RecoveryRequirement, SatisfactionClass, SessionState, StartMode, TargetObservation,

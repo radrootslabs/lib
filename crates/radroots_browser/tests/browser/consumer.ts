@@ -3,6 +3,7 @@ import init, {
   Receipt, Failure, Admission, BusinessInstallation, Issuance, OperationKind,
   SessionState, StartMode, TargetObservation, verify_listing_publications,
   verify_binding_inquiry, advertisements,
+  FixtureRejection, SignerRejectionReason,
 } from '@radroots/browser-feasibility';
 
 function assert(value: unknown, message: string): asserts value {
@@ -14,6 +15,41 @@ const peer = 'c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5';
 const now = (): string => String(Math.floor(Date.now() / 1000));
 const deadline = (): string => String(Math.floor(Date.now() / 1000) + 120);
 const text = '\uFEFF  cafe\u0301 / café 🥕\u0000  ';
+
+async function rejectedSigners(base: string, context: string): Promise<void> {
+  const cases = [
+    {mode:FixtureRejection.Malformed,reason:SignerRejectionReason.InvalidArtifact,covered:'34',total:'34',digest:'ba883ea08dff4c078672a055dd2be042d9debb5b22c66527e4499c068011879d'},
+    {mode:FixtureRejection.Oversized,reason:SignerRejectionReason.TooLarge,covered:'65536',total:'65537',digest:'d2d5af5c0316f5c2b119635386239edc87abce035f851c3f6ee127e6c3cbf435'},
+    {mode:FixtureRejection.Foreign,reason:SignerRejectionReason.BindingMismatch,covered:undefined,total:undefined,digest:undefined},
+  ];
+  for (const value of cases) {
+    const host=await BindingFixture.create_rejected(base.replace('http:','ws:')+'/listing/'+context,`rejected_${context}_${value.mode}`,value.mode);
+    const client=host.client(),scope=host.workspace(); await client.start(StartMode.Online);
+    const request=new CommandRequest(id('18'),deadline()),input=listingInput();
+    let refused=false;
+    try { await client.publish_listing(scope,request,input); }
+    catch(error:unknown) {
+      assert(error instanceof Failure,'actual generated rejected failure'); refused=true;
+      assert(error.code==='signer_tampering'&&error.retry==='manual_reconciliation','original failure code/retry');
+      assert(error.operation_id===id('18')&&error.admission===Admission.Confirmed,'original confirmed identity');
+      const diagnostic=error.signer_rejection; assert(diagnostic,'bounded signer metadata');
+      assert(diagnostic.reason===value.reason,'original fixed rejection reason');
+      const fingerprint=diagnostic.fingerprint;
+      if(fingerprint){
+        assert(fingerprint.covered_bytes===value.covered&&fingerprint.total_bytes===value.total,'exact coverage strings');
+        const bytes=fingerprint.sha256;
+        assert(bytes.length===32&&Array.from(bytes).map(byte=>byte.toString(16).padStart(2,'0')).join('')===value.digest,'independent original prefix digest');
+        fingerprint.free();
+      }else assert(value.digest===undefined,'no invented or discarded fingerprint');
+      diagnostic.free(); error.free();
+    }
+    assert(refused&&host.signing_calls()===1,'one actual callback and no successful signature');
+    const facts=await client.operation(scope,id('18'),undefined);
+    assert(facts&&facts.business_installation===BusinessInstallation.NotInstalled,'rejection is no business success');
+    facts.free(); await client.close(); assert(host.callbacks_closed()===1,'rejected callback owner closes'); scope.close();
+    for(const item of [request,input,scope,client,host])item.free();
+  }
+}
 
 async function refuses(call: () => unknown, code: string): Promise<void> {
   try { await call(); } catch (error: unknown) {
@@ -153,8 +189,9 @@ export async function run(base: string, context: string): Promise<unknown> {
   await readClient.close(); await resumedClient.close();
   assert(privateReopened.callbacks_closed() === 1 && reopened.callbacks_closed() === 1, 'all original callback scopes close');
   await refuses(()=>client.start(StartMode.Online),'capability_unavailable');
+  await rejectedSigners(base,context);
   scope.close(); resumedScope.close(); buyerScope.close(); readScope.close();
   for (const value of [original,resumed,message,read]) value.free();
   for (const value of [request,denied,privateRequest,input,inquiry,scope,resumedScope,buyerScope,readScope,client,resumedClient,buyerClient,readClient,seller,reopened,buyer,privateReopened]) value.free();
-  return {passed:['packed generated public call and exact replay','reopen/query and original exact-byte retry','all typed receipt axes','private JS call and independent nested authentication','bounded inputs, scope and lifecycle refusals','actual ordered close'],revision,messageId};
+  return {passed:['packed generated public call and exact replay','reopen/query and original exact-byte retry','all typed receipt axes','private JS call and independent nested authentication','bounded inputs, scope and lifecycle refusals','actual ordered close','bounded rejected signer metadata and exact coverage'],revision,messageId};
 }

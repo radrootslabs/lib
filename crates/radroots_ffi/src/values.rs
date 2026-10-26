@@ -56,6 +56,7 @@ impl ListingValue {
         serde_json::to_vec(self.inner.terms()).map_err(|_| Error::UnsupportedState {
             axis: "listing_terms".to_owned(),
             operation_id: None,
+            signer_rejection: None,
         })
     }
 }
@@ -99,6 +100,7 @@ impl ChatValue {
             _ => Err(Error::UnsupportedState {
                 axis: "chat_relation".to_owned(),
                 operation_id: None,
+                signer_rejection: None,
             }),
         }
     }

@@ -94,6 +94,13 @@ pub enum FixturePolicy {
     Required,
 }
 
+#[derive(Clone, Copy, uniffi::Enum)]
+pub enum FixtureRejection {
+    Malformed,
+    Oversized,
+    Foreign,
+}
+
 /// Test resources and counters. The shared client owns every command effect.
 #[derive(uniffi::Object)]
 pub struct Host {
@@ -204,6 +211,16 @@ impl Host {
     }
     pub fn set_unknown_signing(&self, unknown: bool) {
         self.signer.unknown.store(unknown, Ordering::SeqCst);
+    }
+    pub fn set_rejected_signing(&self, mode: FixtureRejection) {
+        self.signer.rejection.store(
+            match mode {
+                FixtureRejection::Malformed => 1,
+                FixtureRejection::Oversized => 2,
+                FixtureRejection::Foreign => 3,
+            },
+            Ordering::SeqCst,
+        );
     }
     pub fn release_signer(&self) {
         self.signer.release();

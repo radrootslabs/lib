@@ -543,3 +543,20 @@ and validates a replacement against the existing namespace. It never initializes
 or migrates a store. Only a confirmed original capture clears database uncertainty;
 errors/unknown results keep the fence. No current issuance clock, new claim,
 signature or stock release is obtained. Ordinary outboxes refuse this port.
+
+`StockDispatchPermit::dispatch` consumes the newly committed first-dispatch
+permit and owns one `ExactIssuer` invocation, enforcing the original callback
+binding before classifying its output. Only this path constructs the native
+non-cloneable `StockUnissuedInvocation` for a matching pre-dispatch refusal.
+Obtained artifacts remain owned; foreign callbacks become bounded rejections,
+and indeterminate results retain the original claim. Existing/reopened claims,
+caller-created reports and exact-recovery refusals cannot create this live
+observation. Qualification concerns the actual selected issuer; a custom trait
+implementation supplies no execution evidence or guarantee about unrelated
+root-key use. The predecessor intent-extraction method consumes the same permit
+and supplies no unissued observation while its composing callers await cutover.
+
+This live observation is not persisted and cannot authorize abort or release.
+Catalog13, protected formats and the absent-claims-only abort rule are unchanged.
+Retained/durable original negative capture and the composing caller cutover
+remain required before claimed-attempt reconciliation can release stock.

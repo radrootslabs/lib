@@ -26,7 +26,7 @@ macro_rules! bridge {
                 use $native as Native;
                 match value {
                     $(Native::$variant => Ok(Self::$variant),)+
-                    _ => Err(Error::UnsupportedState { axis: stringify!($name).to_owned(), operation_id: None }),
+                    _ => Err(Error::UnsupportedState { axis: stringify!($name).to_owned(), operation_id: None, signer_rejection: None }),
                 }
             }
         }

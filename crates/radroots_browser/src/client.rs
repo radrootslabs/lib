@@ -103,7 +103,7 @@ impl SessionHost for Resources {
         Box::pin(async move {
             self.tasks.drain().await?;
             if let Some(commands) = &self.commands {
-                commands.drain().await.map_err(operation)?;
+                commands.drain().await?;
             }
             Ok(())
         })
@@ -291,7 +291,7 @@ impl Inbox<'_> {
         &self,
         context: CommandContext,
         input: InquireInput,
-    ) -> Result<OperationReceipt<ChatMessage>> {
+    ) -> radroots_execution::ExecutionResult<OperationReceipt<ChatMessage>> {
         self.client
             .session
             .inquire(self.client.workspace.clone(), context, input)
@@ -310,7 +310,8 @@ impl Listings<'_> {
         &self,
         context: CommandContext,
         input: radroots_protocol::listing::PublishInput,
-    ) -> Result<OperationReceipt<radroots_domain::listing::Listing>> {
+    ) -> radroots_execution::ExecutionResult<OperationReceipt<radroots_domain::listing::Listing>>
+    {
         self.client
             .session
             .publish_listing(self.client.workspace.clone(), context, input)
@@ -346,7 +347,7 @@ impl Operations<'_> {
         &self,
         id: OperationId,
         expected: Option<CommandDigest>,
-    ) -> Result<radroots_execution::OperationStatus> {
+    ) -> radroots_execution::ExecutionResult<radroots_execution::OperationStatus> {
         self.client
             .session
             .resume_command(self.client.workspace.clone(), &self.scope, id, expected)

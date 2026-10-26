@@ -28,8 +28,9 @@ pub(in crate::workspace) mod issuance;
 mod ledger;
 mod order_state;
 pub use issuance::{
-    StockCapturedEvidence, StockClaimOutcome, StockClaimRequest, StockDispatchPermit,
-    StockEvidenceCapture, StockEvidencePage, StockExactReplayPermit, StockSigningAttempt,
+    StockCapturedEvidence, StockClaimOutcome, StockClaimRequest, StockDispatchOutcome,
+    StockDispatchPermit, StockEvidenceCapture, StockEvidencePage, StockExactReplayPermit,
+    StockSigningAttempt, StockUnissuedInvocation,
 };
 pub(in crate::workspace) mod signing_plan;
 pub(in crate::workspace) mod snapshot;

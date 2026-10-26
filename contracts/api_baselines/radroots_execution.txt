@@ -153,6 +153,8 @@ impl radroots_execution::session::SignerSession
 pub async fn radroots_execution::session::SignerSession::verify_commerce_plan(&self, radroots_signing::provider::ProviderCall, &radroots_protocol::commerce::rumor::EncodedCommerceRumor, radroots_protocol::commerce::signing_plan::CommerceSigningPlan) -> core::result::Result<radroots_signing::commerce::VerifiedCommerceSigningPlan, radroots_signing::provider::ProviderError>
 impl core::clone::Clone for radroots_execution::session::SignerSession
 pub fn radroots_execution::session::SignerSession::clone(&self) -> Self
+impl radroots_signing::issuance::ExactIssuer for radroots_execution::session::SignerSession
+pub fn radroots_execution::session::SignerSession::issue_exact(&self, radroots_signing::issuance::SigningIntent) -> radroots_signing::signer::BoxFuture<'_, radroots_signing::issuance::SigningOutcome>
 pub struct radroots_execution::session::WorkPermit<H: radroots_execution::session::SessionHost>
 impl<H: radroots_execution::session::SessionHost> core::ops::drop::Drop for radroots_execution::session::WorkPermit<H>
 pub fn radroots_execution::session::WorkPermit<H>::drop(&mut self)

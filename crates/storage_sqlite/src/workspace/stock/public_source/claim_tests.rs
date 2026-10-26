@@ -1,5 +1,7 @@
 //! Actual claim transactions; only a newly confirmed claim returns a permit.
 use super::*;
+#[path = "dispatch_tests.rs"]
+mod dispatch;
 #[path = "evidence_tests.rs"]
 mod evidence;
 #[path = "exact_recovery_tests.rs"]
@@ -134,12 +136,14 @@ async fn each_recipient_gets_one_confirmed_permit_and_original_reopen_never_redi
             panic!("new committed claim must return a permit");
         };
         assert_eq!(permit.report().recipient(), *recipient);
-        let (intent, report) = permit
-            .into_signing_intent(CancellationSignal::new())
-            .unwrap();
-        let actual = signer.sign_exact(intent).await;
-        assert_eq!(actual.binding(), report.binding());
-        let (_, OutcomeKind::Obtained(artifact)) = actual.into_parts() else {
+        let crate::workspace::StockDispatchOutcome::Obtained {
+            attempt: report,
+            artifact,
+        } = permit
+            .dispatch(&signer, CancellationSignal::new())
+            .await
+            .unwrap()
+        else {
             panic!("actual exact signer must obtain bytes");
         };
         artifact.with_json(|raw| assert!(raw.contains("\"sig\"")));
