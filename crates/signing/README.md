@@ -222,7 +222,7 @@ secret material in it.
 | `std` | yes | Uses `std` collections and permits preserved native error sources; no runtime, I/O, or global initialization is added. |
 | `serde` | yes | Adds serialization for explicitly passive public values and deserialization only where validated reconstruction is safe. |
 | `chat` | no | Adds bounded chat-seal conversion and authenticated DM advertisements. |
-| `commerce` | no | Adds exact structured-commerce seal conversion and authenticated DM advertisements. |
+| `commerce` | no | Adds exact structured-commerce seal conversion, authenticated DM advertisements and complete original plan verification. |
 | `artifacts` | no | Adds captured chat/public-listing artifact conversion. |
 
 Features are additive. `--no-default-features` provides the `no_std + alloc`
@@ -285,3 +285,12 @@ Recovery outcomes enforce the original callback binding with the same bounded
 rejection/fingerprint policy as issuance outcomes. A mismatched callback cannot
 be promoted to the expected operation; a correctly bound obtained artifact is
 retained unchanged. Callback rejection remains distinct from nonissuance.
+
+With `commerce`, `commerce::VerifiedCommerceSigningPlan::verify` qualifies both
+original peer/self ciphertexts against their captured rumor and verifies signed
+DM advertisements, selected route subsets and the actual provider's replay and
+private-crypto capabilities. It observes identity and capabilities around each
+decryption, signs nothing and retains the original call deadline. The proof
+grants no workspace consent, T1 commit, dispatch, stock or network authority.
+This portable verifier is shared by scoped execution and concrete native T1;
+the predecessor Nostr export is removed without an alias.

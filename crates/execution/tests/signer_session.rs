@@ -22,6 +22,9 @@ use std::sync::{
     Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
+#[cfg(all(feature = "commerce", not(target_arch = "wasm32")))]
+#[path = "support/signer_commerce.rs"]
+mod commerce;
 #[cfg(not(target_arch = "wasm32"))]
 #[path = "support/signer_recovery.rs"]
 mod recovery;
@@ -49,6 +52,7 @@ fn state(second: bool, encrypt: bool) -> ProviderState {
 }
 
 struct Control {
+    commerce_plaintext: Mutex<Option<String>>,
     recovery_calls: AtomicUsize,
     recovery_response:
         Mutex<Option<oneshot::Receiver<radroots_signing::issuance::ExactRecoveryOutcome>>>,
@@ -172,7 +176,17 @@ impl ParticipantProvider for Provider {
     ) -> BoxFuture<'_, Result<PrivateText, ProviderError>> {
         Box::pin(async move {
             self.0.crypto_calls.fetch_add(1, Ordering::SeqCst);
-            Err(ProviderError::ProviderFailure)
+            let response = self.0.crypto_response.lock().unwrap().take();
+            if let Some(response) = response {
+                response.await.map_err(|_| ProviderError::Cancelled)?;
+            }
+            self.0
+                .commerce_plaintext
+                .lock()
+                .unwrap()
+                .as_deref()
+                .map(PrivateText::new)
+                .unwrap_or(Err(ProviderError::ProviderFailure))
         })
     }
 }
@@ -232,6 +246,7 @@ fn scope() -> Fixture {
 
 fn control() -> Shared<Control> {
     Shared::new(Control {
+        commerce_plaintext: Mutex::new(None),
         recovery_calls: AtomicUsize::new(0),
         recovery_response: Mutex::new(None),
         recovery_binding: Mutex::new(None),

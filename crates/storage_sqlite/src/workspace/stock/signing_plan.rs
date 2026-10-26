@@ -5,8 +5,8 @@ use inventory::{
     checkpoint::{self, EntryIdentity, IdentityTarget, MinimumProof},
 };
 use radroots_domain::{CheckpointDigest, CommandDigest, OperationId, UnixSeconds};
-use radroots_nostr::commerce::VerifiedCommerceSigningPlan;
 use radroots_protocol::commerce::CommerceSigningPlan;
+use radroots_signing::commerce::VerifiedCommerceSigningPlan;
 use radroots_storage::{
     command::{CommitAttempt, OperationError},
     inventory::InventoryCheckpointRef,

@@ -324,6 +324,10 @@ struct SigningIssuance {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SigningPlanBinding {
+    crypto_verifier_owner: String,
+    scoped_crypto_verification: String,
+    predecessor_nostr_verifier_alias: bool,
+    crypto_verification_grants_dispatch_authority: bool,
     payload_version: u16,
     journal_family: u16,
     worker_charge_bytes: u32,
@@ -597,6 +601,13 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .final_source_counts_and_witnesses_required
             && !stock.acceptance_preparation.signer_invoked
             && !stock.acceptance_preparation.agreement_installed
+            && stock.signing_plan_binding.crypto_verifier_owner == "radroots_signing.commerce"
+            && stock.signing_plan_binding.scoped_crypto_verification
+                == "SignerSession.verify_commerce_plan"
+            && !stock.signing_plan_binding.predecessor_nostr_verifier_alias
+            && !stock
+                .signing_plan_binding
+                .crypto_verification_grants_dispatch_authority
             && stock.signing_plan_binding.payload_version == 1
             && stock.signing_plan_binding.journal_family == 3
             && stock.signing_plan_binding.worker_charge_bytes == 1048576
@@ -1682,6 +1693,13 @@ mod tests {
     #[test]
     fn signing_plans_require_complete_original_qualified_intents_before_any_signing() {
         for (field, bad) in [
+            ("crypto_verifier_owner", json!("radroots_nostr.commerce")),
+            (
+                "scoped_crypto_verification",
+                json!("ParticipantProvider.sign_exact"),
+            ),
+            ("predecessor_nostr_verifier_alias", json!(true)),
+            ("crypto_verification_grants_dispatch_authority", json!(true)),
             ("payload_version", json!(2)),
             ("journal_family", json!(2)),
             ("worker_charge_bytes", json!(524288)),

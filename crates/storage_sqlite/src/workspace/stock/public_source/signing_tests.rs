@@ -4,12 +4,12 @@ use super::*;
 #[path = "claim_tests.rs"]
 mod claims;
 use crate::workspace::{StockBoundSigningPlan, StockSigningPlanOutcome, StockSigningPlanRequest};
-use radroots_nostr::commerce::VerifiedCommerceSigningPlan;
 use radroots_protocol::{
     commerce::{CommerceSeal, CommerceSigningPlan},
     intent::SigningReplay,
     nip59::CapturedDmRoute,
 };
+use radroots_signing::commerce::VerifiedCommerceSigningPlan;
 use radroots_signing::provider::{NonceSource, ParticipantProvider, PrivateText, ProviderError};
 struct TestNonce(u8);
 impl NonceSource for TestNonce {

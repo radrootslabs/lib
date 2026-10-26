@@ -87,6 +87,8 @@ pub async fn radroots_execution::session::SignerSession::quiesce(&self) -> radro
 pub async fn radroots_execution::session::SignerSession::recover_exact(&self, radroots_signing::issuance::exact_recovery::ExactRecoveryRequest) -> radroots_signing::issuance::exact_recovery::ExactRecoveryOutcome
 pub async fn radroots_execution::session::SignerSession::sign_exact(&self, radroots_signing::issuance::SigningIntent) -> radroots_signing::issuance::SigningOutcome
 pub fn radroots_execution::session::SignerSession::state(&self) -> radroots_execution::session::SessionState
+impl radroots_execution::session::SignerSession
+pub async fn radroots_execution::session::SignerSession::verify_commerce_plan(&self, radroots_signing::provider::ProviderCall, &radroots_protocol::commerce::rumor::EncodedCommerceRumor, radroots_protocol::commerce::signing_plan::CommerceSigningPlan) -> core::result::Result<radroots_signing::commerce::VerifiedCommerceSigningPlan, radroots_signing::provider::ProviderError>
 impl core::clone::Clone for radroots_execution::session::SignerSession
 pub fn radroots_execution::session::SignerSession::clone(&self) -> Self
 pub struct radroots_execution::session::WorkPermit<H: radroots_execution::session::SessionHost>

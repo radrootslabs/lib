@@ -68,6 +68,15 @@ pub const fn radroots_signing::capability::SignerCapability::may_require_authent
 pub const fn radroots_signing::capability::SignerCapability::new(radroots_signing::capability::SignerKind, radroots_signing::recovery::ReplayCapability, radroots_signing::capability::CancellationSupport, bool, bool) -> Self
 pub const fn radroots_signing::capability::SignerCapability::replay(self) -> radroots_signing::recovery::ReplayCapability
 pub const fn radroots_signing::capability::SignerCapability::reports_progress(self) -> bool
+pub mod radroots_signing::commerce
+pub struct radroots_signing::commerce::VerifiedCommerceSigningPlan
+impl radroots_signing::commerce::VerifiedCommerceSigningPlan
+pub const fn radroots_signing::commerce::VerifiedCommerceSigningPlan::deadline_unix_ms(&self) -> u64
+pub fn radroots_signing::commerce::VerifiedCommerceSigningPlan::into_plan(self) -> radroots_protocol::commerce::signing_plan::CommerceSigningPlan
+pub const fn radroots_signing::commerce::VerifiedCommerceSigningPlan::plan(&self) -> &radroots_protocol::commerce::signing_plan::CommerceSigningPlan
+pub async fn radroots_signing::commerce::VerifiedCommerceSigningPlan::verify(&dyn radroots_signing::provider::ParticipantProvider, radroots_signing::provider::ProviderCall, &radroots_protocol::commerce::rumor::EncodedCommerceRumor, radroots_protocol::commerce::signing_plan::CommerceSigningPlan) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+impl core::fmt::Debug for radroots_signing::commerce::VerifiedCommerceSigningPlan
+pub fn radroots_signing::commerce::VerifiedCommerceSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod radroots_signing::error
 #[non_exhaustive] pub enum radroots_signing::error::Kind
 pub radroots_signing::error::Kind::AuthorizationDenied

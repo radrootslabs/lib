@@ -1,11 +1,5 @@
 //! Crypto qualification for exact structured-commerce T1 data. No signing.
-use alloc::string::String;
-use core::fmt;
-use radroots_protocol::{
-    commerce::{CommerceSigningPlan, EncodedCommerceRumor},
-    intent::SigningReplay,
-};
-use radroots_signing::{
+use crate::{
     issuance::VerifiedDmRelayAdvertisement,
     provider::{
         ParticipantProvider, PrivateCiphertext, PrivateCryptoCapability, ProviderCall,
@@ -13,6 +7,15 @@ use radroots_signing::{
     },
     recovery::ReplayCapability,
 };
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+use core::fmt;
+use radroots_protocol::{
+    commerce::{CommerceSigningPlan, EncodedCommerceRumor},
+    intent::SigningReplay,
+};
+#[cfg(feature = "std")]
+use std::{string::String, vec::Vec};
 
 /// Exact preimages whose encryption and original signed route advertisements
 /// were checked through the selected participant provider. This proves no
@@ -41,7 +44,7 @@ impl VerifiedCommerceSigningPlan {
         for (seal, route) in original.seals().iter().zip(original.routes()) {
             let verified =
                 VerifiedDmRelayAdvertisement::verify(route.raw_json(), seal.recipient())?;
-            let targets: alloc::vec::Vec<String> = route
+            let targets: Vec<String> = route
                 .selected_relays()
                 .iter()
                 .map(|value| String::from(value.as_ref()))
@@ -91,7 +94,7 @@ async fn state(
         SigningReplay::LocalReplaySafe => {
             state.exact_issuance().is_some()
                 && state.exact_recovery()
-                    == radroots_signing::issuance::ExactRecoveryCapability::LocalExactReplay
+                    == crate::issuance::ExactRecoveryCapability::LocalExactReplay
         }
         SigningReplay::ExactReplayByRequestId => {
             state.exact_issuance() == Some(ReplayCapability::ExactReplayByRequestId)

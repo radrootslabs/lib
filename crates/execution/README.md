@@ -196,3 +196,13 @@ append retry cannot resolve a concrete host's uncertain connection. The qualifie
 native host retains writer ownership while authenticating and reopening that
 same namespace. Core keeps the original material and leases until a matching
 confirmed result, including through a refused preflight or lost observer.
+
+With `commerce`, `SignerSession::verify_commerce_plan` qualifies the complete
+original plan through the attached provider's frozen observed identity and
+existing per-call admission. Changed identity latches a refusal, and missing
+capabilities or a closing scope cannot confirm a plan. Active decryption retains
+provider/callback roots until settlement; each observation and decryption uses
+the existing single-call capacity. No legacy or first-signing method is invoked.
+The shared Signing proof preserves original bytes and deadline without granting
+T1 or stock authority. The composing executor still owns the complete task and
+subsequent durable boundaries after caller cancellation.

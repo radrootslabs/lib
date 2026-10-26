@@ -241,6 +241,10 @@
     "source_carrier_max_bytes": 65536,
     "source_chunk_max_bytes": 16384,
     "signing_plan_binding": {
+      "crypto_verifier_owner": "radroots_signing.commerce",
+      "scoped_crypto_verification": "SignerSession.verify_commerce_plan",
+      "predecessor_nostr_verifier_alias": false,
+      "crypto_verification_grants_dispatch_authority": false,
       "payload_version": 1,
       "journal_family": 3,
       "worker_charge_bytes": 1048576,

@@ -1,11 +1,12 @@
 #![cfg(feature = "commerce")]
-use radroots_nostr::{commerce::VerifiedCommerceSigningPlan, key::SecretKey, signing::LocalSigner};
+use radroots_nostr::{key::SecretKey, signing::LocalSigner};
 use radroots_protocol::{
     command::CapturedOrderAcceptance,
     commerce::{self, CommerceSeal, CommerceSigningPlan},
     intent::SigningReplay,
     nip59::CapturedDmRoute,
 };
+use radroots_signing::commerce::VerifiedCommerceSigningPlan;
 use radroots_signing::{
     issuance::{OutcomeKind, SigningIntent},
     provider::{NonceSource, ParticipantProvider, PrivateText, ProviderCall, ProviderError},

@@ -191,7 +191,7 @@ clock failure cannot discard obtained bytes. This path performs no encryption,
 route replacement, network call or legacy fallback. After-expiry durable signer
 retrieval is unavailable. Legacy replay and first-dispatch behavior are unchanged.
 
-`commerce::VerifiedCommerceSigningPlan::verify` checks both exact recipient
+`radroots_signing::commerce::VerifiedCommerceSigningPlan::verify` checks both exact recipient
 ciphertexts against the original rumor through the selected participant
 provider, verifies original signed DM advertisements and their selected subsets,
 and checks the provider's actual replay declaration. It performs no signing or

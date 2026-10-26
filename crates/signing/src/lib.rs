@@ -8,6 +8,8 @@ extern crate alloc;
 pub mod actor;
 pub mod authorization;
 pub mod capability;
+#[cfg(feature = "commerce")]
+pub mod commerce;
 pub mod error;
 pub mod host;
 pub mod identity;

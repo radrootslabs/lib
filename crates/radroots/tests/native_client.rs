@@ -115,6 +115,81 @@ fn local() -> Arc<LocalSigner> {
 }
 
 #[tokio::test]
+async fn ordinary_native_scoped_commerce_verification_keeps_the_exact_independent_plan_and_releases_roots()
+ {
+    use radroots_protocol::{
+        command::CapturedOrderAcceptance,
+        commerce::{self, CommerceSigningPlan, EncodedCommerceRumor},
+    };
+    use radroots_signing::{
+        provider::{NonceSource, ProviderCall},
+        request::CancellationSignal,
+    };
+    struct Nonce;
+    impl NonceSource for Nonce {
+        fn next_nonce(&self) -> Result<[u8; 32], ProviderError> {
+            Ok([42; 32])
+        }
+    }
+    let command = CapturedOrderAcceptance::parse(include_bytes!(
+        "fixtures/commerce_verification/command_wire.json"
+    ))
+    .unwrap();
+    let record = commerce::decode(include_bytes!(
+        "fixtures/commerce_verification/record_wire.json"
+    ))
+    .unwrap();
+    let rumor = EncodedCommerceRumor::capture(record.content()).unwrap();
+    let wire = include_bytes!("fixtures/commerce_verification/plan_wire.bin");
+    let plan = CommerceSigningPlan::parse(
+        command.context().operation_id(),
+        command.digest(),
+        &rumor,
+        wire,
+    )
+    .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let selected = options(root.path());
+    let client = Client::open(NativeConfig::public_read(selected.clone()))
+        .await
+        .unwrap();
+    let provider = Arc::new(
+        LocalSigner::with_clock(
+            parse_secret_key("0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            || Ok(451000),
+        )
+        .unwrap()
+        .with_nonce_source(Arc::new(Nonce)),
+    );
+    let author = provider.public_key();
+    let weak = Arc::downgrade(&provider);
+    let scope = client
+        .attach_signer(SignerHandle::new(provider, callbacks(selected, true)))
+        .await
+        .unwrap();
+    let call = ProviderCall::new(
+        author,
+        std::num::NonZeroU64::new(600000).unwrap(),
+        CancellationSignal::new(),
+    );
+    let verified = scope
+        .verify_commerce_plan(call, &rumor, plan)
+        .await
+        .unwrap();
+    assert_eq!(verified.plan().protected_wire(), wire);
+    assert_eq!(verified.deadline_unix_ms(), 600000);
+    client.close().await.unwrap();
+    assert!(weak.upgrade().is_none());
+    assert_eq!(
+        verified.plan().operation_id(),
+        command.context().operation_id()
+    );
+    // This crypto proof outlives key cleanup; it proves no workspace grant, T1,
+    // first signature, installed order or configured network target.
+}
+
+#[tokio::test]
 async fn ordinary_native_scoped_recovery_keeps_original_fields_and_refuses_expired_original() {
     use radroots::signing::{
         ArtifactRole, ExactRecoveryKind, ExactRecoveryRequest, OutcomeKind, SigningIntent,

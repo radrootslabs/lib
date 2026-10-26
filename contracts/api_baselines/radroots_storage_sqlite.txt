@@ -698,7 +698,7 @@ impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockSigningAttemp
 pub fn radroots_storage_sqlite::workspace::StockSigningAttempt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockSigningPlanRequest
 impl radroots_storage_sqlite::workspace::StockSigningPlanRequest
-pub fn radroots_storage_sqlite::workspace::StockSigningPlanRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_nostr::commerce::signing_plan::VerifiedCommerceSigningPlan) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage_sqlite::workspace::StockSigningPlanRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_signing::commerce::VerifiedCommerceSigningPlan) -> core::result::Result<Self, radroots_storage::command::OperationError>
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockSigningPlanRequest
 pub fn radroots_storage_sqlite::workspace::StockSigningPlanRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockSnapshotRequest

@@ -73,14 +73,6 @@ pub struct radroots_nostr::commerce::NonActionable<R>
 impl<R: core::marker::Copy> radroots_nostr::commerce::NonActionable<R>
 pub const fn radroots_nostr::commerce::NonActionable<R>::carrier(&self) -> &radroots_nostr::private_ingress::AuthenticatedCarrier
 pub const fn radroots_nostr::commerce::NonActionable<R>::reason(&self) -> R
-pub struct radroots_nostr::commerce::VerifiedCommerceSigningPlan
-impl radroots_nostr::commerce::VerifiedCommerceSigningPlan
-pub const fn radroots_nostr::commerce::VerifiedCommerceSigningPlan::deadline_unix_ms(&self) -> u64
-pub fn radroots_nostr::commerce::VerifiedCommerceSigningPlan::into_plan(self) -> radroots_protocol::commerce::signing_plan::CommerceSigningPlan
-pub const fn radroots_nostr::commerce::VerifiedCommerceSigningPlan::plan(&self) -> &radroots_protocol::commerce::signing_plan::CommerceSigningPlan
-pub async fn radroots_nostr::commerce::VerifiedCommerceSigningPlan::verify(&dyn radroots_signing::provider::ParticipantProvider, radroots_signing::provider::ProviderCall, &radroots_protocol::commerce::rumor::EncodedCommerceRumor, radroots_protocol::commerce::signing_plan::CommerceSigningPlan) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
-impl core::fmt::Debug for radroots_nostr::commerce::VerifiedCommerceSigningPlan
-pub fn radroots_nostr::commerce::VerifiedCommerceSigningPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn radroots_nostr::commerce::admit(radroots_nostr::private_ingress::AuthenticatedCarrier) -> radroots_nostr::commerce::RecordOpening
 pub async fn radroots_nostr::commerce::open(&dyn radroots_signing::provider::ParticipantProvider, radroots_signing::provider::ProviderCall, &str) -> core::result::Result<radroots_nostr::commerce::RecordOpening, radroots_nostr::private_ingress::OpeningError>
 pub mod radroots_nostr::event

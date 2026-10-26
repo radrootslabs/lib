@@ -9,6 +9,9 @@ use std::{
 };
 
 use super::{HostFuture, Session, SessionHost, SessionState, host::Shared};
+#[cfg(feature = "commerce")]
+#[path = "signer_commerce.rs"]
+mod commerce;
 
 struct Binding {
     provider: Shared<dyn ParticipantProvider>,

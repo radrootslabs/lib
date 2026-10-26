@@ -107,5 +107,3 @@ pub async fn open(
         private_ingress::open(provider, call, raw_outer).await?,
     ))
 }
-mod signing_plan;
-pub use signing_plan::VerifiedCommerceSigningPlan;
