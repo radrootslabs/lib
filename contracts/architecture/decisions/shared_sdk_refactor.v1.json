@@ -796,6 +796,9 @@
   },
   "execution": {
     "ordinary_inventory_owner": {
+      "owned_acceptance_method": "prepare_stock_acceptance",
+      "acceptance_is_preparation_only": true,
+      "lost_accepted_admission_is_unknown": true,
       "execution": "radroots_execution.ClientSession",
       "facade": "radroots.Client",
       "selected_workspace_views_share_owner": true,

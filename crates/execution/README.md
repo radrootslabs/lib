@@ -154,3 +154,13 @@ each publication work item and across its independently selected retries,
 without erasing another recipient's pending state or weakening the full policy.
 These projections perform no transport or participant signer invocation and
 never renew a scheduling lease.
+
+`ClientSession::prepare_stock_acceptance` captures the existing seller command
+from its exact client-owned scope and preserves the supplied independent stock,
+private-source and listing minima. The bounded target task retains captured
+inputs, proof, resource permit and byte reservation through store settlement
+after observer loss; close drains accepted work. Missing or refused task hosts
+execute no fallback. Loss of an accepted admission task preserves the original
+ID with unknown T0 and manual reconciliation. The result is preparation only;
+the concrete store still authenticates consent and actual atomic holds. This
+low-level method does not supply complete ordinary commerce orchestration.

@@ -2,6 +2,8 @@
 use super::*;
 use radroots_execution::{Code, RetryClass, session::tasks::TaskHost};
 use radroots_storage::{command::OperationError, inventory::*};
+#[path = "workspace_acceptance.rs"]
+mod acceptance;
 
 #[derive(Default)]
 struct Tasks {
@@ -46,6 +48,35 @@ impl WorkspaceStore for Store {
     }
 }
 impl InventoryStore for Store {
+    fn prepare_stock_acceptance(
+        &self,
+        request: StockAcceptanceRequest,
+        proof: AttachmentProof,
+    ) -> radroots_storage::event::BoxFuture<'_, Result<StockAcceptanceOutcome, OperationError>>
+    {
+        Box::pin(async move {
+            assert_eq!(proof.with_secret(|bytes| *bytes), [7; 32]);
+            assert_eq!(request.binding().input(), &input(5));
+            assert_eq!(request.minimum_checkpoint().revision().get(), 0);
+            assert_eq!(request.source_checkpoint().revision().get(), 2);
+            assert_eq!(request.listing_checkpoint().revision().get(), 3);
+            self.calls
+                .lock()
+                .unwrap()
+                .push((request.attempt().operation_id(), request.command().digest()));
+            poll_fn(|cx| {
+                self.waker.register(cx.waker());
+                if self.waiting.load(Ordering::SeqCst) {
+                    Poll::Pending
+                } else {
+                    Poll::Ready(())
+                }
+            })
+            .await;
+            // Port mechanics only; this reports no actual T0 or SQL effect.
+            Ok(StockAcceptanceOutcome::Unknown(request.attempt()))
+        })
+    }
     fn abort_proven_unissued(
         &self,
         request: StockAbortRequest,

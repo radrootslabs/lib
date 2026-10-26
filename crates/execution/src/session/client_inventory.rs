@@ -11,19 +11,61 @@ use radroots_domain::{
     stock::{OptionMappingKey, OptionPoolMapping, PoolView},
 };
 use radroots_protocol::command::{
-    CapturedInventoryCommand, CapturedOptionMapping, CapturedPoolCorrection, CapturedPoolCreation,
-    CreatePoolInput, MapOptionInput, PoolCorrectionInput,
+    AcceptOrderInput, CapturedInventoryCommand, CapturedOptionMapping, CapturedOrderAcceptance,
+    CapturedPoolCorrection, CapturedPoolCreation, CreatePoolInput, MapOptionInput,
+    PoolCorrectionInput,
 };
 use radroots_storage::{
     command::OperationError,
     inventory::{
         InventoryCheckpointRef, InventoryOutcome, InventoryReceipt, InventoryRequest,
         InventoryStore, StockAbortOutcome, StockAbortReceipt, StockAbortRequest,
+        StockAcceptanceOutcome, StockAcceptanceRequest,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
 
 impl<H: SessionHost + 'static> ClientSession<H> {
+    /// Captures original acceptance and owns its T0 admission until settlement.
+    /// A preparation report claims no signature, installed agreement or delivery.
+    /// Concrete store authentication/consent and actual atomic effects remain
+    /// authoritative; supplied minima and command metadata grant nothing.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn prepare_stock_acceptance(
+        &self,
+        store: Shared<dyn InventoryStore>,
+        scope: &WorkspaceSession,
+        context: CommandContext,
+        minimum: InventoryCheckpointRef,
+        sources: radroots_storage::workspace::seller_stock::StockSourceCheckpointRef,
+        listings: radroots_storage::workspace::seller_stock::StockListingCheckpointRef,
+        input: AcceptOrderInput,
+    ) -> crate::Result<StockAcceptanceOutcome> {
+        let operation = context.data().operation_id();
+        let proposed = OperationContext::proposed(Some(operation));
+        if !scope.owns_context(&context) {
+            return Err(Error::operation(OperationError::Unauthorized, proposed));
+        }
+        self.run_stock_with_loss(
+            scope,
+            proposed,
+            Error::admission_uncertain(operation),
+            move |binding, proof| {
+                // Capture only after reserving work and byte capacity, before
+                // submission. No store, signer or transport runs in capture.
+                let request = CapturedOrderAcceptance::new(context.data().clone(), input)
+                    .map_err(|_| OperationError::InvalidCommand)
+                    .and_then(|command| {
+                        StockAcceptanceRequest::capture(
+                            binding, minimum, sources, listings, &command,
+                        )
+                    });
+                Box::pin(async move { store.prepare_stock_acceptance(request?, proof).await })
+            },
+        )
+        .await
+    }
+
     /// Captures pool creation from this client's own selected attachment.
     /// Actual authority, conservation and commit remain the store's obligation.
     pub async fn create_stock_pool(

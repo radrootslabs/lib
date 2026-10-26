@@ -409,6 +409,9 @@ struct Execution {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OrdinaryInventoryOwner {
+    owned_acceptance_method: String,
+    acceptance_is_preparation_only: bool,
+    lost_accepted_admission_is_unknown: bool,
     execution: String,
     facade: String,
     selected_workspace_views_share_owner: bool,
@@ -1087,6 +1090,10 @@ fn validate_values(v: &Values, limits: &BTreeMap<String, u64>) -> Result<(), Str
 fn validate_execution(e: &Execution, p: &Protocol, c: &Cutover) -> Result<(), String> {
     require(
         e.ordinary_inventory_owner.execution == "radroots_execution.ClientSession"
+            && e.ordinary_inventory_owner.owned_acceptance_method == "prepare_stock_acceptance"
+            && e.ordinary_inventory_owner.acceptance_is_preparation_only
+            && e.ordinary_inventory_owner
+                .lost_accepted_admission_is_unknown
             && e.ordinary_inventory_owner.facade == "radroots.Client"
             && e.ordinary_inventory_owner
                 .selected_workspace_views_share_owner
@@ -1443,6 +1450,9 @@ mod tests {
     #[test]
     fn ordinary_inventory_keeps_selected_owner_and_accepted_task_lifetime() {
         for (field, bad) in [
+            ("owned_acceptance_method", json!("inline_fallback")),
+            ("acceptance_is_preparation_only", json!(false)),
+            ("lost_accepted_admission_is_unknown", json!(false)),
             ("execution", json!("application")),
             ("facade", json!("native_backend")),
             ("selected_workspace_views_share_owner", json!(false)),
