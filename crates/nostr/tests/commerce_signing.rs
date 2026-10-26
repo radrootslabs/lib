@@ -212,6 +212,6 @@ async fn independent_peer_self_ciphertexts_routes_and_exact_intents_verify_and_a
             rebuild(original, SigningReplay::LocalReplaySafe, false)
         )
         .await
-        .is_err()
+        .is_ok()
     );
 }

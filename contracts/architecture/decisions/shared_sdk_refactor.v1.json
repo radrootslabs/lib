@@ -72,6 +72,24 @@
     "existing_order_or_history_recovery": false
   },
   "native_seller_stock_authority": {
+    "qualified_local_recovery": {
+      "provider_method": "radroots_signing.provider.ParticipantProvider.recover_exact",
+      "adapter": "radroots_nostr.signing.LocalSigner",
+      "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
+      "captured_replay": "local_replay_safe",
+      "native_catalog": 13,
+      "worker_charge_bytes": 1048576,
+      "existing_protected_claim_required": true,
+      "current_execute_consent_required": true,
+      "original_window_required": true,
+      "call_budget_extends_original_window": false,
+      "recovery_refusal_proves_original_unissued": false,
+      "creates_claim_or_stock_effect": false,
+      "provider_work_inside_sql": false,
+      "unsupported_legacy_fallback": false,
+      "after_expiry_retrieval_available": false,
+      "legacy_and_first_dispatch_unchanged": true
+    },
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",

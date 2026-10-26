@@ -497,3 +497,20 @@ preparation. Fresh T1, claim and installation for an aborted original refuse;
 original history remains readable. These primitives do not yet provide the
 complete ordinary caller workflow, claimed-attempt reconciliation, amendments,
 fulfillment, browser stock or platform resource qualification.
+
+`authorize_stock_exact_replay` returns a non-cloneable `StockExactReplayPermit`
+only for an existing protected catalog13 claim whose retained T1 permits local
+exact replay. A short read transaction rechecks current ExecuteAndRecover
+consent, original actor/resources, acknowledged minimum, original window and
+non-regressing time, order eligibility, backing and raw/root/grant/claim witnesses.
+RecoverOnly can read original claims but cannot mint this first-capable replay
+permission. Authorization creates no claim, stock movement or root update and
+cannot upgrade NonReplayable or predecessor records. The bounded worker owns
+accepted authorization after observer loss and drains before close.
+
+The permit transfers exact original data to the separately qualified provider
+after SQL ends. Obtained S uses existing append-only capture and original T2;
+indeterminate/refused recovery keeps the original claim nonspendable. No result
+of a recovery refusal proves original nonissuance or authorizes cleanup. Complete
+ordinary commerce ownership, proven-negative reconciliation and final cross-host
+and resource acceptance remain separate requirements.

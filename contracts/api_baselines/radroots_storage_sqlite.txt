@@ -428,6 +428,8 @@ pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::initialize_loc
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::open_existing(&std::path::Path, radroots_storage::workspace::AttachmentInput, radroots_storage_sqlite::workspace::WorkspaceCrypto, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceClock>) -> core::result::Result<Self, radroots_storage::workspace::WorkspaceError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::revoke(&self, radroots_storage::workspace::AttachmentInput, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<(), radroots_storage::workspace::WorkspaceError>
 impl radroots_storage_sqlite::workspace::NativeWorkspace
+pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::authorize_stock_exact_replay(&self, radroots_storage_sqlite::workspace::StockClaimRequest, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockExactReplayPermit, radroots_storage::command::OperationError>
+impl radroots_storage_sqlite::workspace::NativeWorkspace
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::bind_stock_signing_intents(&self, radroots_storage_sqlite::workspace::StockSigningPlanRequest, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<radroots_storage_sqlite::workspace::StockSigningPlanOutcome, radroots_storage::command::OperationError>
 pub async fn radroots_storage_sqlite::workspace::NativeWorkspace::stock_signing_plan(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, &radroots_storage::workspace::AttachmentProof) -> core::result::Result<core::option::Option<radroots_storage_sqlite::workspace::StockBoundSigningPlan>, radroots_storage::command::OperationError>
 impl radroots_storage_sqlite::workspace::NativeWorkspace
@@ -601,6 +603,13 @@ pub const fn radroots_storage_sqlite::workspace::StockEvidenceReceipt::digest(&s
 pub const fn radroots_storage_sqlite::workspace::StockEvidenceReceipt::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
 pub const fn radroots_storage_sqlite::workspace::StockEvidenceReceipt::recipient(&self) -> radroots_identity::key::PublicKey
 pub const fn radroots_storage_sqlite::workspace::StockEvidenceReceipt::signing_attempt_id(&self) -> radroots_domain::identifier::SigningAttemptId
+pub struct radroots_storage_sqlite::workspace::StockExactReplayPermit
+impl radroots_storage_sqlite::workspace::StockExactReplayPermit
+pub const fn radroots_storage_sqlite::workspace::StockExactReplayPermit::authorized_at(&self) -> radroots_domain::context::UnixSeconds
+pub fn radroots_storage_sqlite::workspace::StockExactReplayPermit::into_recovery_request(self, radroots_signing::provider::ProviderCall) -> core::result::Result<(radroots_signing::issuance::exact_recovery::ExactRecoveryRequest, radroots_storage_sqlite::workspace::StockSigningAttempt), radroots_storage::command::OperationError>
+pub const fn radroots_storage_sqlite::workspace::StockExactReplayPermit::report(&self) -> &radroots_storage_sqlite::workspace::StockSigningAttempt
+impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockExactReplayPermit
+pub fn radroots_storage_sqlite::workspace::StockExactReplayPermit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockGrantEnrollment
 impl radroots_storage_sqlite::workspace::StockGrantEnrollment
 pub fn radroots_storage_sqlite::workspace::StockGrantEnrollment::input(&self) -> &radroots_storage::workspace::AttachmentInput

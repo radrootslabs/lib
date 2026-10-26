@@ -165,6 +165,7 @@ pub struct ProviderState {
     decryption: PrivateCryptoCapability,
     signing_replay: crate::recovery::ReplayCapability,
     exact_issuance: Option<crate::recovery::ReplayCapability>,
+    exact_recovery: crate::issuance::ExactRecoveryCapability,
 }
 impl ProviderState {
     /// Reports capabilities actually implemented by the observing provider.
@@ -180,6 +181,7 @@ impl ProviderState {
             decryption,
             signing_replay,
             exact_issuance: None,
+            exact_recovery: crate::issuance::ExactRecoveryCapability::Unavailable,
         }
     }
     /// Returns the observed participant key, independently of any hosted principal.
@@ -204,6 +206,21 @@ impl ProviderState {
     /// the retained legacy signing API. Absence means unavailable.
     pub const fn exact_issuance(self) -> Option<crate::recovery::ReplayCapability> {
         self.exact_issuance
+    }
+
+    /// Reports separately implemented original-intent recovery. This metadata
+    /// alone cannot authorize replay or qualify an adapter.
+    pub const fn exact_recovery(self) -> crate::issuance::ExactRecoveryCapability {
+        self.exact_recovery
+    }
+    /// Reports actual adapter support, independently of legacy replay and the
+    /// first-dispatch method. Current access and captured T1 policy still apply.
+    pub const fn with_exact_recovery(
+        mut self,
+        value: crate::issuance::ExactRecoveryCapability,
+    ) -> Self {
+        self.exact_recovery = value;
+        self
     }
 
     /// Records the actual provider's qualified exact-intent support. This
@@ -243,7 +260,7 @@ impl ProviderCall {
         self.identity
     }
 
-    /// Returns the captured first-issue deadline without consulting a clock.
+    /// Returns this invocation's captured scheduling deadline without a clock.
     pub const fn deadline_unix_ms(&self) -> NonZeroU64 {
         self.deadline_unix_ms
     }
@@ -292,6 +309,22 @@ pub trait ParticipantProvider: Signer {
         Box::pin(async move {
             crate::issuance::SigningOutcome::not_dispatched(
                 intent.binding(),
+                ProviderError::CapabilityUnavailable,
+            )
+        })
+    }
+
+    /// Recovers only the complete original intent according to this adapter's
+    /// qualified method and the executor's retained T1 policy/current access.
+    /// Unsupported adapters preserve original uncertainty without invoking any
+    /// signing method. Refusal of this call proves no original nonissuance.
+    fn recover_exact(
+        &self,
+        request: crate::issuance::ExactRecoveryRequest,
+    ) -> BoxFuture<'_, crate::issuance::ExactRecoveryOutcome> {
+        Box::pin(async move {
+            crate::issuance::ExactRecoveryOutcome::indeterminate(
+                request.binding(),
                 ProviderError::CapabilityUnavailable,
             )
         })

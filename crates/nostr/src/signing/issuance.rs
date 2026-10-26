@@ -46,6 +46,71 @@ impl LocalSigner {
     }
 }
 
+impl LocalSigner {
+    pub(super) fn recover_original(
+        &self,
+        request: radroots_signing::issuance::ExactRecoveryRequest,
+    ) -> BoxFuture<'_, radroots_signing::issuance::ExactRecoveryOutcome> {
+        use radroots_signing::issuance::ExactRecoveryOutcome;
+        Box::pin(async move {
+            let binding = request.binding();
+            let original = request.original();
+            if original.author() != self.public_key || request.call().identity() != self.public_key
+            {
+                return ExactRecoveryOutcome::indeterminate(
+                    binding,
+                    ProviderError::IdentityChanged,
+                );
+            }
+            let unsigned =
+                match original.with_event(crate::plan_signing::unsigned_event_from_fields) {
+                    Ok(unsigned) => unsigned,
+                    Err(_) => {
+                        return ExactRecoveryOutcome::indeterminate(
+                            binding,
+                            ProviderError::InvalidInput,
+                        );
+                    }
+                };
+            let now = match (self.clock)() {
+                Ok(now) => now,
+                Err(_) => {
+                    return ExactRecoveryOutcome::indeterminate(
+                        binding,
+                        ProviderError::ProviderFailure,
+                    );
+                }
+            };
+            // A claim may have committed before its original invocation ever
+            // started. Recomputing after original expiry could then create the
+            // first signature late. A new recovery budget cannot permit that.
+            if let Err(reason) = original.check_before_effect(self.public_key, now) {
+                return ExactRecoveryOutcome::indeterminate(binding, reason);
+            }
+            if let Err(reason) = request.call().check_before_effect(self.public_key, now) {
+                return ExactRecoveryOutcome::indeterminate(binding, reason);
+            }
+            // Only this qualified local adapter performs exact-preimage replay.
+            // Unsupported providers never fall through to legacy signing.
+            let event = match unsigned.sign_with_keys(&self.keys) {
+                Ok(event) => event,
+                Err(_) => {
+                    return ExactRecoveryOutcome::indeterminate(
+                        binding,
+                        ProviderError::ProviderFailure,
+                    );
+                }
+            };
+            let observed = (self.clock)().ok().and_then(NonZeroU64::new);
+            ExactRecoveryOutcome::from_recovery_verification(SigningOutcome::capture(
+                original,
+                event.as_json(),
+                observed,
+            ))
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -64,6 +129,8 @@ mod tests {
     const AUTHOR: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
     const CREATED: u64 = 1_700_000_000;
     const DEADLINE: u64 = CREATED * 1000 + 10_000;
+    #[path = "exact_recovery_tests.rs"]
+    mod exact_recovery;
     #[derive(Default)]
     struct ClockState {
         calls: usize,
@@ -76,6 +143,8 @@ mod tests {
             let mut state = state.borrow_mut();
             state.calls += 1;
             match (state.mode, state.calls) {
+                (8, 1) => Ok(DEADLINE),
+                (9, 2) => Ok(u64::MAX),
                 (1, 2) | (3, 1) => Err(SigningError::new(Kind::InternalError)),
                 (2, 2) => Ok(DEADLINE + 1),
                 (4, 1) | (7, 2) => Ok(0),

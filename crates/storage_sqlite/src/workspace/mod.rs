@@ -28,13 +28,13 @@ pub use stock::{
     StockClaimReference, StockClaimRequest, StockConsentCapture, StockConsentMode,
     StockConsentOutcome, StockConsentReceipt, StockDispatchPermit, StockEnrollment,
     StockEvidenceCapture, StockEvidenceOutcome, StockEvidencePage, StockEvidenceReceipt,
-    StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt, StockHistorySnapshot,
-    StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,
-    StockListingCapture, StockListingOutcome, StockListingReceipt, StockListingSnapshot,
-    StockOperationSnapshot, StockPublicationWork, StockRecipientSnapshot, StockRequestSnapshot,
-    StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest, StockSigningProgress,
-    StockSnapshotRequest, StockSourceCapture, StockSourceOutcome, StockSourceProfile,
-    StockSourceReceipt, StockSourceSnapshot,
+    StockExactReplayPermit, StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt,
+    StockHistorySnapshot, StockInstallationOutcome, StockInstallationReceipt,
+    StockInstallationRequest, StockListingCapture, StockListingOutcome, StockListingReceipt,
+    StockListingSnapshot, StockOperationSnapshot, StockPublicationWork, StockRecipientSnapshot,
+    StockRequestSnapshot, StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest,
+    StockSigningProgress, StockSnapshotRequest, StockSourceCapture, StockSourceOutcome,
+    StockSourceProfile, StockSourceReceipt, StockSourceSnapshot,
 };
 mod worker;
 

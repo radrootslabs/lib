@@ -10,6 +10,7 @@ use sqlx::Row;
 pub(in crate::workspace) mod claim;
 pub(in crate::workspace) mod evidence;
 mod projection;
+pub(in crate::workspace) mod recovery;
 pub(super) use claim::read_entry;
 pub use claim::{StockClaimOutcome, StockClaimRequest, StockDispatchPermit, StockSigningAttempt};
 pub use evidence::{
@@ -17,6 +18,7 @@ pub use evidence::{
     StockEvidenceReceipt,
 };
 pub(super) use projection::{Projection, raw_projection};
+pub use recovery::StockExactReplayPermit;
 
 pub(super) async fn check_counts(connection: &mut SqliteConnection) -> Result<(), WorkspaceError> {
     let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")

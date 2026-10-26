@@ -148,6 +148,13 @@ pub fn radroots_signing::identity::SigningOperationId::fmt(&self, &mut core::fmt
 pub mod radroots_signing::issuance
 pub use radroots_signing::issuance::ArtifactRole
 pub use radroots_signing::issuance::IntentBinding
+#[non_exhaustive] pub enum radroots_signing::issuance::ExactRecoveryCapability
+pub radroots_signing::issuance::ExactRecoveryCapability::LocalExactReplay
+pub radroots_signing::issuance::ExactRecoveryCapability::Unavailable
+#[non_exhaustive] pub enum radroots_signing::issuance::ExactRecoveryKind
+pub radroots_signing::issuance::ExactRecoveryKind::Indeterminate(radroots_signing::provider::ProviderError)
+pub radroots_signing::issuance::ExactRecoveryKind::Obtained(radroots_signing::issuance::SignedArtifact)
+pub radroots_signing::issuance::ExactRecoveryKind::Rejected(radroots_signing::issuance::RejectedArtifact)
 #[non_exhaustive] pub enum radroots_signing::issuance::OutcomeKind
 pub radroots_signing::issuance::OutcomeKind::NotDispatched(radroots_signing::provider::ProviderError)
 pub radroots_signing::issuance::OutcomeKind::Obtained(radroots_signing::issuance::SignedArtifact)
@@ -163,6 +170,21 @@ impl radroots_signing::issuance::ArtifactFingerprint
 pub const fn radroots_signing::issuance::ArtifactFingerprint::covered_bytes(self) -> usize
 pub const fn radroots_signing::issuance::ArtifactFingerprint::sha256(&self) -> &[u8; 32]
 pub const fn radroots_signing::issuance::ArtifactFingerprint::total_bytes(self) -> usize
+pub struct radroots_signing::issuance::ExactRecoveryOutcome
+impl radroots_signing::issuance::ExactRecoveryOutcome
+pub const fn radroots_signing::issuance::ExactRecoveryOutcome::binding(&self) -> radroots_protocol::intent::IntentBinding
+pub fn radroots_signing::issuance::ExactRecoveryOutcome::from_recovery_verification(radroots_signing::issuance::SigningOutcome) -> Self
+pub const fn radroots_signing::issuance::ExactRecoveryOutcome::indeterminate(radroots_protocol::intent::IntentBinding, radroots_signing::provider::ProviderError) -> Self
+pub fn radroots_signing::issuance::ExactRecoveryOutcome::into_parts(self) -> (radroots_protocol::intent::IntentBinding, radroots_signing::issuance::ExactRecoveryKind)
+pub const fn radroots_signing::issuance::ExactRecoveryOutcome::kind(&self) -> &radroots_signing::issuance::ExactRecoveryKind
+pub struct radroots_signing::issuance::ExactRecoveryRequest
+impl radroots_signing::issuance::ExactRecoveryRequest
+pub const fn radroots_signing::issuance::ExactRecoveryRequest::binding(&self) -> radroots_protocol::intent::IntentBinding
+pub const fn radroots_signing::issuance::ExactRecoveryRequest::call(&self) -> &radroots_signing::provider::ProviderCall
+pub fn radroots_signing::issuance::ExactRecoveryRequest::new(radroots_signing::issuance::SigningIntent, radroots_signing::provider::ProviderCall) -> core::result::Result<Self, radroots_signing::provider::ProviderError>
+pub const fn radroots_signing::issuance::ExactRecoveryRequest::original(&self) -> &radroots_signing::issuance::SigningIntent
+impl core::fmt::Debug for radroots_signing::issuance::ExactRecoveryRequest
+pub fn radroots_signing::issuance::ExactRecoveryRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_signing::issuance::RejectedArtifact
 impl radroots_signing::issuance::RejectedArtifact
 pub const fn radroots_signing::issuance::RejectedArtifact::fingerprint(self) -> core::option::Option<radroots_signing::issuance::ArtifactFingerprint>
@@ -252,10 +274,12 @@ impl radroots_signing::provider::ProviderState
 pub const fn radroots_signing::provider::ProviderState::decryption(self) -> radroots_signing::provider::PrivateCryptoCapability
 pub const fn radroots_signing::provider::ProviderState::encryption(self) -> radroots_signing::provider::PrivateCryptoCapability
 pub const fn radroots_signing::provider::ProviderState::exact_issuance(self) -> core::option::Option<radroots_signing::recovery::ReplayCapability>
+pub const fn radroots_signing::provider::ProviderState::exact_recovery(self) -> radroots_signing::issuance::ExactRecoveryCapability
 pub const fn radroots_signing::provider::ProviderState::identity(self) -> radroots_identity::key::PublicKey
 pub const fn radroots_signing::provider::ProviderState::new(radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::provider::PrivateCryptoCapability, radroots_signing::recovery::ReplayCapability) -> Self
 pub const fn radroots_signing::provider::ProviderState::signing_replay(self) -> radroots_signing::recovery::ReplayCapability
 pub const fn radroots_signing::provider::ProviderState::with_exact_issuance(self, core::option::Option<radroots_signing::recovery::ReplayCapability>) -> Self
+pub const fn radroots_signing::provider::ProviderState::with_exact_recovery(self, radroots_signing::issuance::ExactRecoveryCapability) -> Self
 pub struct radroots_signing::provider::SignerHandle
 impl radroots_signing::provider::SignerHandle
 pub fn radroots_signing::provider::SignerHandle::into_parts(self) -> (radroots_signing::host::Shared<dyn radroots_signing::provider::ParticipantProvider>, radroots_signing::host::Shared<dyn radroots_signing::provider::SignerCallbacks>)
@@ -267,6 +291,7 @@ pub trait radroots_signing::provider::ParticipantProvider: radroots_signing::sig
 pub fn radroots_signing::provider::ParticipantProvider::decrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateCiphertext) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateText, radroots_signing::provider::ProviderError>>
 pub fn radroots_signing::provider::ParticipantProvider::encrypt_private(&self, radroots_signing::provider::ProviderCall, radroots_identity::key::PublicKey, radroots_signing::provider::PrivateText) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::PrivateCiphertext, radroots_signing::provider::ProviderError>>
 pub fn radroots_signing::provider::ParticipantProvider::provider_state(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>>
+pub fn radroots_signing::provider::ParticipantProvider::recover_exact(&self, radroots_signing::issuance::ExactRecoveryRequest) -> radroots_signing::signer::BoxFuture<'_, radroots_signing::issuance::ExactRecoveryOutcome>
 pub fn radroots_signing::provider::ParticipantProvider::sign_exact(&self, radroots_signing::issuance::SigningIntent) -> radroots_signing::signer::BoxFuture<'_, radroots_signing::issuance::SigningOutcome>
 pub trait radroots_signing::provider::SignerCallbacks: radroots_signing::host::HostBound
 pub fn radroots_signing::provider::SignerCallbacks::close(&self) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<(), radroots_signing::provider::ProviderError>>

@@ -98,6 +98,17 @@ chat, record, rumor and complete-event limits before using these primitives.
 Capability and replay observations do not replace actual provider qualification
 or permit reissue of retained uncertain work.
 
+`ParticipantProvider::recover_exact` is a separate original-intent boundary.
+`ExactRecoveryRequest` retains the complete original intent and a distinct
+recovery-call budget. The executor must check captured T1 replay policy, current
+authorization and the actual adapter's documented method. Unsupported adapters
+return original-bound indeterminate state without calling legacy or first-issue
+signing. `ExactRecoveryOutcome` has no proven-unissued variant: refusal, expiry
+or cancellation of this invocation proves nothing about the earlier invocation.
+Obtained bytes are independently verified against the original fields/binding
+and must remain owned through append-only durable capture. Provider capability
+observations, request construction and outcome metadata confer no authority.
+
 `SignerHandle` pairs a provider with its exact `SignerCallbacks` host scope.
 The lower signing port owns this contract so adapters do not depend on an
 executor. A composing lifecycle owner must quiesce dispatch, drain observers,

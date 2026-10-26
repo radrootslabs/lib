@@ -2,6 +2,8 @@
 use super::*;
 #[path = "evidence_tests.rs"]
 mod evidence;
+#[path = "exact_recovery_tests.rs"]
+mod exact_recovery;
 use crate::workspace::{StockClaimOutcome, StockClaimRequest, StockSigningAttempt};
 use radroots_signing::issuance::OutcomeKind;
 

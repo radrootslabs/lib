@@ -22,6 +22,14 @@ async fn candidate(
     receipt: &StockAcceptanceReceipt,
     nonce: u8,
 ) -> VerifiedCommerceSigningPlan {
+    candidate_with_replay(r, receipt, nonce, SigningReplay::NonReplayable).await
+}
+async fn candidate_with_replay(
+    r: &Rig,
+    receipt: &StockAcceptanceReceipt,
+    nonce: u8,
+    replay: SigningReplay,
+) -> VerifiedCommerceSigningPlan {
     let provider =
         LocalSigner::with_clock(SecretKey::parse(&format!("{:064x}", 3)).unwrap(), || {
             Ok(150000)
@@ -85,7 +93,7 @@ async fn candidate(
         rumor,
         seals.try_into().unwrap(),
         routes.try_into().unwrap(),
-        SigningReplay::NonReplayable,
+        replay,
     )
     .unwrap();
     VerifiedCommerceSigningPlan::verify(&provider, call(), rumor, plan)

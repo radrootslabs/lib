@@ -12,6 +12,8 @@ use std::{num::NonZeroU64, str::FromStr};
 
 const AUTHOR: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 const CREATED: u64 = 1_700_000_000;
+#[path = "issuance/exact_recovery.rs"]
+mod exact_recovery;
 fn plan(content: &str, tags: Vec<Vec<String>>) -> AuthoredEventPlan {
     AuthoredEventPlan::from_generic(
         GenericEventDraft::new(

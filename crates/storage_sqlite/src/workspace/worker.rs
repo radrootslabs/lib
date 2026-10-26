@@ -85,6 +85,11 @@ enum Job {
         AttachmentProof,
         Reply<stock::StockClaimOutcome, OperationError>,
     ),
+    AuthorizeStockExactReplay(
+        Box<stock::StockClaimRequest>,
+        AttachmentProof,
+        Reply<stock::StockExactReplayPermit, OperationError>,
+    ),
     StockSigningAttempt(
         Box<stock::StockClaimRequest>,
         AttachmentProof,
@@ -331,6 +336,9 @@ impl Job {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::ClaimStockSigning(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::AuthorizeStockExactReplay(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::StockSigningAttempt(_, _, reply) => {
@@ -595,6 +603,7 @@ impl Handle {
                                         | Job::StockSigningPlan(..)
                                         | Job::ClaimStockSigning(..)
                                         | Job::StockSigningAttempt(..)
+                                        | Job::AuthorizeStockExactReplay(..)
                                         | Job::CaptureStockEvidence(..)
                                         | Job::StockEvidence(..)
                                         | Job::StockEvidencePage(..)
@@ -984,6 +993,26 @@ impl Handle {
                                 Job::ClaimStockSigning(request, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
                                         Box::pin(stock::issuance::claim::claim(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::AuthorizeStockExactReplay(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::issuance::recovery::authorize(
                                             &mut stock::inventory::Turn {
                                                 connection,
                                                 namespace: &namespace,
@@ -1807,6 +1836,19 @@ impl Handle {
         self.send(Job::ClaimStockSigning(Box::new(request), proof, reply))?;
         result.await.unwrap_or(Ok(unknown))
     }
+    pub(super) async fn authorize_stock_exact_replay(
+        &self,
+        request: stock::StockClaimRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockExactReplayPermit, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::AuthorizeStockExactReplay(
+            Box::new(request),
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn stock_signing_attempt(
         &self,
         request: stock::StockClaimRequest,
@@ -1956,7 +1998,8 @@ impl Handle {
             Job::BindStockSigningPlan(..)
             | Job::StockSigningPlan(..)
             | Job::ClaimStockSigning(..)
-            | Job::StockSigningAttempt(..) => 1024 * 1024,
+            | Job::StockSigningAttempt(..)
+            | Job::AuthorizeStockExactReplay(..) => 1024 * 1024,
             Job::RetainStockSource(..) => 256 * 1024,
             Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,

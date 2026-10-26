@@ -57,7 +57,10 @@ impl ParticipantProvider for LocalSigner {
             )
             .with_exact_issuance(Some(
                 radroots_signing::recovery::ReplayCapability::NonReplayable,
-            )))
+            ))
+            .with_exact_recovery(
+                radroots_signing::issuance::ExactRecoveryCapability::LocalExactReplay,
+            ))
         })
     }
 
@@ -66,6 +69,13 @@ impl ParticipantProvider for LocalSigner {
         intent: radroots_signing::issuance::SigningIntent,
     ) -> BoxFuture<'_, radroots_signing::issuance::SigningOutcome> {
         self.issue_exact(intent)
+    }
+
+    fn recover_exact(
+        &self,
+        request: radroots_signing::issuance::ExactRecoveryRequest,
+    ) -> BoxFuture<'_, radroots_signing::issuance::ExactRecoveryOutcome> {
+        self.recover_original(request)
     }
 
     fn encrypt_private(

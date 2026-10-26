@@ -29,7 +29,7 @@ mod order_state;
 pub use issuance::{
     StockCapturedEvidence, StockClaimOutcome, StockClaimRequest, StockDispatchPermit,
     StockEvidenceCapture, StockEvidenceOutcome, StockEvidencePage, StockEvidenceReceipt,
-    StockSigningAttempt,
+    StockExactReplayPermit, StockSigningAttempt,
 };
 pub(in crate::workspace) mod signing_plan;
 pub(in crate::workspace) mod snapshot;

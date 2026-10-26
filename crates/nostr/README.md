@@ -181,6 +181,16 @@ durable transition. The owning successor contract is
 The optional pinned Node fixture producer under `tools/protocol_oracle` is
 development-only; standalone Rust tests consume checked-in synthetic vectors.
 
+The local participant adapter implements separately qualified exact-intent
+recovery through `recover_exact`. It recomputes only the complete original
+preimage while the original first-issuance window remains open and the current
+recovery-call budget permits work. A longer call budget cannot renew the original
+window: the earlier claim may have preceded an invocation that never began.
+Identity/clock/cancellation refusal retains original uncertainty, and post-effect
+clock failure cannot discard obtained bytes. This path performs no encryption,
+route replacement, network call or legacy fallback. After-expiry durable signer
+retrieval is unavailable. Legacy replay and first-dispatch behavior are unchanged.
+
 `commerce::VerifiedCommerceSigningPlan::verify` checks both exact recipient
 ciphertexts against the original rumor through the selected participant
 provider, verifies original signed DM advertisements and their selected subsets,

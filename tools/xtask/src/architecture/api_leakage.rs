@@ -629,6 +629,7 @@ fn collect_module(
     if units.contains_key(&module) {
         return Ok(());
     }
+    let inside_inline_module = inline_items.is_some();
     let (items, source_relative) = if let Some(items) = inline_items {
         let relative = source_path
             .strip_prefix(package_root)
@@ -685,6 +686,14 @@ fn collect_module(
         child_module.push(child.ident.to_string());
         let child_public = is_public(&child.vis);
         let child_effective = initially_effective && child_public;
+        let attribute_base = if inside_inline_module {
+            module_directory
+        } else {
+            source_path.parent().unwrap_or_else(|| Path::new("."))
+        };
+        let child_directory = path_attribute(&child)
+            .map(|path| attribute_base.join(path))
+            .unwrap_or_else(|| module_directory.join(child.ident.to_string()));
         if let Some((_, inline)) = child.content {
             collect_module(
                 package_root,
@@ -693,12 +702,12 @@ fn collect_module(
                 child_public,
                 child_effective,
                 source_path,
-                &module_directory.join(child.ident.to_string()),
+                &child_directory,
                 Some(inline),
                 units,
             )?;
         } else {
-            let child_path = module_source_path(source_path, module_directory, &child)?;
+            let child_path = module_source_path(attribute_base, module_directory, &child)?;
             collect_module(
                 package_root,
                 child_module,
@@ -706,7 +715,7 @@ fn collect_module(
                 child_public,
                 child_effective,
                 &child_path,
-                &module_directory.join(child.ident.to_string()),
+                &self::module_directory(&child_path)?,
                 None,
                 units,
             )?;
@@ -732,15 +741,12 @@ fn module_directory(source_path: &Path) -> Result<PathBuf, String> {
 }
 
 fn module_source_path(
-    source_path: &Path,
+    attribute_base: &Path,
     module_directory: &Path,
     item_mod: &syn::ItemMod,
 ) -> Result<PathBuf, String> {
     if let Some(path) = path_attribute(item_mod) {
-        return Ok(source_path
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(path));
+        return Ok(attribute_base.join(path));
     }
     let name = item_mod.ident.to_string();
     let flat = module_directory.join(format!("{name}.rs"));
@@ -1454,6 +1460,69 @@ mod tests {
             &fixture_metadata(root.path(), package, source),
         )
         .expect("scan fixture")
+    }
+
+    #[test]
+    fn path_attributes_follow_physical_files_and_inline_module_directories() {
+        // Rust Reference items.mod.outlined.path: inline paths include their
+        // module directories; a redirected file owns its physical child path.
+        for (source, branch, leaf) in [
+            (
+                "pub mod branch;",
+                Some((
+                    "src/branch.rs",
+                    "pub mod inline { #[path = \"leaf.rs\"] pub mod leaf; }",
+                )),
+                "src/branch/inline/leaf.rs",
+            ),
+            (
+                "pub mod branch;",
+                Some((
+                    "src/branch/mod.rs",
+                    "pub mod inline { #[path = \"leaf.rs\"] pub mod leaf; }",
+                )),
+                "src/branch/inline/leaf.rs",
+            ),
+            (
+                "pub mod outer { pub mod inner { #[path = \"leaf.rs\"] pub mod leaf; } }",
+                None,
+                "src/outer/inner/leaf.rs",
+            ),
+            (
+                "#[path = \"thread_files\"] pub mod thread { #[path = \"leaf.rs\"] pub mod leaf; }",
+                None,
+                "src/thread_files/leaf.rs",
+            ),
+            (
+                "#[path = \"redirect/payload.rs\"] pub mod branch;",
+                Some(("src/redirect/payload.rs", "pub mod leaf;")),
+                "src/redirect/payload/leaf.rs",
+            ),
+        ] {
+            let root = tempfile::TempDir::new().unwrap();
+            let package = "radroots_signing";
+            let metadata = fixture_metadata(root.path(), package, source);
+            let base = root.path().join(package);
+            if let Some((name, body)) = branch {
+                let path = base.join(name);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, body).unwrap();
+            }
+            let path = base.join(leaf);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(
+                path,
+                "pub fn exposed() -> tokio::runtime::Runtime { todo!() }",
+            )
+            .unwrap();
+            let findings = scan_workspace(root.path(), &policy(), &metadata).unwrap();
+            assert!(
+                findings
+                    .iter()
+                    .any(|finding| finding.source == leaf && finding.forbidden_path == "tokio"),
+                "{leaf}: {findings:?}"
+            );
+        }
     }
 
     fn write_baseline_decision(root: &std::path::Path) {

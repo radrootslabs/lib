@@ -84,16 +84,24 @@ async fn state(
     replay: SigningReplay,
 ) -> Result<(), ProviderError> {
     let state = provider.provider_state().await?;
-    let expected = match replay {
-        SigningReplay::NonReplayable => ReplayCapability::NonReplayable,
-        SigningReplay::LocalReplaySafe => ReplayCapability::LocalReplaySafe,
-        SigningReplay::ExactReplayByRequestId => ReplayCapability::ExactReplayByRequestId,
+    let supported = match replay {
+        SigningReplay::NonReplayable => {
+            state.exact_issuance() == Some(ReplayCapability::NonReplayable)
+        }
+        SigningReplay::LocalReplaySafe => {
+            state.exact_issuance().is_some()
+                && state.exact_recovery()
+                    == radroots_signing::issuance::ExactRecoveryCapability::LocalExactReplay
+        }
+        SigningReplay::ExactReplayByRequestId => {
+            state.exact_issuance() == Some(ReplayCapability::ExactReplayByRequestId)
+        }
     };
     if call.identity() != rumor.author()
         || state.identity() != rumor.author()
         || state.encryption() != PrivateCryptoCapability::Nip44V2
         || state.decryption() != PrivateCryptoCapability::Nip44V2
-        || state.exact_issuance() != Some(expected)
+        || !supported
     {
         return Err(ProviderError::CapabilityUnavailable);
     }

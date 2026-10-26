@@ -103,6 +103,7 @@ struct StockCapabilityContract {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NativeSellerStockAuthority {
+    qualified_local_recovery: QualifiedLocalRecovery,
     source_payload_schemas: Vec<String>,
     source_profile_dispositions: Vec<String>,
     source_owner_administration_required: bool,
@@ -212,6 +213,27 @@ struct AcceptancePreparation {
     final_source_counts_and_witnesses_required: bool,
     signer_invoked: bool,
     agreement_installed: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QualifiedLocalRecovery {
+    provider_method: String,
+    adapter: String,
+    native_authorizer: String,
+    captured_replay: String,
+    native_catalog: u16,
+    worker_charge_bytes: u32,
+    existing_protected_claim_required: bool,
+    current_execute_consent_required: bool,
+    original_window_required: bool,
+    call_budget_extends_original_window: bool,
+    recovery_refusal_proves_original_unissued: bool,
+    creates_claim_or_stock_effect: bool,
+    provider_work_inside_sql: bool,
+    unsupported_legacy_fallback: bool,
+    after_expiry_retrieval_available: bool,
+    legacy_and_first_dispatch_unchanged: bool,
 }
 
 #[derive(Deserialize)]
@@ -590,6 +612,36 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .signing_issuance
                 .capture_retains_distinct_valid_encodings
             && !stock.signing_issuance.agreement_installed
+            && stock.qualified_local_recovery.provider_method
+                == "radroots_signing.provider.ParticipantProvider.recover_exact"
+            && stock.qualified_local_recovery.adapter == "radroots_nostr.signing.LocalSigner"
+            && stock.qualified_local_recovery.native_authorizer
+                == "NativeWorkspace.authorize_stock_exact_replay"
+            && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
+            && stock.qualified_local_recovery.native_catalog == 13
+            && stock.qualified_local_recovery.worker_charge_bytes == 1048576
+            && stock
+                .qualified_local_recovery
+                .existing_protected_claim_required
+            && stock
+                .qualified_local_recovery
+                .current_execute_consent_required
+            && stock.qualified_local_recovery.original_window_required
+            && !stock
+                .qualified_local_recovery
+                .call_budget_extends_original_window
+            && !stock
+                .qualified_local_recovery
+                .recovery_refusal_proves_original_unissued
+            && !stock.qualified_local_recovery.creates_claim_or_stock_effect
+            && !stock.qualified_local_recovery.provider_work_inside_sql
+            && !stock.qualified_local_recovery.unsupported_legacy_fallback
+            && !stock
+                .qualified_local_recovery
+                .after_expiry_retrieval_available
+            && stock
+                .qualified_local_recovery
+                .legacy_and_first_dispatch_unchanged
             && stock.preparation_abort.payload_version == 1
             && stock.preparation_abort.journal_family == 7
             && stock.preparation_abort.worker_charge_bytes == 1048576
@@ -1392,6 +1444,37 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/execution/ordinary_inventory_owner/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn qualified_local_recovery_keeps_original_policy_window_and_current_rights() {
+        for (field, bad) in [
+            ("provider_method", json!("sign_exact")),
+            ("adapter", json!("legacy_signer")),
+            ("native_authorizer", json!("caller_assertion")),
+            ("captured_replay", json!("non_replayable")),
+            ("native_catalog", json!(12)),
+            ("worker_charge_bytes", json!(1048577)),
+            ("existing_protected_claim_required", json!(false)),
+            ("current_execute_consent_required", json!(false)),
+            ("original_window_required", json!(false)),
+            ("call_budget_extends_original_window", json!(true)),
+            ("recovery_refusal_proves_original_unissued", json!(true)),
+            ("creates_claim_or_stock_effect", json!(true)),
+            ("provider_work_inside_sql", json!(true)),
+            ("unsupported_legacy_fallback", json!(true)),
+            ("after_expiry_retrieval_available", json!(true)),
+            ("legacy_and_first_dispatch_unchanged", json!(false)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/qualified_local_recovery/{field}"),
                     bad
                 ))
                 .is_err(),

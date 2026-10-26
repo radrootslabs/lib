@@ -31,6 +31,10 @@ mod dm_relays;
 pub use dm_relays::VerifiedDmRelayAdvertisement;
 
 pub use radroots_protocol::intent::{ArtifactRole, IntentBinding};
+mod exact_recovery;
+pub use exact_recovery::{
+    ExactRecoveryCapability, ExactRecoveryKind, ExactRecoveryOutcome, ExactRecoveryRequest,
+};
 
 /// Bounded exact preimage and immutable provenance. It is neither an
 /// authenticated command context nor evidence of T0/T1 admission.
