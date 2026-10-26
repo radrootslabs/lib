@@ -204,6 +204,14 @@ async fn ordinary_outbox_refuses_exact_replay_without_adopting_stock_authority()
         .unwrap_err(),
         OperationError::UnsupportedOperation,
     );
+    assert_eq!(
+        radroots_storage::inventory::InventoryStore::reconcile_stock_evidence(
+            &outbox, &evidence, &proof
+        )
+        .await
+        .unwrap_err(),
+        OperationError::UnsupportedOperation,
+    );
     outbox.close().await.unwrap();
     r.store.close().await.unwrap();
 }

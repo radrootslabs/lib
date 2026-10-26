@@ -69,6 +69,11 @@ enum Job {
         AttachmentProof,
         Reply<stock::StockEvidencePage, OperationError>,
     ),
+    RecoverStockEvidence(
+        Box<radroots_storage::inventory::StockEvidenceRequest>,
+        AttachmentProof,
+        Reply<stock::StockEvidenceOutcome, OperationError>,
+    ),
     CaptureStockEvidence(
         Box<radroots_storage::inventory::StockEvidenceRequest>,
         AttachmentProof,
@@ -329,7 +334,7 @@ impl Job {
             Self::StockEvidencePage(_, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
-            Self::CaptureStockEvidence(_, _, reply) => {
+            Self::CaptureStockEvidence(_, _, reply) | Self::RecoverStockEvidence(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::StockEvidence(_, _, _, reply) => {
@@ -605,6 +610,7 @@ impl Handle {
                                         | Job::StockSigningAttempt(..)
                                         | Job::AuthorizeStockExactReplay(..)
                                         | Job::CaptureStockEvidence(..)
+                                        | Job::RecoverStockEvidence(..)
                                         | Job::StockEvidence(..)
                                         | Job::StockEvidencePage(..)
                                         | Job::StockSnapshot(..)
@@ -620,6 +626,24 @@ impl Handle {
                                 continue;
                             }
                             let job = match job {
+                                Job::RecoverStockEvidence(request, proof, reply) => {
+                                    let result = Box::pin(
+                                        super::recovery::RecoveryTurn {
+                                            connection: &mut connection,
+                                            cached_grant: &mut cached_grant,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                            options: &options,
+                                        }
+                                        .capture_stock(*request, proof),
+                                    )
+                                    .await;
+                                    let _ = reply.send(result);
+                                    continue;
+                                }
                                 Job::RecoverCapture(selected, proof, evidence, reply) => {
                                     let result = super::recovery::RecoveryTurn {
                                         connection: &mut connection,
@@ -1261,7 +1285,9 @@ impl Handle {
                                     }
                                     let _ = reply.send(result);
                                 }
-                                job @ Job::RecoverCapture(..) => job.reject_recovery(),
+                                job @ (Job::RecoverCapture(..) | Job::RecoverStockEvidence(..)) => {
+                                    job.reject_recovery()
+                                }
                                 Job::CaptureDeliveryObservation(
                                     binding,
                                     proof,
@@ -1806,6 +1832,16 @@ impl Handle {
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
+    pub(super) async fn reconcile_stock_evidence(
+        &self,
+        request: radroots_storage::inventory::StockEvidenceRequest,
+        proof: AttachmentProof,
+    ) -> Result<stock::StockEvidenceOutcome, OperationError> {
+        let unknown = stock::StockEvidenceOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::RecoverStockEvidence(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
     pub(super) async fn capture_stock_signing_evidence(
         &self,
         evidence: radroots_storage::inventory::StockEvidenceRequest,
@@ -1986,7 +2022,9 @@ impl Handle {
     }
     fn send(&self, job: Job) -> Result<(), WorkspaceError> {
         let bytes = match &job {
-            Job::RetainStockListing(..) | Job::CaptureStockEvidence(..) => 256 * 1024,
+            Job::RetainStockListing(..)
+            | Job::CaptureStockEvidence(..)
+            | Job::RecoverStockEvidence(..) => 256 * 1024,
             Job::StockEvidence(..)
             | Job::StockEvidencePage(..)
             | Job::StockSnapshot(..)

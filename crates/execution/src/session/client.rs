@@ -19,7 +19,10 @@ struct Resources<H> {
     signer: Shared<Mutex<Option<SignerSession>>>,
     #[cfg(feature = "workspace_session")]
     workspaces: WorkspaceScopes,
+    #[cfg(feature = "workspace_session")]
+    stock_captures: Shared<super::stock_evidence::Owner>,
     host_quiesced: Mutex<bool>,
+    host_drained: Mutex<bool>,
 }
 #[cfg(feature = "workspace_session")]
 type WorkspaceScopes = Shared<Mutex<std::vec::Vec<crate::workspace::WorkspaceSession>>>;
@@ -68,7 +71,24 @@ impl<H: SessionHost> SessionHost for Resources<H> {
         self.host.disconnect()
     }
     fn drain(&self) -> HostFuture<'_, crate::Result<()>> {
-        self.host.drain()
+        Box::pin(async move {
+            let drained = *self
+                .host_drained
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if !drained {
+                // The host may drive its accepted futures here. They must reach
+                // settlement before retrying captures whose locks they retain.
+                self.host.drain().await?;
+                *self
+                    .host_drained
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+            }
+            #[cfg(feature = "workspace_session")]
+            self.stock_captures.drain().await?;
+            Ok(())
+        })
     }
     fn dispose_callbacks(&self) -> HostFuture<'_, crate::Result<()>> {
         Box::pin(async move {
@@ -99,6 +119,8 @@ pub struct ClientSession<H: SessionHost> {
     pub(crate) task_budget: super::tasks::TaskBudget,
     #[cfg(feature = "workspace_session")]
     pub(crate) commands: Option<Shared<super::command::CommandRuntime>>,
+    #[cfg(feature = "workspace_session")]
+    stock_captures: Shared<super::stock_evidence::Owner>,
 }
 impl<H: SessionHost> Clone for ClientSession<H> {
     fn clone(&self) -> Self {
@@ -113,6 +135,8 @@ impl<H: SessionHost> Clone for ClientSession<H> {
             task_budget: self.task_budget.clone(),
             #[cfg(feature = "workspace_session")]
             commands: self.commands.clone(),
+            #[cfg(feature = "workspace_session")]
+            stock_captures: self.stock_captures.clone(),
         }
     }
 }
@@ -122,6 +146,8 @@ impl<H: SessionHost> ClientSession<H> {
         let signer = Shared::new(Mutex::new(None));
         #[cfg(feature = "workspace_session")]
         let workspaces = Shared::new(Mutex::new(std::vec::Vec::new()));
+        #[cfg(feature = "workspace_session")]
+        let stock_captures = Shared::new(super::stock_evidence::Owner::default());
         Self {
             session: Session::new(
                 Resources {
@@ -129,7 +155,10 @@ impl<H: SessionHost> ClientSession<H> {
                     signer: signer.clone(),
                     #[cfg(feature = "workspace_session")]
                     workspaces: workspaces.clone(),
+                    #[cfg(feature = "workspace_session")]
+                    stock_captures: stock_captures.clone(),
                     host_quiesced: Mutex::new(false),
+                    host_drained: Mutex::new(false),
                 },
                 maximum_in_flight,
             ),
@@ -142,6 +171,8 @@ impl<H: SessionHost> ClientSession<H> {
             task_budget: super::tasks::TaskBudget::new(),
             #[cfg(feature = "workspace_session")]
             commands: None,
+            #[cfg(feature = "workspace_session")]
+            stock_captures,
         }
     }
     /// Pairs an explicit target task host with its owning lifecycle host. The

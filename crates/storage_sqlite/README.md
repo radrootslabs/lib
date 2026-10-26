@@ -534,3 +534,12 @@ distinct valid encodings, idempotency, late capture and unknown-commit fencing
 retain their existing semantics. Catalog13 and stored encodings/hashes remain
 unchanged. Public native receipt/outcome aliases are removed. Borrowed inputs
 survive errors; full ordinary task/capture ownership remains separate work.
+
+Original stock evidence reconciliation uses the generic journal's same-owner
+connection recovery machinery through `InventoryStore::reconcile_stock_evidence`.
+It authenticates retained capture credentials before confirmed close, preserves
+the writer lease and cached authorization through refused read-only preflight,
+and validates a replacement against the existing namespace. It never initializes
+or migrates a store. Only a confirmed original capture clears database uncertainty;
+errors/unknown results keep the fence. No current issuance clock, new claim,
+signature or stock release is obtained. Ordinary outboxes refuse this port.

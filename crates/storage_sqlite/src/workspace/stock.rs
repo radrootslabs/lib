@@ -860,6 +860,27 @@ pub(super) async fn initialize(
     read(connection, input, crypto).await?;
     namespace.validate()
 }
+/// Retained credential authentication only; no new command permission.
+pub(super) struct CaptureAuthorization(StockRecord);
+impl CaptureAuthorization {
+    pub(super) fn authenticate(
+        &self,
+        input: &AttachmentInput,
+        proof: &AttachmentProof,
+    ) -> Result<(), WorkspaceError> {
+        self.0.authenticate_retained_capture(input, proof)
+    }
+}
+pub(super) async fn capture_authorization(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    proof: &AttachmentProof,
+) -> Result<CaptureAuthorization, WorkspaceError> {
+    let (_, record, _, _) = read(connection, input, crypto).await?;
+    record.authenticate_retained_capture(input, proof)?;
+    Ok(CaptureAuthorization(record))
+}
 async fn read(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
@@ -1101,6 +1122,23 @@ async fn unchanged(
 }
 
 impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
+    fn reconcile_stock_evidence<'a>(
+        &'a self,
+        request: &'a StockEvidenceRequest,
+        proof: &'a AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<StockEvidenceOutcome, radroots_storage::command::OperationError>,
+    > {
+        Box::pin(async move {
+            self.worker
+                .reconcile_stock_evidence(
+                    request.retained_copy(),
+                    proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?,
+                )
+                .await
+        })
+    }
     fn capture_stock_evidence<'a>(
         &'a self,
         request: &'a StockEvidenceRequest,

@@ -4,6 +4,8 @@ use radroots_execution::{Code, RetryClass, session::tasks::TaskHost};
 use radroots_storage::{command::OperationError, inventory::*};
 #[path = "workspace_acceptance.rs"]
 mod acceptance;
+#[path = "workspace_evidence.rs"]
+mod evidence;
 
 #[derive(Default)]
 struct Tasks {
@@ -28,6 +30,7 @@ impl TaskHost for Tasks {
     }
 }
 struct Store {
+    capture: evidence::Control,
     model: Shared<Model>,
     calls: Mutex<Vec<(OperationId, CommandDigest)>>,
     waiting: AtomicBool,
@@ -48,6 +51,21 @@ impl WorkspaceStore for Store {
     }
 }
 impl InventoryStore for Store {
+    fn reconcile_stock_evidence<'a>(
+        &'a self,
+        request: &'a StockEvidenceRequest,
+        proof: &'a AttachmentProof,
+    ) -> radroots_storage::event::BoxFuture<'a, Result<StockEvidenceOutcome, OperationError>> {
+        self.capture.reconciliations.fetch_add(1, Ordering::SeqCst);
+        evidence::capture(self, request, proof)
+    }
+    fn capture_stock_evidence<'a>(
+        &'a self,
+        request: &'a StockEvidenceRequest,
+        proof: &'a AttachmentProof,
+    ) -> radroots_storage::event::BoxFuture<'a, Result<StockEvidenceOutcome, OperationError>> {
+        evidence::capture(self, request, proof)
+    }
     fn prepare_stock_acceptance(
         &self,
         request: StockAcceptanceRequest,
@@ -150,11 +168,15 @@ impl InventoryStore for Store {
         '_,
         Result<Option<radroots_domain::stock::PoolView>, OperationError>,
     > {
-        panic!("unexpected port call")
+        Box::pin(async move {
+            self.capture.queries.fetch_add(1, Ordering::SeqCst);
+            Ok(None)
+        })
     }
 }
 fn store() -> Shared<Store> {
     Shared::new(Store {
+        capture: evidence::Control::default(),
         model: new_model(),
         calls: Mutex::new(vec![]),
         waiting: AtomicBool::new(false),

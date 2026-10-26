@@ -20,12 +20,92 @@ use radroots_storage::{
     inventory::{
         InventoryCheckpointRef, InventoryOutcome, InventoryReceipt, InventoryRequest,
         InventoryStore, StockAbortOutcome, StockAbortReceipt, StockAbortRequest,
-        StockAcceptanceOutcome, StockAcceptanceRequest,
+        StockAcceptanceOutcome, StockAcceptanceRequest, StockEvidenceOutcome, StockEvidenceRequest,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
 
 impl<H: SessionHost + 'static> ClientSession<H> {
+    /// Owns already obtained original material until a matching durable append.
+    /// The borrowed original survives preflight/host refusal. Accepted work and
+    /// failed captures retain bytes, credentials and resource/byte leases after
+    /// observer loss. This signs nothing and supplies no installation right.
+    pub async fn capture_stock_evidence(
+        &self,
+        store: Shared<dyn InventoryStore>,
+        scope: &WorkspaceSession,
+        request: &StockEvidenceRequest,
+    ) -> crate::Result<StockEvidenceOutcome> {
+        let proposed = OperationContext::proposed(Some(request.operation_id()));
+        let permit = self
+            .session
+            .admit()
+            .map_err(|error| error.with_context(proposed))?;
+        let budget = self
+            .task_budget
+            .reserve()
+            .map_err(|error| error.with_context(proposed))?;
+        {
+            let scopes = self
+                .workspaces
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if !scopes.iter().any(|owned| owned.same_scope(scope)) {
+                return Err(Error::operation(OperationError::Unauthorized, proposed));
+            }
+        }
+        let host = self
+            .task_host
+            .as_ref()
+            .ok_or_else(|| Error::operation(OperationError::UnsupportedOperation, proposed))?;
+        let (binding, proof) = scope
+            .captured_input()
+            .map_err(|error| Error::operation(error.into(), proposed))?;
+        if !radroots_storage::workspace::seller_stock::SellerAuthoritySelection::from_attachment(
+            binding.input(),
+        )
+        .matches_attachment(request.binding().input())
+            || binding.scope() != request.binding().scope()
+            || binding.actor() != request.binding().actor()
+        {
+            return Err(Error::operation(OperationError::Unauthorized, proposed));
+        }
+        // Refresh only non-authorizing host observations. Immutable namespace,
+        // original actor/selectors and exact obtained bytes cannot be rebound.
+        let retained = request
+            .with_json(|raw| {
+                StockEvidenceRequest::from_obtained_wire(
+                    binding,
+                    request.operation_id(),
+                    request.command_digest(),
+                    request.signing_attempt_id(),
+                    request.recipient(),
+                    *request.intent_digest(),
+                    raw,
+                    request.observed_at_unix_ms(),
+                )
+            })
+            .map_err(|error| Error::operation(error, proposed))?;
+        let owner = self.stock_captures.clone();
+        let lease: Shared<dyn HostBound> = Shared::new((permit, budget));
+        let (reply, observed) = futures::channel::oneshot::channel();
+        host.submit(Box::pin(async move {
+            let entry = owner.retain(store, retained, proof, lease);
+            let result = owner.capture(&entry).await;
+            let _ = reply.send(result);
+        }))
+        .map_err(|error| error.with_context(proposed))?;
+        observed
+            .await
+            .unwrap_or_else(|_| Err(Error::operation(OperationError::RecoveryRequired, proposed)))
+    }
+
+    /// Retries only retained original captures. This remains available during
+    /// closing; unresolved material keeps callbacks, keys and storage owned.
+    pub async fn drain_stock_evidence(&self) -> crate::Result<()> {
+        self.stock_captures.drain().await
+    }
+
     /// Captures original acceptance and owns its T0 admission until settlement.
     /// A preparation report claims no signature, installed agreement or delivery.
     /// Concrete store authentication/consent and actual atomic effects remain
@@ -43,9 +123,13 @@ impl<H: SessionHost + 'static> ClientSession<H> {
     ) -> crate::Result<StockAcceptanceOutcome> {
         let operation = context.data().operation_id();
         let proposed = OperationContext::proposed(Some(operation));
+        self.stock_captures
+            .ensure_ready()
+            .map_err(|error| Error::operation(error, proposed))?;
         if !scope.owns_context(&context) {
             return Err(Error::operation(OperationError::Unauthorized, proposed));
         }
+        let stock_captures = self.stock_captures.clone();
         self.run_stock_with_loss(
             scope,
             proposed,
@@ -60,7 +144,10 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                             binding, minimum, sources, listings, &command,
                         )
                     });
-                Box::pin(async move { store.prepare_stock_acceptance(request?, proof).await })
+                Box::pin(async move {
+                    stock_captures.ensure_ready()?;
+                    store.prepare_stock_acceptance(request?, proof).await
+                })
             },
         )
         .await
@@ -126,9 +213,13 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         >,
     ) -> crate::Result<InventoryOutcome> {
         let proposed = OperationContext::proposed(Some(context.data().operation_id()));
+        self.stock_captures
+            .ensure_ready()
+            .map_err(|error| Error::operation(error, proposed))?;
         if !scope.owns_context(&context) {
             return Err(Error::operation(OperationError::Unauthorized, proposed));
         }
+        let stock_captures = self.stock_captures.clone();
         self.run_stock_with_loss(
             scope,
             proposed,
@@ -139,7 +230,10 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                 let request = capture(context.data().clone())
                     .map_err(|_| OperationError::InvalidCommand)
                     .and_then(|command| InventoryRequest::new(binding, minimum, command));
-                Box::pin(async move { store.execute_inventory(request?, proof).await })
+                Box::pin(async move {
+                    stock_captures.ensure_ready()?;
+                    store.execute_inventory(request?, proof).await
+                })
             },
         )
         .await

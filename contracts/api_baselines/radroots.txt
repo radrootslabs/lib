@@ -177,10 +177,15 @@ pub use radroots::stock::InventoryOutcome
 pub use radroots::stock::InventoryReceipt
 pub use radroots::stock::MapOptionInput
 pub use radroots::stock::PoolCorrectionInput
+pub use radroots::stock::StockEvidenceOutcome
+pub use radroots::stock::StockEvidenceReceipt
+pub use radroots::stock::StockEvidenceRequest
 pub struct radroots::stock::Stock<'a>
 impl<'a> radroots::stock::Stock<'a>
 pub async fn radroots::stock::Stock<'a>::adjust(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock_correction::PoolCorrectionInput) -> radroots_execution::Result<radroots_storage::inventory::InventoryOutcome>
+pub async fn radroots::stock::Stock<'a>::capture_evidence(&self, &radroots_storage::inventory::evidence::StockEvidenceRequest) -> radroots_execution::Result<radroots_storage::inventory::evidence::StockEvidenceOutcome>
 pub async fn radroots::stock::Stock<'a>::create_pool(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock::CreatePoolInput) -> radroots_execution::Result<radroots_storage::inventory::InventoryOutcome>
+pub async fn radroots::stock::Stock<'a>::drain_evidence(&self) -> radroots_execution::Result<()>
 pub async fn radroots::stock::Stock<'a>::map_option(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_protocol::command::stock_mapping::MapOptionInput) -> radroots_execution::Result<radroots_storage::inventory::InventoryOutcome>
 pub async fn radroots::stock::Stock<'a>::operation(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_storage::inventory::InventoryReceipt>>
 pub async fn radroots::stock::Stock<'a>::option_mapping(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::stock::mapping::OptionMappingKey) -> radroots_execution::Result<core::option::Option<radroots_domain::stock::mapping::OptionPoolMapping>>

@@ -64,6 +64,11 @@ impl StockEvidenceRequest {
     pub const fn intent_digest(&self) -> &[u8; 32] {
         &self.intent
     }
+    /// Digest of these exact obtained bytes, not a signature or commit proof.
+    pub fn evidence_digest(&self) -> [u8; 32] {
+        use sha2::{Digest, Sha256};
+        self.with_json(|raw| Sha256::digest(raw.as_bytes()).into())
+    }
     pub const fn observed_at_unix_ms(&self) -> Option<NonZeroU64> {
         self.observed
     }

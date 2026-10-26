@@ -417,3 +417,12 @@ Their constructors provide no protected claim, authority, installation or safe
 release proof. Capture neither signs nor renews current issuing permission.
 Unsupported hosts refuse. An ordinary owner must separately retain admitted
 tasks, failed captures and resource leases until durable settlement.
+
+`InventoryStore::reconcile_stock_evidence` explicitly resolves original capture
+after an error or unknown append. A qualified host authenticates retained capture
+ownership before replacing an uncertain connection, keeps its namespace writer
+lease through read-only preflight and validates the existing namespace without
+initialization or migration. Confirmation permits only the matching original
+capture; no first signature, new command or renewed issuing grant is supplied.
+The borrowed evidence remains available after failure. Unsupported hosts refuse;
+ordinary capture is not an implicit recovery fallback.

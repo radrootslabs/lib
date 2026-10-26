@@ -175,3 +175,24 @@ bound obtained bytes and nullable observation survive unchanged. The composing
 executor must still own the complete task and durable capture, authenticate the
 original store claim and enforce retained replay policy. This scope grants no
 stock authority, renewed deadline or proof of original nonissuance.
+
+`ClientSession::capture_stock_evidence` owns a bounded copy of borrowed original
+evidence through the selected shared port. Accepted tasks outlive their caller's
+wait. Errors, unknown appends and mismatched receipts retain exact bytes, original
+credentials and resource/byte leases. A real storage failure keeps its error code
+and requires manual reconciliation. `drain_stock_evidence` retries that same
+material; it performs no signing, T0, installation or delivery. Close drains the
+owner before callback/key/storage disposal and remains resumable on failure.
+Fresh inventory preparation/mutation and new command first-signature calls
+refuse while material remains unpersisted; independent reads remain available.
+Borrowed originals survive unsupported/refused hosts. Scope checks preserve the
+immutable namespace and actor; host observation metadata supplies no permission
+or renewed issuance window. Matching host reports remain a trust boundary, not
+cryptographic transaction proofs. Full ordinary commerce orchestration is a
+separate requirement.
+
+Capture drain calls explicit `InventoryStore::reconcile_stock_evidence`; a blind
+append retry cannot resolve a concrete host's uncertain connection. The qualified
+native host retains writer ownership while authenticating and reopening that
+same namespace. Core keeps the original material and leases until a matching
+confirmed result, including through a refused preflight or lost observer.

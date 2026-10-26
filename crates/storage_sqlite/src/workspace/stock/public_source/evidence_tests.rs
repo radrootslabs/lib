@@ -2,6 +2,8 @@
 use super::*;
 #[path = "installation_tests.rs"]
 mod installations;
+#[path = "evidence_reconciliation_tests.rs"]
+mod reconciliation;
 #[path = "snapshot_tests.rs"]
 mod snapshots;
 use crate::workspace::StockEvidenceCapture;

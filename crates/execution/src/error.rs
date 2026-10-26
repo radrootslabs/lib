@@ -208,6 +208,18 @@ impl Error {
         }
     }
 
+    /// A failed obtained-material append preserves its actual error code while
+    /// requiring explicit reconciliation of the already retained original.
+    #[cfg(feature = "workspace_session")]
+    pub(crate) fn capture_pending(
+        error: radroots_storage::command::OperationError,
+        context: OperationContext,
+    ) -> Self {
+        let mut value = Self::operation(error, context);
+        value.retry = RetryClass::ManualReconciliation;
+        value
+    }
+
     #[cfg(feature = "workspace_session")]
     /// Projects a typed journal refusal with its observed admission context.
     /// This data conversion performs no transaction or authorization check.

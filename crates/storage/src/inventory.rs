@@ -278,6 +278,17 @@ pub trait InventoryStore: WorkspaceStore {
     ) -> BoxFuture<'a, Result<StockEvidenceOutcome, OperationError>> {
         Box::pin(async { Err(OperationError::UnsupportedOperation) })
     }
+    /// Reconciles only already obtained original bytes after a failed/unknown
+    /// append. A qualified host resolves its actual connection/commit state
+    /// while retaining writer ownership; it cannot sign or renew a first issue.
+    /// Unsupported hosts refuse, with the borrowed original left intact.
+    fn reconcile_stock_evidence<'a>(
+        &'a self,
+        _request: &'a StockEvidenceRequest,
+        _proof: &'a AttachmentProof,
+    ) -> BoxFuture<'a, Result<StockEvidenceOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
     /// Prepares an original acceptance with complete atomic holds and the order
     /// fence. Unsupported hosts execute no fallback or simulated stock effect.
     fn prepare_stock_acceptance(

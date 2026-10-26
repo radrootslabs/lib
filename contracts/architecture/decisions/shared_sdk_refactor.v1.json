@@ -256,6 +256,11 @@
     },
     "signing_issuance": {
       "shared_capture_port": "InventoryStore.capture_stock_evidence",
+      "shared_reconciliation_port": "InventoryStore.reconcile_stock_evidence",
+      "reconciliation_retains_writer_through_replacement": true,
+      "reconciliation_authenticates_before_connection_close": true,
+      "reconciliation_preflight_initializes_or_migrates": false,
+      "reconciliation_clears_fence_only_after_confirmed_capture": true,
       "shared_capture_model_owner": "radroots_storage.inventory",
       "shared_capture_descriptors_are_authority": false,
       "shared_capture_reauthenticates_original": true,
@@ -806,6 +811,15 @@
   },
   "execution": {
     "ordinary_inventory_owner": {
+      "owned_capture_method": "capture_stock_evidence",
+      "capture_drain_uses_explicit_reconciliation": true,
+      "retained_capture_survives_observer_loss": true,
+      "failed_capture_blocks_fresh_work": true,
+      "failed_capture_blocks_disposal": true,
+      "capture_preserves_actual_error_code": true,
+      "pending_capture_retry": "manual_reconciliation",
+      "capture_reports_must_match_original": true,
+      "capture_scope_metadata_renews_issuance": false,
       "owned_acceptance_method": "prepare_stock_acceptance",
       "acceptance_is_preparation_only": true,
       "lost_accepted_admission_is_unknown": true,

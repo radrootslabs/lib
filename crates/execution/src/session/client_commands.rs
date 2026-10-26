@@ -1,5 +1,8 @@
 use super::{ClientSession, SessionHost, Shared};
-use crate::session::{HostBound, command::CommandRuntime};
+use crate::session::{
+    HostBound,
+    command::{CommandRuntime, SigningResources},
+};
 use crate::{
     Error, OperationContext, OperationReceipt, OperationStatus,
     workspace::{CommandContext, WorkspaceSession},
@@ -58,6 +61,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
             .as_ref()
             .ok_or_else(|| Error::operation(OperationError::Unauthorized, proposed))?;
         let signer = self.signer_session();
+        let stock_captures = self.stock_captures.clone();
         let lease: Shared<dyn HostBound> = Shared::new((permit, budget));
         let (reply, observed) = futures::channel::oneshot::channel();
         host.submit(Box::pin(async move {
@@ -89,8 +93,11 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                         journal.clone(),
                         prepared,
                         &proof,
-                        signer,
-                        lease,
+                        SigningResources {
+                            signer,
+                            lease,
+                            stock_captures,
+                        },
                         crate::session::command::RunMode::Resume,
                     )
                     .await
@@ -160,6 +167,9 @@ impl<H: SessionHost + 'static> ClientSession<H> {
     {
         let operation = context.data().operation_id();
         let proposed = OperationContext::proposed(Some(operation));
+        self.stock_captures
+            .ensure_ready()
+            .map_err(|error| Error::operation(error, proposed))?;
         let permit = self
             .session
             .admit()
@@ -191,12 +201,24 @@ impl<H: SessionHost + 'static> ClientSession<H> {
             .map_err(|error| Error::operation(error, proposed))?;
         let runtime = self.commands.clone();
         let signer = self.signer_session();
+        let stock_captures = self.stock_captures.clone();
         let lease: Shared<dyn HostBound> = Shared::new((permit, budget));
         if let Some(host) = &self.task_host {
             let (reply, observed) = futures::channel::oneshot::channel();
             let task = Box::pin(async move {
-                let result =
-                    execute_command(journal, request, proof, runtime, signer, lease, project).await;
+                let result = execute_command(
+                    journal,
+                    request,
+                    proof,
+                    runtime,
+                    SigningResources {
+                        signer,
+                        lease,
+                        stock_captures,
+                    },
+                    project,
+                )
+                .await;
                 let _ = reply.send(result);
             });
             host.submit(task)
@@ -205,7 +227,19 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                 .await
                 .unwrap_or_else(|_| Err(Error::admission_uncertain(operation)))
         } else {
-            execute_command(journal, request, proof, runtime, signer, lease, project).await
+            execute_command(
+                journal,
+                request,
+                proof,
+                runtime,
+                SigningResources {
+                    signer,
+                    lease,
+                    stock_captures,
+                },
+                project,
+            )
+            .await
         }
     }
 }
@@ -255,12 +289,15 @@ async fn execute_command<T: HostBound + 'static>(
     request: AdmissionRequest,
     proof: radroots_storage::workspace::AttachmentProof,
     runtime: Option<Shared<CommandRuntime>>,
-    signer: Option<super::SignerSession>,
-    lease: Shared<dyn HostBound>,
+    resources: SigningResources,
     project: ReceiptProjection<T>,
 ) -> crate::Result<OperationReceipt<T>> {
     let operation = request.command().context().operation_id();
     let proposed = OperationContext::proposed(Some(operation));
+    resources
+        .stock_captures
+        .ensure_ready()
+        .map_err(|error| Error::operation(error, proposed))?;
     let binding = request.binding().clone();
     let digest = request.command().digest();
     // Original lookup precedes fresh deadline/planning. Authentication of the
@@ -284,8 +321,7 @@ async fn execute_command<T: HostBound + 'static>(
                         journal.clone(),
                         prepared,
                         &query_proof,
-                        signer,
-                        lease,
+                        resources,
                         crate::session::command::RunMode::Command,
                     )
                     .await

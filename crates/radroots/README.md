@@ -162,3 +162,13 @@ The ordinary native inquiry and initial-listing boundaries continue accepted
 online work through exact signing, protected capture, installation and delivery.
 Full commerce behavior, final cross-platform acceptance and generated binding
 qualification remain separate requirements.
+
+`client.stock(scope).capture_evidence(&request)` sends obtained original evidence
+to that client's selected shared stock store through Core's bounded task owner.
+The original request remains borrowed; failed or unknown captures stay owned
+after observer loss. `drain_evidence` retries this client's retained originals
+without signing or changing captured bytes. Close preserves unresolved material
+and resource ownership before disposing callbacks, keys or storage. The concrete
+qualified store still authenticates the actual protected claim and exact signed
+bytes; input and receipt metadata grant no authority. This low-level capture
+surface supplies neither full commerce execution nor original nonissuance proof.

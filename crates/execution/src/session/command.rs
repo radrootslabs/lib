@@ -98,6 +98,11 @@ pub struct CommandRuntime {
     observations: Mutex<Vec<Shared<PendingObservation>>>,
     draining: futures::lock::Mutex<()>,
 }
+pub(super) struct SigningResources {
+    pub(super) signer: Option<SignerSession>,
+    pub(super) lease: Shared<dyn HostBound>,
+    pub(super) stock_captures: Shared<super::stock_evidence::Owner>,
+}
 pub(super) enum RunMode {
     Command,
     Resume,
@@ -201,14 +206,15 @@ impl CommandRuntime {
         journal: Shared<dyn OperationJournal>,
         prepared: PreparedOperation,
         proof: &AttachmentProof,
-        signer: Option<SignerSession>,
-        lease: Shared<dyn HostBound>,
+        resources: SigningResources,
         mode: RunMode,
     ) -> Result<(), OperationError> {
         if !self.io.enabled() {
             return Ok(());
         }
         self.drain().await?;
+        resources.stock_captures.ensure_ready()?;
+        let signer = &resources.signer;
         let binding = prepared.request().binding().clone();
         let operation = prepared.identity().operation_id();
         let digest = prepared.identity().command_digest();
@@ -234,7 +240,8 @@ impl CommandRuntime {
             &bound,
             proof,
             signer.as_ref(),
-            lease.clone(),
+            resources.lease.clone(),
+            &resources.stock_captures,
         )
         .await?;
         let snapshot = journal
@@ -258,7 +265,8 @@ impl CommandRuntime {
                 )
                 .await?;
         }
-        self.deliver(journal, &bound, proof, lease, mode).await
+        self.deliver(journal, &bound, proof, resources.lease, mode)
+            .await
     }
     async fn plan(
         &self,
@@ -363,6 +371,7 @@ impl CommandRuntime {
         proof: &AttachmentProof,
         signer: Option<&SignerSession>,
         lease: Shared<dyn HostBound>,
+        stock_captures: &super::stock_evidence::Owner,
     ) -> Result<(), OperationError> {
         let prepared = bound.prepared();
         let binding = prepared.request().binding();
@@ -402,6 +411,7 @@ impl CommandRuntime {
             {
                 continue;
             }
+            stock_captures.ensure_ready()?;
             let attempt = match journal.claim_attempt(select(), copy(proof)?).await {
                 Err(OperationError::DeadlineExceeded) => continue,
                 Err(error) => return Err(error),
@@ -429,6 +439,7 @@ impl CommandRuntime {
             if intent.binding() != attempt.binding() {
                 return Err(OperationError::RecoveryRequired);
             }
+            stock_captures.ensure_ready()?;
             let outcome = signer.sign_exact(intent).await;
             let (_, kind) = outcome.into_parts();
             if let OutcomeKind::Obtained(artifact) = kind {

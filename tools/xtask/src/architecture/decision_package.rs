@@ -290,6 +290,11 @@ struct InitialAgreementInstallation {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SigningIssuance {
+    shared_reconciliation_port: String,
+    reconciliation_retains_writer_through_replacement: bool,
+    reconciliation_authenticates_before_connection_close: bool,
+    reconciliation_preflight_initializes_or_migrates: bool,
+    reconciliation_clears_fence_only_after_confirmed_capture: bool,
     shared_capture_port: String,
     shared_capture_model_owner: String,
     shared_capture_descriptors_are_authority: bool,
@@ -419,6 +424,15 @@ struct Execution {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OrdinaryInventoryOwner {
+    capture_drain_uses_explicit_reconciliation: bool,
+    owned_capture_method: String,
+    retained_capture_survives_observer_loss: bool,
+    failed_capture_blocks_fresh_work: bool,
+    failed_capture_blocks_disposal: bool,
+    capture_preserves_actual_error_code: bool,
+    pending_capture_retry: String,
+    capture_reports_must_match_original: bool,
+    capture_scope_metadata_renews_issuance: bool,
     owned_acceptance_method: String,
     acceptance_is_preparation_only: bool,
     lost_accepted_admission_is_unknown: bool,
@@ -607,6 +621,20 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.signing_issuance.coherent_operation_snapshot_required
             && stock.signing_issuance.shared_capture_port
                 == "InventoryStore.capture_stock_evidence"
+            && stock.signing_issuance.shared_reconciliation_port
+                == "InventoryStore.reconcile_stock_evidence"
+            && stock
+                .signing_issuance
+                .reconciliation_retains_writer_through_replacement
+            && stock
+                .signing_issuance
+                .reconciliation_authenticates_before_connection_close
+            && !stock
+                .signing_issuance
+                .reconciliation_preflight_initializes_or_migrates
+            && stock
+                .signing_issuance
+                .reconciliation_clears_fence_only_after_confirmed_capture
             && stock.signing_issuance.shared_capture_model_owner == "radroots_storage.inventory"
             && !stock
                 .signing_issuance
@@ -1123,6 +1151,21 @@ fn validate_values(v: &Values, limits: &BTreeMap<String, u64>) -> Result<(), Str
 fn validate_execution(e: &Execution, p: &Protocol, c: &Cutover) -> Result<(), String> {
     require(
         e.ordinary_inventory_owner.execution == "radroots_execution.ClientSession"
+            && e.ordinary_inventory_owner.owned_capture_method == "capture_stock_evidence"
+            && e.ordinary_inventory_owner
+                .capture_drain_uses_explicit_reconciliation
+            && e.ordinary_inventory_owner
+                .retained_capture_survives_observer_loss
+            && e.ordinary_inventory_owner.failed_capture_blocks_fresh_work
+            && e.ordinary_inventory_owner.failed_capture_blocks_disposal
+            && e.ordinary_inventory_owner
+                .capture_preserves_actual_error_code
+            && e.ordinary_inventory_owner.pending_capture_retry == "manual_reconciliation"
+            && e.ordinary_inventory_owner
+                .capture_reports_must_match_original
+            && !e
+                .ordinary_inventory_owner
+                .capture_scope_metadata_renews_issuance
             && e.ordinary_inventory_owner.owned_acceptance_method == "prepare_stock_acceptance"
             && e.ordinary_inventory_owner.acceptance_is_preparation_only
             && e.ordinary_inventory_owner
@@ -1391,6 +1434,23 @@ mod tests {
             ("capture_worker_charge_bytes", json!(16384)),
             ("capture_raw_max_bytes", json!(65537)),
             ("shared_capture_port", json!("arbitrary_transaction")),
+            ("shared_reconciliation_port", json!("blind_capture_retry")),
+            (
+                "reconciliation_retains_writer_through_replacement",
+                json!(false),
+            ),
+            (
+                "reconciliation_authenticates_before_connection_close",
+                json!(false),
+            ),
+            (
+                "reconciliation_preflight_initializes_or_migrates",
+                json!(true),
+            ),
+            (
+                "reconciliation_clears_fence_only_after_confirmed_capture",
+                json!(false),
+            ),
             (
                 "shared_capture_model_owner",
                 json!("radroots_storage_sqlite"),
@@ -1492,6 +1552,15 @@ mod tests {
     fn ordinary_inventory_keeps_selected_owner_and_accepted_task_lifetime() {
         for (field, bad) in [
             ("owned_acceptance_method", json!("inline_fallback")),
+            ("owned_capture_method", json!("drop_after_refusal")),
+            ("capture_drain_uses_explicit_reconciliation", json!(false)),
+            ("retained_capture_survives_observer_loss", json!(false)),
+            ("failed_capture_blocks_fresh_work", json!(false)),
+            ("failed_capture_blocks_disposal", json!(false)),
+            ("capture_preserves_actual_error_code", json!(false)),
+            ("pending_capture_retry", json!("new_signing_attempt")),
+            ("capture_reports_must_match_original", json!(false)),
+            ("capture_scope_metadata_renews_issuance", json!(true)),
             ("acceptance_is_preparation_only", json!(false)),
             ("lost_accepted_admission_is_unknown", json!(false)),
             ("execution", json!("application")),

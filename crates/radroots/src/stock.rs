@@ -6,6 +6,9 @@ use radroots_domain::{
 };
 pub use radroots_protocol::command::{CreatePoolInput, MapOptionInput, PoolCorrectionInput};
 pub use radroots_storage::inventory::{InventoryCheckpointRef, InventoryOutcome, InventoryReceipt};
+pub use radroots_storage::inventory::{
+    StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest,
+};
 
 /// Borrowed access to this client's explicitly selected private stock owner.
 pub struct Stock<'a> {
@@ -15,6 +18,23 @@ pub struct Stock<'a> {
 impl<'a> Stock<'a> {
     pub(crate) const fn new(client: &'a Client, scope: WorkspaceSession) -> Self {
         Self { client, scope }
+    }
+    /// Retains already obtained original evidence through actual append and
+    /// caller loss. Failed or uncertain capture remains owned for explicit retry
+    /// or close draining. This supplies no signing or installation permission.
+    pub async fn capture_evidence(
+        &self,
+        request: &StockEvidenceRequest,
+    ) -> Result<StockEvidenceOutcome> {
+        self.client
+            .session
+            .capture_stock_evidence(self.client.inventory()?, &self.scope, request)
+            .await
+    }
+    /// Retries this client's retained original captures without obtaining new
+    /// signatures, changing captured bytes or renewing their original windows.
+    pub async fn drain_evidence(&self) -> Result<()> {
+        self.client.session.drain_stock_evidence().await
     }
     /// Creates a private pool with actual atomic conservation and idempotency.
     /// The report claims neither Nostr signing nor transport delivery.
