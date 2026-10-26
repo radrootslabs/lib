@@ -223,6 +223,11 @@ struct AcceptancePreparation {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct QualifiedLocalRecovery {
+    scoped_method: String,
+    scoped_identity_and_capability_rechecked: bool,
+    scoped_callback_binding_enforced: bool,
+    scoped_close_waits_for_active_call: bool,
+    scoped_method_grants_store_authority: bool,
     provider_method: String,
     adapter: String,
     native_authorizer: String,
@@ -628,6 +633,19 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !stock.signing_issuance.agreement_installed
             && stock.qualified_local_recovery.provider_method
                 == "radroots_signing.provider.ParticipantProvider.recover_exact"
+            && stock.qualified_local_recovery.scoped_method == "SignerSession.recover_exact"
+            && stock
+                .qualified_local_recovery
+                .scoped_identity_and_capability_rechecked
+            && stock
+                .qualified_local_recovery
+                .scoped_callback_binding_enforced
+            && stock
+                .qualified_local_recovery
+                .scoped_close_waits_for_active_call
+            && !stock
+                .qualified_local_recovery
+                .scoped_method_grants_store_authority
             && stock.qualified_local_recovery.adapter == "radroots_nostr.signing.LocalSigner"
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
@@ -1476,6 +1494,11 @@ mod tests {
     #[test]
     fn qualified_local_recovery_keeps_original_policy_window_and_current_rights() {
         for (field, bad) in [
+            ("scoped_method", json!("legacy_replay")),
+            ("scoped_identity_and_capability_rechecked", json!(false)),
+            ("scoped_callback_binding_enforced", json!(false)),
+            ("scoped_close_waits_for_active_call", json!(false)),
+            ("scoped_method_grants_store_authority", json!(true)),
             ("provider_method", json!("sign_exact")),
             ("adapter", json!("legacy_signer")),
             ("native_authorizer", json!("caller_assertion")),

@@ -157,6 +157,10 @@ pub use radroots::signing::ArtifactRole
 pub use radroots::signing::AuthorizationHeader
 pub use radroots::signing::BlossomAuthorizationPlan
 pub use radroots::signing::BlossomSigningError
+pub use radroots::signing::ExactRecoveryCapability
+pub use radroots::signing::ExactRecoveryKind
+pub use radroots::signing::ExactRecoveryOutcome
+pub use radroots::signing::ExactRecoveryRequest
 pub use radroots::signing::IntentBinding
 pub use radroots::signing::Mode
 pub use radroots::signing::Operations

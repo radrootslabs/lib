@@ -115,6 +115,121 @@ fn local() -> Arc<LocalSigner> {
 }
 
 #[tokio::test]
+async fn ordinary_native_scoped_recovery_keeps_original_fields_and_refuses_expired_original() {
+    use radroots::signing::{
+        ArtifactRole, ExactRecoveryKind, ExactRecoveryRequest, OutcomeKind, SigningIntent,
+    };
+    use radroots_event_codec::authoring::AuthoredEventPlan;
+    use radroots_signing::{provider::ProviderCall, request::CancellationSignal};
+    const CREATED: u64 = 1_700_000_000;
+    const NOW: u64 = CREATED * 1000 + 1;
+    static OBSERVATIONS: AtomicUsize = AtomicUsize::new(0);
+    fn clock() -> Result<u64, radroots_signing::Error> {
+        if OBSERVATIONS
+            .fetch_add(1, Ordering::SeqCst)
+            .is_multiple_of(2)
+        {
+            Ok(NOW)
+        } else {
+            Err(radroots_signing::Error::new(
+                radroots_signing::error::Kind::InternalError,
+            ))
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let selected = options(root.path());
+    let client = Client::open(NativeConfig::public_read(selected.clone()))
+        .await
+        .unwrap();
+    let provider = Arc::new(
+        LocalSigner::with_clock(
+            parse_secret_key("0000000000000000000000000000000000000000000000000000000000000001")
+                .unwrap(),
+            clock,
+        )
+        .unwrap(),
+    );
+    let author = provider.public_key();
+    let weak = Arc::downgrade(&provider);
+    let scope = client
+        .attach_signer(SignerHandle::new(provider, callbacks(selected, true)))
+        .await
+        .unwrap();
+    let call = |deadline| {
+        ProviderCall::new(
+            author,
+            std::num::NonZeroU64::new(deadline).unwrap(),
+            CancellationSignal::new(),
+        )
+    };
+    let original = |deadline| {
+        SigningIntent::new(
+            radroots::OperationId::from_bytes([41; 32]),
+            [42; 32],
+            AuthoredEventPlan::from_generic(
+                radroots::event::GenericEventDraft::new(
+                    "radroots.social.geochat.v1",
+                    20_000,
+                    CREATED,
+                    vec![],
+                    "synthetic scoped original recovery",
+                    author.to_hex(),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
+            ArtifactRole::PublicEvent,
+            None,
+            call(deadline),
+        )
+        .unwrap()
+    };
+    let first = original(CREATED * 1000 + 10_000);
+    let expected = first.binding();
+    let expected_event = first.with_event(|_, id| id);
+    let issued = scope.sign_exact(first).await;
+    assert!(matches!(issued.kind(), OutcomeKind::Obtained(_)));
+    drop(issued); // Primitive lost observation only; no durable stock claim.
+    let recovered = scope
+        .recover_exact(
+            ExactRecoveryRequest::new(
+                original(CREATED * 1000 + 10_000),
+                call(CREATED * 1000 + 20_000),
+            )
+            .unwrap(),
+        )
+        .await;
+    assert_eq!(recovered.binding(), expected);
+    let (_, ExactRecoveryKind::Obtained(bytes)) = recovered.into_parts() else {
+        panic!("real scoped recovery unavailable")
+    };
+    assert_eq!(bytes.event_id(), expected_event);
+    assert!(bytes.observed_at_unix_ms().is_none());
+    bytes.with_json(|raw| {
+        let wire = radroots_event::wire::Nip01EventWire::parse_json(raw).unwrap();
+        assert_eq!(wire.pubkey, author.to_hex());
+        assert_eq!(wire.content, "synthetic scoped original recovery");
+        assert_eq!(wire.created_at, CREATED);
+    });
+    let expired = original(NOW);
+    let expired_binding = expired.binding();
+    let refused = scope
+        .recover_exact(ExactRecoveryRequest::new(expired, call(CREATED * 1000 + 30_000)).unwrap())
+        .await;
+    assert_eq!(refused.binding(), expired_binding);
+    assert!(matches!(
+        refused.kind(),
+        ExactRecoveryKind::Indeterminate(ProviderError::DeadlineExceeded)
+    ));
+    assert_eq!(OBSERVATIONS.load(Ordering::SeqCst), 5);
+    client.close().await.unwrap();
+    assert!(weak.upgrade().is_none());
+    // Obtained authenticated bytes outlive key/callback cleanup. This proves
+    // neither a protected stock authorization nor durable command capture.
+    assert!(bytes.with_json(|raw| raw.contains("synthetic scoped original recovery")));
+}
+
+#[tokio::test]
 async fn actual_native_signer_attaches_before_start_and_callbacks_close_before_the_store() {
     let root = tempfile::tempdir().unwrap();
     let options = options(root.path());

@@ -94,6 +94,22 @@ impl ExactRecoveryOutcome {
         };
         Self { binding, kind }
     }
+    /// Enforces the original callback identity using the issuance verifier's
+    /// bounded forensic policy. A foreign result grants no success or release.
+    pub fn enforce_binding(self, expected: IntentBinding) -> Self {
+        let kind = match self.kind {
+            ExactRecoveryKind::Obtained(value) => OutcomeKind::Obtained(value),
+            ExactRecoveryKind::Rejected(value) => OutcomeKind::Rejected(value),
+            ExactRecoveryKind::Indeterminate(reason) => OutcomeKind::Unknown(reason),
+        };
+        Self::from_recovery_verification(
+            SigningOutcome {
+                binding: self.binding,
+                kind,
+            }
+            .enforce_binding(expected),
+        )
+    }
     /// Returns the original operation/intent binding.
     pub const fn binding(&self) -> IntentBinding {
         self.binding

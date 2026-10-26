@@ -123,6 +123,55 @@ impl Clone for SignerSession {
 }
 
 impl SignerSession {
+    /// Recovers an original intent only through the current qualified method.
+    /// This scope supplies no store authority or captured replay policy. Its
+    /// caller must own the complete task and durable capture after observer loss.
+    /// Refusal leaves original issuance indeterminate and renews no deadline.
+    pub async fn recover_exact(
+        &self,
+        request: radroots_signing::issuance::ExactRecoveryRequest,
+    ) -> radroots_signing::issuance::ExactRecoveryOutcome {
+        use radroots_signing::issuance::{ExactRecoveryCapability, ExactRecoveryOutcome};
+        let binding = request.binding();
+        let refuse = |reason| ExactRecoveryOutcome::indeterminate(binding, reason);
+        if self.state() != SessionState::Running {
+            return refuse(ProviderError::CapabilityUnavailable);
+        }
+        if self.identity_changed() {
+            return refuse(ProviderError::IdentityChanged);
+        }
+        let Some(observed) = self.observed() else {
+            return refuse(ProviderError::CapabilityUnavailable);
+        };
+        if observed.identity() != request.original().author() {
+            return refuse(ProviderError::IdentityChanged);
+        }
+        if observed.exact_recovery() != ExactRecoveryCapability::LocalExactReplay {
+            return refuse(ProviderError::CapabilityUnavailable);
+        }
+        let observed = match self.observe().await {
+            Ok(observed) => observed,
+            Err(error) => return refuse(error),
+        };
+        if observed.identity() != request.original().author() {
+            return refuse(ProviderError::IdentityChanged);
+        }
+        if observed.exact_recovery() != ExactRecoveryCapability::LocalExactReplay {
+            return refuse(ProviderError::CapabilityUnavailable);
+        }
+        let Ok(_permit) = self.session.admit() else {
+            return refuse(ProviderError::CapabilityUnavailable);
+        };
+        let Some(provider) = self.resources.retain_binding() else {
+            return refuse(ProviderError::CapabilityUnavailable);
+        };
+        provider
+            .provider
+            .recover_exact(request)
+            .await
+            .enforce_binding(binding)
+    }
+
     async fn private_provider(
         &self,
         call: &ProviderCall,

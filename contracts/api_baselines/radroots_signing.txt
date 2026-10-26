@@ -173,6 +173,7 @@ pub const fn radroots_signing::issuance::ArtifactFingerprint::total_bytes(self) 
 pub struct radroots_signing::issuance::ExactRecoveryOutcome
 impl radroots_signing::issuance::ExactRecoveryOutcome
 pub const fn radroots_signing::issuance::ExactRecoveryOutcome::binding(&self) -> radroots_protocol::intent::IntentBinding
+pub fn radroots_signing::issuance::ExactRecoveryOutcome::enforce_binding(self, radroots_protocol::intent::IntentBinding) -> Self
 pub fn radroots_signing::issuance::ExactRecoveryOutcome::from_recovery_verification(radroots_signing::issuance::SigningOutcome) -> Self
 pub const fn radroots_signing::issuance::ExactRecoveryOutcome::indeterminate(radroots_protocol::intent::IntentBinding, radroots_signing::provider::ProviderError) -> Self
 pub fn radroots_signing::issuance::ExactRecoveryOutcome::into_parts(self) -> (radroots_protocol::intent::IntentBinding, radroots_signing::issuance::ExactRecoveryKind)

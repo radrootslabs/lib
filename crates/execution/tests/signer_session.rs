@@ -22,6 +22,9 @@ use std::sync::{
     Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
+#[cfg(not(target_arch = "wasm32"))]
+#[path = "support/signer_recovery.rs"]
+mod recovery;
 
 fn key(second: bool) -> PublicKey {
     PublicKey::from_hex(if second {
@@ -46,6 +49,10 @@ fn state(second: bool, encrypt: bool) -> ProviderState {
 }
 
 struct Control {
+    recovery_calls: AtomicUsize,
+    recovery_response:
+        Mutex<Option<oneshot::Receiver<radroots_signing::issuance::ExactRecoveryOutcome>>>,
+    recovery_binding: Mutex<Option<radroots_signing::issuance::IntentBinding>>,
     current: Mutex<ProviderState>,
     calls: AtomicUsize,
     sign_calls: AtomicUsize,
@@ -82,6 +89,29 @@ impl Signer for Provider {
 }
 
 impl ParticipantProvider for Provider {
+    fn recover_exact(
+        &self,
+        request: radroots_signing::issuance::ExactRecoveryRequest,
+    ) -> BoxFuture<'_, radroots_signing::issuance::ExactRecoveryOutcome> {
+        use radroots_signing::issuance::ExactRecoveryOutcome;
+        Box::pin(async move {
+            self.0.recovery_calls.fetch_add(1, Ordering::SeqCst);
+            let binding = self
+                .0
+                .recovery_binding
+                .lock()
+                .unwrap()
+                .unwrap_or(request.binding());
+            let response = self.0.recovery_response.lock().unwrap().take();
+            if let Some(response) = response {
+                response.await.unwrap_or_else(|_| {
+                    ExactRecoveryOutcome::indeterminate(binding, ProviderError::ProviderFailure)
+                })
+            } else {
+                ExactRecoveryOutcome::indeterminate(binding, ProviderError::ProviderFailure)
+            }
+        })
+    }
     fn sign_exact(
         &self,
         intent: radroots_signing::issuance::SigningIntent,
@@ -202,6 +232,9 @@ fn scope() -> Fixture {
 
 fn control() -> Shared<Control> {
     Shared::new(Control {
+        recovery_calls: AtomicUsize::new(0),
+        recovery_response: Mutex::new(None),
+        recovery_binding: Mutex::new(None),
         current: Mutex::new(state(false, false)),
         calls: AtomicUsize::new(0),
         sign_calls: AtomicUsize::new(0),

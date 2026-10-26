@@ -281,3 +281,7 @@ that source observation; it establishes no global freshness, configured or
 available transport, workspace grant, consent or signing permission. Missing DM
 information supplies no fallback target. Exact seal conversion also compares the
 originating captured operation and command commitment before creating an intent.
+Recovery outcomes enforce the original callback binding with the same bounded
+rejection/fingerprint policy as issuance outcomes. A mismatched callback cannot
+be promoted to the expected operation; a correctly bound obtained artifact is
+retained unchanged. Callback rejection remains distinct from nonissuance.

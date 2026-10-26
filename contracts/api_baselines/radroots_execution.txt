@@ -82,6 +82,7 @@ pub fn radroots_execution::session::SignerSession::new(radroots_signing::provide
 pub async fn radroots_execution::session::SignerSession::observe(&self) -> core::result::Result<radroots_signing::provider::ProviderState, radroots_signing::provider::ProviderError>
 pub fn radroots_execution::session::SignerSession::observed(&self) -> core::option::Option<radroots_signing::provider::ProviderState>
 pub async fn radroots_execution::session::SignerSession::quiesce(&self) -> radroots_execution::Result<()>
+pub async fn radroots_execution::session::SignerSession::recover_exact(&self, radroots_signing::issuance::exact_recovery::ExactRecoveryRequest) -> radroots_signing::issuance::exact_recovery::ExactRecoveryOutcome
 pub async fn radroots_execution::session::SignerSession::sign_exact(&self, radroots_signing::issuance::SigningIntent) -> radroots_signing::issuance::SigningOutcome
 pub fn radroots_execution::session::SignerSession::state(&self) -> radroots_execution::session::SessionState
 impl core::clone::Clone for radroots_execution::session::SignerSession

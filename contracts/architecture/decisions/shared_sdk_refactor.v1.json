@@ -73,6 +73,11 @@
   },
   "native_seller_stock_authority": {
     "qualified_local_recovery": {
+      "scoped_method": "SignerSession.recover_exact",
+      "scoped_identity_and_capability_rechecked": true,
+      "scoped_callback_binding_enforced": true,
+      "scoped_close_waits_for_active_call": true,
+      "scoped_method_grants_store_authority": false,
       "provider_method": "radroots_signing.provider.ParticipantProvider.recover_exact",
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",

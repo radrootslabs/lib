@@ -164,3 +164,14 @@ execute no fallback. Loss of an accepted admission task preserves the original
 ID with unknown T0 and manual reconciliation. The result is preparation only;
 the concrete store still authenticates consent and actual atomic holds. This
 low-level method does not supply complete ordinary commerce orchestration.
+
+`SignerSession::recover_exact` uses the already attached frozen identity and
+rechecks the actual recovery capability before calling the qualified method.
+Unobserved, unavailable, closed or changed scopes return original-bound
+indeterminate state without legacy or first-signing fallback. Active calls retain
+the provider and callback scope until settlement; close waits for those calls.
+Foreign callback bindings are rejected with bounded forensic identity. Correctly
+bound obtained bytes and nullable observation survive unchanged. The composing
+executor must still own the complete task and durable capture, authenticate the
+original store claim and enforce retained replay policy. This scope grants no
+stock authority, renewed deadline or proof of original nonissuance.

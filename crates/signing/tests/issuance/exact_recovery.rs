@@ -82,6 +82,33 @@ fn refusal_of_this_recovery_invocation_never_proves_original_nonissuance() {
 }
 
 #[test]
+fn foreign_recovery_callback_keeps_only_bounded_forensics_and_never_becomes_expected_success() {
+    let expected = intent("private retained original", vec![], 7, 8).binding();
+    let foreign = intent("private retained original", vec![], 9, 8);
+    let raw = signed(&foreign);
+    let result = ExactRecoveryOutcome::from_recovery_verification(SigningOutcome::capture(
+        &foreign,
+        raw.clone(),
+        None,
+    ))
+    .enforce_binding(expected);
+    assert_eq!(result.binding(), expected);
+    let ExactRecoveryKind::Rejected(rejected) = result.kind() else {
+        panic!("foreign callback promoted")
+    };
+    assert_eq!(rejected.reason(), RejectionReason::BindingMismatch);
+    assert_eq!(rejected.fingerprint().unwrap().total_bytes(), raw.len());
+    assert!(!format!("{result:?}").contains("private retained original"));
+    let result =
+        ExactRecoveryOutcome::indeterminate(foreign.binding(), ProviderError::ProviderFailure)
+            .enforce_binding(expected);
+    let ExactRecoveryKind::Rejected(rejected) = result.kind() else {
+        panic!("foreign uncertainty rebound")
+    };
+    assert!(rejected.fingerprint().is_none());
+}
+
+#[test]
 fn verified_original_bytes_and_tampering_keep_distinct_recovery_observations() {
     let original = intent("private retained original", vec![], 7, 8);
     let raw = signed(&original);
