@@ -66,10 +66,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         let (reply, observed) = futures::channel::oneshot::channel();
         host.submit(Box::pin(async move {
             let result = async {
-                runtime
-                    .drain()
-                    .await
-                    .map_err(|error| Error::operation(error, proposed))?;
+                runtime.drain().await?;
                 let prepared = journal
                     .operation(
                         binding.clone(),

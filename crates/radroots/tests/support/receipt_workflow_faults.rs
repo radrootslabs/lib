@@ -495,8 +495,28 @@ async fn failed_obtained_capture_blocks_close_retains_writer_and_retries_without
     assert_eq!(error.retry(), radroots::RetryClass::ManualReconciliation);
     assert_eq!(error.context().admission(), Admission::Confirmed);
     assert_eq!(ready.signer.calls.load(Ordering::SeqCst), 1);
+    let blocked = ready
+        .client
+        .inbox()
+        .inquire(ready.context(209, now() + 120), inquiry())
+        .await
+        .unwrap_err();
+    assert_eq!(blocked.code(), Code::StorageFailure);
+    assert_eq!(blocked.retry(), radroots::RetryClass::ManualReconciliation);
+    assert_eq!(
+        blocked.context().operation_id(),
+        Some(OperationId::from_bytes([205; 32]))
+    );
+    assert_eq!(blocked.context().admission(), Admission::Confirmed);
+    assert_eq!(ready.signer.calls.load(Ordering::SeqCst), 1);
     let error = ready.client.close().await.unwrap_err();
-    assert_eq!(error.code(), Code::RecoveryRequired);
+    assert_eq!(error.code(), Code::StorageFailure);
+    assert_eq!(error.retry(), radroots::RetryClass::ManualReconciliation);
+    assert_eq!(
+        error.context().operation_id(),
+        Some(OperationId::from_bytes([205; 32]))
+    );
+    assert_eq!(error.context().admission(), Admission::Confirmed);
     assert_eq!(ready.client.state(), SessionState::Closing);
     ready.writer_is_retained().await;
     sqlx::query("DROP TRIGGER capture_insert_fault")

@@ -2,6 +2,9 @@
 #[path = "inquiry_routes.rs"]
 mod routes;
 pub use routes::{capture_dm_route, selected_dm_targets};
+#[path = "command_obtained.rs"]
+mod obtained;
+use obtained::Obtained;
 
 use super::{HostBound, HostFuture, Shared, SignerSession};
 use alloc::{string::String, vec::Vec};
@@ -21,11 +24,10 @@ use radroots_signing::{
 };
 use radroots_storage::{
     command::{
-        ArtifactEvidence, BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest,
-        DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryIntent, DeliveryObservation,
-        EnvelopeCandidate, EvidenceCaptureOutcome, InstallationRequest, OperationError,
-        OperationJournal, PlanBindingOutcome, PreparedOperation, PublicationArtifact,
-        PublicationWork,
+        BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest, DeliveryAttemptOutcome,
+        DeliveryAttemptRequest, DeliveryIntent, DeliveryObservation, EnvelopeCandidate,
+        EvidenceCaptureOutcome, InstallationRequest, OperationError, OperationJournal,
+        PlanBindingOutcome, PreparedOperation, PublicationArtifact, PublicationWork,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
@@ -78,7 +80,7 @@ struct PendingCapture {
     journal: Shared<dyn OperationJournal>,
     binding: WorkspaceBinding,
     proof: AttachmentProof,
-    evidence: ArtifactEvidence,
+    obtained: Obtained,
     // Keeps both the resource permit and conservative live-byte reservation.
     _lease: Shared<dyn HostBound>,
 }
@@ -108,9 +110,15 @@ pub(super) enum RunMode {
     Resume,
 }
 pub(super) enum CommandFailure {
+    Retained(crate::Error),
     Host(OperationError, Option<RejectedArtifact>),
     Capture(OperationError),
     Rejected(RejectedArtifact),
+}
+impl From<crate::Error> for CommandFailure {
+    fn from(error: crate::Error) -> Self {
+        Self::Retained(error)
+    }
 }
 impl From<OperationError> for CommandFailure {
     fn from(error: OperationError) -> Self {
@@ -124,6 +132,7 @@ impl CommandFailure {
     ) -> crate::ExecutionFailure {
         let context = crate::OperationContext::retained(operation);
         match self {
+            Self::Retained(error) => error.into(),
             Self::Host(error, Some(rejected)) => {
                 crate::ExecutionFailure::host_after_rejection(error, operation, rejected)
             }
@@ -145,7 +154,7 @@ impl CommandRuntime {
     }
     /// Retries only already obtained original evidence. Failure retains its
     /// exact bytes and resource ownership, including when this wait is dropped.
-    pub async fn drain(&self) -> Result<(), OperationError> {
+    pub async fn drain(&self) -> crate::Result<()> {
         let _serial = self.draining.lock().await;
         loop {
             let next = self
@@ -157,14 +166,23 @@ impl CommandRuntime {
             let Some(next) = next else {
                 break;
             };
+            let fail = |error| {
+                crate::Error::capture_pending(
+                    error,
+                    crate::OperationContext::retained(next.obtained.operation()),
+                )
+            };
+            let evidence = next.obtained.evidence().map_err(fail)?;
             match next
                 .journal
-                .reconcile_unknown(next.binding.input().clone(), &next.proof, &next.evidence)
+                .reconcile_unknown(next.binding.input().clone(), &next.proof, evidence)
                 .await
-                .map_err(|_| OperationError::RecoveryRequired)?
+                .map_err(fail)?
             {
                 EvidenceCaptureOutcome::Committed(_) => self.remove(&next),
-                EvidenceCaptureOutcome::Unknown(_) => return Err(OperationError::RecoveryRequired),
+                EvidenceCaptureOutcome::Unknown(_) => {
+                    return Err(fail(OperationError::RecoveryRequired));
+                }
             }
         }
         loop {
@@ -177,10 +195,28 @@ impl CommandRuntime {
             let Some(next) = next else {
                 return Ok(());
             };
-            self.capture_observation(&next)
-                .await
-                .map_err(|_| OperationError::RecoveryRequired)?;
+            self.capture_observation(&next).await.map_err(|error| {
+                crate::Error::capture_pending(
+                    error,
+                    crate::OperationContext::retained(
+                        next.observation.work().evidence().operation_id(),
+                    ),
+                )
+            })?;
         }
+    }
+    pub(super) fn ensure_ready(&self) -> crate::Result<()> {
+        let pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(entry) = pending.first() {
+            return Err(crate::Error::capture_pending(
+                OperationError::RecoveryRequired,
+                crate::OperationContext::retained(entry.obtained.operation()),
+            ));
+        }
+        Ok(())
     }
     async fn capture_observation(
         &self,
@@ -485,6 +521,8 @@ impl CommandRuntime {
             if intent.binding() != attempt.binding() {
                 return Err(OperationError::RecoveryRequired.into());
             }
+            let capture_proof = copy(proof)?;
+            self.ensure_ready()?;
             stock_captures.ensure_ready()?;
             let outcome = signer.sign_exact(intent).await;
             let (_, kind) = outcome.into_parts();
@@ -492,22 +530,20 @@ impl CommandRuntime {
                 return Ok(Some(rejected));
             }
             if let OutcomeKind::Obtained(artifact) = kind {
-                let evidence = artifact.with_json(|raw| {
-                    ArtifactEvidence::verify(&attempt, raw, artifact.observed_at_unix_ms())
-                })?;
                 let entry = Shared::new(PendingCapture {
                     journal: journal.clone(),
                     binding: binding.clone(),
-                    proof: copy(proof)?,
-                    evidence,
+                    proof: capture_proof,
+                    obtained: Obtained::new(attempt, artifact),
                     _lease: lease.clone(),
                 });
                 self.pending
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .push(entry.clone());
+                let evidence = entry.obtained.evidence().map_err(CommandFailure::Capture)?;
                 match journal
-                    .capture_evidence(binding.input().clone(), &entry.proof, &entry.evidence)
+                    .capture_evidence(binding.input().clone(), &entry.proof, evidence)
                     .await
                     .map_err(CommandFailure::Capture)?
                 {

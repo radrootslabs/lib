@@ -244,3 +244,14 @@ not durable forensic records, authenticated business output or proof that the
 original signer never issued. Missing/unsupported/uncertain outcomes keep their
 existing conservative claims; no rejection authorizes another first dispatch,
 stock release or renewed deadline.
+
+Generic chat/listing execution registers the original obtained artifact and
+attempt with prepared capture credentials and its resource lease before
+fallible storage conversion. Conversion or append failure retains the original
+bytes, blocks further issuance and permits only original capture reconciliation.
+`CommandRuntime::drain` returns the compact execution `Error`, preserving the
+actual store code, original confirmed operation and manual reconciliation
+through resume and close, including when another operation encounters that
+retained obligation. Observation append failures likewise retain their original
+operation. A failed conversion is cached without discarding its signed input;
+neither a new caller nor close may relabel it as a successful capture.

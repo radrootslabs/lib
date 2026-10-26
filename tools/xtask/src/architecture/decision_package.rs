@@ -329,6 +329,8 @@ struct SigningPlanBinding {
     ordinary_peer_installed_before_self_work: bool,
     ordinary_accepted_task_survives_observer_loss: bool,
     ordinary_obtained_owned_before_descriptor_conversion: bool,
+    generic_obtained_owned_before_descriptor_conversion: bool,
+    retained_drain_preserves_original_error_and_operation: bool,
     rejected_signer_error: String,
     effectful_command_result: String,
     common_error_max_bytes: u16,
@@ -629,6 +631,12 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock
                 .signing_plan_binding
                 .ordinary_obtained_owned_before_descriptor_conversion
+            && stock
+                .signing_plan_binding
+                .generic_obtained_owned_before_descriptor_conversion
+            && stock
+                .signing_plan_binding
+                .retained_drain_preserves_original_error_and_operation
             && stock.signing_plan_binding.rejected_signer_error == "SignerTampering"
             && stock.signing_plan_binding.effectful_command_result == "ExecutionResult"
             && stock.signing_plan_binding.common_error_max_bytes == 64
@@ -1746,6 +1754,14 @@ mod tests {
     fn signing_plans_require_complete_original_qualified_intents_before_any_signing() {
         for (field, bad) in [
             ("effectful_command_result", json!("unbounded_error")),
+            (
+                "generic_obtained_owned_before_descriptor_conversion",
+                json!(false),
+            ),
+            (
+                "retained_drain_preserves_original_error_and_operation",
+                json!(false),
+            ),
             ("common_error_max_bytes", json!(128)),
             ("execution_failure_max_bytes", json!(256)),
             ("rejected_signer_error", json!("success")),

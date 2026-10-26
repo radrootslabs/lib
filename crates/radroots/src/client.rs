@@ -181,9 +181,7 @@ impl SessionHost for StoreHost {
                         crate::native_tasks::ControlKind::Drain,
                         Box::pin(async move {
                             if let Some(commands) = commands {
-                                commands.drain().await.map_err(|error| {
-                                    Error::operation(error, OperationContext::proposed(None))
-                                })?;
+                                commands.drain().await?;
                             }
                             Ok(())
                         }),

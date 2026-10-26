@@ -176,7 +176,7 @@ impl CommandRuntime {
         if snapshot.aborted() || !self.io.enabled() {
             return Ok(status);
         }
-        self.drain().await.map_err(fail)?;
+        self.drain().await?;
         resources.stock_captures.ensure_ready().map_err(fail)?;
         let Some(signer) = resources.signer.as_ref() else {
             return Ok(status);
@@ -280,6 +280,7 @@ impl CommandRuntime {
                             if report != claim || request.original().binding() != claim.binding {
                                 return Err(fail(OperationError::RecoveryRequired));
                             }
+                            self.ensure_ready()?;
                             match signer.recover_exact(request).await.into_parts().1 {
                                 ExactRecoveryKind::Obtained(artifact) => Some((artifact, report)),
                                 ExactRecoveryKind::Rejected(rejected) => {
@@ -318,6 +319,7 @@ impl CommandRuntime {
                                 if intent.binding() != expected || report.binding != expected {
                                     return Err(fail(OperationError::RecoveryRequired));
                                 }
+                                self.ensure_ready()?;
                                 resources.stock_captures.ensure_ready().map_err(fail)?;
                                 match signer.sign_exact(intent).await.into_parts().1 {
                                     OutcomeKind::Obtained(artifact) => Some((artifact, report)),

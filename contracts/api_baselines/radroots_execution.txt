@@ -6,7 +6,7 @@ pub mod radroots_execution::session
 pub mod radroots_execution::session::command
 pub struct radroots_execution::session::command::CommandRuntime
 impl radroots_execution::session::command::CommandRuntime
-pub async fn radroots_execution::session::command::CommandRuntime::drain(&self) -> core::result::Result<(), radroots_storage::command::OperationError>
+pub async fn radroots_execution::session::command::CommandRuntime::drain(&self) -> radroots_execution::Result<()>
 pub fn radroots_execution::session::command::CommandRuntime::new(alloc::sync::Arc<dyn radroots_execution::session::command::CommandIo>) -> Self
 pub trait radroots_execution::session::command::CommandIo: radroots_execution::session::HostBound
 pub fn radroots_execution::session::command::CommandIo::delivery_id(&self) -> core::result::Result<alloc::string::String, radroots_storage::command::OperationError>

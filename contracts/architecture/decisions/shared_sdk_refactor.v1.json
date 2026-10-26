@@ -246,6 +246,8 @@
       "ordinary_peer_installed_before_self_work": true,
       "ordinary_accepted_task_survives_observer_loss": true,
       "ordinary_obtained_owned_before_descriptor_conversion": true,
+      "generic_obtained_owned_before_descriptor_conversion": true,
+      "retained_drain_preserves_original_error_and_operation": true,
       "rejected_signer_error": "SignerTampering",
       "effectful_command_result": "ExecutionResult",
       "common_error_max_bytes": 64,
