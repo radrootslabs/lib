@@ -142,9 +142,9 @@ impl CommandRuntime {
         proof: &AttachmentProof,
         resources: SigningResources,
         mode: RunMode,
-    ) -> crate::Result<AcceptanceStatus> {
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
         let retained = OperationContext::retained(selection.operation);
-        let fail = |e| Error::operation(e, retained);
+        let fail = |e| crate::ExecutionFailure::from(Error::operation(e, retained));
         let mut snapshot = store
             .snapshot(selection.clone(), proof)
             .await
@@ -282,6 +282,12 @@ impl CommandRuntime {
                             }
                             match signer.recover_exact(request).await.into_parts().1 {
                                 ExactRecoveryKind::Obtained(artifact) => Some((artifact, report)),
+                                ExactRecoveryKind::Rejected(rejected) => {
+                                    return Err(crate::ExecutionFailure::rejected(
+                                        selection.operation,
+                                        rejected,
+                                    ));
+                                }
                                 _ => None,
                             }
                         }
@@ -315,6 +321,12 @@ impl CommandRuntime {
                                 resources.stock_captures.ensure_ready().map_err(fail)?;
                                 match signer.sign_exact(intent).await.into_parts().1 {
                                     OutcomeKind::Obtained(artifact) => Some((artifact, report)),
+                                    OutcomeKind::Rejected(rejected) => {
+                                        return Err(crate::ExecutionFailure::rejected(
+                                            selection.operation,
+                                            rejected,
+                                        ));
+                                    }
                                     _ => None,
                                 }
                             }

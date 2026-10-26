@@ -43,5 +43,6 @@ pub use radroots_execution::{
     TargetObservation, WaitTermination,
 };
 pub use radroots_execution::{Error, Result};
+pub use radroots_execution::{ExecutionFailure, ExecutionResult};
 pub use radroots_protocol::command::CommandError;
 pub use radroots_storage::workspace::{AttachmentInput, AttachmentProof};

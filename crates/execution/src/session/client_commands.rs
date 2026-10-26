@@ -30,7 +30,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         scope: &WorkspaceSession,
         operation: OperationId,
         expected: Option<CommandDigest>,
-    ) -> crate::Result<OperationStatus> {
+    ) -> crate::ExecutionResult<OperationStatus> {
         let proposed = OperationContext::proposed(Some(operation));
         let permit = self
             .session
@@ -46,7 +46,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if !scopes.iter().any(|owned| owned.same_scope(scope)) {
-                return Err(Error::operation(OperationError::Unauthorized, proposed));
+                return Err(Error::operation(OperationError::Unauthorized, proposed).into());
             }
         }
         let (binding, proof) = scope
@@ -101,14 +101,14 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                         crate::session::command::RunMode::Resume,
                     )
                     .await
-                    .map_err(|error| Error::operation(error, retained))?;
+                    .map_err(|error| error.into_failure(operation))?;
                 let snapshot = journal
                     .operation_snapshot(binding, operation, Some(digest), proof)
                     .await
                     .map_err(|error| Error::operation(error, retained))?
                     .ok_or_else(|| Error::operation(OperationError::RecoveryRequired, retained))?;
                 OperationStatus::try_from_snapshot(&snapshot)
-                    .map_err(|error| Error::operation(error, retained))
+                    .map_err(|error| Error::operation(error, retained).into())
             }
             .await;
             let _ = reply.send(result);
@@ -118,7 +118,8 @@ impl<H: SessionHost + 'static> ClientSession<H> {
             Err(Error::operation(
                 OperationError::RecoveryRequired,
                 OperationContext::admission_unknown(operation),
-            ))
+            )
+            .into())
         })
     }
     /// Captures and durably admits one inquiry through the configured journal.
@@ -130,7 +131,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         journal: Shared<dyn OperationJournal>,
         context: CommandContext,
         input: InquireInput,
-    ) -> crate::Result<OperationReceipt<ChatMessage>> {
+    ) -> crate::ExecutionResult<OperationReceipt<ChatMessage>> {
         self.submit_command(
             journal,
             context,
@@ -146,7 +147,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         journal: Shared<dyn OperationJournal>,
         context: CommandContext,
         input: PublishInput,
-    ) -> crate::Result<OperationReceipt<Listing>> {
+    ) -> crate::ExecutionResult<OperationReceipt<Listing>> {
         self.submit_command(
             journal,
             context,
@@ -161,7 +162,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         context: CommandContext,
         capture: F,
         project: ReceiptProjection<T>,
-    ) -> crate::Result<OperationReceipt<T>>
+    ) -> crate::ExecutionResult<OperationReceipt<T>>
     where
         F: FnOnce(radroots_domain::CommandContextData) -> Result<CapturedCommand, CommandError>,
     {
@@ -189,7 +190,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if !scopes.iter().any(|scope| scope.owns_context(&context)) {
-                return Err(Error::operation(OperationError::Unauthorized, proposed));
+                return Err(Error::operation(OperationError::Unauthorized, proposed).into());
             }
         }
         let (binding, proof) = context
@@ -225,7 +226,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                 .map_err(|error| error.with_context(proposed))?;
             observed
                 .await
-                .unwrap_or_else(|_| Err(Error::admission_uncertain(operation)))
+                .unwrap_or_else(|_| Err(Error::admission_uncertain(operation).into()))
         } else {
             execute_command(
                 journal,
@@ -291,7 +292,7 @@ async fn execute_command<T: HostBound + 'static>(
     runtime: Option<Shared<CommandRuntime>>,
     resources: SigningResources,
     project: ReceiptProjection<T>,
-) -> crate::Result<OperationReceipt<T>> {
+) -> crate::ExecutionResult<OperationReceipt<T>> {
     let operation = request.command().context().operation_id();
     let proposed = OperationContext::proposed(Some(operation));
     resources
@@ -312,7 +313,7 @@ async fn execute_command<T: HostBound + 'static>(
         .await
         .map_err(|error| Error::operation(error, proposed))?;
     match result {
-        AdmissionOutcome::Unknown(_) => Err(Error::admission_uncertain(operation)),
+        AdmissionOutcome::Unknown(_) => Err(Error::admission_uncertain(operation).into()),
         AdmissionOutcome::Committed(prepared) => {
             let retained = OperationContext::retained(operation);
             if let Some(runtime) = runtime {
@@ -325,14 +326,14 @@ async fn execute_command<T: HostBound + 'static>(
                         crate::session::command::RunMode::Command,
                     )
                     .await
-                    .map_err(|error| Error::operation(error, retained))?;
+                    .map_err(|error| error.into_failure(operation))?;
             }
             let snapshot = journal
                 .operation_snapshot(binding, operation, Some(digest), query_proof)
                 .await
                 .map_err(|error| Error::operation(error, retained))?
                 .ok_or_else(|| Error::operation(OperationError::RecoveryRequired, retained))?;
-            project(&snapshot).map_err(|error| Error::operation(error, retained))
+            project(&snapshot).map_err(|error| Error::operation(error, retained).into())
         }
     }
 }

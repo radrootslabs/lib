@@ -53,7 +53,7 @@ impl<'a> Operations<'a> {
         &self,
         operation: OperationId,
         expected: Option<CommandDigest>,
-    ) -> Result<radroots_execution::OperationStatus> {
+    ) -> crate::ExecutionResult<radroots_execution::OperationStatus> {
         self.client
             .session
             .resume_command(self.client.journal()?, &self.scope, operation, expected)

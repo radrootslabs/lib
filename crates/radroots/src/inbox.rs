@@ -1,5 +1,5 @@
 //! Private inquiry commands through the client's actual protected journal.
-use crate::{Client, CommandContext, OperationReceipt, Result};
+use crate::{Client, CommandContext, OperationReceipt};
 use radroots_domain::ChatMessage;
 pub use radroots_execution::inbox::{InquireInput, ListingRevisionRef};
 
@@ -18,7 +18,7 @@ impl<'a> Inbox<'a> {
         &self,
         context: CommandContext,
         input: InquireInput,
-    ) -> Result<OperationReceipt<ChatMessage>> {
+    ) -> crate::ExecutionResult<OperationReceipt<ChatMessage>> {
         self.client
             .session
             .inquire(self.client.journal()?, context, input)

@@ -38,13 +38,14 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         sources: StockSourceCheckpointRef,
         listings: StockListingCheckpointRef,
         input: AcceptOrderInput,
-    ) -> crate::Result<AcceptanceStatus> {
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
         let operation = context.data().operation_id();
         if !scope.owns_context(&context) {
             return Err(Error::operation(
                 OperationError::Unauthorized,
                 OperationContext::proposed(Some(operation)),
-            ));
+            )
+            .into());
         }
         self.submit_acceptance(
             inventory,
@@ -88,7 +89,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         minimum: InventoryCheckpointRef,
         operation: OperationId,
         digest: CommandDigest,
-    ) -> crate::Result<AcceptanceStatus> {
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
         self.submit_acceptance(
             inventory,
             store,
@@ -149,7 +150,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
             (AcceptanceSelection, Option<StockAcceptanceRequest>),
             OperationError,
         >,
-    ) -> crate::Result<AcceptanceStatus> {
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
         let proposed = OperationContext::proposed(Some(operation));
         if matches!(&mode, RunMode::Command) {
             self.stock_captures
@@ -167,7 +168,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             if !scopes.iter().any(|v| v.same_scope(scope)) {
-                return Err(Error::operation(OperationError::Unauthorized, proposed));
+                return Err(Error::operation(OperationError::Unauthorized, proposed).into());
             }
         }
         let host = self
@@ -209,7 +210,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                         .map_err(|e| Error::operation(e, proposed))?
                     {
                         StockAcceptanceOutcome::Unknown(_) => {
-                            return Err(Error::admission_uncertain(operation));
+                            return Err(Error::admission_uncertain(operation).into());
                         }
                         StockAcceptanceOutcome::Prepared(value)
                             if value.attempt().workspace_id()
@@ -227,7 +228,8 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                             return Err(Error::operation(
                                 OperationError::RecoveryRequired,
                                 OperationContext::admission_unknown(operation),
-                            ));
+                            )
+                            .into());
                         }
                     }
                 }
@@ -242,7 +244,7 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                         .await
                         .map_err(|e| Error::operation(e, retained))?;
                     crate::session::commerce::observe(&selection, view.as_ref())
-                        .map_err(|e| Error::operation(e, retained))
+                        .map_err(|e| Error::operation(e, retained).into())
                 }
             }
             .await;
@@ -251,6 +253,6 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         .map_err(|e| e.with_context(proposed))?;
         observed
             .await
-            .unwrap_or_else(|_| Err(Error::admission_uncertain(operation)))
+            .unwrap_or_else(|_| Err(Error::admission_uncertain(operation).into()))
     }
 }

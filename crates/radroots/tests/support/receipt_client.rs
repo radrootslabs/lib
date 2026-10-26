@@ -57,7 +57,7 @@ impl Ordinary {
         id: u8,
         text: &str,
         correlation: &str,
-    ) -> radroots::Result<OperationReceipt<ChatMessage>> {
+    ) -> radroots::ExecutionResult<OperationReceipt<ChatMessage>> {
         self.client
             .inbox()
             .inquire(self.context(id, correlation), input(text))

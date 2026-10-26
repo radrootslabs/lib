@@ -80,7 +80,8 @@ fn root_has_exact_exports_and_no_sdk_namespace() {
         )
     );
     assert!(ROOT.contains("pub use radroots_protocol::command::CommandError;"));
-    assert_eq!(ROOT.matches("pub use ").count(), 10);
+    assert!(ROOT.contains("pub use radroots_execution::{ExecutionFailure, ExecutionResult};"));
+    assert_eq!(ROOT.matches("pub use ").count(), 11);
     assert!(README.contains("```compile_fail\nuse radroots::sdk;\n```"));
 }
 

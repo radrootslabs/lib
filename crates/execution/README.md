@@ -227,3 +227,20 @@ and close retains callback roots through settlement and durable capture. Query
 facts keep preparation, recipient evidence, installation and actual abort
 separate. This path performs no outer wrapping, relay publication, stock release
 or proof of original nonissuance; full commerce/accounting closure remains open.
+
+Observed rejected signer output returns `SignerTampering` with the original
+confirmed operation identity. Effectful commands return `ExecutionResult`;
+its allocation-free Copy `ExecutionFailure` retains the compact primitive Error
+plus optional fixed Signing rejection through `signer_rejection()`, including
+exact prefix coverage. The primitive Error keeps its 64-byte budget and the
+separate command failure is bounded to 128 bytes; neither
+failure type owns an untrusted raw payload. Ordinary acceptance
+and the generic chat/listing loop stop further issuance on rejection. Already
+captured peer evidence remains retained and matching installation completes
+before reporting a self-copy rejection. A later installation failure preserves
+its actual error code together with signer diagnostics and manual recovery.
+Unknown installation stops delivery. These diagnostics are caller observations,
+not durable forensic records, authenticated business output or proof that the
+original signer never issued. Missing/unsupported/uncertain outcomes keep their
+existing conservative claims; no rejection authorizes another first dispatch,
+stock release or renewed deadline.

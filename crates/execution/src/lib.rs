@@ -5,6 +5,13 @@
 
 mod diagnostic;
 mod error;
+#[cfg(feature = "signer_session")]
+mod failure;
+#[cfg(feature = "signer_session")]
+pub use failure::ExecutionFailure;
+/// Effectful command results, including optional bounded signer diagnostics.
+#[cfg(feature = "signer_session")]
+pub type ExecutionResult<T> = core::result::Result<T, ExecutionFailure>;
 extern crate alloc;
 mod receipt;
 pub use receipt::{

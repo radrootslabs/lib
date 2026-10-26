@@ -1,5 +1,5 @@
 //! Initial public listing commands through the shared protected execution owner.
-use crate::{Client, CommandContext, OperationReceipt, Result};
+use crate::{Client, CommandContext, OperationReceipt};
 pub use radroots_domain::listing::Listing;
 pub use radroots_protocol::listing::PublishInput;
 
@@ -17,7 +17,7 @@ impl<'a> Listings<'a> {
         &self,
         context: CommandContext,
         input: PublishInput,
-    ) -> Result<OperationReceipt<Listing>> {
+    ) -> crate::ExecutionResult<OperationReceipt<Listing>> {
         self.client
             .session
             .publish_listing(self.client.journal()?, context, input)

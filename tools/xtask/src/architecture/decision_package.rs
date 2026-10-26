@@ -329,6 +329,14 @@ struct SigningPlanBinding {
     ordinary_peer_installed_before_self_work: bool,
     ordinary_accepted_task_survives_observer_loss: bool,
     ordinary_obtained_owned_before_descriptor_conversion: bool,
+    rejected_signer_error: String,
+    effectful_command_result: String,
+    common_error_max_bytes: u16,
+    execution_failure_max_bytes: u16,
+    rejected_signer_metadata_owner: String,
+    rejected_signer_report_is_nonissuance: bool,
+    generic_peer_installed_before_rejected_self_return: bool,
+    unknown_installation_blocks_delivery: bool,
     ordinary_existing_claim_grants_first_dispatch: bool,
     ordinary_replay_requires_original_policy_and_current_permit: bool,
     ordinary_acceptance_implies_delivery: bool,
@@ -621,6 +629,21 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock
                 .signing_plan_binding
                 .ordinary_obtained_owned_before_descriptor_conversion
+            && stock.signing_plan_binding.rejected_signer_error == "SignerTampering"
+            && stock.signing_plan_binding.effectful_command_result == "ExecutionResult"
+            && stock.signing_plan_binding.common_error_max_bytes == 64
+            && stock.signing_plan_binding.execution_failure_max_bytes == 128
+            && stock.signing_plan_binding.rejected_signer_metadata_owner
+                == "radroots_signing.issuance.RejectedArtifact"
+            && !stock
+                .signing_plan_binding
+                .rejected_signer_report_is_nonissuance
+            && stock
+                .signing_plan_binding
+                .generic_peer_installed_before_rejected_self_return
+            && stock
+                .signing_plan_binding
+                .unknown_installation_blocks_delivery
             && !stock
                 .signing_plan_binding
                 .ordinary_existing_claim_grants_first_dispatch
@@ -1722,6 +1745,17 @@ mod tests {
     #[test]
     fn signing_plans_require_complete_original_qualified_intents_before_any_signing() {
         for (field, bad) in [
+            ("effectful_command_result", json!("unbounded_error")),
+            ("common_error_max_bytes", json!(128)),
+            ("execution_failure_max_bytes", json!(256)),
+            ("rejected_signer_error", json!("success")),
+            ("rejected_signer_metadata_owner", json!("raw_payload")),
+            ("rejected_signer_report_is_nonissuance", json!(true)),
+            (
+                "generic_peer_installed_before_rejected_self_return",
+                json!(false),
+            ),
+            ("unknown_installation_blocks_delivery", json!(false)),
             (
                 "ordinary_obtained_owned_before_descriptor_conversion",
                 json!(false),

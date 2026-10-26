@@ -491,7 +491,8 @@ async fn failed_obtained_capture_blocks_close_retains_writer_and_retries_without
         .inquire(ready.context(205, now() + 120), inquiry())
         .await
         .unwrap_err();
-    assert_eq!(error.code(), Code::RecoveryRequired);
+    assert_eq!(error.code(), Code::StorageFailure);
+    assert_eq!(error.retry(), radroots::RetryClass::ManualReconciliation);
     assert_eq!(error.context().admission(), Admission::Confirmed);
     assert_eq!(ready.signer.calls.load(Ordering::SeqCst), 1);
     let error = ready.client.close().await.unwrap_err();

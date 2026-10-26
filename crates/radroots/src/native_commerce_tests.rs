@@ -81,6 +81,10 @@ impl WorkspaceClock for Clock {
     }
 }
 struct Control {
+    pause_rejected: AtomicBool,
+    tamper_recovery: AtomicBool,
+    tamper_self: AtomicBool,
+    rejected: std::sync::Mutex<Option<radroots_signing::issuance::RejectedArtifact>>,
     recovery_supported: AtomicBool,
     signs: AtomicUsize,
     recoveries: AtomicUsize,
@@ -92,6 +96,10 @@ struct Control {
 impl Control {
     fn new() -> Self {
         Self {
+            pause_rejected: AtomicBool::new(false),
+            tamper_recovery: AtomicBool::new(false),
+            tamper_self: AtomicBool::new(false),
+            rejected: std::sync::Mutex::new(None),
             recovery_supported: AtomicBool::new(true),
             signs: AtomicUsize::new(0),
             recoveries: AtomicUsize::new(0),
@@ -149,6 +157,28 @@ impl ParticipantProvider for Provider {
                 return SigningOutcome::not_dispatched(intent.binding(), ProviderError::Cancelled);
             }
             let result = self.inner.sign_exact(intent).await;
+            if is_self && self.control.tamper_self.load(Ordering::SeqCst) {
+                let foreign = radroots_signing::issuance::IntentBinding::from_components(
+                    OperationId::from_bytes([0xa1; 32]),
+                    [0xa2; 32],
+                    [0xa3; 32],
+                    radroots_signing::issuance::ArtifactRole::BusinessSeal,
+                    Some(self.inner.public_key()),
+                    NonZeroU64::new(230000).unwrap(),
+                )
+                .unwrap();
+                let rejected = result.enforce_binding(foreign);
+                let radroots_signing::issuance::OutcomeKind::Rejected(metadata) = rejected.kind()
+                else {
+                    panic!("actual artifact must retain bounded mismatch metadata")
+                };
+                *self.control.rejected.lock().unwrap() = Some(*metadata);
+                if self.control.pause_rejected.swap(false, Ordering::SeqCst) {
+                    self.control.entered.notify_one();
+                    self.control.release.notified().await;
+                }
+                return rejected;
+            }
             if !is_self && self.control.pause_peer.swap(false, Ordering::SeqCst) {
                 self.control.entered.notify_one();
                 self.control.release.notified().await;
@@ -159,7 +189,27 @@ impl ParticipantProvider for Provider {
     fn recover_exact(&self, request: ExactRecoveryRequest) -> BoxFuture<'_, ExactRecoveryOutcome> {
         Box::pin(async move {
             self.control.recoveries.fetch_add(1, Ordering::SeqCst);
-            self.inner.recover_exact(request).await
+            let result = self.inner.recover_exact(request).await;
+            if self.control.tamper_recovery.load(Ordering::SeqCst) {
+                let foreign = radroots_signing::issuance::IntentBinding::from_components(
+                    OperationId::from_bytes([0xa1; 32]),
+                    [0xa2; 32],
+                    [0xa3; 32],
+                    radroots_signing::issuance::ArtifactRole::BusinessSeal,
+                    Some(self.inner.public_key()),
+                    NonZeroU64::new(230000).unwrap(),
+                )
+                .unwrap();
+                let rejected = result.enforce_binding(foreign);
+                let radroots_signing::issuance::ExactRecoveryKind::Rejected(metadata) =
+                    rejected.kind()
+                else {
+                    panic!("actual recovered artifact must retain bounded mismatch metadata")
+                };
+                *self.control.rejected.lock().unwrap() = Some(*metadata);
+                return rejected;
+            }
+            result
         })
     }
 }
@@ -918,4 +968,255 @@ async fn identical_authenticated_foreign_scope_cannot_start_this_clients_accepta
     assert_eq!(r.control.signs.load(Ordering::SeqCst), 0);
     r.client.close().await.unwrap();
     other.close().await.unwrap();
+}
+
+fn assert_rejected(error: crate::ExecutionFailure, operation: OperationId, control: &Control) {
+    assert_eq!(error.code(), crate::Code::SignerTampering);
+    assert_eq!(error.context().operation_id(), Some(operation));
+    assert_eq!(error.context().admission(), crate::Admission::Confirmed);
+    assert_eq!(error.retry(), crate::RetryClass::ManualReconciliation);
+    let rejected = error
+        .signer_rejection()
+        .expect("preserve the actual bounded rejection");
+    assert_eq!(
+        rejected,
+        *control.rejected.lock().unwrap().as_ref().unwrap()
+    );
+    let fingerprint = rejected
+        .fingerprint()
+        .expect("actual returned bytes have fingerprint coverage");
+    assert!(fingerprint.covered_bytes() > 0);
+    assert_eq!(fingerprint.covered_bytes(), fingerprint.total_bytes());
+    assert!(fingerprint.covered_bytes() <= 65536);
+}
+
+#[tokio::test]
+async fn rejected_self_callback_returns_bounded_tampering_without_losing_peer_installation() {
+    let r = Rig::new().await;
+    r.control.tamper_self.store(true, Ordering::SeqCst);
+    let (command, context) = r.captured().await;
+    let (private, public, minimum) = r.minima().await;
+    let error = r
+        .client
+        .orders(&r.scope)
+        .accept(
+            context,
+            minimum,
+            private,
+            public,
+            AcceptOrderInput::new(
+                command.input().request(),
+                command.input().terms_digest(),
+                AllocationSelection::automatic(),
+            ),
+        )
+        .await
+        .unwrap_err();
+    assert_rejected(error, command.context().operation_id(), &r.control);
+    let status = r
+        .client
+        .orders(&r.scope)
+        .acceptance_status(minimum, command.context().operation_id(), command.digest())
+        .await
+        .unwrap();
+    let installed = status
+        .installation()
+        .expect("actual peer S installs before self rejection");
+    assert_eq!(
+        status
+            .recipients()
+            .iter()
+            .filter(|v| v.evidence.is_some())
+            .count(),
+        1
+    );
+    assert!(!status.aborted());
+    r.control.tamper_self.store(false, Ordering::SeqCst);
+    let resumed = r
+        .client
+        .orders(&r.scope)
+        .resume_acceptance(minimum, command.context().operation_id(), command.digest())
+        .await
+        .unwrap();
+    assert_eq!(resumed.installation(), Some(installed));
+    assert!(resumed.recipients().iter().all(|v| v.evidence.is_some()));
+    assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+    assert_eq!(r.control.recoveries.load(Ordering::SeqCst), 1);
+    r.client.close().await.unwrap();
+    assert!(r.provider.upgrade().is_none());
+}
+
+#[tokio::test]
+async fn generic_inquiry_installs_actual_peer_and_returns_original_bounded_self_rejection() {
+    for fail_install in [false, true] {
+        let r = Rig::new().await;
+        r.control
+            .pause_rejected
+            .store(fail_install, Ordering::SeqCst);
+        r.control.tamper_self.store(true, Ordering::SeqCst);
+        let crypto = WorkspaceCrypto::new(
+            r.vault.clone(),
+            SecretRef::new(
+                SecretId::parse("workspace-key").unwrap(),
+                BackendKind::File,
+                KeyVersion::new(1).unwrap(),
+            ),
+            SecretMaterial::from_slice(&[0x41; 32]).unwrap(),
+            AccessPolicy::standard(),
+        )
+        .unwrap();
+        let key = r.enrollment.input().participant();
+        let (native, input, credential) = NativeWorkspace::initialize_local_outbox(
+            &r._temp.path().join("chat"),
+            radroots_storage_sqlite::workspace::LocalOutboxConfig::new(
+                key,
+                key,
+                "synthetic-rejected-chat",
+                UnixSeconds::new(300).unwrap(),
+            )
+            .unwrap(),
+            crypto,
+            r.clock.clone(),
+        )
+        .await
+        .unwrap();
+        let path = r._temp.path().join("chat_cache");
+        std::fs::create_dir(&path).unwrap();
+        let options = OpenOptions::new(Paths::from_directory(path).unwrap(), OpenMode::Create)
+            .with_source_generation(SourceGeneration::new([20; 32]).unwrap(), 1)
+            .unwrap();
+        let mut client = Client::open(NativeConfig::public_read(options).with_workspace(native))
+            .await
+            .unwrap();
+        client.session = client
+            .session
+            .clone()
+            .with_command_runtime(Arc::new(CommandRuntime::new(Arc::new(Io(r.clock.clone())))));
+        let scope = client.attach(input, proof(&credential)).await.unwrap();
+        client
+            .attach_signer(SignerHandle::new(
+                r.provider.upgrade().unwrap(),
+                Arc::new(Callbacks),
+            ))
+            .await
+            .unwrap();
+        client.start(StartMode::LocalOnly).await.unwrap();
+        let operation = OperationId::from_bytes([95; 32]);
+        let context = scope
+            .command_context(operation, None, None, UnixSeconds::new(230).unwrap())
+            .unwrap();
+        let peer = data()["scope"]["buyer"].as_str().unwrap().parse().unwrap();
+        let input = crate::inbox::InquireInput::new(
+            radroots_domain::ThreadId::from_bytes([96; 32]),
+            peer,
+            None,
+            "synthetic private inquiry",
+        )
+        .unwrap();
+        let observer_client = client.clone();
+        let observer =
+            tokio::spawn(async move { observer_client.inbox().inquire(context, input).await });
+        let mut injected = None;
+        if fail_install {
+            use sqlx::Connection;
+            tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                r.control.entered.notified(),
+            )
+            .await
+            .unwrap();
+            let path = r._temp.path().join("chat/execution_v1.sqlite");
+            let mut connection =
+                sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
+                    .await
+                    .unwrap();
+            sqlx::query("CREATE TRIGGER controlled_t2_failure BEFORE INSERT ON chat_messages BEGIN SELECT RAISE(ABORT, 'controlled_t2_failure'); END").execute(&mut connection).await.unwrap();
+            injected = Some(connection);
+            r.control.release.notify_one();
+        }
+        let error = observer.await.unwrap().unwrap_err();
+        if fail_install {
+            assert_eq!(error.code(), crate::Code::StorageFailure);
+            assert_eq!(error.context().operation_id(), Some(operation));
+            assert_eq!(error.context().admission(), crate::Admission::Confirmed);
+            assert_eq!(error.retry(), crate::RetryClass::ManualReconciliation);
+            assert_eq!(
+                error.signer_rejection(),
+                *r.control.rejected.lock().unwrap()
+            );
+        } else {
+            assert_rejected(error, operation, &r.control)
+        }
+        if let Some(mut connection) = injected {
+            use sqlx::Connection;
+            sqlx::query("DROP TRIGGER controlled_t2_failure")
+                .execute(&mut connection)
+                .await
+                .unwrap();
+            connection.close().await.unwrap();
+        }
+        let status = client
+            .operations(&scope)
+            .get(operation)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status.business_installation(),
+            if fail_install {
+                crate::BusinessInstallation::NotInstalled
+            } else {
+                crate::BusinessInstallation::Installed
+            }
+        );
+        assert_eq!(
+            status
+                .artifacts()
+                .iter()
+                .filter(|v| v.issuance() == crate::Issuance::Obtained)
+                .count(),
+            1
+        );
+        assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+        client.close().await.unwrap();
+        r.client.close().await.unwrap();
+        assert!(r.provider.upgrade().is_none());
+    }
+}
+
+#[tokio::test]
+async fn rejected_exact_recovery_keeps_original_binding_and_cannot_release_installed_peer() {
+    let r = Rig::new().await;
+    r.control.fail_self.store(true, Ordering::SeqCst);
+    let (command, status) = r.accept().await;
+    let installed = status.installation().unwrap();
+    r.control.fail_self.store(false, Ordering::SeqCst);
+    r.control.tamper_recovery.store(true, Ordering::SeqCst);
+    let (_, _, minimum) = r.minima().await;
+    let error = r
+        .client
+        .orders(&r.scope)
+        .resume_acceptance(minimum, command.context().operation_id(), command.digest())
+        .await
+        .unwrap_err();
+    assert_rejected(error, command.context().operation_id(), &r.control);
+    let current = r
+        .client
+        .orders(&r.scope)
+        .acceptance_status(minimum, command.context().operation_id(), command.digest())
+        .await
+        .unwrap();
+    assert_eq!(current.installation(), Some(installed));
+    assert_eq!(
+        current
+            .recipients()
+            .iter()
+            .filter(|v| v.evidence.is_some())
+            .count(),
+        1
+    );
+    assert!(!current.aborted());
+    assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+    assert_eq!(r.control.recoveries.load(Ordering::SeqCst), 1);
+    r.client.close().await.unwrap();
 }

@@ -190,8 +190,18 @@ pub struct Error {
     retry: RetryClass,
     detail: Option<Detail>,
 }
+const _: () = assert!(core::mem::size_of::<Error>() <= 64);
 
 impl Error {
+    #[cfg(feature = "workspace_session")]
+    pub(crate) const fn signer_tampering(operation: OperationId) -> Self {
+        Self {
+            code: Code::SignerTampering,
+            context: OperationContext::retained(operation),
+            retry: RetryClass::ManualReconciliation,
+            detail: Some(Detail::new(crate::Field::Signer, crate::Reason::Conflict)),
+        }
+    }
     #[cfg(feature = "workspace_session")]
     pub(crate) const fn with_context(mut self, context: OperationContext) -> Self {
         self.context = context;

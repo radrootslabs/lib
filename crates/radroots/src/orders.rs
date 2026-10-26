@@ -30,7 +30,7 @@ impl<'a> Orders<'a> {
         sources: StockSourceCheckpointRef,
         listings: StockListingCheckpointRef,
         input: AcceptOrderInput,
-    ) -> Result<AcceptanceStatus> {
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
         self.client
             .session
             .accept_stock_order(
@@ -52,7 +52,7 @@ impl<'a> Orders<'a> {
         minimum: InventoryCheckpointRef,
         operation: OperationId,
         digest: CommandDigest,
-    ) -> Result<AcceptanceStatus> {
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
         self.client
             .session
             .resume_stock_acceptance(

@@ -15,7 +15,7 @@ use radroots_protocol::{
     plan::{CapturedSigningPlan, SigningTarget},
 };
 use radroots_signing::{
-    issuance::{OutcomeKind, SigningIntent},
+    issuance::{OutcomeKind, RejectedArtifact, SigningIntent},
     provider::{PrivateCiphertext, PrivateText, ProviderCall},
     request::CancellationSignal,
 };
@@ -106,6 +106,32 @@ pub(super) struct SigningResources {
 pub(super) enum RunMode {
     Command,
     Resume,
+}
+pub(super) enum CommandFailure {
+    Host(OperationError, Option<RejectedArtifact>),
+    Capture(OperationError),
+    Rejected(RejectedArtifact),
+}
+impl From<OperationError> for CommandFailure {
+    fn from(error: OperationError) -> Self {
+        Self::Host(error, None)
+    }
+}
+impl CommandFailure {
+    pub(super) fn into_failure(
+        self,
+        operation: radroots_domain::OperationId,
+    ) -> crate::ExecutionFailure {
+        let context = crate::OperationContext::retained(operation);
+        match self {
+            Self::Host(error, Some(rejected)) => {
+                crate::ExecutionFailure::host_after_rejection(error, operation, rejected)
+            }
+            Self::Host(error, None) => crate::Error::operation(error, context).into(),
+            Self::Capture(error) => crate::Error::capture_pending(error, context).into(),
+            Self::Rejected(rejected) => crate::ExecutionFailure::rejected(operation, rejected),
+        }
+    }
 }
 impl CommandRuntime {
     /// Owns explicit IO without performing effects or starting a runtime.
@@ -208,7 +234,7 @@ impl CommandRuntime {
         proof: &AttachmentProof,
         resources: SigningResources,
         mode: RunMode,
-    ) -> Result<(), OperationError> {
+    ) -> Result<(), CommandFailure> {
         if !self.io.enabled() {
             return Ok(());
         }
@@ -231,42 +257,62 @@ impl CommandRuntime {
                     .await?
                 {
                     PlanBindingOutcome::Committed(bound) => bound,
-                    PlanBindingOutcome::Unknown(_) => return Err(OperationError::RecoveryRequired),
+                    PlanBindingOutcome::Unknown(_) => {
+                        return Err(OperationError::RecoveryRequired.into());
+                    }
                 }
             }
         };
-        self.issue(
-            journal.clone(),
-            &bound,
-            proof,
-            signer.as_ref(),
-            resources.lease.clone(),
-            &resources.stock_captures,
-        )
-        .await?;
-        let snapshot = journal
-            .operation_snapshot(binding.clone(), operation, Some(digest), copy(proof)?)
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?;
-        if snapshot
-            .artifacts()
-            .iter()
-            .any(|recipient| recipient.obtained().is_some())
-        {
-            journal
-                .install_transition_and_outbox(
-                    InstallationRequest::new(
-                        binding.clone(),
-                        operation,
-                        digest,
-                        *bound.plan().digest(),
-                    ),
-                    copy(proof)?,
-                )
-                .await?;
+        let rejected = self
+            .issue(
+                journal.clone(),
+                &bound,
+                proof,
+                signer.as_ref(),
+                resources.lease.clone(),
+                &resources.stock_captures,
+            )
+            .await?;
+        let installation: Result<(), OperationError> = async {
+            let snapshot = journal
+                .operation_snapshot(binding.clone(), operation, Some(digest), copy(proof)?)
+                .await?
+                .ok_or(OperationError::RecoveryRequired)?;
+            if snapshot
+                .artifacts()
+                .iter()
+                .any(|recipient| recipient.obtained().is_some())
+            {
+                let outcome = journal
+                    .install_transition_and_outbox(
+                        InstallationRequest::new(
+                            binding.clone(),
+                            operation,
+                            digest,
+                            *bound.plan().digest(),
+                        ),
+                        copy(proof)?,
+                    )
+                    .await?;
+                if matches!(
+                    outcome,
+                    radroots_storage::command::InstallationOutcome::Unknown(_)
+                ) {
+                    return Err(OperationError::RecoveryRequired);
+                }
+            }
+            Ok(())
+        }
+        .await;
+        if let Err(error) = installation {
+            return Err(CommandFailure::Host(error, rejected));
+        }
+        if let Some(rejected) = rejected {
+            return Err(CommandFailure::Rejected(rejected));
         }
         self.deliver(journal, &bound, proof, resources.lease, mode)
             .await
+            .map_err(Into::into)
     }
     async fn plan(
         &self,
@@ -372,7 +418,7 @@ impl CommandRuntime {
         signer: Option<&SignerSession>,
         lease: Shared<dyn HostBound>,
         stock_captures: &super::stock_evidence::Owner,
-    ) -> Result<(), OperationError> {
+    ) -> Result<Option<RejectedArtifact>, CommandFailure> {
         let prepared = bound.prepared();
         let binding = prepared.request().binding();
         let targets = match bound.plan() {
@@ -414,7 +460,7 @@ impl CommandRuntime {
             stock_captures.ensure_ready()?;
             let attempt = match journal.claim_attempt(select(), copy(proof)?).await {
                 Err(OperationError::DeadlineExceeded) => continue,
-                Err(error) => return Err(error),
+                Err(error) => return Err(error.into()),
                 Ok(outcome) => match outcome {
                     ClaimAttemptOutcome::Claimed(attempt) => attempt,
                     ClaimAttemptOutcome::Retained(_) | ClaimAttemptOutcome::Unknown(_) => continue,
@@ -437,11 +483,14 @@ impl CommandRuntime {
             )
             .map_err(|_| OperationError::InvalidCommand)?;
             if intent.binding() != attempt.binding() {
-                return Err(OperationError::RecoveryRequired);
+                return Err(OperationError::RecoveryRequired.into());
             }
             stock_captures.ensure_ready()?;
             let outcome = signer.sign_exact(intent).await;
             let (_, kind) = outcome.into_parts();
+            if let OutcomeKind::Rejected(rejected) = kind {
+                return Ok(Some(rejected));
+            }
             if let OutcomeKind::Obtained(artifact) = kind {
                 let evidence = artifact.with_json(|raw| {
                     ArtifactEvidence::verify(&attempt, raw, artifact.observed_at_unix_ms())
@@ -460,16 +509,16 @@ impl CommandRuntime {
                 match journal
                     .capture_evidence(binding.input().clone(), &entry.proof, &entry.evidence)
                     .await
-                    .map_err(|_| OperationError::RecoveryRequired)?
+                    .map_err(CommandFailure::Capture)?
                 {
                     EvidenceCaptureOutcome::Committed(_) => self.remove(&entry),
                     EvidenceCaptureOutcome::Unknown(_) => {
-                        return Err(OperationError::RecoveryRequired);
+                        return Err(CommandFailure::Capture(OperationError::RecoveryRequired));
                     }
                 }
             }
         }
-        Ok(())
+        Ok(None)
     }
     async fn deliver(
         &self,

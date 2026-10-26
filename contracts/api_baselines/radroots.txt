@@ -10,6 +10,8 @@ pub use radroots::CommandError
 pub use radroots::Delivery
 pub use radroots::DeliveryObservation
 pub use radroots::Error
+pub use radroots::ExecutionFailure
+pub use radroots::ExecutionResult
 pub use radroots::Issuance
 pub use radroots::OperationContext
 pub use radroots::OperationId
@@ -107,7 +109,7 @@ pub use radroots::inbox::InquireInput
 pub use radroots::inbox::ListingRevisionRef
 pub struct radroots::inbox::Inbox<'a>
 impl<'a> radroots::inbox::Inbox<'a>
-pub async fn radroots::inbox::Inbox<'a>::inquire(&self, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>
+pub async fn radroots::inbox::Inbox<'a>::inquire(&self, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::ExecutionResult<radroots_execution::receipt::OperationReceipt<radroots_domain::message::ChatMessage>>
 pub mod radroots::knowledge
 pub use radroots::knowledge::AddressableRef
 pub use radroots::knowledge::KnowledgeClaim
@@ -144,7 +146,7 @@ pub use radroots::listings::Listing
 pub use radroots::listings::PublishInput
 pub struct radroots::listings::Listings<'a>
 impl<'a> radroots::listings::Listings<'a>
-pub async fn radroots::listings::Listings<'a>::publish(&self, radroots_execution::workspace::CommandContext, radroots_protocol::listing::PublishInput) -> radroots_execution::Result<radroots_execution::receipt::OperationReceipt<radroots_domain::listing::view::Listing>>
+pub async fn radroots::listings::Listings<'a>::publish(&self, radroots_execution::workspace::CommandContext, radroots_protocol::listing::PublishInput) -> radroots_execution::ExecutionResult<radroots_execution::receipt::OperationReceipt<radroots_domain::listing::view::Listing>>
 pub mod radroots::operations
 pub struct radroots::operations::Operations<'a>
 impl<'a> radroots::operations::Operations<'a>
@@ -152,7 +154,7 @@ pub async fn radroots::operations::Operations<'a>::abort_proven_unissued(&self, 
 pub async fn radroots::operations::Operations<'a>::get(&self, radroots_domain::identifier::OperationId) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationStatus>>
 pub async fn radroots::operations::Operations<'a>::get_matching(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<core::option::Option<radroots_execution::receipt::OperationStatus>>
 pub async fn radroots::operations::Operations<'a>::preparation_abort(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<core::option::Option<radroots_storage::inventory::abort::StockAbortReceipt>>
-pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::receipt::OperationStatus>
+pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::ExecutionResult<radroots_execution::receipt::OperationStatus>
 pub mod radroots::orders
 pub use radroots::orders::AcceptOrderInput
 pub use radroots::orders::AcceptanceRecipient
@@ -160,9 +162,9 @@ pub use radroots::orders::AcceptanceStatus
 pub use radroots::orders::InstalledAcceptance
 pub struct radroots::orders::Orders<'a>
 impl<'a> radroots::orders::Orders<'a>
-pub async fn radroots::orders::Orders<'a>::accept(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_protocol::command::order_acceptance::AcceptOrderInput) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots::orders::Orders<'a>::accept(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_protocol::command::order_acceptance::AcceptOrderInput) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceStatus>
 pub async fn radroots::orders::Orders<'a>::acceptance_status(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
-pub async fn radroots::orders::Orders<'a>::resume_acceptance(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots::orders::Orders<'a>::resume_acceptance(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceStatus>
 pub mod radroots::signing
 pub use radroots::signing::ArtifactRole
 pub use radroots::signing::AuthorizationHeader

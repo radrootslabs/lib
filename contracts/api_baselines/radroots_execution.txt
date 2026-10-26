@@ -105,13 +105,13 @@ pub async fn radroots_execution::session::ClientSession<H>::stock_option_mapping
 pub async fn radroots_execution::session::ClientSession<H>::stock_pool(&self, alloc::sync::Arc<dyn radroots_storage::inventory::InventoryStore>, &radroots_execution::workspace::WorkspaceSession, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::PoolId) -> radroots_execution::Result<core::option::Option<radroots_domain::stock::PoolView>>
 pub async fn radroots_execution::session::ClientSession<H>::stock_preparation_abort(&self, alloc::sync::Arc<dyn radroots_storage::inventory::InventoryStore>, &radroots_execution::workspace::WorkspaceSession, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<core::option::Option<radroots_storage::inventory::abort::StockAbortReceipt>>
 impl<H: radroots_execution::session::SessionHost + 'static> radroots_execution::session::ClientSession<H>
-pub async fn radroots_execution::session::ClientSession<H>::accept_stock_order(&self, alloc::sync::Arc<dyn radroots_storage::inventory::InventoryStore>, alloc::sync::Arc<dyn radroots_execution::session::commerce::AcceptanceStore>, &radroots_execution::workspace::WorkspaceSession, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_protocol::command::order_acceptance::AcceptOrderInput) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
-pub async fn radroots_execution::session::ClientSession<H>::resume_stock_acceptance(&self, alloc::sync::Arc<dyn radroots_storage::inventory::InventoryStore>, alloc::sync::Arc<dyn radroots_execution::session::commerce::AcceptanceStore>, &radroots_execution::workspace::WorkspaceSession, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots_execution::session::ClientSession<H>::accept_stock_order(&self, alloc::sync::Arc<dyn radroots_storage::inventory::InventoryStore>, alloc::sync::Arc<dyn radroots_execution::session::commerce::AcceptanceStore>, &radroots_execution::workspace::WorkspaceSession, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_protocol::command::order_acceptance::AcceptOrderInput) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots_execution::session::ClientSession<H>::resume_stock_acceptance(&self, alloc::sync::Arc<dyn radroots_storage::inventory::InventoryStore>, alloc::sync::Arc<dyn radroots_execution::session::commerce::AcceptanceStore>, &radroots_execution::workspace::WorkspaceSession, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceStatus>
 pub async fn radroots_execution::session::ClientSession<H>::stock_acceptance_status(&self, alloc::sync::Arc<dyn radroots_execution::session::commerce::AcceptanceStore>, &radroots_execution::workspace::WorkspaceSession, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
 impl<H: radroots_execution::session::SessionHost + 'static> radroots_execution::session::ClientSession<H>
-pub async fn radroots_execution::session::ClientSession<H>::inquire(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
-pub async fn radroots_execution::session::ClientSession<H>::publish_listing(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::listing::PublishInput) -> radroots_execution::Result<radroots_execution::OperationReceipt<radroots_domain::listing::view::Listing>>
-pub async fn radroots_execution::session::ClientSession<H>::resume_command(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::Result<radroots_execution::OperationStatus>
+pub async fn radroots_execution::session::ClientSession<H>::inquire(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::command::InquireInput) -> radroots_execution::ExecutionResult<radroots_execution::OperationReceipt<radroots_domain::message::ChatMessage>>
+pub async fn radroots_execution::session::ClientSession<H>::publish_listing(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, radroots_execution::workspace::CommandContext, radroots_protocol::listing::PublishInput) -> radroots_execution::ExecutionResult<radroots_execution::OperationReceipt<radroots_domain::listing::view::Listing>>
+pub async fn radroots_execution::session::ClientSession<H>::resume_command(&self, alloc::sync::Arc<dyn radroots_storage::command::OperationJournal>, &radroots_execution::workspace::WorkspaceSession, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>) -> radroots_execution::ExecutionResult<radroots_execution::OperationStatus>
 impl<H: radroots_execution::session::SessionHost> radroots_execution::session::ClientSession<H>
 pub async fn radroots_execution::session::ClientSession<H>::attach_signer(&self, radroots_signing::provider::SignerHandle) -> radroots_execution::Result<radroots_execution::session::SignerSession>
 pub async fn radroots_execution::session::ClientSession<H>::attach_workspace(&self, alloc::sync::Arc<dyn radroots_storage::workspace::WorkspaceStore>, radroots_storage::workspace::AttachmentInput, radroots_storage::workspace::AttachmentProof) -> radroots_execution::Result<radroots_execution::workspace::WorkspaceSession>
@@ -352,9 +352,24 @@ pub const fn radroots_execution::Error::detail(self) -> core::option::Option<rad
 pub const fn radroots_execution::Error::new(radroots_execution::Code, radroots_execution::OperationContext, radroots_execution::RetryClass, core::option::Option<radroots_execution::Detail>) -> core::result::Result<Self, radroots_execution::InvalidErrorContext>
 pub const fn radroots_execution::Error::operation(radroots_storage::command::OperationError, radroots_execution::OperationContext) -> Self
 pub const fn radroots_execution::Error::retry(self) -> radroots_execution::RetryClass
+impl core::convert::From<radroots_execution::Error> for radroots_execution::ExecutionFailure
+pub fn radroots_execution::ExecutionFailure::from(radroots_execution::Error) -> Self
 impl core::error::Error for radroots_execution::Error
 impl core::fmt::Display for radroots_execution::Error
 pub fn radroots_execution::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_execution::ExecutionFailure
+impl radroots_execution::ExecutionFailure
+pub const fn radroots_execution::ExecutionFailure::code(self) -> radroots_execution::Code
+pub const fn radroots_execution::ExecutionFailure::context(self) -> radroots_execution::OperationContext
+pub const fn radroots_execution::ExecutionFailure::detail(self) -> core::option::Option<radroots_execution::Detail>
+pub const fn radroots_execution::ExecutionFailure::error(self) -> radroots_execution::Error
+pub const fn radroots_execution::ExecutionFailure::retry(self) -> radroots_execution::RetryClass
+pub const fn radroots_execution::ExecutionFailure::signer_rejection(self) -> core::option::Option<radroots_signing::issuance::RejectedArtifact>
+impl core::convert::From<radroots_execution::Error> for radroots_execution::ExecutionFailure
+pub fn radroots_execution::ExecutionFailure::from(radroots_execution::Error) -> Self
+impl core::error::Error for radroots_execution::ExecutionFailure
+impl core::fmt::Display for radroots_execution::ExecutionFailure
+pub fn radroots_execution::ExecutionFailure::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_execution::OperationContext
 impl radroots_execution::OperationContext
 pub const fn radroots_execution::OperationContext::admission(self) -> radroots_execution::Admission
@@ -401,5 +416,6 @@ pub const fn radroots_execution::OperationReceipt<T>::wait_termination(&self) ->
 pub fn radroots_execution::OperationReceipt<T>::with_wait_termination(self, radroots_execution::WaitTermination) -> Self
 impl<T> core::fmt::Debug for radroots_execution::OperationReceipt<T>
 pub fn radroots_execution::OperationReceipt<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub type radroots_execution::ExecutionResult<T> = core::result::Result<T, radroots_execution::ExecutionFailure>
 pub type radroots_execution::OperationStatus = radroots_execution::OperationReceipt<radroots_execution::OperationValue>
 pub type radroots_execution::Result<T> = core::result::Result<T, radroots_execution::Error>

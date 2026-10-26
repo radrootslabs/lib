@@ -136,6 +136,16 @@ discard accepted work or obtained material. Application migrations, full order
 transitions/accounting, original negative reconciliation and final qualification
 remain separate required work.
 
+Effectful commands return `ExecutionResult` with a bounded allocation-free
+`ExecutionFailure`; resource and query errors keep the compact `Error`.
+Rejected signer callbacks return `SignerTampering` and bounded original
+`error.signer_rejection()` metadata. This contains a fixed reason and optional
+digest with its actual coverage, with no raw signer payload. Inspect the original
+operation separately: a peer commitment may already be installed while self
+history remains unresolved. A later storage failure retains its actual code and
+the same signer diagnostic. Rejection is no original nonissuance or stock-release
+proof, and caller diagnostics are not durable forensic storage.
+
 `radroots::domain` provides exact decimals and distinct order, thread, workspace,
 executor and operation identities. `radroots::OperationId` is the 256-bit
 retained identity. These values alone perform no authorization or transaction.
