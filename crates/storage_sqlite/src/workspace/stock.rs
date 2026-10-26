@@ -18,7 +18,8 @@ pub use inventory::installation::{
     StockPublicationWork,
 };
 pub(in crate::workspace) use radroots_storage::inventory::{
-    StockAbortOutcome, StockAbortReceipt, StockAbortRequest,
+    StockAbortOutcome, StockAbortReceipt, StockAbortRequest, StockEvidenceOutcome,
+    StockEvidenceReceipt, StockEvidenceRequest,
 };
 pub(in crate::workspace) use radroots_storage::inventory::{
     StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
@@ -28,8 +29,7 @@ mod ledger;
 mod order_state;
 pub use issuance::{
     StockCapturedEvidence, StockClaimOutcome, StockClaimRequest, StockDispatchPermit,
-    StockEvidenceCapture, StockEvidenceOutcome, StockEvidencePage, StockEvidenceReceipt,
-    StockExactReplayPermit, StockSigningAttempt,
+    StockEvidenceCapture, StockEvidencePage, StockExactReplayPermit, StockSigningAttempt,
 };
 pub(in crate::workspace) mod signing_plan;
 pub(in crate::workspace) mod snapshot;
@@ -1101,6 +1101,23 @@ async fn unchanged(
 }
 
 impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
+    fn capture_stock_evidence<'a>(
+        &'a self,
+        request: &'a StockEvidenceRequest,
+        proof: &'a AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<StockEvidenceOutcome, radroots_storage::command::OperationError>,
+    > {
+        Box::pin(async move {
+            self.worker
+                .capture_stock_signing_evidence(
+                    request.retained_copy(),
+                    proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?,
+                )
+                .await
+        })
+    }
     fn prepare_stock_acceptance(
         &self,
         request: StockAcceptanceRequest,

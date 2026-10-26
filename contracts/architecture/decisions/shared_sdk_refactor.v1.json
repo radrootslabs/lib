@@ -255,6 +255,11 @@
       "agreement_installed": false
     },
     "signing_issuance": {
+      "shared_capture_port": "InventoryStore.capture_stock_evidence",
+      "shared_capture_model_owner": "radroots_storage.inventory",
+      "shared_capture_descriptors_are_authority": false,
+      "shared_capture_reauthenticates_original": true,
+      "native_capture_report_aliases": false,
       "coherent_operation_snapshot_required": true,
       "final_evidence_selectors_and_page_rows_required": true,
       "recovery_view_has_dispatch_or_installation_rights": false,

@@ -1,10 +1,11 @@
 //! Actual original-claim local recovery, current authorization and existing S/T2.
 use super::*;
 use crate::workspace::{
-    StockEvidenceCapture, StockEvidenceOutcome, StockExactReplayPermit, StockInstallationOutcome,
+    StockEvidenceCapture, StockExactReplayPermit, StockInstallationOutcome,
     StockInstallationRequest,
 };
 use radroots_signing::issuance::ExactRecoveryKind;
+use radroots_storage::inventory::StockEvidenceOutcome;
 
 async fn local_ready(r: &Rig) -> StockAcceptanceReceipt {
     local_ready_command(r).await.1
@@ -183,6 +184,25 @@ async fn ordinary_outbox_refuses_exact_replay_without_adopting_stock_authority()
             .await
             .unwrap_err(),
         OperationError::UnsupportedOperation
+    );
+    let evidence = radroots_storage::inventory::StockEvidenceRequest::from_obtained_wire(
+        r.binding.clone(),
+        receipt.attempt().operation_id(),
+        receipt.attempt().command_digest(),
+        radroots_domain::SigningAttemptId::from_bytes([95; 32]),
+        receipt.rumor().recipients()[0],
+        [96; 32],
+        "synthetic unsupported descriptor",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        radroots_storage::inventory::InventoryStore::capture_stock_evidence(
+            &outbox, &evidence, &proof
+        )
+        .await
+        .unwrap_err(),
+        OperationError::UnsupportedOperation,
     );
     outbox.close().await.unwrap();
     r.store.close().await.unwrap();

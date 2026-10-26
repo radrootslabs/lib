@@ -406,3 +406,14 @@ metadata, not consent, authority, actual holds or a commit. Unsupported hosts
 refuse explicitly; no memory or runtime fallback is constructed. The native
 adapter uses its selected existing worker. Signing/Nostr remain outside Storage's
 dependency graph. Complete ordinary commerce ownership remains separate work.
+
+`InventoryStore::capture_stock_evidence` borrows a bounded zeroizing
+`StockEvidenceRequest`; the caller retains original bytes across errors or an
+unknown append. The request contains untrusted original selectors and at most
+64 KiB of wire bytes. A concrete host authenticates the actual retained claim
+and verifies its operation, command digest, recipient, intent and signature.
+`StockEvidenceReceipt` and `StockEvidenceOutcome` report append identity only.
+Their constructors provide no protected claim, authority, installation or safe
+release proof. Capture neither signs nor renews current issuing permission.
+Unsupported hosts refuse. An ordinary owner must separately retain admitted
+tasks, failed captures and resource leases until durable settlement.

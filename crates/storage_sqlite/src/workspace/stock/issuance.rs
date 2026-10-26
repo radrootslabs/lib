@@ -3,7 +3,9 @@ use super::*;
 use radroots_domain::{CommandDigest, OperationId, PublicKey, SigningAttemptId, UnixSeconds};
 use radroots_storage::{
     command::{CommitAttempt, OperationError},
-    inventory::InventoryCheckpointRef,
+    inventory::{
+        InventoryCheckpointRef, StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest,
+    },
 };
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -13,10 +15,7 @@ mod projection;
 pub(in crate::workspace) mod recovery;
 pub(super) use claim::read_entry;
 pub use claim::{StockClaimOutcome, StockClaimRequest, StockDispatchPermit, StockSigningAttempt};
-pub use evidence::{
-    StockCapturedEvidence, StockEvidenceCapture, StockEvidenceOutcome, StockEvidencePage,
-    StockEvidenceReceipt,
-};
+pub use evidence::{StockCapturedEvidence, StockEvidenceCapture, StockEvidencePage};
 pub(super) use projection::{Projection, raw_projection};
 pub use recovery::StockExactReplayPermit;
 

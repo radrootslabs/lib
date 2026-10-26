@@ -9,8 +9,10 @@ pub use radroots_protocol::command::{CapturedInventoryCommand, InventoryCommandK
 use radroots_transport::BoxFuture;
 mod abort;
 mod acceptance;
+mod evidence;
 pub use abort::{StockAbortOutcome, StockAbortReceipt, StockAbortRequest};
 pub use acceptance::{StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest};
+pub use evidence::{StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest};
 
 /// Exact captured owner-private inventory command and original authenticated observation.
 pub struct InventoryRequest {
@@ -266,6 +268,16 @@ pub enum InventoryOutcome {
 /// Native and browser hosts enforce these same atomic rules, never a memory
 /// success placeholder. No signing or network work occurs in these methods.
 pub trait InventoryStore: WorkspaceStore {
+    /// Appends already obtained bytes against the actual protected original
+    /// claim. This performs no signing or installation and renews no permission.
+    /// Unsupported hosts refuse. Borrowed original evidence survives errors.
+    fn capture_stock_evidence<'a>(
+        &'a self,
+        _request: &'a StockEvidenceRequest,
+        _proof: &'a AttachmentProof,
+    ) -> BoxFuture<'a, Result<StockEvidenceOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
     /// Prepares an original acceptance with complete atomic holds and the order
     /// fence. Unsupported hosts execute no fallback or simulated stock effect.
     fn prepare_stock_acceptance(

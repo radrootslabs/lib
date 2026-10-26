@@ -523,3 +523,14 @@ bounded worker and protected transaction. Native consent, source/allocation,
 holds, original replay and commit classification remain authoritative. Catalog13,
 stored bodies and the512KiB worker charge are unchanged. Ordinary outboxes refuse
 this stock port. Metadata constructors provide no dispatch or installation right.
+
+Obtained stock evidence uses the shared `InventoryStore::capture_stock_evidence`
+port and Storage append reports. The low-level verified `StockEvidenceCapture`
+adapter converts into a shared request; the existing native worker verifies that
+request again against the actual protected original before append. Both entry
+points use the same transaction and256KiB charge. Foreign selectors or invalid
+wire cannot become evidence for another claim. Original optional observation,
+distinct valid encodings, idempotency, late capture and unknown-commit fencing
+retain their existing semantics. Catalog13 and stored encodings/hashes remain
+unchanged. Public native receipt/outcome aliases are removed. Borrowed inputs
+survive errors; full ordinary task/capture ownership remains separate work.

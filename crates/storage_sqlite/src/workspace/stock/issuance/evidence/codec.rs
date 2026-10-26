@@ -4,23 +4,23 @@ const PREFIX: usize = 117;
 const MAGIC: &[u8; 8] = b"RDSTKS1\0";
 pub(super) fn encode(
     original: &claim::codec::Retained,
-    supplied: &StockEvidenceCapture,
+    supplied: &StockEvidenceRequest,
 ) -> Vec<u8> {
-    let mut out = Vec::with_capacity(PREFIX + supplied.raw.len());
+    let mut out = Vec::with_capacity(PREFIX + supplied.with_json(str::len));
     out.extend_from_slice(MAGIC);
     out.extend_from_slice(original.frame.header.operation.as_bytes());
     out.extend_from_slice(original.frame.header.transaction.as_bytes());
     out.extend_from_slice(original.frame.header.head.as_bytes());
-    out.push(u8::from(supplied.observed.is_some()));
+    out.push(u8::from(supplied.observed_at_unix_ms().is_some()));
     out.extend_from_slice(
         &supplied
-            .observed
+            .observed_at_unix_ms()
             .map(NonZeroU64::get)
             .unwrap_or(0)
             .to_be_bytes(),
     );
-    out.extend_from_slice(&(supplied.raw.len() as u32).to_be_bytes());
-    out.extend_from_slice(supplied.raw.as_bytes());
+    out.extend_from_slice(&(supplied.with_json(str::len) as u32).to_be_bytes());
+    supplied.with_json(|raw| out.extend_from_slice(raw.as_bytes()));
     out
 }
 pub(super) fn head(header: &ledger::Header, body: &[u8]) -> radroots_domain::CheckpointDigest {
@@ -150,18 +150,18 @@ pub(in crate::workspace::stock) async fn read_entry(
         recipient: original.report.recipient(),
         evidence: Some(digest),
     };
-    let receipt = StockEvidenceReceipt {
-        attempt: CommitAttempt::new(
+    let receipt = StockEvidenceReceipt::from_committed_store(
+        CommitAttempt::new(
             input.workspace_id(),
             projection.operation,
             header.digest,
             Some(header.transaction),
         ),
-        claim: original.report.attempt_id(),
-        recipient: projection.recipient,
+        original.report.attempt_id(),
+        projection.recipient,
         digest,
         observed,
-    };
+    )?;
     let value = StockCapturedEvidence {
         receipt,
         raw: Zeroizing::new(raw.into()),

@@ -1376,6 +1376,9 @@ pub enum radroots_storage::inventory::StockAcceptanceOutcome
 pub radroots_storage::inventory::StockAcceptanceOutcome::Aborted(alloc::boxed::Box<radroots_storage::inventory::StockAbortReceipt>)
 pub radroots_storage::inventory::StockAcceptanceOutcome::Prepared(alloc::boxed::Box<radroots_storage::inventory::StockAcceptanceReceipt>)
 pub radroots_storage::inventory::StockAcceptanceOutcome::Unknown(radroots_storage::command::CommitAttempt)
+pub enum radroots_storage::inventory::StockEvidenceOutcome
+pub radroots_storage::inventory::StockEvidenceOutcome::Committed(radroots_storage::inventory::StockEvidenceReceipt)
+pub radroots_storage::inventory::StockEvidenceOutcome::Unknown(radroots_storage::command::CommitAttempt)
 pub struct radroots_storage::inventory::InventoryCheckpointRef
 impl radroots_storage::inventory::InventoryCheckpointRef
 pub const fn radroots_storage::inventory::InventoryCheckpointRef::authority(self) -> radroots_domain::context::AuthorityRef
@@ -1455,8 +1458,32 @@ pub const fn radroots_storage::inventory::StockAcceptanceRequest::minimum_checkp
 pub const fn radroots_storage::inventory::StockAcceptanceRequest::source_checkpoint(&self) -> radroots_storage::workspace::seller_stock::StockSourceCheckpointRef
 impl core::fmt::Debug for radroots_storage::inventory::StockAcceptanceRequest
 pub fn radroots_storage::inventory::StockAcceptanceRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::inventory::StockEvidenceReceipt
+impl radroots_storage::inventory::StockEvidenceReceipt
+pub const fn radroots_storage::inventory::StockEvidenceReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::inventory::StockEvidenceReceipt::digest(&self) -> &[u8; 32]
+pub fn radroots_storage::inventory::StockEvidenceReceipt::from_committed_store(radroots_storage::command::CommitAttempt, radroots_domain::identifier::SigningAttemptId, radroots_identity::key::PublicKey, [u8; 32], core::option::Option<core::num::nonzero::NonZeroU64>) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::StockEvidenceReceipt::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
+pub const fn radroots_storage::inventory::StockEvidenceReceipt::recipient(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage::inventory::StockEvidenceReceipt::signing_attempt_id(&self) -> radroots_domain::identifier::SigningAttemptId
+pub struct radroots_storage::inventory::StockEvidenceRequest
+impl radroots_storage::inventory::StockEvidenceRequest
+pub fn radroots_storage::inventory::StockEvidenceRequest::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::inventory::StockEvidenceRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
+pub const fn radroots_storage::inventory::StockEvidenceRequest::command_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub fn radroots_storage::inventory::StockEvidenceRequest::from_obtained_wire(radroots_storage::workspace::WorkspaceBinding, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_domain::identifier::SigningAttemptId, radroots_identity::key::PublicKey, [u8; 32], &str, core::option::Option<core::num::nonzero::NonZeroU64>) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::StockEvidenceRequest::intent_digest(&self) -> &[u8; 32]
+pub const fn radroots_storage::inventory::StockEvidenceRequest::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
+pub const fn radroots_storage::inventory::StockEvidenceRequest::operation_id(&self) -> radroots_domain::identifier::OperationId
+pub const fn radroots_storage::inventory::StockEvidenceRequest::recipient(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_storage::inventory::StockEvidenceRequest::retained_copy(&self) -> Self
+pub const fn radroots_storage::inventory::StockEvidenceRequest::signing_attempt_id(&self) -> radroots_domain::identifier::SigningAttemptId
+pub fn radroots_storage::inventory::StockEvidenceRequest::with_json<T>(&self, impl core::ops::function::FnOnce(&str) -> T) -> T
+impl core::fmt::Debug for radroots_storage::inventory::StockEvidenceRequest
+pub fn radroots_storage::inventory::StockEvidenceRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait radroots_storage::inventory::InventoryStore: radroots_storage::workspace::WorkspaceStore
 pub fn radroots_storage::inventory::InventoryStore::abort_proven_unissued(&self, radroots_storage::inventory::StockAbortRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::inventory::StockAbortOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::inventory::InventoryStore::capture_stock_evidence<'a>(&'a self, &'a radroots_storage::inventory::StockEvidenceRequest, &'a radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::inventory::StockEvidenceOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::execute_inventory(&self, radroots_storage::inventory::InventoryRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::inventory::InventoryOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::inventory_operation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::inventory::InventoryReceipt>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::option_mapping(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::stock::mapping::OptionMappingKey, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_domain::stock::mapping::OptionPoolMapping>, radroots_storage::command::OperationError>>

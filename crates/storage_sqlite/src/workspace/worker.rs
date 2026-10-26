@@ -70,7 +70,7 @@ enum Job {
         Reply<stock::StockEvidencePage, OperationError>,
     ),
     CaptureStockEvidence(
-        Box<stock::StockEvidenceCapture>,
+        Box<radroots_storage::inventory::StockEvidenceRequest>,
         AttachmentProof,
         Reply<stock::StockEvidenceOutcome, OperationError>,
     ),
@@ -1808,7 +1808,7 @@ impl Handle {
     }
     pub(super) async fn capture_stock_signing_evidence(
         &self,
-        evidence: stock::StockEvidenceCapture,
+        evidence: radroots_storage::inventory::StockEvidenceRequest,
         proof: AttachmentProof,
     ) -> Result<stock::StockEvidenceOutcome, OperationError> {
         let unknown = stock::StockEvidenceOutcome::Unknown(evidence.attempt());

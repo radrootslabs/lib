@@ -15,12 +15,7 @@ const MAX_RAW: usize = 64 * 1024;
 /// Independently checked obtained bytes. A store error leaves the caller's
 /// original borrowed value intact. This supplies no installation or retry right.
 pub struct StockEvidenceCapture {
-    anchor: CommitAttempt,
-    binding: WorkspaceBinding,
-    claim: OperationId,
-    intent: [u8; 32],
-    raw: Zeroizing<String>,
-    observed: Option<NonZeroU64>,
+    request: StockEvidenceRequest,
 }
 impl StockEvidenceCapture {
     pub fn verify(
@@ -50,37 +45,28 @@ impl StockEvidenceCapture {
             return Err(OperationError::InvalidEvidence);
         };
         Ok(Self {
-            anchor: CommitAttempt::new(
-                attempt.attempt().workspace_id(),
+            request: StockEvidenceRequest::from_obtained_wire(
+                binding,
                 attempt.attempt().operation_id(),
                 attempt.attempt().command_digest(),
-                None,
-            ),
-            binding,
-            claim: OperationId::from_bytes(*attempt.attempt_id().as_bytes()),
-            intent: *attempt.binding().digest(),
-            raw: Zeroizing::new(raw.into()),
-            observed: signed.observed_at_unix_ms(),
+                attempt.attempt_id(),
+                attempt.recipient(),
+                *attempt.binding().digest(),
+                raw,
+                signed.observed_at_unix_ms(),
+            )?,
         })
     }
+    /// Transfers bounded original data into the shared port. The host still
+    /// authenticates its actual retained claim and verifies these bytes again.
+    pub fn into_request(self) -> StockEvidenceRequest {
+        self.request
+    }
     pub fn with_json<T>(&self, use_json: impl FnOnce(&str) -> T) -> T {
-        use_json(&self.raw)
+        self.request.with_json(use_json)
     }
     pub const fn observed_at_unix_ms(&self) -> Option<NonZeroU64> {
-        self.observed
-    }
-    pub(in crate::workspace) const fn attempt(&self) -> CommitAttempt {
-        self.anchor
-    }
-    pub(in crate::workspace) fn retained_copy(&self) -> Self {
-        Self {
-            anchor: self.anchor,
-            binding: self.binding.clone(),
-            claim: self.claim,
-            intent: self.intent,
-            raw: Zeroizing::new(self.raw.to_string()),
-            observed: self.observed,
-        }
+        self.request.observed_at_unix_ms()
     }
 }
 impl std::fmt::Debug for StockEvidenceCapture {
@@ -89,32 +75,6 @@ impl std::fmt::Debug for StockEvidenceCapture {
     }
 }
 
-/// Confirmed append identity, independent of command installation or delivery.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StockEvidenceReceipt {
-    attempt: CommitAttempt,
-    claim: SigningAttemptId,
-    recipient: PublicKey,
-    digest: [u8; 32],
-    observed: Option<NonZeroU64>,
-}
-impl StockEvidenceReceipt {
-    pub const fn attempt(&self) -> CommitAttempt {
-        self.attempt
-    }
-    pub const fn signing_attempt_id(&self) -> SigningAttemptId {
-        self.claim
-    }
-    pub const fn recipient(&self) -> PublicKey {
-        self.recipient
-    }
-    pub const fn digest(&self) -> &[u8; 32] {
-        &self.digest
-    }
-    pub const fn observed_at_unix_ms(&self) -> Option<NonZeroU64> {
-        self.observed
-    }
-}
 pub struct StockCapturedEvidence {
     receipt: StockEvidenceReceipt,
     raw: Zeroizing<String>,
@@ -132,12 +92,6 @@ impl std::fmt::Debug for StockCapturedEvidence {
         f.write_str("StockCapturedEvidence(<redacted>)")
     }
 }
-#[derive(Debug)]
-pub enum StockEvidenceOutcome {
-    Committed(StockEvidenceReceipt),
-    Unknown(CommitAttempt),
-}
-
 /// At most 32 authenticated references in append order. The cursor discovers
 /// retained bytes after process loss without reconstructing a signer output.
 #[derive(Debug)]
@@ -249,14 +203,14 @@ pub(in crate::workspace) async fn page(
 
 pub(in crate::workspace) async fn capture(
     turn: &mut Turn<'_>,
-    supplied: StockEvidenceCapture,
+    supplied: StockEvidenceRequest,
     proof: AttachmentProof,
 ) -> Result<StockEvidenceOutcome, OperationError> {
     if *turn.uncertain {
         return Err(OperationError::RecoveryRequired);
     }
     turn.namespace.validate()?;
-    let input = supplied.binding.input();
+    let input = supplied.binding().input();
     if !SellerAuthoritySelection::from_attachment(turn.selected).matches_attachment(input) {
         return Err(OperationError::Unauthorized);
     }
@@ -266,22 +220,37 @@ pub(in crate::workspace) async fn capture(
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
-    let original = claim::read_entry(turn.connection, turn.selected, turn.crypto, supplied.claim)
-        .await?
-        .ok_or(OperationError::RecoveryRequired)?;
-    if original.frame.header.actor != supplied.binding.actor()
-        || original.report.binding().digest() != &supplied.intent
+    let original = claim::read_entry(
+        turn.connection,
+        turn.selected,
+        turn.crypto,
+        OperationId::from_bytes(*supplied.signing_attempt_id().as_bytes()),
+    )
+    .await?
+    .ok_or(OperationError::RecoveryRequired)?;
+    if original.frame.header.actor != supplied.binding().actor()
+        || original.report.binding().digest() != supplied.intent_digest()
+    {
+        return Err(OperationError::InvalidEvidence);
+    }
+    if original.report.attempt().operation_id() != supplied.operation_id()
+        || original.report.attempt().command_digest() != supplied.command_digest()
+        || original.report.recipient() != supplied.recipient()
     {
         return Err(OperationError::InvalidEvidence);
     }
     // Verify again against the actual protected claim, never a caller descriptor.
-    let checked = StockEvidenceCapture::verify(
-        supplied.binding.clone(),
-        &original.report,
-        &supplied.raw,
-        supplied.observed,
-    )?;
-    let digest: [u8; 32] = Sha256::digest(checked.raw.as_bytes()).into();
+    let checked = supplied
+        .with_json(|raw| {
+            StockEvidenceCapture::verify(
+                supplied.binding().clone(),
+                &original.report,
+                raw,
+                supplied.observed_at_unix_ms(),
+            )
+        })?
+        .into_request();
+    let digest: [u8; 32] = checked.with_json(|raw| Sha256::digest(raw.as_bytes()).into());
     let before = authority
         .inventory
         .ok_or(OperationError::RecoveryRequired)?;
@@ -294,7 +263,7 @@ pub(in crate::workspace) async fn capture(
         turn.connection,
         turn.selected,
         turn.crypto,
-        &supplied.binding,
+        supplied.binding(),
         &authority,
         minimum,
     )
@@ -309,8 +278,8 @@ pub(in crate::workspace) async fn capture(
     )
     .await?;
     let (frame, updated_root, receipt) = if let Some(retained) = &existing {
-        if retained.value.raw.as_str() != checked.raw.as_str()
-            || retained.value.receipt.claim != original.report.attempt_id()
+        if checked.with_json(|raw| retained.value.raw.as_str() != raw)
+            || retained.value.receipt.signing_attempt_id() != original.report.attempt_id()
         {
             return Err(OperationError::RecoveryRequired);
         }
@@ -358,18 +327,18 @@ pub(in crate::workspace) async fn capture(
             .crypto
             .seal_stock_root(turn.selected, next.catalog, &next.encode()?)
             .await?;
-        let receipt = StockEvidenceReceipt {
-            attempt: CommitAttempt::new(
+        let receipt = StockEvidenceReceipt::from_committed_store(
+            CommitAttempt::new(
                 input.workspace_id(),
                 original.report.bound_plan().plan().operation_id(),
                 original.frame.header.digest,
                 Some(transaction),
             ),
-            claim: original.report.attempt_id(),
-            recipient: original.report.recipient(),
+            original.report.attempt_id(),
+            original.report.recipient(),
             digest,
-            observed: checked.observed,
-        };
+            checked.observed_at_unix_ms(),
+        )?;
         (Some(frame), Some(updated), receipt)
     };
     let mut tx = turn
@@ -385,7 +354,7 @@ pub(in crate::workspace) async fn capture(
         if let Some(existing)=&existing {existing.confirm(&mut tx).await?;}
         if let Some(frame)=&frame {
             frame.insert_record(&mut tx).await?;
-            sqlx::query("INSERT INTO stock_signing_evidence(actor,operation_id,recipient,evidence_digest,entry_id) VALUES(?,?,?,?,?)").bind(input.participant().as_bytes().as_slice()).bind(receipt.attempt.operation_id().as_bytes().as_slice()).bind(receipt.recipient.as_bytes().as_slice()).bind(digest.as_slice()).bind(frame.header.operation.as_bytes().as_slice()).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
+            sqlx::query("INSERT INTO stock_signing_evidence(actor,operation_id,recipient,evidence_digest,entry_id) VALUES(?,?,?,?,?)").bind(input.participant().as_bytes().as_slice()).bind(receipt.attempt().operation_id().as_bytes().as_slice()).bind(receipt.recipient().as_bytes().as_slice()).bind(digest.as_slice()).bind(frame.header.operation.as_bytes().as_slice()).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             let result=sqlx::query("UPDATE stock_authority SET protected=? WHERE singleton=1 AND protected=?").bind(updated_root.as_ref().ok_or(OperationError::RecoveryRequired)?).bind(&root).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             if result.rows_affected()!=1 {return Err(OperationError::RecoveryRequired);}
         }
@@ -394,7 +363,7 @@ pub(in crate::workspace) async fn capture(
     if let Err(error) = changed {
         if tx.rollback().await.is_err() {
             *turn.uncertain = true;
-            return Ok(StockEvidenceOutcome::Unknown(receipt.attempt));
+            return Ok(StockEvidenceOutcome::Unknown(receipt.attempt()));
         }
         return Err(error);
     }
@@ -405,7 +374,7 @@ pub(in crate::workspace) async fn capture(
     };
     if done.is_err() {
         *turn.uncertain = true;
-        return Ok(StockEvidenceOutcome::Unknown(receipt.attempt));
+        return Ok(StockEvidenceOutcome::Unknown(receipt.attempt()));
     }
     Ok(StockEvidenceOutcome::Committed(receipt))
 }
@@ -542,12 +511,12 @@ impl NativeWorkspace {
         evidence: &StockEvidenceCapture,
         proof: &AttachmentProof,
     ) -> Result<StockEvidenceOutcome, OperationError> {
-        self.worker
-            .capture_stock_signing_evidence(
-                evidence.retained_copy(),
-                proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?,
-            )
-            .await
+        radroots_storage::inventory::InventoryStore::capture_stock_evidence(
+            self,
+            &evidence.request,
+            proof,
+        )
+        .await
     }
     pub async fn stock_signing_evidence(
         &self,

@@ -4,7 +4,8 @@ use super::*;
 mod installations;
 #[path = "snapshot_tests.rs"]
 mod snapshots;
-use crate::workspace::{StockEvidenceCapture, StockEvidenceOutcome, StockEvidenceReceipt};
+use crate::workspace::StockEvidenceCapture;
+use radroots_storage::inventory::{StockEvidenceOutcome, StockEvidenceReceipt};
 use sha2::{Digest, Sha256};
 async fn obtained(
     r: &Rig,
@@ -32,6 +33,100 @@ fn committed(value: StockEvidenceOutcome) -> StockEvidenceReceipt {
     };
     value
 }
+#[tokio::test]
+async fn shared_capture_authenticates_actual_claim_and_rejects_substituted_descriptors_or_wire() {
+    use radroots_storage::inventory::{InventoryStore, StockEvidenceRequest};
+    let mut r = Rig::new().await;
+    let receipt = ready(&r).await;
+    let recipient = receipt.rumor().recipients()[0];
+    let (report, raw) = obtained(&r, &receipt, recipient).await;
+    let before = inventory_minimum(&r).await;
+    let port: &dyn InventoryStore = &r.store;
+    let tampered = raw.replace("\"sig\":\"", "\"sig\":\"0");
+    for mode in 0..7 {
+        let request = StockEvidenceRequest::from_obtained_wire(
+            r.binding.clone(),
+            if mode == 0 {
+                OperationId::from_bytes([91; 32])
+            } else {
+                report.attempt().operation_id()
+            },
+            if mode == 1 {
+                radroots_domain::CommandDigest::from_bytes([92; 32])
+            } else {
+                report.attempt().command_digest()
+            },
+            if mode == 2 {
+                radroots_domain::SigningAttemptId::from_bytes([93; 32])
+            } else {
+                report.attempt_id()
+            },
+            if mode == 3 {
+                receipt.rumor().recipients()[1]
+            } else {
+                report.recipient()
+            },
+            if mode == 4 {
+                [94; 32]
+            } else {
+                *report.binding().digest()
+            },
+            if mode == 5 {
+                "synthetic invalid original wire"
+            } else if mode == 6 {
+                &tampered
+            } else {
+                &raw
+            },
+            None,
+        )
+        .unwrap();
+        assert!(!format!("{request:?}").contains("synthetic invalid"));
+        assert!(
+            port.capture_stock_evidence(&request, r.enrollment.proof())
+                .await
+                .is_err(),
+            "mode {mode}"
+        );
+        request.with_json(|retained| assert!(!retained.is_empty()));
+        assert_eq!(inventory_minimum(&r).await, before);
+    }
+    let request = StockEvidenceCapture::verify(r.binding.clone(), &report, &raw, None)
+        .unwrap()
+        .into_request();
+    let retained = request.retained_copy();
+    assert_eq!(retained.attempt(), request.attempt());
+    retained.with_json(|bytes| assert_eq!(bytes, raw));
+    let first = committed(
+        port.capture_stock_evidence(&request, r.enrollment.proof())
+            .await
+            .unwrap(),
+    );
+    assert_eq!(first.signing_attempt_id(), report.attempt_id());
+    assert_eq!(
+        committed(
+            port.capture_stock_evidence(&request, r.enrollment.proof())
+                .await
+                .unwrap()
+        ),
+        first
+    );
+    reopen_plain(&mut r).await;
+    let stored = r
+        .store
+        .stock_signing_evidence(
+            selector(&r, &receipt, recipient).await,
+            *first.digest(),
+            r.enrollment.proof(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.receipt(), first);
+    stored.with_json(|bytes| assert_eq!(bytes, raw));
+    r.store.close().await.unwrap();
+}
+
 #[tokio::test]
 async fn original_peer_self_bytes_are_captured_once_reopened_and_preserve_first_optional_time() {
     let mut r = Rig::new().await;

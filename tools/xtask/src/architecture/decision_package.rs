@@ -290,6 +290,11 @@ struct InitialAgreementInstallation {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SigningIssuance {
+    shared_capture_port: String,
+    shared_capture_model_owner: String,
+    shared_capture_descriptors_are_authority: bool,
+    shared_capture_reauthenticates_original: bool,
+    native_capture_report_aliases: bool,
     coherent_operation_snapshot_required: bool,
     final_evidence_selectors_and_page_rows_required: bool,
     recovery_view_has_dispatch_or_installation_rights: bool,
@@ -600,6 +605,16 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
                 .signing_issuance
                 .fresh_current_backing_projection_required
             && stock.signing_issuance.coherent_operation_snapshot_required
+            && stock.signing_issuance.shared_capture_port
+                == "InventoryStore.capture_stock_evidence"
+            && stock.signing_issuance.shared_capture_model_owner == "radroots_storage.inventory"
+            && !stock
+                .signing_issuance
+                .shared_capture_descriptors_are_authority
+            && stock
+                .signing_issuance
+                .shared_capture_reauthenticates_original
+            && !stock.signing_issuance.native_capture_report_aliases
             && stock
                 .signing_issuance
                 .final_evidence_selectors_and_page_rows_required
@@ -1375,6 +1390,14 @@ mod tests {
             ("claim_worker_charge_bytes", json!(16384)),
             ("capture_worker_charge_bytes", json!(16384)),
             ("capture_raw_max_bytes", json!(65537)),
+            ("shared_capture_port", json!("arbitrary_transaction")),
+            (
+                "shared_capture_model_owner",
+                json!("radroots_storage_sqlite"),
+            ),
+            ("shared_capture_descriptors_are_authority", json!(true)),
+            ("shared_capture_reauthenticates_original", json!(false)),
+            ("native_capture_report_aliases", json!(true)),
             ("first_dispatch_requires_confirmed_commit", json!(false)),
             ("existing_claim_returns_dispatch_permit", json!(true)),
             (
