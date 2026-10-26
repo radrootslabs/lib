@@ -136,6 +136,11 @@
     "operation_part_max_count": 16,
     "operation_identity_requires_protected_ancestry": true,
     "acceptance_preparation": {
+      "shared_storage_port": "radroots_storage.inventory.InventoryStore.prepare_stock_acceptance",
+      "shared_model_owner": "radroots_storage.inventory",
+      "legacy_native_aliases": false,
+      "unsupported_hosts_refuse": true,
+      "model_constructs_runtime": false,
       "payload_version": 1,
       "planner_owner": "radroots_domain",
       "order_payload_schema": "radroots.seller_stock.order.v1",

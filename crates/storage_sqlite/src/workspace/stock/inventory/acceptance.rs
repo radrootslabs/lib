@@ -12,107 +12,6 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(in crate::workspace::stock) mod codec;
 mod plan;
 
-/// Captured input data. Execution still requires current authenticated consent.
-pub struct StockAcceptanceRequest {
-    binding: WorkspaceBinding,
-    minimum: InventoryCheckpointRef,
-    sources: StockSourceCheckpointRef,
-    listings: StockListingCheckpointRef,
-    command: CapturedOrderAcceptance,
-}
-impl StockAcceptanceRequest {
-    pub fn capture(
-        binding: WorkspaceBinding,
-        minimum: InventoryCheckpointRef,
-        sources: StockSourceCheckpointRef,
-        listings: StockListingCheckpointRef,
-        command: &CapturedOrderAcceptance,
-    ) -> Result<Self, OperationError> {
-        let command = CapturedOrderAcceptance::parse(command.protected_wire())
-            .map_err(|_| OperationError::InvalidCommand)?;
-        Ok(Self {
-            binding,
-            minimum,
-            sources,
-            listings,
-            command,
-        })
-    }
-    pub(in crate::workspace) fn attempt(&self) -> CommitAttempt {
-        CommitAttempt::new(
-            self.binding.input().workspace_id(),
-            self.command.context().operation_id(),
-            self.command.digest(),
-            None,
-        )
-    }
-}
-impl std::fmt::Debug for StockAcceptanceRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("StockAcceptanceRequest(<private command>)")
-    }
-}
-/// Confirmed T0 preparation, distinct from a signed or installed agreement.
-#[derive(Clone)]
-pub struct StockAcceptanceReceipt {
-    attempt: CommitAttempt,
-    order: OrderId,
-    request: RecordId,
-    terms: TermsDigest,
-    checkpoint: InventoryCheckpointRef,
-    pools: Vec<PoolSnapshot>,
-    allocations: usize,
-    observed: UnixSeconds,
-    issue_before: UnixSeconds,
-    rumor: std::sync::Arc<radroots_protocol::commerce::EncodedCommerceRumor>,
-}
-impl StockAcceptanceReceipt {
-    pub const fn attempt(&self) -> CommitAttempt {
-        self.attempt
-    }
-    pub const fn order_id(&self) -> OrderId {
-        self.order
-    }
-    pub const fn request(&self) -> RecordId {
-        self.request
-    }
-    pub const fn terms_digest(&self) -> TermsDigest {
-        self.terms
-    }
-    pub const fn checkpoint(&self) -> InventoryCheckpointRef {
-        self.checkpoint
-    }
-    /// Exact after-images of actual preparatory holds, sorted by pool identity.
-    pub fn held_pools(&self) -> &[PoolSnapshot] {
-        &self.pools
-    }
-    pub const fn allocation_count(&self) -> usize {
-        self.allocations
-    }
-    pub const fn prepared_at(&self) -> UnixSeconds {
-        self.observed
-    }
-    pub const fn first_issue_deadline(&self) -> UnixSeconds {
-        self.issue_before
-    }
-    /// Exact initial commitment derived from the original protected preparation.
-    /// This is unsigned data and supplies no permission or T1 completion proof.
-    pub fn rumor(&self) -> &radroots_protocol::commerce::EncodedCommerceRumor {
-        &self.rumor
-    }
-}
-impl std::fmt::Debug for StockAcceptanceReceipt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("StockAcceptanceReceipt(<private preparation>)")
-    }
-}
-#[derive(Debug)]
-pub enum StockAcceptanceOutcome {
-    Prepared(Box<StockAcceptanceReceipt>),
-    Aborted(Box<radroots_storage::inventory::StockAbortReceipt>),
-    Unknown(CommitAttempt),
-}
-
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Body<'a> {
@@ -335,12 +234,12 @@ pub(in crate::workspace) async fn admit(
     proof: AttachmentProof,
 ) -> Result<StockAcceptanceOutcome, OperationError> {
     let access = turn
-        .access(&request.binding, request.minimum, &proof)
+        .access(request.binding(), request.minimum_checkpoint(), &proof)
         .await?;
     if !matches!(access.authority.catalog, 9..=13) {
         return Err(OperationError::UnsupportedOperation);
     }
-    let command = &request.command;
+    let command = request.command();
     let operation = command.context().operation_id();
     let original = codec::read(turn.connection, turn.selected, turn.crypto, operation).await?;
     let identity = checkpoint::authenticate_identity(
@@ -367,7 +266,7 @@ pub(in crate::workspace) async fn admit(
         if original.frame.header.digest != command.digest() {
             return Err(OperationError::IdempotencyConflict);
         }
-        for pool in &original.receipt.pools {
+        for pool in original.receipt.held_pools() {
             if !consent.resources.contains(pool.id()) {
                 return Err(OperationError::Unauthorized);
             }
@@ -418,7 +317,7 @@ pub(in crate::workspace) async fn admit(
             .ok_or(OperationError::RecoveryRequired)?,
     )
     .await?;
-    if request.sources.authorization() != access.authority.authorization {
+    if request.source_checkpoint().authorization() != access.authority.authorization {
         return Err(WorkspaceError::StaleCheckpoint.into());
     }
     let source_minimum = source::checkpoint::authenticate(
@@ -429,7 +328,7 @@ pub(in crate::workspace) async fn admit(
             .authority
             .sources
             .ok_or(OperationError::RecoveryRequired)?,
-        source::checkpoint::Target::Minimum(request.sources),
+        source::checkpoint::Target::Minimum(request.source_checkpoint()),
     )
     .await?;
     let admitted = source::request::prepare(
@@ -439,10 +338,10 @@ pub(in crate::workspace) async fn admit(
         source::history::InventoryRead {
             binding: &access.current,
             authority: &access.authority,
-            minimum: request.minimum,
+            minimum: request.minimum_checkpoint(),
         },
         command.input().request(),
-        request.listings,
+        request.listing_checkpoint(),
         access.current.observed_at(),
     )
     .await?;
@@ -653,14 +552,14 @@ pub(in crate::workspace) async fn admit(
             .transpose()?,
         seller_author_head,
         seller_author_sequence,
-        minimum_revision: request.minimum.revision(),
-        minimum_head: request.minimum.head(),
+        minimum_revision: request.minimum_checkpoint().revision(),
+        minimum_head: request.minimum_checkpoint().head(),
         authorization: access
             .authority
             .authorization
             .ok_or(OperationError::RecoveryRequired)?,
-        source_minimum: Progress::source(request.sources)?,
-        listing_minimum: Progress::listing(request.listings)?,
+        source_minimum: Progress::source(request.source_checkpoint())?,
+        listing_minimum: Progress::listing(request.listing_checkpoint())?,
         coverage: expected.checkpoint().clone(),
         buyer_head: expected.buyer_head(),
         observed_at: access.current.observed_at(),
@@ -820,7 +719,7 @@ pub(in crate::workspace) async fn admit(
         if updated.rows_affected() != 1 { return Err(OperationError::RecoveryRequired); }
         turn.namespace.validate()?; Ok(())
     }.await;
-    let attempt = receipt.attempt;
+    let attempt = receipt.attempt();
     if let Err(error) = changed {
         if tx.rollback().await.is_err() {
             *turn.uncertain = true;

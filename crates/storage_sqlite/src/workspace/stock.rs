@@ -13,15 +13,15 @@ pub use consent::{
     StockConsentCapture, StockConsentMode, StockConsentOutcome, StockConsentReceipt,
 };
 pub(in crate::workspace) mod grants;
-pub use inventory::acceptance::{
-    StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
-};
 pub use inventory::installation::{
     StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,
     StockPublicationWork,
 };
 pub(in crate::workspace) use radroots_storage::inventory::{
     StockAbortOutcome, StockAbortReceipt, StockAbortRequest,
+};
+pub(in crate::workspace) use radroots_storage::inventory::{
+    StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
 };
 pub(in crate::workspace) mod issuance;
 mod ledger;
@@ -1101,6 +1101,16 @@ async fn unchanged(
 }
 
 impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
+    fn prepare_stock_acceptance(
+        &self,
+        request: StockAcceptanceRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<StockAcceptanceOutcome, radroots_storage::command::OperationError>,
+    > {
+        Box::pin(self.worker.prepare_stock_acceptance(request, proof))
+    }
     fn abort_proven_unissued(
         &self,
         request: StockAbortRequest,

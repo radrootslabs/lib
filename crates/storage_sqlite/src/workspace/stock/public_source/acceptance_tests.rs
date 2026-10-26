@@ -1,13 +1,13 @@
 //! Actual T0 effects on the native connection, with independent original sources.
 use super::*;
-use crate::workspace::{
-    StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest, StockConsentCapture,
-    StockConsentMode, StockConsentOutcome,
-};
+use crate::workspace::{StockConsentCapture, StockConsentMode, StockConsentOutcome};
 use radroots_domain::{CommandContextData, OperationId, PoolId};
 use radroots_protocol::command::CapturedOrderAcceptance;
 use radroots_storage::{
-    inventory::{InventoryOutcome, InventoryRequest, InventoryStore},
+    inventory::{
+        InventoryOutcome, InventoryRequest, InventoryStore, StockAcceptanceOutcome,
+        StockAcceptanceReceipt, StockAcceptanceRequest,
+    },
     workspace::seller_stock::StockResources,
 };
 #[path = "signing_tests.rs"]
@@ -160,14 +160,48 @@ async fn prepare(
     r: &Rig,
     command: &CapturedOrderAcceptance,
 ) -> Result<StockAcceptanceReceipt, OperationError> {
-    match r
-        .store
-        .prepare_stock_acceptance(request(r, command).await, r.enrollment.proof())
+    let selected: &dyn InventoryStore = &r.store;
+    let proof = r
+        .enrollment
+        .proof()
+        .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
+    match selected
+        .prepare_stock_acceptance(request(r, command).await, proof)
         .await?
     {
         StockAcceptanceOutcome::Prepared(value) => Ok(*value),
         _ => panic!("T0 must confirm"),
     }
+}
+
+#[tokio::test]
+async fn ordinary_outbox_refuses_shared_acceptance_without_creating_or_adopting_stock() {
+    let r = Rig::new().await;
+    seed(&r, "10").await;
+    let command = command(&r, 90, true).await;
+    let request = request(&r, &command).await;
+    let (outbox, _, proof) = NativeWorkspace::initialize_local_outbox(
+        &r.path.with_file_name("unsupported-acceptance-outbox"),
+        crate::workspace::LocalOutboxConfig::seller(
+            r.enrollment.input().participant(),
+            r.enrollment.input().participant(),
+            "synthetic-acceptance-outbox",
+            UnixSeconds::new(500).unwrap(),
+        )
+        .unwrap(),
+        r.fixture.crypto(),
+        r.clock.clone(),
+    )
+    .await
+    .unwrap();
+    let selected: &dyn InventoryStore = &outbox;
+    assert!(matches!(
+        selected.prepare_stock_acceptance(request, proof).await,
+        Err(OperationError::UnsupportedOperation)
+    ));
+    assert_pool(&r, 80, 10, 0, 1).await;
+    outbox.close().await.unwrap();
+    r.store.close().await.unwrap();
 }
 async fn assert_pool(r: &Rig, id: u8, available: u64, held: u64, version: u64) {
     let value = r

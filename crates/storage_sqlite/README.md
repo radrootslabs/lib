@@ -514,3 +514,12 @@ indeterminate/refused recovery keeps the original claim nonspendable. No result
 of a recovery refusal proves original nonissuance or authorizes cleanup. Complete
 ordinary commerce ownership, proven-negative reconciliation and final cross-host
 and resource acceptance remain separate requirements.
+
+T0 request, preparation report and outcome now belong to
+`radroots_storage::inventory`; predecessor native type exports are removed.
+`NativeWorkspace::prepare_stock_acceptance` and the generic
+`InventoryStore::prepare_stock_acceptance` method dispatch to the same existing
+bounded worker and protected transaction. Native consent, source/allocation,
+holds, original replay and commit classification remain authoritative. Catalog13,
+stored bodies and the512KiB worker charge are unchanged. Ordinary outboxes refuse
+this stock port. Metadata constructors provide no dispatch or installation right.

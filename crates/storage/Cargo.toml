@@ -35,7 +35,7 @@ name = "radroots_storage"
 [features]
 default = ["memory", "serde"]
 memory = []
-command_journal = ["radroots_protocol/chat", "radroots_protocol/intent", "radroots_protocol/listing"]
+command_journal = ["radroots_protocol/chat", "radroots_protocol/intent", "radroots_protocol/listing", "radroots_protocol/commerce"]
 protected_outbox = ["command_journal", "serde", "dep:serde_json", "dep:subtle"]
 serde = [
   "dep:serde",

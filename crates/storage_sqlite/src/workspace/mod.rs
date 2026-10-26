@@ -23,13 +23,12 @@ mod schema;
 mod snapshot;
 mod stock;
 pub use stock::{
-    SellerStockConfig, StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest,
-    StockAuthorityReceipt, StockBoundSigningPlan, StockCapturedEvidence, StockClaimOutcome,
-    StockClaimReference, StockClaimRequest, StockConsentCapture, StockConsentMode,
-    StockConsentOutcome, StockConsentReceipt, StockDispatchPermit, StockEnrollment,
-    StockEvidenceCapture, StockEvidenceOutcome, StockEvidencePage, StockEvidenceReceipt,
-    StockExactReplayPermit, StockGrantEnrollment, StockGrantOutcome, StockGrantReceipt,
-    StockHistorySnapshot, StockInstallationOutcome, StockInstallationReceipt,
+    SellerStockConfig, StockAuthorityReceipt, StockBoundSigningPlan, StockCapturedEvidence,
+    StockClaimOutcome, StockClaimReference, StockClaimRequest, StockConsentCapture,
+    StockConsentMode, StockConsentOutcome, StockConsentReceipt, StockDispatchPermit,
+    StockEnrollment, StockEvidenceCapture, StockEvidenceOutcome, StockEvidencePage,
+    StockEvidenceReceipt, StockExactReplayPermit, StockGrantEnrollment, StockGrantOutcome,
+    StockGrantReceipt, StockHistorySnapshot, StockInstallationOutcome, StockInstallationReceipt,
     StockInstallationRequest, StockListingCapture, StockListingOutcome, StockListingReceipt,
     StockListingSnapshot, StockOperationSnapshot, StockPublicationWork, StockRecipientSnapshot,
     StockRequestSnapshot, StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest,

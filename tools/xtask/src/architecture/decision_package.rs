@@ -198,6 +198,11 @@ struct NativeSellerStockAuthority {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AcceptancePreparation {
+    shared_storage_port: String,
+    shared_model_owner: String,
+    legacy_native_aliases: bool,
+    unsupported_hosts_refuse: bool,
+    model_constructs_runtime: bool,
     planner_owner: String,
     payload_version: u32,
     order_payload_schema: String,
@@ -537,6 +542,12 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.operation_part_max_count == 16
             && stock.operation_identity_requires_protected_ancestry
             && stock.acceptance_preparation.planner_owner == "radroots_domain"
+            && stock.acceptance_preparation.shared_storage_port
+                == "radroots_storage.inventory.InventoryStore.prepare_stock_acceptance"
+            && stock.acceptance_preparation.shared_model_owner == "radroots_storage.inventory"
+            && !stock.acceptance_preparation.legacy_native_aliases
+            && stock.acceptance_preparation.unsupported_hosts_refuse
+            && !stock.acceptance_preparation.model_constructs_runtime
             && stock.acceptance_preparation.payload_version == 1
             && stock.acceptance_preparation.order_payload_schema
                 == "radroots.seller_stock.order.v1"
@@ -1512,6 +1523,29 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/native_seller_stock_authority/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn acceptance_uses_shared_models_without_native_aliases_or_runtime_fallback() {
+        for (field, bad) in [
+            ("shared_storage_port", json!("native_only")),
+            (
+                "shared_model_owner",
+                json!("radroots_storage_sqlite.workspace"),
+            ),
+            ("legacy_native_aliases", json!(true)),
+            ("unsupported_hosts_refuse", json!(false)),
+            ("model_constructs_runtime", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/acceptance_preparation/{field}"),
                     bad
                 ))
                 .is_err(),

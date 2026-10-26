@@ -71,17 +71,18 @@ impl Retained {
             }
         }
         let actor = self.frame.header.actor.participant();
+        let order = self.receipt.order_id();
         let query = if self.operation_keyed {
             sqlx::query_scalar("SELECT count(*) FROM stock_orders WHERE actor=? AND operation_id=? AND order_id=? AND revision=1 AND protected=?")
                 .bind(actor.as_bytes().as_slice())
                 .bind(self.frame.header.operation.as_bytes().as_slice())
-                .bind(self.receipt.order.as_bytes().as_slice())
+                .bind(order.as_bytes().as_slice())
                 .bind(&self.order_cipher)
         } else {
             sqlx::query_scalar(
                 "SELECT count(*) FROM stock_orders WHERE order_id=? AND revision=1 AND protected=?",
             )
-            .bind(self.receipt.order.as_bytes().as_slice())
+            .bind(order.as_bytes().as_slice())
             .bind(&self.order_cipher)
         };
         let count: i64 = query
@@ -98,7 +99,7 @@ impl Retained {
             preparation_digest(
                 self.frame.header.actor.participant().as_bytes(),
                 self.frame.header.operation.as_bytes(),
-                self.receipt.order.as_bytes(),
+                self.receipt.order_id().as_bytes(),
                 &self.order_cipher,
             )
         });
@@ -111,7 +112,7 @@ impl Retained {
             header: self.frame.header,
             protected: self.frame.protected,
             parts_witness: self.frame.parts_witness,
-            pools: self.receipt.pools,
+            pools: self.receipt.into_held_pools(),
             mapping: None,
             movements: self.movements,
         }
@@ -177,28 +178,29 @@ pub(super) fn receipt(
         body.observed_at,
     )
     .map_err(|_| OperationError::RecoveryRequired)?;
-    Ok(StockAcceptanceReceipt {
-        rumor: std::sync::Arc::new(rumor),
-        attempt: CommitAttempt::new(
+    StockAcceptanceReceipt::from_committed_store(
+        input,
+        CommitAttempt::new(
             input.workspace_id(),
             header.operation,
             header.digest,
             Some(header.transaction),
         ),
-        order: header.order.ok_or(OperationError::RecoveryRequired)?,
-        request: command.input().request(),
-        terms: command.input().terms_digest(),
-        checkpoint: InventoryCheckpointRef::from_host_metadata(
+        header.order.ok_or(OperationError::RecoveryRequired)?,
+        command.input().request(),
+        command.input().terms_digest(),
+        InventoryCheckpointRef::from_host_metadata(
             input.authority(),
             header.revision,
             Some(header.head),
         )?
         .with_authorization(body.authorization),
-        pools: body.effects.iter().map(|value| value.after()).collect(),
-        allocations: body.allocations.len(),
-        observed: body.observed_at,
-        issue_before: body.issue_before,
-    })
+        body.effects.iter().map(|value| value.after()).collect(),
+        body.allocations.len(),
+        radroots_domain::IssuanceWindow::new(body.observed_at, body.issue_before)
+            .map_err(|_| OperationError::RecoveryRequired)?,
+        rumor,
+    )
 }
 pub(in crate::workspace::stock) async fn read(
     connection: &mut SqliteConnection,

@@ -395,3 +395,14 @@ or read rights. The first original optional time in each class remains unchanged
 Snapshots carry bounded summaries and original observations without duplicating
 raw outer bytes. Their v3 progress digest includes these facts; structural
 construction and an adapter's report establish no backend qualification.
+
+The shared inventory boundary owns `StockAcceptanceRequest`,
+`StockAcceptanceReceipt` and `StockAcceptanceOutcome`. Its
+`InventoryStore::prepare_stock_acceptance` port requires the concrete host's
+actual protected T0 transaction. It does not sign or install an agreement.
+Requests copy bounded captured commands and retain independent inventory,
+private-source and public-listing minima. Report construction checks bounded
+metadata, not consent, authority, actual holds or a commit. Unsupported hosts
+refuse explicitly; no memory or runtime fallback is constructed. The native
+adapter uses its selected existing worker. Signing/Nostr remain outside Storage's
+dependency graph. Complete ordinary commerce ownership remains separate work.
