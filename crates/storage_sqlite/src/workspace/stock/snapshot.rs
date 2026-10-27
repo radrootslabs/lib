@@ -41,6 +41,7 @@ pub enum StockSigningProgress {
     Bound,
     Unknown,
     Obtained,
+    OriginalUnissued,
 }
 /// Immutable claim identity. This reference cannot construct a dispatch permit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -71,6 +72,7 @@ pub struct StockRecipientSnapshot {
     claim: Option<StockClaimReference>,
     count: Sequence,
     first: Option<StockEvidenceReceipt>,
+    unissued: Option<super::StockUnissuedReceipt>,
 }
 impl StockRecipientSnapshot {
     pub const fn recipient(&self) -> PublicKey {
@@ -89,9 +91,15 @@ impl StockRecipientSnapshot {
     pub const fn first_evidence(&self) -> Option<StockEvidenceReceipt> {
         self.first
     }
+    /// Authenticated original-invocation fact, independent of later S.
+    pub const fn original_unissued(&self) -> Option<super::StockUnissuedReceipt> {
+        self.unissued
+    }
     pub const fn progress(&self) -> StockSigningProgress {
         if self.first.is_some() {
             StockSigningProgress::Obtained
+        } else if self.unissued.is_some() {
+            StockSigningProgress::OriginalUnissued
         } else if self.claim.is_some() {
             StockSigningProgress::Unknown
         } else if self.expected.is_some() {
@@ -156,6 +164,7 @@ pub(in crate::workspace) async fn read(
     }
     let mut reports = Vec::with_capacity(2);
     let mut claims = Vec::with_capacity(2);
+    let mut refusals = Vec::with_capacity(2);
     let mut summaries = Vec::with_capacity(2);
     for recipient in auth.original.receipt.rumor().recipients() {
         let (retained, claim_proof) =
@@ -205,13 +214,33 @@ pub(in crate::workspace) async fn read(
         {
             return Err(OperationError::RecoveryRequired);
         }
+        let unissued = if auth.access.authority.catalog >= 14 {
+            Box::pin(issuance::unissued::lookup(
+                turn.connection,
+                turn.selected,
+                turn.crypto,
+                request.operation,
+                *recipient,
+            ))
+            .await?
+        } else {
+            None
+        };
+        if unissued
+            .as_ref()
+            .is_some_and(|v| reference.is_none_or(|c| c.id != v.receipt().signing_attempt_id()))
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
         reports.push(StockRecipientSnapshot {
             recipient: *recipient,
             expected,
             claim: reference,
             count: summary.count,
             first,
+            unissued: unissued.as_ref().map(|v| v.receipt()),
         });
+        refusals.push(unissued);
         claims.push(claim_proof);
         summaries.push(summary);
     }
@@ -312,6 +341,9 @@ pub(in crate::workspace) async fn read(
         }
         for (index, report) in reports.iter().enumerate() {
             claims[index].confirm(&mut tx).await?;
+            if let Some(value) = &refusals[index] {
+                value.confirm(&mut tx).await?;
+            }
             summaries[index]
                 .confirm(
                     &mut tx,

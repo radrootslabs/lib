@@ -104,6 +104,13 @@ impl std::fmt::Debug for StockSigningAttempt {
 /// Single-use confirmed first-dispatch boundary, distinct from actual provider
 /// capability and destination policy. Those remain caller obligations before
 /// invoking the signer. An original/recovered claim cannot construct this type.
+///
+/// ```compile_fail
+/// use radroots_storage_sqlite::workspace::StockDispatchPermit;
+/// fn extract(permit: StockDispatchPermit) {
+///     let _ = permit.into_signing_intent(radroots_signing::request::CancellationSignal::new());
+/// }
+/// ```
 pub struct StockDispatchPermit {
     report: StockSigningAttempt,
 }
@@ -113,7 +120,7 @@ impl StockDispatchPermit {
     }
     /// Consumes this first-dispatch permit to expose the unchanged exact intent.
     /// The returned report anchors later capture; it cannot reissue a permit.
-    pub fn into_signing_intent(
+    fn into_intent(
         self,
         cancellation: CancellationSignal,
     ) -> Result<(SigningIntent, StockSigningAttempt), OperationError> {

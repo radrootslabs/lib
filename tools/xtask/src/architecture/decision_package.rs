@@ -340,6 +340,13 @@ struct SigningPlanBinding {
     generic_peer_installed_before_rejected_self_return: bool,
     unknown_installation_blocks_delivery: bool,
     native_first_dispatch_owns_issuer_invocation: bool,
+    shared_first_dispatch_port: String,
+    shared_unissued_owner: String,
+    shared_unissued_retained_before_capture: bool,
+    shared_unissued_drained_before_storage_close: bool,
+    shared_unissued_failure_blocks_fresh_commands: bool,
+    public_native_intent_extraction: bool,
+    coherent_snapshot_preserves_original_unissued: bool,
     exact_issuer_port: String,
     native_failure_boundary: String,
     native_failure_preserves_signer_rejection: bool,
@@ -681,6 +688,22 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock
                 .signing_plan_binding
                 .native_first_dispatch_owns_issuer_invocation
+            && stock.signing_plan_binding.shared_first_dispatch_port
+                == "radroots_execution.session.commerce.AcceptanceDispatch.dispatch"
+            && stock.signing_plan_binding.shared_unissued_owner == "ClientSession.stock_captures"
+            && stock
+                .signing_plan_binding
+                .shared_unissued_retained_before_capture
+            && stock
+                .signing_plan_binding
+                .shared_unissued_drained_before_storage_close
+            && stock
+                .signing_plan_binding
+                .shared_unissued_failure_blocks_fresh_commands
+            && !stock.signing_plan_binding.public_native_intent_extraction
+            && stock
+                .signing_plan_binding
+                .coherent_snapshot_preserves_original_unissued
             && stock.signing_plan_binding.exact_issuer_port
                 == "radroots_signing.issuance.ExactIssuer"
             && stock.signing_plan_binding.native_failure_boundary == "radroots_ffi.Error"
@@ -1862,6 +1885,19 @@ mod tests {
             ),
             ("unknown_installation_blocks_delivery", json!(false)),
             ("native_first_dispatch_owns_issuer_invocation", json!(false)),
+            ("shared_first_dispatch_port", json!("into_intent")),
+            ("shared_unissued_owner", json!("caller_waiter")),
+            ("shared_unissued_retained_before_capture", json!(false)),
+            ("shared_unissued_drained_before_storage_close", json!(false)),
+            (
+                "shared_unissued_failure_blocks_fresh_commands",
+                json!(false),
+            ),
+            ("public_native_intent_extraction", json!(true)),
+            (
+                "coherent_snapshot_preserves_original_unissued",
+                json!(false),
+            ),
             ("exact_issuer_port", json!("legacy_signer_fallback")),
             ("native_failure_boundary", json!("discarded_primitive")),
             ("native_failure_preserves_signer_rejection", json!(false)),

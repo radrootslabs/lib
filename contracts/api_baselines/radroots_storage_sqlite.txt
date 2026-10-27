@@ -410,6 +410,7 @@ pub radroots_storage_sqlite::workspace::StockSigningPlanOutcome::Unknown(radroot
 pub enum radroots_storage_sqlite::workspace::StockSigningProgress
 pub radroots_storage_sqlite::workspace::StockSigningProgress::Bound
 pub radroots_storage_sqlite::workspace::StockSigningProgress::Obtained
+pub radroots_storage_sqlite::workspace::StockSigningProgress::OriginalUnissued
 pub radroots_storage_sqlite::workspace::StockSigningProgress::Unbound
 pub radroots_storage_sqlite::workspace::StockSigningProgress::Unknown
 pub enum radroots_storage_sqlite::workspace::StockSourceOutcome
@@ -570,7 +571,6 @@ pub struct radroots_storage_sqlite::workspace::StockDispatchPermit
 impl radroots_storage_sqlite::workspace::StockDispatchPermit
 pub fn radroots_storage_sqlite::workspace::StockDispatchPermit::dispatch(self, &dyn radroots_signing::issuance::ExactIssuer, radroots_signing::request::CancellationSignal) -> radroots_signing::signer::BoxFuture<'_, core::result::Result<radroots_storage_sqlite::workspace::StockDispatchOutcome, radroots_storage::command::OperationError>>
 impl radroots_storage_sqlite::workspace::StockDispatchPermit
-pub fn radroots_storage_sqlite::workspace::StockDispatchPermit::into_signing_intent(self, radroots_signing::request::CancellationSignal) -> core::result::Result<(radroots_signing::issuance::SigningIntent, radroots_storage_sqlite::workspace::StockSigningAttempt), radroots_storage::command::OperationError>
 pub const fn radroots_storage_sqlite::workspace::StockDispatchPermit::report(&self) -> &radroots_storage_sqlite::workspace::StockSigningAttempt
 impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockDispatchPermit
 pub fn radroots_storage_sqlite::workspace::StockDispatchPermit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -688,6 +688,7 @@ pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::claim(&
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::evidence_count(&self) -> radroots_domain::context::Sequence
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::expected_event_id(&self) -> core::option::Option<[u8; 32]>
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::first_evidence(&self) -> core::option::Option<radroots_storage::inventory::evidence::StockEvidenceReceipt>
+pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::original_unissued(&self) -> core::option::Option<radroots_storage_sqlite::workspace::StockUnissuedReceipt>
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::progress(&self) -> radroots_storage_sqlite::workspace::StockSigningProgress
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::recipient(&self) -> radroots_identity::key::PublicKey
 pub struct radroots_storage_sqlite::workspace::StockRequestSnapshot

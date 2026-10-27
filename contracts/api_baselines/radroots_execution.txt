@@ -26,12 +26,20 @@ pub enum radroots_execution::session::commerce::AcceptanceClaimOutcome
 pub radroots_execution::session::commerce::AcceptanceClaimOutcome::Existing(radroots_execution::session::commerce::AcceptanceClaim)
 pub radroots_execution::session::commerce::AcceptanceClaimOutcome::Fresh(alloc::boxed::Box<dyn radroots_execution::session::commerce::AcceptanceDispatch>)
 pub radroots_execution::session::commerce::AcceptanceClaimOutcome::Unknown(radroots_storage::command::CommitAttempt)
+pub enum radroots_execution::session::commerce::AcceptanceDispatchOutcome
+pub radroots_execution::session::commerce::AcceptanceDispatchOutcome::Obtained(radroots_execution::session::commerce::AcceptanceClaim, radroots_signing::issuance::SignedArtifact)
+pub radroots_execution::session::commerce::AcceptanceDispatchOutcome::Rejected(radroots_execution::session::commerce::AcceptanceClaim, radroots_signing::issuance::RejectedArtifact)
+pub radroots_execution::session::commerce::AcceptanceDispatchOutcome::Unissued(alloc::boxed::Box<dyn radroots_execution::session::commerce::AcceptanceUnissued>)
+pub radroots_execution::session::commerce::AcceptanceDispatchOutcome::Unknown(radroots_execution::session::commerce::AcceptanceClaim, radroots_signing::provider::ProviderError)
 pub enum radroots_execution::session::commerce::AcceptanceInstallationOutcome
 pub radroots_execution::session::commerce::AcceptanceInstallationOutcome::Installed(alloc::boxed::Box<radroots_execution::session::commerce::InstalledAcceptance>)
 pub radroots_execution::session::commerce::AcceptanceInstallationOutcome::Unknown(radroots_storage::command::CommitAttempt)
 pub enum radroots_execution::session::commerce::AcceptancePlanOutcome
 pub radroots_execution::session::commerce::AcceptancePlanOutcome::Bound(radroots_storage::command::CommitAttempt)
 pub radroots_execution::session::commerce::AcceptancePlanOutcome::Unknown(radroots_storage::command::CommitAttempt)
+pub enum radroots_execution::session::commerce::AcceptanceUnissuedOutcome
+pub radroots_execution::session::commerce::AcceptanceUnissuedOutcome::Committed(alloc::boxed::Box<radroots_execution::session::commerce::AcceptanceUnissuedReceipt>)
+pub radroots_execution::session::commerce::AcceptanceUnissuedOutcome::Unknown(radroots_storage::command::CommitAttempt)
 pub struct radroots_execution::session::commerce::AcceptanceClaim
 pub radroots_execution::session::commerce::AcceptanceClaim::binding: radroots_protocol::intent::IntentBinding
 pub radroots_execution::session::commerce::AcceptanceClaim::id: radroots_domain::identifier::SigningAttemptId
@@ -40,6 +48,7 @@ pub fn radroots_execution::session::commerce::AcceptanceClaim::fmt(&self, &mut c
 pub struct radroots_execution::session::commerce::AcceptanceRecipient
 pub radroots_execution::session::commerce::AcceptanceRecipient::claim: core::option::Option<radroots_execution::session::commerce::AcceptanceClaim>
 pub radroots_execution::session::commerce::AcceptanceRecipient::evidence: core::option::Option<radroots_storage::inventory::evidence::StockEvidenceReceipt>
+pub radroots_execution::session::commerce::AcceptanceRecipient::original_unissued: core::option::Option<radroots_execution::session::commerce::AcceptanceUnissuedReceipt>
 pub radroots_execution::session::commerce::AcceptanceRecipient::recipient: radroots_identity::key::PublicKey
 pub struct radroots_execution::session::commerce::AcceptanceSelection
 pub radroots_execution::session::commerce::AcceptanceSelection::binding: radroots_storage::workspace::WorkspaceBinding
@@ -57,6 +66,12 @@ pub const fn radroots_execution::session::commerce::AcceptanceStatus::recipients
 pub const fn radroots_execution::session::commerce::AcceptanceStatus::record_id(&self) -> radroots_domain::identifier::RecordId
 impl core::fmt::Debug for radroots_execution::session::commerce::AcceptanceStatus
 pub fn radroots_execution::session::commerce::AcceptanceStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_execution::session::commerce::AcceptanceUnissuedReceipt
+pub radroots_execution::session::commerce::AcceptanceUnissuedReceipt::attempt: radroots_storage::command::CommitAttempt
+pub radroots_execution::session::commerce::AcceptanceUnissuedReceipt::checkpoint: radroots_storage::inventory::InventoryCheckpointRef
+pub radroots_execution::session::commerce::AcceptanceUnissuedReceipt::claim: radroots_domain::identifier::SigningAttemptId
+pub radroots_execution::session::commerce::AcceptanceUnissuedReceipt::reason: radroots_signing::provider::ProviderError
+pub radroots_execution::session::commerce::AcceptanceUnissuedReceipt::recipient: radroots_identity::key::PublicKey
 pub struct radroots_execution::session::commerce::InstalledAcceptance
 pub radroots_execution::session::commerce::InstalledAcceptance::attempt: radroots_storage::command::CommitAttempt
 pub radroots_execution::session::commerce::InstalledAcceptance::checkpoint: radroots_storage::inventory::InventoryCheckpointRef
@@ -65,7 +80,8 @@ pub radroots_execution::session::commerce::InstalledAcceptance::record: radroots
 impl core::fmt::Debug for radroots_execution::session::commerce::InstalledAcceptance
 pub fn radroots_execution::session::commerce::InstalledAcceptance::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait radroots_execution::session::commerce::AcceptanceDispatch: radroots_execution::session::HostBound
-pub fn radroots_execution::session::commerce::AcceptanceDispatch::into_intent(alloc::boxed::Box<Self>, radroots_signing::request::CancellationSignal) -> core::result::Result<(radroots_signing::issuance::SigningIntent, radroots_execution::session::commerce::AcceptanceClaim), radroots_storage::command::OperationError>
+pub fn radroots_execution::session::commerce::AcceptanceDispatch::claim(&self) -> radroots_execution::session::commerce::AcceptanceClaim
+pub fn radroots_execution::session::commerce::AcceptanceDispatch::dispatch<'a>(alloc::boxed::Box<Self>, &'a dyn radroots_signing::issuance::ExactIssuer, radroots_signing::request::CancellationSignal) -> radroots_execution::session::HostFuture<'a, core::result::Result<radroots_execution::session::commerce::AcceptanceDispatchOutcome, radroots_storage::command::OperationError>>
 pub trait radroots_execution::session::commerce::AcceptanceSnapshot: radroots_execution::session::HostBound
 pub fn radroots_execution::session::commerce::AcceptanceSnapshot::aborted(&self) -> bool
 pub fn radroots_execution::session::commerce::AcceptanceSnapshot::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
@@ -79,6 +95,11 @@ pub fn radroots_execution::session::commerce::AcceptanceStore::claim<'a>(&'a sel
 pub fn radroots_execution::session::commerce::AcceptanceStore::exact_replay<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, radroots_identity::key::PublicKey, radroots_signing::provider::ProviderCall, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<(radroots_signing::issuance::exact_recovery::ExactRecoveryRequest, radroots_execution::session::commerce::AcceptanceClaim), radroots_storage::command::OperationError>>
 pub fn radroots_execution::session::commerce::AcceptanceStore::install<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<radroots_execution::session::commerce::AcceptanceInstallationOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_execution::session::commerce::AcceptanceStore::snapshot<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<alloc::boxed::Box<dyn radroots_execution::session::commerce::AcceptanceSnapshot>, radroots_storage::command::OperationError>>
+pub trait radroots_execution::session::commerce::AcceptanceUnissued: radroots_execution::session::HostBound
+pub fn radroots_execution::session::commerce::AcceptanceUnissued::capture(&self) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_execution::session::commerce::AcceptanceUnissuedOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_execution::session::commerce::AcceptanceUnissued::claim(&self) -> radroots_execution::session::commerce::AcceptanceClaim
+pub fn radroots_execution::session::commerce::AcceptanceUnissued::reason(&self) -> radroots_signing::provider::ProviderError
+pub fn radroots_execution::session::commerce::AcceptanceUnissued::reconcile(&self) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_execution::session::commerce::AcceptanceUnissuedOutcome, radroots_storage::command::OperationError>>
 pub mod radroots_execution::session::tasks
 pub trait radroots_execution::session::tasks::TaskHost: radroots_execution::session::HostBound
 pub fn radroots_execution::session::tasks::TaskHost::submit(&self, radroots_execution::session::HostFuture<'static, ()>) -> radroots_execution::Result<()>

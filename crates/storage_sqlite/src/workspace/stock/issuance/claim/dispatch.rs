@@ -71,7 +71,7 @@ impl StockDispatchPermit {
         cancellation: CancellationSignal,
     ) -> BoxFuture<'_, Result<StockDispatchOutcome, OperationError>> {
         Box::pin(async move {
-            let (intent, attempt) = self.into_signing_intent(cancellation)?;
+            let (intent, attempt) = self.into_intent(cancellation)?;
             let binding = attempt.binding();
             let (_, kind) = issuer
                 .issue_exact(intent)

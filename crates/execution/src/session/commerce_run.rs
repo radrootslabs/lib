@@ -15,7 +15,7 @@ use radroots_protocol::{
     intent::SigningReplay,
 };
 use radroots_signing::{
-    issuance::{ExactRecoveryCapability, ExactRecoveryKind, OutcomeKind, SignedArtifact},
+    issuance::{ExactRecoveryCapability, ExactRecoveryKind, SignedArtifact, SigningIntent},
     provider::PrivateText,
     recovery::ReplayCapability,
 };
@@ -51,7 +51,7 @@ pub(crate) fn observe(
         .map_err(|_| OperationError::RecoveryRequired)?;
     } else if recipients
         .iter()
-        .any(|v| v.claim.is_some() || v.evidence.is_some())
+        .any(|v| v.claim.is_some() || v.evidence.is_some() || v.original_unissued.is_some())
     {
         return Err(OperationError::RecoveryRequired);
     }
@@ -82,11 +82,22 @@ pub(crate) fn observe(
             return Err(OperationError::RecoveryRequired);
         }
     }
+    for recipient in &recipients {
+        if let Some(value) = recipient.original_unissued
+            && (!same(value.attempt, selection)
+                || value.attempt.transaction_id().is_none()
+                || value.recipient != recipient.recipient
+                || recipient.claim.is_none_or(|v| v.id != value.claim)
+                || value.checkpoint.authority() != selection.minimum.authority())
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+    }
     let installation = snapshot.installation();
     if snapshot.aborted()
         && recipients
             .iter()
-            .any(|v| v.claim.is_some() || v.evidence.is_some())
+            .any(|v| v.claim.is_some() || v.evidence.is_some() || v.original_unissued.is_some())
     {
         return Err(OperationError::RecoveryRequired);
     }
@@ -261,83 +272,125 @@ impl CommandRuntime {
                     .map_err(|_| fail(OperationError::Unauthorized))?;
                 let capture_proof = copy(proof).map_err(fail)?;
                 let capture_selection = selection.clone();
-                let obtained: Option<(SignedArtifact, AcceptanceClaim)> =
-                    if let Some(claim) = facts.claim {
-                        if !matches!(&mode, RunMode::Resume)
-                            || plan.replay() != SigningReplay::LocalReplaySafe
-                        {
-                            None
-                        } else {
-                            let (request, report) = store
-                                .exact_replay(
-                                    selection.clone(),
-                                    recipient,
-                                    call(original).map_err(fail)?,
-                                    proof,
-                                )
-                                .await
-                                .map_err(fail)?;
-                            if report != claim || request.original().binding() != claim.binding {
+                let obtained: Option<(SignedArtifact, AcceptanceClaim)> = if let Some(claim) =
+                    facts.claim
+                {
+                    if !matches!(&mode, RunMode::Resume)
+                        || plan.replay() != SigningReplay::LocalReplaySafe
+                    {
+                        None
+                    } else {
+                        let (request, report) = store
+                            .exact_replay(
+                                selection.clone(),
+                                recipient,
+                                call(original).map_err(fail)?,
+                                proof,
+                            )
+                            .await
+                            .map_err(fail)?;
+                        if report != claim || request.original().binding() != claim.binding {
+                            return Err(fail(OperationError::RecoveryRequired));
+                        }
+                        self.ensure_ready()?;
+                        match signer.recover_exact(request).await.into_parts().1 {
+                            ExactRecoveryKind::Obtained(artifact) => Some((artifact, report)),
+                            ExactRecoveryKind::Rejected(rejected) => {
+                                return Err(crate::ExecutionFailure::rejected(
+                                    selection.operation,
+                                    rejected,
+                                ));
+                            }
+                            _ => None,
+                        }
+                    }
+                } else {
+                    if self.io.now().map_err(fail)? >= original.first_issue_deadline() {
+                        continue;
+                    }
+                    match store
+                        .claim(selection.clone(), recipient, proof)
+                        .await
+                        .map_err(fail)?
+                    {
+                        AcceptanceClaimOutcome::Fresh(permit) => {
+                            let report = permit.claim();
+                            let seal = plan
+                                .seals()
+                                .iter()
+                                .find(|v| v.recipient() == recipient)
+                                .ok_or_else(|| fail(OperationError::RecoveryRequired))?;
+                            let expected = SigningIntent::from_commerce_seal(
+                                seal,
+                                call(original).map_err(fail)?,
+                            )
+                            .map_err(|_| fail(OperationError::RecoveryRequired))?
+                            .binding();
+                            if report.binding != expected {
                                 return Err(fail(OperationError::RecoveryRequired));
                             }
                             self.ensure_ready()?;
-                            match signer.recover_exact(request).await.into_parts().1 {
-                                ExactRecoveryKind::Obtained(artifact) => Some((artifact, report)),
-                                ExactRecoveryKind::Rejected(rejected) => {
+                            resources.stock_captures.ensure_ready().map_err(fail)?;
+                            match permit
+                                .dispatch(signer, CancellationSignal::new())
+                                .await
+                                .map_err(fail)?
+                            {
+                                AcceptanceDispatchOutcome::Obtained(actual, artifact) => {
+                                    if actual != report {
+                                        resources.stock_captures.retain_obtained(
+                                            crate::session::stock_evidence::ObtainedContext {
+                                                selection: capture_selection,
+                                                claim: report,
+                                                recipient,
+                                                store: inventory.clone(),
+                                                proof: capture_proof,
+                                                lease: resources.lease.clone(),
+                                            },
+                                            artifact,
+                                        );
+                                        return Err(fail(OperationError::RecoveryRequired));
+                                    }
+                                    Some((artifact, report))
+                                }
+                                AcceptanceDispatchOutcome::Unissued(observation) => {
+                                    let pending = resources.stock_captures.retain_unissued(
+                                        capture_selection.clone(),
+                                        report,
+                                        recipient,
+                                        observation,
+                                        resources.lease.clone(),
+                                    );
+                                    if !matches!(
+                                        resources.stock_captures.capture_unissued(&pending).await?,
+                                        AcceptanceUnissuedOutcome::Committed(_)
+                                    ) {
+                                        return Err(fail(OperationError::RecoveryRequired));
+                                    }
+                                    None
+                                }
+                                AcceptanceDispatchOutcome::Rejected(actual, rejected)
+                                    if actual == report =>
+                                {
                                     return Err(crate::ExecutionFailure::rejected(
                                         selection.operation,
                                         rejected,
                                     ));
                                 }
-                                _ => None,
-                            }
-                        }
-                    } else {
-                        if self.io.now().map_err(fail)? >= original.first_issue_deadline() {
-                            continue;
-                        }
-                        match store
-                            .claim(selection.clone(), recipient, proof)
-                            .await
-                            .map_err(fail)?
-                        {
-                            AcceptanceClaimOutcome::Fresh(permit) => {
-                                let (intent, report) = permit
-                                    .into_intent(CancellationSignal::new())
-                                    .map_err(fail)?;
-                                let seal = plan
-                                    .seals()
-                                    .iter()
-                                    .find(|v| v.recipient() == recipient)
-                                    .ok_or_else(|| fail(OperationError::RecoveryRequired))?;
-                                let expected = SigningIntent::from_commerce_seal(
-                                    seal,
-                                    call(original).map_err(fail)?,
-                                )
-                                .map_err(|_| fail(OperationError::RecoveryRequired))?
-                                .binding();
-                                if intent.binding() != expected || report.binding != expected {
-                                    return Err(fail(OperationError::RecoveryRequired));
+                                AcceptanceDispatchOutcome::Unknown(actual, _)
+                                    if actual == report =>
+                                {
+                                    None
                                 }
-                                self.ensure_ready()?;
-                                resources.stock_captures.ensure_ready().map_err(fail)?;
-                                match signer.sign_exact(intent).await.into_parts().1 {
-                                    OutcomeKind::Obtained(artifact) => Some((artifact, report)),
-                                    OutcomeKind::Rejected(rejected) => {
-                                        return Err(crate::ExecutionFailure::rejected(
-                                            selection.operation,
-                                            rejected,
-                                        ));
-                                    }
-                                    _ => None,
-                                }
-                            }
-                            AcceptanceClaimOutcome::Existing(_) => None,
-                            AcceptanceClaimOutcome::Unknown(_) => {
-                                return Err(fail(OperationError::RecoveryRequired));
+                                _ => return Err(fail(OperationError::RecoveryRequired)),
                             }
                         }
-                    };
+                        AcceptanceClaimOutcome::Existing(_) => None,
+                        AcceptanceClaimOutcome::Unknown(_) => {
+                            return Err(fail(OperationError::RecoveryRequired));
+                        }
+                    }
+                };
                 if let Some((artifact, claim)) = obtained {
                     let pending = resources.stock_captures.retain_obtained(
                         crate::session::stock_evidence::ObtainedContext {

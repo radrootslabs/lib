@@ -196,3 +196,12 @@ and resource ownership before disposing callbacks, keys or storage. The concrete
 qualified store still authenticates the actual protected claim and exact signed
 bytes; input and receipt metadata grant no authority. This low-level capture
 surface supplies neither full commerce execution nor original nonissuance proof.
+
+Original acceptance dispatch is consumed by the selected native host, which owns
+its one exact issuer invocation. An original pre-dispatch refusal is retained by
+the client before storage capture, survives a lost caller or failed append, and
+joins explicit evidence drain and close retry. Coherent recipient status retains
+that authenticated original fact separately from any later valid signature.
+Recovery refusals never become original observations. These facts do not release
+stock or qualify arbitrary adapters; claimed-abort handling and full commerce
+accounting remain in implementation.

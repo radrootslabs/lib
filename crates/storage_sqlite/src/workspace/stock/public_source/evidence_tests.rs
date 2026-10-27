@@ -17,14 +17,18 @@ async fn obtained(
     let StockClaimOutcome::Fresh(permit) = claim(r, receipt, recipient).await.unwrap() else {
         panic!("first claim");
     };
-    let (intent, report) = permit
-        .into_signing_intent(CancellationSignal::new())
-        .unwrap();
     let signer = LocalSigner::with_clock(SecretKey::parse(&format!("{:064x}", 3)).unwrap(), || {
         Ok(150000)
     })
     .unwrap();
-    let (_, OutcomeKind::Obtained(signed)) = signer.sign_exact(intent).await.into_parts() else {
+    let crate::workspace::StockDispatchOutcome::Obtained {
+        attempt: report,
+        artifact: signed,
+    } = permit
+        .dispatch(&signer, CancellationSignal::new())
+        .await
+        .unwrap()
+    else {
         panic!("real signature");
     };
     (report, signed.with_json(str::to_owned))

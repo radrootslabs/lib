@@ -81,6 +81,7 @@ impl WorkspaceClock for Clock {
     }
 }
 struct Control {
+    pause_refused: AtomicBool,
     pause_rejected: AtomicBool,
     tamper_recovery: AtomicBool,
     tamper_self: AtomicBool,
@@ -96,6 +97,7 @@ struct Control {
 impl Control {
     fn new() -> Self {
         Self {
+            pause_refused: AtomicBool::new(false),
             pause_rejected: AtomicBool::new(false),
             tamper_recovery: AtomicBool::new(false),
             tamper_self: AtomicBool::new(false),
@@ -154,6 +156,10 @@ impl ParticipantProvider for Provider {
             self.control.signs.fetch_add(1, Ordering::SeqCst);
             let is_self = intent.recipient() == Some(self.inner.public_key());
             if is_self && self.control.fail_self.load(Ordering::SeqCst) {
+                if self.control.pause_refused.swap(false, Ordering::SeqCst) {
+                    self.control.entered.notify_one();
+                    self.control.release.notified().await;
+                }
                 return SigningOutcome::not_dispatched(intent.binding(), ProviderError::Cancelled);
             }
             let result = self.inner.sign_exact(intent).await;
@@ -749,6 +755,9 @@ async fn lost_observer_cannot_discard_actual_peer_artifact_and_close_installs_be
     reopened.close().await.unwrap();
 }
 
+#[path = "native_refusal_tests.rs"]
+mod original_refusals;
+
 #[tokio::test]
 async fn peer_installation_survives_self_refusal_and_resume_uses_original_exact_recovery() {
     let r = Rig::new().await;
@@ -766,6 +775,12 @@ async fn peer_installation_survives_self_refusal_and_resume_uses_original_exact_
         1
     );
     assert!(!status.aborted());
+    let original_refusal = status
+        .recipients()
+        .iter()
+        .find_map(|v| v.original_unissued)
+        .expect("actual original refusal must be captured");
+    assert_eq!(original_refusal.reason, ProviderError::Cancelled);
     assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
     r.control.fail_self.store(false, Ordering::SeqCst);
     let (_, _, minimum) = r.minima().await;
@@ -779,6 +794,13 @@ async fn peer_installation_survives_self_refusal_and_resume_uses_original_exact_
     assert!(resumed.recipients().iter().all(|v| v.evidence.is_some()));
     assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
     assert_eq!(r.control.recoveries.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        resumed
+            .recipients()
+            .iter()
+            .find_map(|v| v.original_unissued),
+        Some(original_refusal)
+    );
     r.client.close().await.unwrap();
     assert!(r.provider.upgrade().is_none());
 }

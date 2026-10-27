@@ -178,7 +178,13 @@ pub(in crate::workspace::stock) struct Retained {
     projection: Projection,
 }
 impl Retained {
-    async fn confirm(&self, connection: &mut SqliteConnection) -> Result<(), OperationError> {
+    pub(in crate::workspace::stock) fn receipt(&self) -> StockUnissuedReceipt {
+        *self.value
+    }
+    pub(in crate::workspace::stock) async fn confirm(
+        &self,
+        connection: &mut SqliteConnection,
+    ) -> Result<(), OperationError> {
         ledger::confirm_header(connection, &self.frame.header, &self.frame.protected).await?;
         ledger::confirm_parts(
             connection,
@@ -280,7 +286,7 @@ pub(in crate::workspace::stock) async fn read_entry(
     retained.confirm(connection).await?;
     Ok(Some(retained))
 }
-async fn lookup(
+pub(in crate::workspace::stock) async fn lookup(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,

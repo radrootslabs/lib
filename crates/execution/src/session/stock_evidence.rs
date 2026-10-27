@@ -10,6 +10,9 @@ use std::{sync::Mutex, vec::Vec};
 #[path = "stock_obtained.rs"]
 mod obtained;
 pub(super) use obtained::{ObtainedContext, RetainedObtained};
+#[path = "stock_unissued.rs"]
+mod unissued;
+pub(super) use unissued::RetainedUnissued;
 
 pub(super) struct Pending {
     store: Shared<dyn InventoryStore>,
@@ -22,6 +25,7 @@ pub(super) struct Pending {
 pub(super) struct Owner {
     unmapped: Mutex<Vec<Shared<RetainedObtained>>>,
     pending: Mutex<Vec<Shared<Pending>>>,
+    unissued: Mutex<Vec<Shared<RetainedUnissued>>>,
     serial: futures::lock::Mutex<()>,
 }
 impl Owner {
@@ -36,7 +40,11 @@ impl Owner {
             .unmapped
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if pending.is_empty() && unmapped.is_empty() {
+        let unissued = self
+            .unissued
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if pending.is_empty() && unmapped.is_empty() && unissued.is_empty() {
             Ok(())
         } else {
             Err(OperationError::RecoveryRequired)
@@ -148,6 +156,24 @@ impl Owner {
     }
     pub(super) async fn drain(&self) -> crate::Result<()> {
         let _serial = self.serial.lock().await;
+        loop {
+            let entry = self
+                .unissued
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .first()
+                .cloned();
+            let Some(entry) = entry else { break };
+            if matches!(
+                self.append_unissued(&entry, true).await?,
+                crate::session::commerce::AcceptanceUnissuedOutcome::Unknown(_)
+            ) {
+                return Err(Error::capture_pending(
+                    OperationError::RecoveryRequired,
+                    OperationContext::retained(entry.operation()),
+                ));
+            }
+        }
         loop {
             let entry = self
                 .unmapped

@@ -44,9 +44,7 @@ async fn original_t0_t1_unknown_and_partial_obtained_states_form_one_coherent_re
     let StockClaimOutcome::Fresh(permit) = claim(&r, &receipt, recipient).await.unwrap() else {
         panic!("first claim");
     };
-    let (intent, report) = permit
-        .into_signing_intent(CancellationSignal::new())
-        .unwrap();
+    let report = permit.report();
     let unknown = snapshot(&r, &receipt).await;
     assert_eq!(unknown.recipients()[0].progress(), Progress::Unknown);
     assert_eq!(
@@ -57,7 +55,14 @@ async fn original_t0_t1_unknown_and_partial_obtained_states_form_one_coherent_re
         Ok(150000)
     })
     .unwrap();
-    let (_, OutcomeKind::Obtained(signed)) = signer.sign_exact(intent).await.into_parts() else {
+    let crate::workspace::StockDispatchOutcome::Obtained {
+        attempt: report,
+        artifact: signed,
+    } = permit
+        .dispatch(&signer, CancellationSignal::new())
+        .await
+        .unwrap()
+    else {
         panic!("actual signing");
     };
     let raw = signed.with_json(str::to_owned);

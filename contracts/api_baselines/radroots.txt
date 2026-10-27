@@ -159,6 +159,7 @@ pub mod radroots::orders
 pub use radroots::orders::AcceptOrderInput
 pub use radroots::orders::AcceptanceRecipient
 pub use radroots::orders::AcceptanceStatus
+pub use radroots::orders::AcceptanceUnissuedReceipt
 pub use radroots::orders::InstalledAcceptance
 pub struct radroots::orders::Orders<'a>
 impl<'a> radroots::orders::Orders<'a>

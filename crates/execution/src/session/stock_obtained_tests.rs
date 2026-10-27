@@ -26,6 +26,9 @@ use radroots_storage::{
     },
 };
 use std::num::NonZeroU64;
+#[path = "stock_unissued_tests.rs"]
+mod unissued;
+
 struct NoIo;
 impl WorkspaceStore for NoIo {
     fn authenticate(
@@ -76,8 +79,11 @@ impl InventoryStore for NoIo {
         panic!("unexpected IO")
     }
 }
-#[test]
-fn mapping_refusal_keeps_verified_artifact_credentials_and_lease_before_any_storage_request() {
+fn fixture() -> (
+    ObtainedContext,
+    radroots_signing::issuance::SignedArtifact,
+    std::sync::Weak<()>,
+) {
     let command = CapturedOrderAcceptance::parse(include_bytes!(
         "../../tests/fixtures/commerce_verification/command_wire.json"
     ))
@@ -168,9 +174,15 @@ fn mapping_refusal_keeps_verified_artifact_credentials_and_lease_before_any_stor
         proof: AttachmentProof::from_protected_input(&[7; 32]).unwrap(),
         lease: lease.clone(),
     };
+    drop(lease);
+    (context, artifact, weak)
+}
+#[test]
+fn mapping_refusal_keeps_verified_artifact_credentials_and_lease_before_any_storage_request() {
+    let (context, artifact, weak) = fixture();
+    let wire = include_str!("../../tests/fixtures/commerce_verification/seal_signed.json");
     let owner = Owner::default();
     let entry = owner.retain_obtained(context, artifact);
-    drop(lease);
     assert_eq!(
         block_on(owner.capture_obtained(&entry)).unwrap_err().code(),
         crate::Code::Unauthorized

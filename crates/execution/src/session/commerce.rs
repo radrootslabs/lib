@@ -7,7 +7,7 @@ use radroots_domain::{CommandDigest, OperationId, OrderId, PublicKey, RecordId, 
 use radroots_protocol::commerce::CommerceSigningPlan;
 use radroots_signing::{
     commerce::VerifiedCommerceSigningPlan,
-    issuance::{ExactRecoveryRequest, IntentBinding, SigningIntent},
+    issuance::{ExactRecoveryRequest, IntentBinding},
     provider::ProviderCall,
     request::CancellationSignal,
 };
@@ -57,6 +57,8 @@ pub struct AcceptanceRecipient {
     pub claim: Option<AcceptanceClaim>,
     /// First authenticated original encoding, if durably observed.
     pub evidence: Option<StockEvidenceReceipt>,
+    /// Authenticated fact about the original invocation, independent of later S.
+    pub original_unissued: Option<AcceptanceUnissuedReceipt>,
 }
 
 /// Actual initial agreement installation, independent of self-copy and delivery.
@@ -94,15 +96,12 @@ pub trait AcceptanceSnapshot: HostBound {
     fn aborted(&self) -> bool;
 }
 
-/// Consuming a concrete host's fresh confirmed claim transfers one exact intent.
-/// An existing claim/report must never construct an implementation of this port.
-pub trait AcceptanceDispatch: HostBound {
-    /// Consumes the host permit once; creates no signature or recovery guarantee.
-    fn into_intent(
-        self: Box<Self>,
-        cancellation: CancellationSignal,
-    ) -> Result<(SigningIntent, AcceptanceClaim), OperationError>;
-}
+#[path = "commerce_dispatch.rs"]
+mod dispatch;
+pub use self::dispatch::{
+    AcceptanceDispatch, AcceptanceDispatchOutcome, AcceptanceUnissued, AcceptanceUnissuedOutcome,
+    AcceptanceUnissuedReceipt,
+};
 
 /// Actual host completion of T1; an unknown commit must be queried, not repeated
 /// as a new preparation or signature.

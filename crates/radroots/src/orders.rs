@@ -2,7 +2,7 @@
 use crate::{Client, CommandContext, Result, WorkspaceSession};
 use radroots_domain::{CommandDigest, OperationId};
 pub use radroots_execution::session::commerce::{
-    AcceptanceRecipient, AcceptanceStatus, InstalledAcceptance,
+    AcceptanceRecipient, AcceptanceStatus, AcceptanceUnissuedReceipt, InstalledAcceptance,
 };
 pub use radroots_protocol::command::AcceptOrderInput;
 use radroots_storage::{

@@ -3,14 +3,15 @@ use radroots_domain::PublicKey;
 use radroots_execution::session::{
     HostFuture,
     commerce::{
-        AcceptanceClaim, AcceptanceClaimOutcome, AcceptanceDispatch, AcceptanceInstallationOutcome,
-        AcceptancePlanOutcome, AcceptanceRecipient, AcceptanceSelection, AcceptanceSnapshot,
-        AcceptanceStore, InstalledAcceptance,
+        AcceptanceClaim, AcceptanceClaimOutcome, AcceptanceDispatch, AcceptanceDispatchOutcome,
+        AcceptanceInstallationOutcome, AcceptancePlanOutcome, AcceptanceRecipient,
+        AcceptanceSelection, AcceptanceSnapshot, AcceptanceStore, AcceptanceUnissued,
+        AcceptanceUnissuedOutcome, AcceptanceUnissuedReceipt, InstalledAcceptance,
     },
 };
 use radroots_signing::{
     host::Shared,
-    issuance::{ExactRecoveryRequest, SigningIntent},
+    issuance::{ExactIssuer, ExactRecoveryRequest},
     provider::ProviderCall,
     request::CancellationSignal,
 };
@@ -20,15 +21,76 @@ use radroots_storage::{
     workspace::AttachmentProof,
 };
 use radroots_storage_sqlite::workspace::{
-    NativeWorkspace, StockClaimOutcome, StockClaimRequest, StockDispatchPermit,
-    StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,
-    StockOperationSnapshot, StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest,
-    StockSnapshotRequest,
+    NativeWorkspace, StockClaimOutcome, StockClaimRequest, StockDispatchOutcome,
+    StockDispatchPermit, StockInstallationOutcome, StockInstallationReceipt,
+    StockInstallationRequest, StockOperationSnapshot, StockSigningAttempt, StockSigningPlanOutcome,
+    StockSigningPlanRequest, StockSnapshotRequest, StockUnissuedInvocation, StockUnissuedOutcome,
+    StockUnissuedReceipt,
 };
 
 pub(crate) struct NativeCommerce(pub(crate) Shared<NativeWorkspace>);
 struct Snapshot(StockOperationSnapshot);
-struct Dispatch(StockDispatchPermit);
+struct Dispatch {
+    permit: StockDispatchPermit,
+    store: Shared<NativeWorkspace>,
+    binding: radroots_storage::workspace::WorkspaceBinding,
+    proof: AttachmentProof,
+}
+struct Unissued {
+    observation: StockUnissuedInvocation,
+    store: Shared<NativeWorkspace>,
+    binding: radroots_storage::workspace::WorkspaceBinding,
+    proof: AttachmentProof,
+}
+fn refusal(value: &StockUnissuedReceipt) -> AcceptanceUnissuedReceipt {
+    AcceptanceUnissuedReceipt {
+        attempt: value.attempt(),
+        claim: value.signing_attempt_id(),
+        recipient: value.recipient(),
+        reason: value.reason(),
+        checkpoint: value.checkpoint(),
+    }
+}
+fn refusal_outcome(value: StockUnissuedOutcome) -> AcceptanceUnissuedOutcome {
+    match value {
+        StockUnissuedOutcome::Committed(value) => {
+            AcceptanceUnissuedOutcome::Committed(Box::new(refusal(&value)))
+        }
+        StockUnissuedOutcome::Unknown(value) => AcceptanceUnissuedOutcome::Unknown(value),
+    }
+}
+impl AcceptanceUnissued for Unissued {
+    fn claim(&self) -> AcceptanceClaim {
+        claim(self.observation.attempt())
+    }
+    fn reason(&self) -> radroots_signing::provider::ProviderError {
+        self.observation.reason()
+    }
+    fn capture(&self) -> HostFuture<'_, Result<AcceptanceUnissuedOutcome, OperationError>> {
+        Box::pin(async move {
+            self.store
+                .capture_stock_original_unissued(
+                    self.binding.clone(),
+                    &self.observation,
+                    &self.proof,
+                )
+                .await
+                .map(refusal_outcome)
+        })
+    }
+    fn reconcile(&self) -> HostFuture<'_, Result<AcceptanceUnissuedOutcome, OperationError>> {
+        Box::pin(async move {
+            self.store
+                .reconcile_stock_original_unissued(
+                    self.binding.clone(),
+                    &self.observation,
+                    &self.proof,
+                )
+                .await
+                .map(refusal_outcome)
+        })
+    }
+}
 fn claim(value: &StockSigningAttempt) -> AcceptanceClaim {
     AcceptanceClaim {
         id: value.attempt_id(),
@@ -61,6 +123,7 @@ impl AcceptanceSnapshot for Snapshot {
                 binding: c.binding(),
             }),
             evidence: v.first_evidence(),
+            original_unissued: v.original_unissued().as_ref().map(refusal),
         })
     }
     fn installation(&self) -> Option<InstalledAcceptance> {
@@ -71,12 +134,41 @@ impl AcceptanceSnapshot for Snapshot {
     }
 }
 impl AcceptanceDispatch for Dispatch {
-    fn into_intent(
+    fn claim(&self) -> AcceptanceClaim {
+        claim(self.permit.report())
+    }
+    fn dispatch<'a>(
         self: Box<Self>,
+        issuer: &'a dyn ExactIssuer,
         cancel: CancellationSignal,
-    ) -> Result<(SigningIntent, AcceptanceClaim), OperationError> {
-        let (intent, report) = self.0.into_signing_intent(cancel)?;
-        Ok((intent, claim(&report)))
+    ) -> HostFuture<'a, Result<AcceptanceDispatchOutcome, OperationError>> {
+        Box::pin(async move {
+            let Self {
+                permit,
+                store,
+                binding,
+                proof,
+            } = *self;
+            Ok(match permit.dispatch(issuer, cancel).await? {
+                StockDispatchOutcome::Obtained { attempt, artifact } => {
+                    AcceptanceDispatchOutcome::Obtained(claim(&attempt), artifact)
+                }
+                StockDispatchOutcome::Unissued(observation) => {
+                    AcceptanceDispatchOutcome::Unissued(Box::new(Unissued {
+                        observation,
+                        store,
+                        binding,
+                        proof,
+                    }))
+                }
+                StockDispatchOutcome::Unknown { attempt, reason } => {
+                    AcceptanceDispatchOutcome::Unknown(claim(&attempt), reason)
+                }
+                StockDispatchOutcome::Rejected { attempt, rejection } => {
+                    AcceptanceDispatchOutcome::Rejected(claim(&attempt), rejection)
+                }
+            })
+        })
     }
 }
 fn select(value: AcceptanceSelection, recipient: PublicKey) -> StockClaimRequest {
@@ -141,13 +233,22 @@ impl AcceptanceStore for NativeCommerce {
         proof: &'a AttachmentProof,
     ) -> HostFuture<'a, Result<AcceptanceClaimOutcome, OperationError>> {
         Box::pin(async move {
+            // Retain capture material before admission and before the issuer runs.
+            let binding = value.binding.clone();
+            let retained_proof =
+                proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?;
             match self
                 .0
                 .claim_stock_signing_attempt(select(value, recipient), proof)
                 .await?
             {
                 StockClaimOutcome::Fresh(value) => {
-                    Ok(AcceptanceClaimOutcome::Fresh(Box::new(Dispatch(value))))
+                    Ok(AcceptanceClaimOutcome::Fresh(Box::new(Dispatch {
+                        permit: value,
+                        store: self.0.clone(),
+                        binding,
+                        proof: retained_proof,
+                    })))
                 }
                 StockClaimOutcome::Existing(value) => {
                     Ok(AcceptanceClaimOutcome::Existing(claim(&value)))
