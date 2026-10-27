@@ -109,7 +109,7 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
     )
     .await
     .unwrap();
-    assert_eq!(schema::admit(&mut connection).await, Ok(14));
+    assert_eq!(schema::admit(&mut connection).await, Ok(15));
     assert_eq!(schema::integrity(&mut connection).await, Ok(()));
     let root: Vec<u8> = sqlx::query_scalar("SELECT protected FROM stock_authority")
         .fetch_one(&mut connection)
@@ -117,18 +117,18 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
         .unwrap();
     let clear = fixture
         .crypto()
-        .open_stock_root(enrollment.input(), 14, &root)
+        .open_stock_root(enrollment.input(), 15, &root)
         .await
         .unwrap();
     let authority = clear
-        .expose_secret(|bytes| Authority::decode(bytes, 14))
+        .expose_secret(|bytes| Authority::decode(bytes, 15))
         .unwrap();
     clear.expose_secret(|bytes| {
         let original:serde_json::Value=serde_json::from_slice(bytes).unwrap();
         assert_eq!(original["inventory"]["mappings"],"0");
         for bad in [serde_json::json!([]),serde_json::json!({"revision":"1","pools":"1","movements":"1","head":original["inventory"]["head"]})] {
             let mut value=original.clone();value["inventory"]=bad;
-            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),14).is_err());
+            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),15).is_err());
         }
         for bad in [
             serde_json::json!([]),
@@ -139,7 +139,7 @@ async fn current_grant_set_reopens_with_original_namespace_after_one_grant_chang
             serde_json::json!({"revision":"1","records":"2","parts":"3","head":"01".repeat(32)}),
         ] {
             let mut value=original.clone();value["sources"]=bad;
-            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),14).is_err());
+            assert!(Authority::decode(&serde_json::to_vec(&value).unwrap(),15).is_err());
         }
     });
     assert_eq!(authority.input, *enrollment.input());
@@ -189,7 +189,7 @@ async fn current_and_retained_roots_bind_the_complete_namespace_with_distinct_ca
     let caller = namespace.attachment(GrantId::from_bytes([9; 32])).unwrap();
     let crypto = fixture.crypto();
     let clear = b"synthetic context payload";
-    for version in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14] {
+    for version in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] {
         let current = crypto
             .seal_stock_root(&owner, version, clear)
             .await
@@ -277,7 +277,7 @@ async fn retained_v10_preserves_prior_families_and_signing_plan_retention() {
 }
 #[tokio::test]
 async fn retained_v11_preserves_prior_families_and_adds_claims_and_obtained_evidence() {
-    assert_eq!(schema::CURRENT, 14);
+    assert_eq!(schema::CURRENT, 15);
     retained_inventory_catalog(11).await;
 }
 // Exact catalog fixtures exercise retained/successor codecs; they are not
@@ -302,6 +302,47 @@ pub(super) async fn literal_catalog(
         AttachmentProof::from_protected_input(&[0xA3; 32]).unwrap(),
     )
     .unwrap();
+    literal_catalog_contents(
+        fixture,
+        path,
+        catalog,
+        &input,
+        record,
+        TransactionId::from_bytes([9; 32]),
+    )
+    .await;
+    (input, proof)
+}
+
+/// Creates an exact retained schema/root with a caller's enrollment and key.
+/// This is literal-shape/current-code evidence, never predecessor-binary evidence.
+pub(in crate::workspace::stock) async fn literal_enrollment_catalog(
+    fixture: &CryptoFixture,
+    path: &std::path::Path,
+    catalog: i64,
+    enrollment: &StockEnrollment,
+) {
+    assert!(matches!(catalog, 13 | 14));
+    let record = enrollment.record.lock().unwrap().take().unwrap();
+    literal_catalog_contents(
+        fixture,
+        path,
+        catalog,
+        enrollment.input(),
+        record,
+        enrollment.transaction_id(),
+    )
+    .await;
+}
+async fn literal_catalog_contents(
+    fixture: &CryptoFixture,
+    path: &std::path::Path,
+    catalog: i64,
+    input: &AttachmentInput,
+    record: GrantRecord,
+    transaction: TransactionId,
+) {
+    let input = input.clone();
     // Literal retained catalog/root shapes from published creation/correction source; not predecessor-binary evidence.
     let crypto = fixture.crypto();
     let grant_clear = if catalog >= 4 {
@@ -325,9 +366,9 @@ pub(super) async fn literal_catalog(
     };
     // The v4 namespace, grant2 and operation3 envelopes remain frozen literals.
     let mut value = if catalog >= 4 {
-        serde_json::json!({"version":4,"namespace":SellerAuthoritySelection::from_attachment(&input),"administrator":input.grant_id(),"transaction":TransactionId::from_bytes([9;32]),"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null},"authorization":grants::single_state(input.grant_id(),&grant).unwrap()})
+        serde_json::json!({"version":4,"namespace":SellerAuthoritySelection::from_attachment(&input),"administrator":input.grant_id(),"transaction":transaction,"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null},"authorization":grants::single_state(input.grant_id(),&grant).unwrap()})
     } else {
-        serde_json::json!({"version":catalog,"input":input,"transaction":TransactionId::from_bytes([9;32]),"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null}})
+        serde_json::json!({"version":catalog,"input":input,"transaction":transaction,"revocation":"1","inventory":{"revision":"0","pools":"0","movements":"0","head":null}})
     };
     if catalog >= 5 {
         value["version"] = serde_json::json!(catalog);
@@ -340,7 +381,7 @@ pub(super) async fn literal_catalog(
     if catalog >= 7 {
         value["inventory"]["orders"] = serde_json::json!("0");
     }
-    if matches!(catalog, 8..=14) {
+    if matches!(catalog, 8..=15) {
         value["public_sources"] =
             serde_json::json!({"revision":"0","events":"0","heads":"0","parts":"0","head":null});
     }
@@ -387,6 +428,7 @@ pub(super) async fn literal_catalog(
         12 => "PRAGMA user_version=12",
         13 => "PRAGMA user_version=13",
         14 => "PRAGMA user_version=14",
+        15 => "PRAGMA user_version=15",
         _ => unreachable!(),
     })
     .execute(&mut *tx)
@@ -395,7 +437,6 @@ pub(super) async fn literal_catalog(
     tx.commit().await.unwrap();
     connection.close().await.unwrap();
     drop(namespace);
-    (input, proof)
 }
 
 async fn retained_inventory_catalog(catalog: i64) {
@@ -412,7 +453,7 @@ async fn retained_inventory_catalog(catalog: i64) {
     assert_eq!(authority.source_checkpoint().is_some(), catalog >= 6);
     assert_eq!(
         authority.listing_checkpoint().is_some(),
-        matches!(catalog, 8..=14)
+        matches!(catalog, 8..=15)
     );
     let minimum = authority.inventory_checkpoint().unwrap();
     let context = CommandContextData::new(
@@ -655,7 +696,7 @@ async fn retained_inventory_catalog(catalog: i64) {
             .fetch_one(&mut connection)
             .await
             .unwrap();
-    let old = if matches!(catalog, 7..=14) {
+    let old = if matches!(catalog, 7..=15) {
         let retained = ledger::read(
             &mut connection,
             &input,
@@ -708,7 +749,7 @@ async fn retained_inventory_catalog(catalog: i64) {
         // inside a real SQL transaction. Row counts and the protected header
         // stay unchanged while one referenced ciphertext changes.
         for part in [false, true] {
-            if part && !matches!(catalog, 7..=14) {
+            if part && !matches!(catalog, 7..=15) {
                 continue;
             }
             let (authority, _, _, _) = read(&mut connection, &input, &fixture.crypto())
@@ -785,6 +826,7 @@ async fn retained_inventory_catalog(catalog: i64) {
         12 => "PRAGMA user_version=11",
         13 => "PRAGMA user_version=12",
         14 => "PRAGMA user_version=13",
+        15 => "PRAGMA user_version=14",
         _ => unreachable!(),
     })
     .execute(&mut connection)
@@ -914,18 +956,24 @@ async fn retained_enrollment_v1_authenticates_but_never_auto_creates_inventory()
 
 #[tokio::test]
 async fn retained_v12_preserves_initial_installation_catalog_without_upgrade() {
-    assert_eq!(schema::CURRENT, 14);
+    assert_eq!(schema::CURRENT, 15);
     retained_inventory_catalog(12).await;
 }
 
 #[tokio::test]
 async fn retained_v13_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 14);
+    assert_eq!(schema::CURRENT, 15);
     retained_inventory_catalog(13).await;
 }
 
 #[tokio::test]
-async fn current_v14_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 14);
+async fn retained_v14_authenticates_literal_catalog_and_original_inventory_records() {
+    assert_eq!(schema::CURRENT, 15);
     retained_inventory_catalog(14).await;
+}
+
+#[tokio::test]
+async fn current_v15_authenticates_literal_catalog_and_original_inventory_records() {
+    assert_eq!(schema::CURRENT, 15);
+    retained_inventory_catalog(15).await;
 }

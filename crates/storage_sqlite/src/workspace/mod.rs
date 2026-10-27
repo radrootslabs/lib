@@ -31,10 +31,10 @@ pub use stock::{
     StockHistorySnapshot, StockInstallationOutcome, StockInstallationReceipt,
     StockInstallationRequest, StockListingCapture, StockListingOutcome, StockListingReceipt,
     StockListingSnapshot, StockOperationSnapshot, StockPublicationWork, StockRecipientSnapshot,
-    StockRequestSnapshot, StockSigningAttempt, StockSigningPlanOutcome, StockSigningPlanRequest,
-    StockSigningProgress, StockSnapshotRequest, StockSourceCapture, StockSourceOutcome,
-    StockSourceProfile, StockSourceReceipt, StockSourceSnapshot, StockUnissuedInvocation,
-    StockUnissuedOutcome, StockUnissuedReceipt,
+    StockReplayAdmissionReceipt, StockRequestSnapshot, StockSigningAttempt,
+    StockSigningPlanOutcome, StockSigningPlanRequest, StockSigningProgress, StockSnapshotRequest,
+    StockSourceCapture, StockSourceOutcome, StockSourceProfile, StockSourceReceipt,
+    StockSourceSnapshot, StockUnissuedInvocation, StockUnissuedOutcome, StockUnissuedReceipt,
 };
 mod worker;
 

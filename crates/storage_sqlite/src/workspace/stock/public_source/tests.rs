@@ -43,6 +43,9 @@ struct Rig {
 }
 impl Rig {
     async fn new() -> Self {
+        Self::with_catalog(super::super::schema::CURRENT).await
+    }
+    async fn with_catalog(catalog: i64) -> Self {
         let fixture = CryptoFixture::new();
         let path = fixture.root().join("public-sources");
         let owner = PublicKey::from_hex(vectors()["author"].as_str().unwrap()).unwrap();
@@ -58,14 +61,27 @@ impl Rig {
             clock.as_ref(),
         )
         .unwrap();
-        let store = NativeWorkspace::initialize_seller_stock(
-            &path,
-            &enrollment,
-            fixture.crypto(),
-            clock.clone(),
-        )
-        .await
-        .unwrap();
+        let store = if catalog == super::super::schema::CURRENT {
+            NativeWorkspace::initialize_seller_stock(
+                &path,
+                &enrollment,
+                fixture.crypto(),
+                clock.clone(),
+            )
+            .await
+            .unwrap()
+        } else {
+            super::super::tests::literal_enrollment_catalog(&fixture, &path, catalog, &enrollment)
+                .await;
+            NativeWorkspace::open_seller_stock(
+                &path,
+                enrollment.input().clone(),
+                fixture.crypto(),
+                clock.clone(),
+            )
+            .await
+            .unwrap()
+        };
         let binding = store
             .authenticate(enrollment.input().clone(), enrollment.proof())
             .await

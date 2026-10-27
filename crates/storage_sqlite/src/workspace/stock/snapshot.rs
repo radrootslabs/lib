@@ -73,6 +73,7 @@ pub struct StockRecipientSnapshot {
     count: Sequence,
     first: Option<StockEvidenceReceipt>,
     unissued: Option<super::StockUnissuedReceipt>,
+    replay: Option<super::StockReplayAdmissionReceipt>,
 }
 impl StockRecipientSnapshot {
     pub const fn recipient(&self) -> PublicKey {
@@ -94,6 +95,11 @@ impl StockRecipientSnapshot {
     /// Authenticated original-invocation fact, independent of later S.
     pub const fn original_unissued(&self) -> Option<super::StockUnissuedReceipt> {
         self.unissued
+    }
+    /// First durable current-catalog replay admission, not invocation or S.
+    /// Retained catalogs without this family return None.
+    pub const fn replay_admission(&self) -> Option<super::StockReplayAdmissionReceipt> {
+        self.replay
     }
     pub const fn progress(&self) -> StockSigningProgress {
         if self.first.is_some() {
@@ -159,12 +165,23 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
+    Box::pin(read_authorized(turn, request, proof, auth)).await
+}
+
+// Keep authorization loading outside the projection's larger polling frame.
+async fn read_authorized(
+    turn: &mut Turn<'_>,
+    request: StockSnapshotRequest,
+    proof: AttachmentProof,
+    auth: signing_plan::Authorized,
+) -> Result<StockOperationSnapshot, OperationError> {
     if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
     let mut reports = Vec::with_capacity(2);
     let mut claims = Vec::with_capacity(2);
     let mut refusals = Vec::with_capacity(2);
+    let mut replays = Vec::with_capacity(2);
     let mut summaries = Vec::with_capacity(2);
     for recipient in auth.original.receipt.rumor().recipients() {
         let (retained, claim_proof) =
@@ -232,6 +249,24 @@ pub(in crate::workspace) async fn read(
         {
             return Err(OperationError::RecoveryRequired);
         }
+        let replay = if auth.access.authority.catalog >= 15 {
+            Box::pin(issuance::replay_admission::lookup(
+                turn.connection,
+                turn.selected,
+                turn.crypto,
+                request.operation,
+                *recipient,
+            ))
+            .await?
+        } else {
+            None
+        };
+        if replay
+            .as_ref()
+            .is_some_and(|v| reference.is_none_or(|c| c.id != v.receipt().signing_attempt_id()))
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
         reports.push(StockRecipientSnapshot {
             recipient: *recipient,
             expected,
@@ -239,8 +274,10 @@ pub(in crate::workspace) async fn read(
             count: summary.count,
             first,
             unissued: unissued.as_ref().map(|v| v.receipt()),
+            replay: replay.as_ref().map(|v| v.receipt()),
         });
         refusals.push(unissued);
+        replays.push(replay);
         claims.push(claim_proof);
         summaries.push(summary);
     }
@@ -341,6 +378,9 @@ pub(in crate::workspace) async fn read(
         }
         for (index, report) in reports.iter().enumerate() {
             claims[index].confirm(&mut tx).await?;
+            if let Some(value) = &replays[index] {
+                value.confirm(&mut tx).await?;
+            }
             if let Some(value) = &refusals[index] {
                 value.confirm(&mut tx).await?;
             }

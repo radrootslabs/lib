@@ -24,6 +24,7 @@ pub(super) enum Family {
     Installation,
     AbortedPreparation,
     OriginalUnissued,
+    ReplayAdmission,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -79,6 +80,7 @@ impl Header {
                     | Family::Installation
                     | Family::AbortedPreparation
                     | Family::OriginalUnissued
+                    | Family::ReplayAdmission
             ) != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
@@ -334,6 +336,7 @@ impl Family {
             Self::Installation => 6,
             Self::AbortedPreparation => 7,
             Self::OriginalUnissued => 8,
+            Self::ReplayAdmission => 9,
         }
     }
 }
@@ -537,7 +540,7 @@ pub(super) async fn history(
                 movements: vec![],
             }))
         }
-        Some(2) if matches!(authority.catalog, 9..=14) => Ok(Some(
+        Some(2) if matches!(authority.catalog, 9..=15) => Ok(Some(
             Box::pin(super::inventory::acceptance::codec::read(
                 connection, input, crypto, operation,
             ))
@@ -546,7 +549,7 @@ pub(super) async fn history(
             .into_history(),
         )),
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10..=14) => {
+        Some(3) if matches!(authority.catalog, 10..=15) => {
             let retained = Box::pin(super::signing_plan::read_entry(
                 connection, input, crypto, operation,
             ))
@@ -570,7 +573,7 @@ pub(super) async fn history(
             .ok_or(OperationError::RecoveryRequired)?
             .into_history(),
         )),
-        Some(6) if matches!(authority.catalog, 12..=14) => Ok(Some(
+        Some(6) if matches!(authority.catalog, 12..=15) => Ok(Some(
             Box::pin(super::inventory::installation::read_entry(
                 connection, input, crypto, operation,
             ))
@@ -586,8 +589,16 @@ pub(super) async fn history(
             .ok_or(OperationError::RecoveryRequired)?
             .into_history(),
         )),
-        Some(8) if authority.catalog == 14 => Ok(Some(
+        Some(8) if authority.catalog >= 14 => Ok(Some(
             Box::pin(super::issuance::unissued::read_entry(
+                connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
+        )),
+        Some(9) if authority.catalog >= 15 => Ok(Some(
+            Box::pin(super::issuance::replay_admission::read_entry(
                 connection, input, crypto, operation,
             ))
             .await?
@@ -662,10 +673,19 @@ impl HistoryEntry {
         }
         match (header.family, self.signing) {
             (
-                Family::SigningClaim | Family::SigningEvidence | Family::OriginalUnissued,
+                Family::SigningClaim
+                | Family::SigningEvidence
+                | Family::OriginalUnissued
+                | Family::ReplayAdmission,
                 Some(projection),
             ) => hash.update(projection.digest(header.actor.participant(), header.operation)),
-            (Family::SigningClaim | Family::SigningEvidence | Family::OriginalUnissued, None) => {
+            (
+                Family::SigningClaim
+                | Family::SigningEvidence
+                | Family::OriginalUnissued
+                | Family::ReplayAdmission,
+                None,
+            ) => {
                 return Err(OperationError::RecoveryRequired);
             }
             (_, Some(_)) => return Err(OperationError::RecoveryRequired),

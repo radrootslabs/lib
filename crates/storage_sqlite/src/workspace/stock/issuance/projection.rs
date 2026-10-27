@@ -11,6 +11,7 @@ pub(in crate::workspace::stock) enum ProjectionKind {
     Claim,
     Obtained([u8; 32]),
     OriginalUnissued(u8),
+    ReplayAdmission,
 }
 impl ProjectionKind {
     fn family(self) -> i64 {
@@ -18,6 +19,7 @@ impl ProjectionKind {
             Self::Claim => 4,
             Self::Obtained(_) => 5,
             Self::OriginalUnissued(_) => 8,
+            Self::ReplayAdmission => 9,
         }
     }
 }
@@ -31,6 +33,7 @@ impl Projection {
         hash.update(self.recipient.as_bytes());
         match self.kind {
             ProjectionKind::Claim => hash.update([0]),
+            ProjectionKind::ReplayAdmission => hash.update([3]),
             ProjectionKind::Obtained(value) => {
                 hash.update([1]);
                 hash.update(value);
@@ -71,6 +74,7 @@ pub(in crate::workspace::stock) async fn raw_projection(
         4 => sqlx::query("SELECT CASE WHEN length(operation_id)=32 THEN operation_id END,CASE WHEN length(recipient)=32 THEN recipient END,NULL FROM stock_signing_claims WHERE actor=? AND entry_id=?").bind(actor.as_slice()).bind(entry.as_slice()).fetch_optional(connection).await,
         5 => sqlx::query("SELECT CASE WHEN length(operation_id)=32 THEN operation_id END,CASE WHEN length(recipient)=32 THEN recipient END,CASE WHEN length(evidence_digest)=32 THEN evidence_digest END FROM stock_signing_evidence WHERE actor=? AND entry_id=?").bind(actor.as_slice()).bind(entry.as_slice()).fetch_optional(connection).await,
         8 => sqlx::query("SELECT CASE WHEN length(operation_id)=32 THEN operation_id END,CASE WHEN length(recipient)=32 THEN recipient END,reason FROM stock_original_unissued WHERE actor=? AND entry_id=?").bind(actor.as_slice()).bind(entry.as_slice()).fetch_optional(connection).await,
+        9 => sqlx::query("SELECT CASE WHEN length(operation_id)=32 THEN operation_id END,CASE WHEN length(recipient)=32 THEN recipient END,NULL FROM stock_replay_admissions WHERE actor=? AND entry_id=?").bind(actor.as_slice()).bind(entry.as_slice()).fetch_optional(connection).await,
         _ => return Err(OperationError::RecoveryRequired),
     }.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;
     let field = |index| {
@@ -86,6 +90,7 @@ pub(in crate::workspace::stock) async fn raw_projection(
             .map_err(|_| OperationError::RecoveryRequired)?,
         kind: match family {
             4 => ProjectionKind::Claim,
+            9 => ProjectionKind::ReplayAdmission,
             5 => ProjectionKind::Obtained(field(2)?),
             8 => {
                 let reason: u8 = row

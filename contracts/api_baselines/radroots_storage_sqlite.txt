@@ -596,6 +596,7 @@ pub const fn radroots_storage_sqlite::workspace::StockEvidencePage::next(&self) 
 pub fn radroots_storage_sqlite::workspace::StockEvidencePage::receipts(&self) -> &[radroots_storage::inventory::evidence::StockEvidenceReceipt]
 pub struct radroots_storage_sqlite::workspace::StockExactReplayPermit
 impl radroots_storage_sqlite::workspace::StockExactReplayPermit
+pub const fn radroots_storage_sqlite::workspace::StockExactReplayPermit::admission(&self) -> core::option::Option<radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt>
 pub const fn radroots_storage_sqlite::workspace::StockExactReplayPermit::authorized_at(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage_sqlite::workspace::StockExactReplayPermit::into_recovery_request(self, radroots_signing::provider::ProviderCall) -> core::result::Result<(radroots_signing::issuance::exact_recovery::ExactRecoveryRequest, radroots_storage_sqlite::workspace::StockSigningAttempt), radroots_storage::command::OperationError>
 pub const fn radroots_storage_sqlite::workspace::StockExactReplayPermit::report(&self) -> &radroots_storage_sqlite::workspace::StockSigningAttempt
@@ -691,6 +692,15 @@ pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::first_e
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::original_unissued(&self) -> core::option::Option<radroots_storage_sqlite::workspace::StockUnissuedReceipt>
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::progress(&self) -> radroots_storage_sqlite::workspace::StockSigningProgress
 pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::recipient(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage_sqlite::workspace::StockRecipientSnapshot::replay_admission(&self) -> core::option::Option<radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt>
+pub struct radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt
+impl radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt
+pub const fn radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt::authorization(&self) -> radroots_storage::workspace::seller_stock::authorization::StockAuthorizationRef
+pub const fn radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub const fn radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt::observed_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt::recipient(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage_sqlite::workspace::StockReplayAdmissionReceipt::signing_attempt_id(&self) -> radroots_domain::identifier::SigningAttemptId
 pub struct radroots_storage_sqlite::workspace::StockRequestSnapshot
 impl radroots_storage_sqlite::workspace::StockRequestSnapshot
 pub const fn radroots_storage_sqlite::workspace::StockRequestSnapshot::checkpoint(&self) -> &radroots_domain::context::CheckpointRef

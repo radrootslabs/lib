@@ -13,6 +13,7 @@ pub(in crate::workspace) mod claim;
 pub(in crate::workspace) mod evidence;
 mod projection;
 pub(in crate::workspace) mod recovery;
+pub(in crate::workspace) mod replay_admission;
 pub(in crate::workspace) mod unissued;
 pub(super) use claim::read_entry;
 pub use claim::{
@@ -22,6 +23,7 @@ pub use claim::{
 pub use evidence::{StockCapturedEvidence, StockEvidenceCapture, StockEvidencePage};
 pub(super) use projection::{Projection, ProjectionKind, raw_projection};
 pub use recovery::StockExactReplayPermit;
+pub use replay_admission::StockReplayAdmissionReceipt;
 pub use unissued::{StockUnissuedOutcome, StockUnissuedReceipt};
 
 pub(super) async fn check_counts(connection: &mut SqliteConnection) -> Result<(), WorkspaceError> {
@@ -41,6 +43,13 @@ pub(super) async fn check_counts(connection: &mut SqliteConnection) -> Result<()
         let (facts,entries):(i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM stock_original_unissued),(SELECT count(*) FROM stock_operations WHERE family=8)")
             .fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
         if facts != entries {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+    }
+    if catalog >= 15 {
+        let (rows,entries):(i64,i64)=sqlx::query_as("SELECT (SELECT count(*) FROM stock_replay_admissions),(SELECT count(*) FROM stock_operations WHERE family=9)")
+            .fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
+        if rows != entries {
             return Err(WorkspaceError::RecoveryRequired);
         }
     }

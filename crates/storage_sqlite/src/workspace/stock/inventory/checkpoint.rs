@@ -68,7 +68,15 @@ impl MinimumProof {
                 let related: Option<Vec<u8>> = row
                     .try_get(2)
                     .map_err(|_| OperationError::RecoveryRequired)?;
-                if !(0..=if catalog >= 14 { 8 } else { 7 }).contains(&family) {
+                if !(0..=if catalog >= 15 {
+                    9
+                } else if catalog >= 14 {
+                    8
+                } else {
+                    7
+                })
+                    .contains(&family)
+                {
                     return Err(OperationError::RecoveryRequired);
                 }
                 let subject: Option<Vec<u8>> = row
@@ -94,7 +102,7 @@ impl MinimumProof {
                             .await?,
                     );
                 }
-                if matches!(family, 4 | 5 | 8) {
+                if matches!(family, 4 | 5 | 8 | 9) {
                     hash.update(
                         super::super::issuance::raw_projection(
                             connection, &actor, &operation, family,
@@ -143,7 +151,7 @@ pub(in crate::workspace::stock) async fn authenticate_order_state(
     authority: &Authority,
     order: radroots_domain::OrderId,
 ) -> Result<super::super::order_state::Checked, OperationError> {
-    if !matches!(authority.catalog, 13..=14) {
+    if !matches!(authority.catalog, 13..=15) {
         return Err(OperationError::UnsupportedOperation);
     }
     let current = authority
@@ -212,7 +220,7 @@ pub(super) async fn authenticate_order_absence(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    if !matches!(authority.catalog, 9..=14) {
+    if !matches!(authority.catalog, 9..=15) {
         return Err(OperationError::UnsupportedOperation);
     }
     let upper = current.revision.get();
@@ -294,7 +302,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    let multipart = matches!(authority.catalog, 7..=14);
+    let multipart = matches!(authority.catalog, 7..=15);
     let upper = current.revision.get();
     let mut previous = current.head;
     let mut hash = history_hash(multipart);
@@ -471,7 +479,7 @@ pub(in crate::workspace::stock) async fn authenticate_minimum_with_local(
         minimum.revision().get().max(1)
     };
     let upper = current.revision.get();
-    let multipart = matches!(authority.catalog, 7..=14);
+    let multipart = matches!(authority.catalog, 7..=15);
     let mut hash = history_hash(multipart);
     let mut expected = current.head;
     for revision in (lower..=upper).rev() {
@@ -735,7 +743,7 @@ async fn authenticate_projected(
         .ok_or(OperationError::UnsupportedOperation)?;
     let upper = current.revision.get();
     let mut expected = current.head;
-    let multipart = matches!(authority.catalog, 7..=14);
+    let multipart = matches!(authority.catalog, 7..=15);
     let mut hash = history_hash(multipart);
     for revision in (1..=upper).rev() {
         let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32").bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;

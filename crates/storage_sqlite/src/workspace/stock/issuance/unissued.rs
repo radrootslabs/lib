@@ -329,7 +329,7 @@ pub(in crate::workspace) async fn capture(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, input, turn.crypto).await?;
-    if authority.catalog != 14 {
+    if !matches!(authority.catalog, 14..=15) {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
@@ -483,7 +483,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     )
     .await?;
-    if auth.access.authority.catalog != 14 {
+    if !matches!(auth.access.authority.catalog, 14..=15) {
         return Err(OperationError::UnsupportedOperation);
     }
     let witness = Box::pin(checkpoint::authenticate_minimum(

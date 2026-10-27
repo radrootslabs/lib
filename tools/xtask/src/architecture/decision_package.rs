@@ -244,6 +244,16 @@ struct QualifiedLocalRecovery {
     unsupported_legacy_fallback: bool,
     after_expiry_retrieval_available: bool,
     legacy_and_first_dispatch_unchanged: bool,
+    current_replay_admission_required: bool,
+    replay_admission_journal_family: u16,
+    replay_admission_payload_version: u16,
+    replay_admission_payload_bytes: u16,
+    replay_admission_unknown_returns_permit: bool,
+    replay_admission_reauthorizes_current: bool,
+    replay_admission_clear_on_refusal: bool,
+    replay_admission_stock_effect: bool,
+    retained_untracked_catalogs: Vec<u16>,
+    replay_admission_report_is_release_authority: bool,
 }
 
 #[derive(Deserialize)]
@@ -594,10 +604,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 14
+            && stock.schema_version == 15
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v14"
+            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v15"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -876,7 +886,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
             && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
-            && stock.qualified_local_recovery.native_catalog == 14
+            && stock.qualified_local_recovery.native_catalog == 15
             && stock.qualified_local_recovery.worker_charge_bytes == 1048576
             && stock
                 .qualified_local_recovery
@@ -900,6 +910,35 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock
                 .qualified_local_recovery
                 .legacy_and_first_dispatch_unchanged
+            && stock
+                .qualified_local_recovery
+                .current_replay_admission_required
+            && stock
+                .qualified_local_recovery
+                .replay_admission_journal_family
+                == 9
+            && stock
+                .qualified_local_recovery
+                .replay_admission_payload_version
+                == 1
+            && stock
+                .qualified_local_recovery
+                .replay_admission_payload_bytes
+                == 184
+            && !stock
+                .qualified_local_recovery
+                .replay_admission_unknown_returns_permit
+            && stock
+                .qualified_local_recovery
+                .replay_admission_reauthorizes_current
+            && !stock
+                .qualified_local_recovery
+                .replay_admission_clear_on_refusal
+            && !stock.qualified_local_recovery.replay_admission_stock_effect
+            && stock.qualified_local_recovery.retained_untracked_catalogs == [13, 14]
+            && !stock
+                .qualified_local_recovery
+                .replay_admission_report_is_release_authority
             && stock.preparation_abort.payload_version == 1
             && stock.preparation_abort.journal_family == 7
             && stock.preparation_abort.worker_charge_bytes == 1048576
@@ -1790,6 +1829,16 @@ mod tests {
             ("unsupported_legacy_fallback", json!(true)),
             ("after_expiry_retrieval_available", json!(true)),
             ("legacy_and_first_dispatch_unchanged", json!(false)),
+            ("current_replay_admission_required", json!(false)),
+            ("replay_admission_journal_family", json!(8)),
+            ("replay_admission_payload_version", json!(2)),
+            ("replay_admission_payload_bytes", json!(185)),
+            ("replay_admission_unknown_returns_permit", json!(true)),
+            ("replay_admission_reauthorizes_current", json!(false)),
+            ("replay_admission_clear_on_refusal", json!(true)),
+            ("replay_admission_stock_effect", json!(true)),
+            ("retained_untracked_catalogs", json!([15])),
+            ("replay_admission_report_is_release_authority", json!(true)),
         ] {
             assert!(
                 validate_bytes(&changed(

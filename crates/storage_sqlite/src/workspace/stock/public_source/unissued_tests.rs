@@ -364,7 +364,7 @@ async fn lost_original_negative_append_waiter_drains_and_reopens_the_same_fact()
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v14", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v15", 0);
     let mut pending = Box::pin(capture(&r, &value));
     assert!(futures::poll!(pending.as_mut()).is_pending());
     provider.gate.entered();

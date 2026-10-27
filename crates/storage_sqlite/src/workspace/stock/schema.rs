@@ -1,7 +1,7 @@
 //! Exact stock catalogs. Enrollment-only version1 is retained without upgrade.
 use super::WorkspaceError;
 use sqlx::SqliteConnection;
-pub(super) const CURRENT: i64 = 14;
+pub(super) const CURRENT: i64 = 15;
 const AUTHORITY: &str = "CREATE TABLE stock_authority (singleton INTEGER PRIMARY KEY CHECK(singleton=1), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 const GRANTS: &str = "CREATE TABLE stock_grants (grant_id BLOB PRIMARY KEY CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
 const POOLS: &str = "CREATE TABLE stock_pools (pool_id BLOB PRIMARY KEY CHECK(length(pool_id)=32), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
@@ -18,6 +18,7 @@ const OPERATIONS_V11: &str = "CREATE TABLE stock_operations (actor BLOB NOT NULL
 const OPERATIONS_V12: &str = "CREATE TABLE stock_operations (actor BLOB NOT NULL CHECK(length(actor)=32), grant_id BLOB NOT NULL REFERENCES stock_grants(grant_id), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), command_digest BLOB NOT NULL CHECK(length(command_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), pool_id BLOB REFERENCES stock_pools(pool_id) DEFERRABLE INITIALLY DEFERRED, revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), family INTEGER NOT NULL DEFAULT 0 CHECK(family BETWEEN 0 AND 6), order_id BLOB CHECK(order_id IS NULL OR length(order_id)=32), related_operation BLOB CHECK(related_operation IS NULL OR length(related_operation)=32), subject_grant BLOB REFERENCES stock_grants(grant_id) CHECK(subject_grant IS NULL OR length(subject_grant)=32), PRIMARY KEY(actor,grant_id,operation_id), CHECK((family=0 AND pool_id IS NOT NULL AND order_id IS NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family=1 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NOT NULL) OR (family=2 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family BETWEEN 3 AND 6 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NULL))) STRICT, WITHOUT ROWID";
 const OPERATIONS_V13: &str = "CREATE TABLE stock_operations (actor BLOB NOT NULL CHECK(length(actor)=32), grant_id BLOB NOT NULL REFERENCES stock_grants(grant_id), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), command_digest BLOB NOT NULL CHECK(length(command_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), pool_id BLOB REFERENCES stock_pools(pool_id) DEFERRABLE INITIALLY DEFERRED, revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), family INTEGER NOT NULL DEFAULT 0 CHECK(family BETWEEN 0 AND 7), order_id BLOB CHECK(order_id IS NULL OR length(order_id)=32), related_operation BLOB CHECK(related_operation IS NULL OR length(related_operation)=32), subject_grant BLOB REFERENCES stock_grants(grant_id) CHECK(subject_grant IS NULL OR length(subject_grant)=32), PRIMARY KEY(actor,grant_id,operation_id), CHECK((family=0 AND pool_id IS NOT NULL AND order_id IS NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family=1 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NOT NULL) OR (family=2 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family BETWEEN 3 AND 7 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NULL))) STRICT, WITHOUT ROWID";
 const OPERATIONS_V14: &str = "CREATE TABLE stock_operations (actor BLOB NOT NULL CHECK(length(actor)=32), grant_id BLOB NOT NULL REFERENCES stock_grants(grant_id), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), command_digest BLOB NOT NULL CHECK(length(command_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), pool_id BLOB REFERENCES stock_pools(pool_id) DEFERRABLE INITIALLY DEFERRED, revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), family INTEGER NOT NULL DEFAULT 0 CHECK(family BETWEEN 0 AND 8), order_id BLOB CHECK(order_id IS NULL OR length(order_id)=32), related_operation BLOB CHECK(related_operation IS NULL OR length(related_operation)=32), subject_grant BLOB REFERENCES stock_grants(grant_id) CHECK(subject_grant IS NULL OR length(subject_grant)=32), PRIMARY KEY(actor,grant_id,operation_id), CHECK((family=0 AND pool_id IS NOT NULL AND order_id IS NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family=1 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NOT NULL) OR (family=2 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family BETWEEN 3 AND 8 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NULL))) STRICT, WITHOUT ROWID";
+const OPERATIONS_V15: &str = "CREATE TABLE stock_operations (actor BLOB NOT NULL CHECK(length(actor)=32), grant_id BLOB NOT NULL REFERENCES stock_grants(grant_id), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), command_digest BLOB NOT NULL CHECK(length(command_digest)=32), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), pool_id BLOB REFERENCES stock_pools(pool_id) DEFERRABLE INITIALLY DEFERRED, revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), family INTEGER NOT NULL DEFAULT 0 CHECK(family BETWEEN 0 AND 9), order_id BLOB CHECK(order_id IS NULL OR length(order_id)=32), related_operation BLOB CHECK(related_operation IS NULL OR length(related_operation)=32), subject_grant BLOB REFERENCES stock_grants(grant_id) CHECK(subject_grant IS NULL OR length(subject_grant)=32), PRIMARY KEY(actor,grant_id,operation_id), CHECK((family=0 AND pool_id IS NOT NULL AND order_id IS NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family=1 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NOT NULL) OR (family=2 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NULL AND subject_grant IS NULL) OR (family BETWEEN 3 AND 9 AND pool_id IS NULL AND order_id IS NOT NULL AND related_operation IS NOT NULL AND subject_grant IS NULL))) STRICT, WITHOUT ROWID";
 const MOVEMENTS: &str = "CREATE TABLE stock_movements (movement_id BLOB PRIMARY KEY CHECK(length(movement_id)=32), actor BLOB NOT NULL CHECK(length(actor)=32), grant_id BLOB NOT NULL CHECK(length(grant_id)=32), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), pool_id BLOB NOT NULL REFERENCES stock_pools(pool_id), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), FOREIGN KEY(actor,grant_id,operation_id) REFERENCES stock_operations(actor,grant_id,operation_id)) STRICT, WITHOUT ROWID";
 pub(super) fn objects(
     version: i64,
@@ -28,13 +29,15 @@ pub(super) fn objects(
     ];
     match version {
         1 => {}
-        2..=14 => objects.extend([
+        2..=15 => objects.extend([
             ("table", "stock_pools", "stock_pools", POOLS),
             (
                 "table",
                 "stock_operations",
                 "stock_operations",
-                if version >= 14 {
+                if version >= 15 {
+                    OPERATIONS_V15
+                } else if version >= 14 {
                     OPERATIONS_V14
                 } else if version >= 13 {
                     OPERATIONS_V13
@@ -85,7 +88,7 @@ pub(super) fn objects(
     if version >= 5 {
         objects.push(("table","stock_mappings","stock_mappings","CREATE TABLE stock_mappings (listing_author BLOB NOT NULL CHECK(length(listing_author)=32), listing_d BLOB NOT NULL CHECK(length(listing_d)=16), option_id BLOB NOT NULL CHECK(length(option_id)=32), pool_id BLOB NOT NULL REFERENCES stock_pools(pool_id), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(listing_author,listing_d,option_id)) STRICT, WITHOUT ROWID"));
     }
-    if (6..=14).contains(&version) {
+    if (6..=15).contains(&version) {
         objects.push(("table","stock_source_records","stock_source_records","CREATE TABLE stock_source_records (record_id BLOB PRIMARY KEY CHECK(length(record_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         objects.push(("table","stock_source_evidence","stock_source_evidence","CREATE TABLE stock_source_evidence (envelope_id BLOB PRIMARY KEY CHECK(length(envelope_id)=32), record_id BLOB REFERENCES stock_source_records(record_id), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         objects.push(("index","stock_source_transaction_identity","stock_source_evidence","CREATE UNIQUE INDEX stock_source_transaction_identity ON stock_source_evidence(transaction_id)"));
@@ -121,7 +124,7 @@ pub(super) fn objects(
             objects.push(("table","stock_orders","stock_orders","CREATE TABLE stock_orders (order_id BLOB PRIMARY KEY CHECK(length(order_id)=32), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         }
     }
-    if matches!(version, 8..=14) {
+    if matches!(version, 8..=15) {
         objects.push(("table","stock_public_events","stock_public_events","CREATE TABLE stock_public_events (event_id BLOB PRIMARY KEY CHECK(length(event_id)=32), listing_author BLOB NOT NULL CHECK(length(listing_author)=32), listing_d BLOB NOT NULL CHECK(length(listing_d)=16), created_at BLOB NOT NULL CHECK(length(created_at)=8), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         objects.push(("index","stock_public_transaction_identity","stock_public_events","CREATE UNIQUE INDEX stock_public_transaction_identity ON stock_public_events(transaction_id)"));
         objects.push((
@@ -178,6 +181,10 @@ pub(super) fn objects(
     if version >= 14 {
         objects.push(("table","stock_original_unissued","stock_original_unissued","CREATE TABLE stock_original_unissued (actor BLOB NOT NULL CHECK(length(actor)=32), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), recipient BLOB NOT NULL CHECK(length(recipient)=32), reason INTEGER NOT NULL CHECK(reason BETWEEN 1 AND 9), entry_id BLOB NOT NULL CHECK(length(entry_id)=32), PRIMARY KEY(actor,operation_id,recipient), FOREIGN KEY(actor,operation_id,recipient) REFERENCES stock_signing_claims(actor,operation_id,recipient), FOREIGN KEY(actor,entry_id) REFERENCES stock_operations(actor,operation_id)) STRICT, WITHOUT ROWID"));
         objects.push(("index","stock_original_unissued_entry","stock_original_unissued","CREATE UNIQUE INDEX stock_original_unissued_entry ON stock_original_unissued(actor,entry_id)"));
+    }
+    if version >= 15 {
+        objects.push(("table","stock_replay_admissions","stock_replay_admissions","CREATE TABLE stock_replay_admissions (actor BLOB NOT NULL CHECK(length(actor)=32), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), recipient BLOB NOT NULL CHECK(length(recipient)=32), entry_id BLOB NOT NULL CHECK(length(entry_id)=32), PRIMARY KEY(actor,operation_id,recipient), FOREIGN KEY(actor,operation_id,recipient) REFERENCES stock_signing_claims(actor,operation_id,recipient), FOREIGN KEY(actor,entry_id) REFERENCES stock_operations(actor,operation_id)) STRICT, WITHOUT ROWID"));
+        objects.push(("index","stock_replay_admission_entry","stock_replay_admissions","CREATE UNIQUE INDEX stock_replay_admission_entry ON stock_replay_admissions(actor,entry_id)"));
     }
     Ok(objects)
 }

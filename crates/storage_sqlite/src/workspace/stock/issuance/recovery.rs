@@ -3,7 +3,10 @@ use super::super::{
     inventory::{Turn, acceptance},
     order_state,
 };
-use super::{StockClaimRequest, StockSigningAttempt, claim, signing_plan};
+use super::{
+    StockClaimRequest, StockReplayAdmissionReceipt, StockSigningAttempt, claim, replay_admission,
+    signing_plan,
+};
 use crate::workspace::{AttachmentProof, NativeWorkspace, WorkspaceError};
 use radroots_domain::UnixSeconds;
 use radroots_protocol::intent::SigningReplay;
@@ -20,8 +23,16 @@ use sqlx::Connection;
 pub struct StockExactReplayPermit {
     report: StockSigningAttempt,
     at: UnixSeconds,
+    admission: Option<StockReplayAdmissionReceipt>,
 }
 impl StockExactReplayPermit {
+    /// Confirmed first replay admission in current catalog15. Retained13/14
+    /// permits are explicitly untracked and return None; no report authorizes
+    /// stock release, a fresh first dispatch or another replay invocation.
+    pub const fn admission(&self) -> Option<StockReplayAdmissionReceipt> {
+        self.admission
+    }
+
     /// Borrows the original protected attempt; this report cannot mint a permit.
     pub const fn report(&self) -> &StockSigningAttempt {
         &self.report
@@ -70,7 +81,7 @@ pub(in crate::workspace) async fn authorize(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 13..=14) {
+    if !matches!(auth.access.authority.catalog, 13..=15) {
         return Err(OperationError::UnsupportedOperation);
     }
     let plan = auth.plan.as_ref().ok_or(OperationError::StaleState)?;
@@ -112,6 +123,11 @@ pub(in crate::workspace) async fn authorize(
         auth.original.receipt.held_pools(),
     ))
     .await?;
+    let pending = if auth.access.authority.catalog >= 15 {
+        Some(Box::pin(replay_admission::prepare(turn, &auth, &retained, at)).await?)
+    } else {
+        None
+    };
     let mut tx = turn
         .connection
         .begin_with("BEGIN IMMEDIATE")
@@ -131,18 +147,38 @@ pub(in crate::workspace) async fn authorize(
         if current.observed_at() < at || current.observed_at() < retained.report.claimed_at() {
             return Err(WorkspaceError::Unavailable.into());
         }
+        if let Some(pending) = &pending {
+            pending.apply(&mut tx, turn.selected, &auth).await?;
+        }
+        turn.namespace.validate()?;
         Ok(current.observed_at())
     }
     .await;
-    // No write, claim, stock movement, provider call or durable result is
-    // manufactured by authorization. A failed rollback still fences the owner.
-    if tx.rollback().await.is_err() {
+    let authorized_at = match checked {
+        Ok(value) => value,
+        Err(error) => {
+            if tx.rollback().await.is_err() {
+                *turn.uncertain = true;
+                return Err(OperationError::RecoveryRequired);
+            }
+            return Err(error);
+        }
+    };
+    // A current fresh marker must be committed before a permit can escape.
+    // Existing markers and retained13/14 authorization require no new write.
+    let done = if pending.as_ref().is_some_and(|v| v.writes()) {
+        tx.commit().await
+    } else {
+        tx.rollback().await
+    };
+    if done.is_err() {
         *turn.uncertain = true;
         return Err(OperationError::RecoveryRequired);
     }
     Ok(StockExactReplayPermit {
         report: retained.report,
-        at: checked?,
+        at: authorized_at,
+        admission: pending.as_ref().map(|v| v.receipt()),
     })
 }
 

@@ -82,7 +82,7 @@
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
       "captured_replay": "local_replay_safe",
-      "native_catalog": 14,
+      "native_catalog": 15,
       "worker_charge_bytes": 1048576,
       "existing_protected_claim_required": true,
       "current_execute_consent_required": true,
@@ -93,12 +93,22 @@
       "provider_work_inside_sql": false,
       "unsupported_legacy_fallback": false,
       "after_expiry_retrieval_available": false,
-      "legacy_and_first_dispatch_unchanged": true
+      "legacy_and_first_dispatch_unchanged": true,
+      "current_replay_admission_required": true,
+      "replay_admission_journal_family": 9,
+      "replay_admission_payload_version": 1,
+      "replay_admission_payload_bytes": 184,
+      "replay_admission_unknown_returns_permit": false,
+      "replay_admission_reauthorizes_current": true,
+      "replay_admission_clear_on_refusal": false,
+      "replay_admission_stock_effect": false,
+      "retained_untracked_catalogs": [13, 14],
+      "replay_admission_report_is_release_authority": false
     },
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 14,
+    "schema_version": 15,
     "retained_enrollment_versions": [
       1
     ],
@@ -114,9 +124,10 @@
       10,
       11,
       12,
-      13
+      13,
+      14
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v14",
+    "authority_payload_schema": "radroots.seller_stock.authority.v15",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",

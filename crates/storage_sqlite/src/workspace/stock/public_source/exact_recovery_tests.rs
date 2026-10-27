@@ -48,6 +48,9 @@ fn signer() -> LocalSigner {
     .unwrap()
 }
 
+#[path = "replay_admission_tests.rs"]
+mod admissions;
+
 #[tokio::test]
 async fn original_local_claim_reopens_recovers_exact_s_and_installs_once_without_another_hold() {
     let mut r = Rig::new().await;
@@ -70,7 +73,12 @@ async fn original_local_claim_reopens_recovers_exact_s_and_installs_once_without
     let permitted = authorize(&r, &receipt, recipient).await.unwrap();
     assert_eq!(permitted.report().attempt_id(), original_attempt);
     assert_eq!(permitted.report().binding(), original_binding);
-    assert_eq!(inventory_minimum(&r).await, acknowledged);
+    let admission = permitted
+        .admission()
+        .expect("current replay must be durably tracked");
+    assert_eq!(inventory_minimum(&r).await, admission.checkpoint());
+    assert!(admission.checkpoint().revision() > acknowledged.revision());
+
     let (request, report) = permitted.into_recovery_request(call(&r, 250000)).unwrap();
     assert_eq!(request.binding(), original_binding);
     let expected_event = request.original().with_event(|_, id| id);
@@ -429,7 +437,7 @@ async fn replay_authorization_rechecks_actual_late_root_grant_plan_claim_backing
         let mut raw = database(&r).await;
         provider
             .gate
-            .arm(Direction::Unwrap, "radroots.seller_stock.authority.v14", 0);
+            .arm(Direction::Unwrap, "radroots.seller_stock.authority.v15", 0);
         let mut pending = Box::pin(
             r.store
                 .authorize_stock_exact_replay(request, r.enrollment.proof()),
@@ -483,7 +491,7 @@ async fn observer_loss_drains_authorization_without_signing_or_a_new_claim_and_r
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v14", 0);
+        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v15", 0);
     let mut pending = Box::pin(
         r.store
             .authorize_stock_exact_replay(request, r.enrollment.proof()),
@@ -496,11 +504,13 @@ async fn observer_loss_drains_authorization_without_signing_or_a_new_claim_and_r
     provider.gate.release();
     closing.await.unwrap();
     reopen_plain(&mut r).await;
-    assert_eq!(inventory_minimum(&r).await, before);
+    let admitted = inventory_minimum(&r).await;
+    assert!(admitted.revision() > before.revision());
     let permitted = authorize(&r, &receipt, recipient).await.unwrap();
     assert_eq!(permitted.report().attempt_id(), original);
+    assert_eq!(permitted.admission().unwrap().checkpoint(), admitted);
     drop(permitted);
-    assert_eq!(inventory_minimum(&r).await, before);
+    assert_eq!(inventory_minimum(&r).await, admitted);
     assert_pool(&r, 80, 9, 1, 2).await;
     r.store.close().await.unwrap();
 }
