@@ -97,7 +97,7 @@ pub(crate) fn observe(
     if snapshot.aborted()
         && recipients
             .iter()
-            .any(|v| v.claim.is_some() || v.evidence.is_some() || v.original_unissued.is_some())
+            .any(|v| v.evidence.is_some() || (v.claim.is_some() && v.original_unissued.is_none()))
     {
         return Err(OperationError::RecoveryRequired);
     }

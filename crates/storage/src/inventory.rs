@@ -299,8 +299,9 @@ pub trait InventoryStore: WorkspaceStore {
         Box::pin(async { Err(OperationError::UnsupportedOperation) })
     }
     /// Explicit original-preparation cleanup. The concrete store must prove
-    /// every original claim absent and retain the exact release atomically.
-    /// Neither this port nor an unsupported host supplies an absence proof.
+    /// every original invocation unissued, exclude outstanding replay and
+    /// obtained output, and retain the exact release atomically. Neither this
+    /// port nor an unsupported host supplies those proofs.
     fn abort_proven_unissued(
         &self,
         _request: StockAbortRequest,

@@ -239,8 +239,9 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         .await
     }
 
-    /// Explicitly asks the selected store to prove original claim absence and
-    /// atomically release only that preparation. Selectors are never proof.
+    /// Explicitly asks the selected store to prove original nonissuance and
+    /// replay absence, then atomically release only that preparation.
+    /// Selectors are never proof.
     pub async fn abort_proven_unissued(
         &self,
         store: Shared<dyn InventoryStore>,

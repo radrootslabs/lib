@@ -6,6 +6,84 @@ use super::{
 };
 use sqlx::Connection;
 
+#[tokio::test]
+async fn actual_original_refusals_allow_explicit_cleanup_and_aborted_status_never_reissues() {
+    let r = Rig::new().await;
+    r.control.fail_peer.store(true, Ordering::SeqCst);
+    r.control.fail_self.store(true, Ordering::SeqCst);
+    let (command, original) = r.accept().await;
+    assert!(!original.aborted());
+    assert!(original.installation().is_none());
+    for facts in original.recipients() {
+        assert!(facts.evidence.is_none());
+        assert_eq!(
+            facts.original_unissued.unwrap().claim,
+            facts.claim.unwrap().id
+        );
+    }
+    assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+    let (_, _, minimum) = r.minima().await;
+    let radroots_storage::inventory::StockAbortOutcome::Aborted(released) = r
+        .client
+        .operations(&r.scope)
+        .abort_proven_unissued(minimum, command.context().operation_id(), command.digest())
+        .await
+        .unwrap()
+    else {
+        panic!("actual cleanup must be confirmed");
+    };
+    let (_, _, minimum) = r.minima().await;
+    let observed = r
+        .client
+        .orders(&r.scope)
+        .acceptance_status(minimum, command.context().operation_id(), command.digest())
+        .await
+        .unwrap();
+    assert!(observed.aborted());
+    assert!(observed.installation().is_none());
+    assert!(observed.recipients() == original.recipients());
+    r.control.fail_peer.store(false, Ordering::SeqCst);
+    r.control.fail_self.store(false, Ordering::SeqCst);
+    let resumed = r
+        .client
+        .orders(&r.scope)
+        .resume_acceptance(minimum, command.context().operation_id(), command.digest())
+        .await
+        .unwrap();
+    assert!(resumed.aborted());
+    assert!(resumed.recipients() == original.recipients());
+    assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+    assert_eq!(r.control.recoveries.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        r.client
+            .operations(&r.scope)
+            .preparation_abort(minimum, command.context().operation_id(), command.digest())
+            .await
+            .unwrap()
+            .unwrap()
+            .attempt(),
+        released.attempt()
+    );
+    let mut raw = sqlx::SqliteConnection::connect(&format!(
+        "sqlite://{}",
+        r._temp
+            .path()
+            .join("stock/stock_execution_v1.sqlite")
+            .display()
+    ))
+    .await
+    .unwrap();
+    let facts: (i64, i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM stock_signing_claims),(SELECT count(*) FROM stock_original_unissued),(SELECT count(*) FROM stock_signing_evidence),(SELECT count(*) FROM stock_replay_admissions),(SELECT count(*) FROM stock_aborts)",
+    )
+    .fetch_one(&mut raw)
+    .await
+    .unwrap();
+    assert_eq!(facts, (2, 2, 0, 0, 1));
+    raw.close().await.unwrap();
+    r.client.close().await.unwrap();
+}
+
 async fn fault(r: &Rig, uncertain: bool) -> sqlx::SqliteConnection {
     let path = r._temp.path().join("stock/stock_execution_v1.sqlite");
     let mut connection = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))

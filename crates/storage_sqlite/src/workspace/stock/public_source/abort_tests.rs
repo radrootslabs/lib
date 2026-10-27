@@ -8,6 +8,8 @@ use super::*;
 use radroots_storage::inventory::{
     InventoryStore, StockAbortOutcome, StockAbortReceipt, StockAbortRequest,
 };
+#[path = "claimed_abort_tests.rs"]
+mod claimed;
 #[path = "abort_failures_tests.rs"]
 mod failures;
 
@@ -41,8 +43,8 @@ pub(super) fn released(value: StockAbortOutcome) -> StockAbortReceipt {
 }
 #[tokio::test]
 async fn unclaimed_preparation_aborts_before_or_after_t1_and_originals_survive_new_order_attempt() {
-    for has_plan in [false, true] {
-        let mut r = Rig::new().await;
+    for (catalog, has_plan) in [(13, false), (14, true), (15, false), (15, true)] {
+        let mut r = Rig::with_catalog(catalog).await;
         let (command, receipt) = Box::pin(prepared(&r)).await;
         if has_plan {
             bound(bind(&r, &receipt, 42).await.unwrap());

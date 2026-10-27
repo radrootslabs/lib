@@ -102,7 +102,10 @@
       "replay_admission_reauthorizes_current": true,
       "replay_admission_clear_on_refusal": false,
       "replay_admission_stock_effect": false,
-      "retained_untracked_catalogs": [13, 14],
+      "retained_untracked_catalogs": [
+        13,
+        14
+      ],
       "replay_admission_report_is_release_authority": false
     },
     "scope": "seller_stock_owner",
@@ -369,10 +372,9 @@
       "relay_delivery_claimed": false
     },
     "preparation_abort": {
-      "payload_version": 1,
+      "payload_version": 2,
       "journal_family": 7,
       "worker_charge_bytes": 1048576,
-      "all_recipient_claims_must_be_absent": true,
       "caller_nonissuance_assertion_is_proof": false,
       "current_exact_recovery_consent_required": true,
       "atomic_exact_original_release_required": true,
@@ -385,7 +387,25 @@
       "shared_storage_port": "radroots_storage.inventory.InventoryStore",
       "shared_model_owner": "radroots_storage.inventory",
       "native_workspace_type_aliases": false,
-      "unsupported_hosts_return": "capability_unavailable"
+      "unsupported_hosts_return": "capability_unavailable",
+      "retained_payload_versions": [
+        1
+      ],
+      "retained_v1_requires_absent_claims": true,
+      "claimed_cleanup_catalogs": [
+        15
+      ],
+      "untracked_claimed_catalogs": [
+        13,
+        14
+      ],
+      "per_recipient_proof_count": 2,
+      "original_unissued_required_for_every_claim": true,
+      "replay_admission_blocks_release": true,
+      "obtained_evidence_blocks_release": true,
+      "contradictory_evidence_retained": true,
+      "contradiction_requires_recovery": true,
+      "caller_reports_are_release_authority": false
     }
   },
   "provenance": {

@@ -1,10 +1,11 @@
-//! Explicit release of original preparation only when every claim is absent.
-use super::super::{issuance::claim, ledger, order_state, signing_plan};
+//! Explicit release after authenticated original nonissuance and replay absence.
+use super::super::{ledger, order_state, signing_plan};
 use super::*;
 use checkpoint::{EntryIdentity, IdentityTarget};
 use radroots_domain::stock::StockTicks;
 mod codec;
 mod projection;
+mod proof;
 pub(in crate::workspace::stock) use codec::read_entry;
 pub(in crate::workspace::stock) use projection::{Projection, raw_projection};
 
@@ -33,6 +34,8 @@ struct Body {
     aborted_at: UnixSeconds,
     authorization: StockAuthorizationRef,
     effects: Vec<Effect>,
+    #[serde(default, skip_serializing_if = "proof::Payload::legacy")]
+    proofs: proof::Payload,
 }
 fn after(before: PoolSnapshot, quantity: StockTicks) -> Result<PoolSnapshot, OperationError> {
     let balances = before
@@ -149,6 +152,14 @@ pub(in crate::workspace) async fn abort(
         &proof,
     ))
     .await?;
+    Box::pin(abort_authorized(turn, request, proof, auth)).await
+}
+async fn abort_authorized(
+    turn: &mut Turn<'_>,
+    request: StockAbortRequest,
+    proof: AttachmentProof,
+    auth: signing_plan::Authorized,
+) -> Result<StockAbortOutcome, OperationError> {
     if !matches!(auth.access.authority.catalog, 13..=15) {
         return Err(OperationError::UnsupportedOperation);
     }
@@ -180,26 +191,7 @@ pub(in crate::workspace) async fn abort(
     }) {
         return Err(OperationError::StaleState);
     }
-    let mut claims = Vec::with_capacity(2);
-    for recipient in auth.original.receipt.rumor().recipients() {
-        let (claim, witness) = Box::pin(claim::existing(
-            turn,
-            &auth,
-            request.operation_id(),
-            *recipient,
-        ))
-        .await?;
-        if claim.is_some() {
-            return Err(OperationError::RecoveryRequired);
-        }
-        claims.push(witness);
-    }
-    no_claims(
-        turn.connection,
-        turn.selected.participant(),
-        request.operation_id(),
-    )
-    .await?;
+    let nonissuance = Box::pin(proof::prepare(turn, &auth, request.operation_id(), at)).await?;
     let backing = Box::pin(super::backing::read(
         turn,
         &auth.access,
@@ -236,7 +228,7 @@ pub(in crate::workspace) async fn abort(
     )
     .map_err(|_| WorkspaceError::Capacity)?;
     let body = Body {
-        version: 1,
+        version: if nonissuance.payload.legacy() { 1 } else { 2 },
         operation: request.operation_id(),
         original_head: auth.original.frame.header.head,
         plan: auth.plan.as_ref().map(|plan| Plan {
@@ -250,6 +242,7 @@ pub(in crate::workspace) async fn abort(
             .authorization
             .ok_or(OperationError::RecoveryRequired)?,
         effects,
+        proofs: nonissuance.payload.clone(),
     };
     let clear = zeroize::Zeroizing::new(
         serde_json::to_vec(&body).map_err(|_| OperationError::StorageFailure)?,
@@ -276,7 +269,7 @@ pub(in crate::workspace) async fn abort(
         parts: 0,
         body_digest: [0; 32],
     };
-    header.head = codec::head(&header, &clear);
+    header.head = codec::head(&header, &clear, body.version)?;
     let projection = Projection::new(&header, &body)?;
     let framed = ledger::prepare(turn.crypto, turn.selected, header, &clear).await?;
     let receipt = codec::receipt(turn.selected, &framed.header, &body)?;
@@ -340,8 +333,7 @@ pub(in crate::workspace) async fn abort(
         .map_err(|_| OperationError::StorageFailure)?;
     let changed:Result<(),OperationError>=async {
         Box::pin(identity.confirm(&mut tx)).await?;
-        for claim in &claims {Box::pin(claim.confirm(&mut tx)).await?;}
-        no_claims(&mut tx,turn.selected.participant(),request.operation_id()).await?;
+        Box::pin(nonissuance.confirm(&mut tx)).await?;
         let checked=Box::pin(auth.confirm(&mut tx,turn.namespace,turn.clock,&proof,false)).await?;
         if checked.observed_at()<at {return Err(WorkspaceError::Unavailable.into());}
         for pool in &backing {Box::pin(pool.confirm(&mut tx)).await?;}

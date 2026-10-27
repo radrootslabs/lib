@@ -15,10 +15,19 @@ pub(in crate::workspace::stock) struct Retained {
     projection: Projection,
     plan: Option<Plan>,
     movements: Vec<ledger::MovementWitness>,
+    nonissuance: proof::Witness,
 }
-pub(super) fn head(header: &ledger::Header, body: &[u8]) -> CheckpointDigest {
+pub(super) fn head(
+    header: &ledger::Header,
+    body: &[u8],
+    version: u8,
+) -> Result<CheckpointDigest, OperationError> {
     let mut hash = Sha256::new();
-    hash.update(b"radroots.seller_stock.abort_chain.v1\0");
+    hash.update(match version {
+        1 => b"radroots.seller_stock.abort_chain.v1\0".as_slice(),
+        2 => b"radroots.seller_stock.abort_chain.v2\0".as_slice(),
+        _ => return Err(OperationError::RecoveryRequired),
+    });
     hash.update(header.namespace.workspace_id().as_bytes());
     hash.update(header.namespace.authority().executor_id().as_bytes());
     hash.update(
@@ -45,7 +54,7 @@ pub(super) fn head(header: &ledger::Header, body: &[u8]) -> CheckpointDigest {
     hash.update([u8::from(header.previous.is_some())]);
     hash.update(header.previous.map(|id| *id.as_bytes()).unwrap_or([0; 32]));
     hash.update(Sha256::digest(body));
-    CheckpointDigest::from_bytes(hash.finalize().into())
+    Ok(CheckpointDigest::from_bytes(hash.finalize().into()))
 }
 pub(super) fn receipt(
     input: &AttachmentInput,
@@ -106,9 +115,9 @@ pub(in crate::workspace::stock) async fn read_entry(
     }
     let body: Body = super::super::super::closed_record(&frame.body)
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if body.version != 1
+    if !matches!((body.version, body.proofs.legacy()), (1, true) | (2, false))
         || header.related_operation != Some(body.operation)
-        || head(header, &frame.body) != header.head
+        || head(header, &frame.body, body.version)? != header.head
         || body.effects.len() > 64
     {
         return Err(OperationError::RecoveryRequired);
@@ -150,7 +159,15 @@ pub(in crate::workspace::stock) async fn read_entry(
             return Err(OperationError::RecoveryRequired);
         }
     }
-    no_claims(connection, input.participant(), body.operation).await?;
+    let nonissuance = Box::pin(proof::read(
+        connection,
+        input,
+        crypto,
+        &body,
+        header,
+        original.receipt.rumor().recipients(),
+    ))
+    .await?;
     let quantities = original.held_allocations()?;
     if quantities.len() != body.effects.len() {
         return Err(OperationError::RecoveryRequired);
@@ -225,6 +242,7 @@ pub(in crate::workspace::stock) async fn read_entry(
         frame,
         plan: body.plan,
         movements,
+        nonissuance,
     };
     value.confirm(connection).await?;
     Ok(Some(value))
@@ -255,12 +273,7 @@ impl Retained {
                 self.frame.header.operation,
             )
             .await?;
-        no_claims(
-            connection,
-            self.frame.header.actor.participant(),
-            self.projection.operation,
-        )
-        .await?;
+        Box::pin(self.nonissuance.confirm(connection)).await?;
         plan_selector(
             connection,
             self.frame.header.actor.participant(),

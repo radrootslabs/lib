@@ -52,9 +52,9 @@ async fn read_fact(
         .await
 }
 #[tokio::test]
-async fn qualified_original_refusals_are_durable_idempotent_and_keep_holds_without_clock() {
+async fn retained_v14_original_refusals_are_durable_idempotent_and_keep_holds_without_clock() {
     for mode in 0..4 {
-        let mut r = Rig::new().await;
+        let mut r = Rig::with_catalog(14).await;
         let receipt = ready(&r).await;
         assert!(read_fact(&r, &receipt).await.unwrap().is_none());
         let value = observation(&r, &receipt, mode).await;

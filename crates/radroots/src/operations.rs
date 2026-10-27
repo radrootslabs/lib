@@ -9,7 +9,8 @@ pub struct Operations<'a> {
 }
 impl<'a> Operations<'a> {
     /// Explicitly requests original preparation cleanup. Only the selected
-    /// store can prove all original claims absent and release the exact hold.
+    /// store can prove original nonissuance and replay absence, then release
+    /// the exact hold while retaining the original claims and facts.
     /// This is separate from business cancellation and stopping delivery.
     pub async fn abort_proven_unissued(
         &self,

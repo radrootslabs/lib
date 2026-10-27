@@ -266,7 +266,17 @@ struct PreparationAbort {
     payload_version: u32,
     journal_family: u32,
     worker_charge_bytes: u32,
-    all_recipient_claims_must_be_absent: bool,
+    retained_payload_versions: Vec<u32>,
+    retained_v1_requires_absent_claims: bool,
+    claimed_cleanup_catalogs: Vec<u32>,
+    untracked_claimed_catalogs: Vec<u32>,
+    per_recipient_proof_count: u32,
+    original_unissued_required_for_every_claim: bool,
+    replay_admission_blocks_release: bool,
+    obtained_evidence_blocks_release: bool,
+    contradictory_evidence_retained: bool,
+    contradiction_requires_recovery: bool,
+    caller_reports_are_release_authority: bool,
     caller_nonissuance_assertion_is_proof: bool,
     current_exact_recovery_consent_required: bool,
     atomic_exact_original_release_required: bool,
@@ -939,7 +949,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !stock
                 .qualified_local_recovery
                 .replay_admission_report_is_release_authority
-            && stock.preparation_abort.payload_version == 1
+            && stock.preparation_abort.payload_version == 2
             && stock.preparation_abort.journal_family == 7
             && stock.preparation_abort.worker_charge_bytes == 1048576
             && stock.preparation_abort.shared_storage_port
@@ -947,7 +957,19 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.preparation_abort.shared_model_owner == "radroots_storage.inventory"
             && !stock.preparation_abort.native_workspace_type_aliases
             && stock.preparation_abort.unsupported_hosts_return == "capability_unavailable"
-            && stock.preparation_abort.all_recipient_claims_must_be_absent
+            && stock.preparation_abort.retained_payload_versions == [1]
+            && stock.preparation_abort.retained_v1_requires_absent_claims
+            && stock.preparation_abort.claimed_cleanup_catalogs == [15]
+            && stock.preparation_abort.untracked_claimed_catalogs == [13, 14]
+            && stock.preparation_abort.per_recipient_proof_count == 2
+            && stock
+                .preparation_abort
+                .original_unissued_required_for_every_claim
+            && stock.preparation_abort.replay_admission_blocks_release
+            && stock.preparation_abort.obtained_evidence_blocks_release
+            && stock.preparation_abort.contradictory_evidence_retained
+            && stock.preparation_abort.contradiction_requires_recovery
+            && !stock.preparation_abort.caller_reports_are_release_authority
             && !stock
                 .preparation_abort
                 .caller_nonissuance_assertion_is_proof
@@ -1745,10 +1767,20 @@ mod tests {
             ("shared_model_owner", json!("radroots_storage_sqlite")),
             ("native_workspace_type_aliases", json!(true)),
             ("unsupported_hosts_return", json!("aborted")),
-            ("payload_version", json!(2)),
+            ("payload_version", json!(3)),
             ("journal_family", json!(6)),
             ("worker_charge_bytes", json!(1048577)),
-            ("all_recipient_claims_must_be_absent", json!(false)),
+            ("retained_payload_versions", json!([])),
+            ("retained_v1_requires_absent_claims", json!(false)),
+            ("claimed_cleanup_catalogs", json!([14, 15])),
+            ("untracked_claimed_catalogs", json!([13])),
+            ("per_recipient_proof_count", json!(1)),
+            ("original_unissued_required_for_every_claim", json!(false)),
+            ("replay_admission_blocks_release", json!(false)),
+            ("obtained_evidence_blocks_release", json!(false)),
+            ("contradictory_evidence_retained", json!(false)),
+            ("contradiction_requires_recovery", json!(false)),
+            ("caller_reports_are_release_authority", json!(true)),
             ("caller_nonissuance_assertion_is_proof", json!(true)),
             ("current_exact_recovery_consent_required", json!(false)),
             ("atomic_exact_original_release_required", json!(false)),

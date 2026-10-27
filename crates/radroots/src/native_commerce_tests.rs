@@ -90,6 +90,7 @@ struct Control {
     signs: AtomicUsize,
     recoveries: AtomicUsize,
     fail_self: AtomicBool,
+    fail_peer: AtomicBool,
     pause_peer: AtomicBool,
     entered: tokio::sync::Notify,
     release: tokio::sync::Notify,
@@ -106,6 +107,7 @@ impl Control {
             signs: AtomicUsize::new(0),
             recoveries: AtomicUsize::new(0),
             fail_self: AtomicBool::new(false),
+            fail_peer: AtomicBool::new(false),
             pause_peer: AtomicBool::new(false),
             entered: tokio::sync::Notify::new(),
             release: tokio::sync::Notify::new(),
@@ -155,7 +157,9 @@ impl ParticipantProvider for Provider {
         Box::pin(async move {
             self.control.signs.fetch_add(1, Ordering::SeqCst);
             let is_self = intent.recipient() == Some(self.inner.public_key());
-            if is_self && self.control.fail_self.load(Ordering::SeqCst) {
+            if (is_self && self.control.fail_self.load(Ordering::SeqCst))
+                || (!is_self && self.control.fail_peer.load(Ordering::SeqCst))
+            {
                 if self.control.pause_refused.swap(false, Ordering::SeqCst) {
                     self.control.entered.notify_one();
                     self.control.release.notified().await;

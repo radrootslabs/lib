@@ -178,6 +178,14 @@ pub(in crate::workspace::stock) struct Retained {
     projection: Projection,
 }
 impl Retained {
+    pub(in crate::workspace::stock) fn identity(&self) -> checkpoint::EntryIdentity {
+        checkpoint::EntryIdentity {
+            operation: self.frame.header.operation,
+            revision: self.frame.header.revision,
+            head: self.frame.header.head,
+            protected_digest: Sha256::digest(&self.frame.protected).into(),
+        }
+    }
     pub(in crate::workspace::stock) fn receipt(&self) -> StockUnissuedReceipt {
         *self.value
     }
