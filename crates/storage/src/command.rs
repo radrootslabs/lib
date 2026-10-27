@@ -16,6 +16,8 @@ use radroots_transport::BoxFuture;
 pub mod protected;
 
 mod delivery;
+#[cfg(feature = "protected_outbox")]
+pub(crate) use delivery::outer as verified_private_outer;
 mod delivery_summary;
 mod dm_source;
 mod installation;

@@ -1390,6 +1390,9 @@ pub enum radroots_storage::inventory::StockAcceptanceOutcome
 pub radroots_storage::inventory::StockAcceptanceOutcome::Aborted(alloc::boxed::Box<radroots_storage::inventory::StockAbortReceipt>)
 pub radroots_storage::inventory::StockAcceptanceOutcome::Prepared(alloc::boxed::Box<radroots_storage::inventory::StockAcceptanceReceipt>)
 pub radroots_storage::inventory::StockAcceptanceOutcome::Unknown(radroots_storage::command::CommitAttempt)
+pub enum radroots_storage::inventory::StockEnvelopeOutcome
+pub radroots_storage::inventory::StockEnvelopeOutcome::Committed(alloc::boxed::Box<radroots_storage::inventory::StockEnvelopeReceipt>)
+pub radroots_storage::inventory::StockEnvelopeOutcome::Unknown(radroots_storage::command::CommitAttempt)
 pub enum radroots_storage::inventory::StockEvidenceOutcome
 pub radroots_storage::inventory::StockEvidenceOutcome::Committed(radroots_storage::inventory::StockEvidenceReceipt)
 pub radroots_storage::inventory::StockEvidenceOutcome::Unknown(radroots_storage::command::CommitAttempt)
@@ -1472,6 +1475,38 @@ pub const fn radroots_storage::inventory::StockAcceptanceRequest::minimum_checkp
 pub const fn radroots_storage::inventory::StockAcceptanceRequest::source_checkpoint(&self) -> radroots_storage::workspace::seller_stock::StockSourceCheckpointRef
 impl core::fmt::Debug for radroots_storage::inventory::StockAcceptanceRequest
 pub fn radroots_storage::inventory::StockAcceptanceRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::inventory::StockEnvelopeReceipt
+impl radroots_storage::inventory::StockEnvelopeReceipt
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::digest(&self) -> &[u8; 32]
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::evidence(&self) -> radroots_storage::inventory::StockEvidenceReceipt
+pub fn radroots_storage::inventory::StockEnvelopeReceipt::from_committed_store(&radroots_storage::inventory::StockEnvelopeRequest, radroots_storage::command::CommitAttempt, radroots_storage::inventory::StockEvidenceReceipt, radroots_domain::identifier::TransactionId, radroots_domain::identifier::EnvelopeEventId, [u8; 32], radroots_storage::inventory::InventoryCheckpointRef) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::installation_transaction_id(&self) -> radroots_domain::identifier::TransactionId
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
+pub const fn radroots_storage::inventory::StockEnvelopeReceipt::recipient(&self) -> radroots_identity::key::PublicKey
+impl core::fmt::Debug for radroots_storage::inventory::StockEnvelopeReceipt
+pub fn radroots_storage::inventory::StockEnvelopeReceipt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::inventory::StockEnvelopeRequest
+impl radroots_storage::inventory::StockEnvelopeRequest
+pub fn radroots_storage::inventory::StockEnvelopeRequest::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::inventory::StockEnvelopeRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
+pub const fn radroots_storage::inventory::StockEnvelopeRequest::command_digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_storage::inventory::StockEnvelopeRequest::minimum_checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub fn radroots_storage::inventory::StockEnvelopeRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, core::option::Option<core::num::nonzero::NonZeroU64>) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::StockEnvelopeRequest::observed_at_unix_ms(&self) -> core::option::Option<core::num::nonzero::NonZeroU64>
+pub const fn radroots_storage::inventory::StockEnvelopeRequest::operation_id(&self) -> radroots_domain::identifier::OperationId
+pub const fn radroots_storage::inventory::StockEnvelopeRequest::recipient(&self) -> radroots_identity::key::PublicKey
+impl core::fmt::Debug for radroots_storage::inventory::StockEnvelopeRequest
+pub fn radroots_storage::inventory::StockEnvelopeRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::inventory::StockEnvelopeSource
+impl radroots_storage::inventory::StockEnvelopeSource
+pub fn radroots_storage::inventory::StockEnvelopeSource::from_retained_wire(radroots_storage::inventory::StockEnvelopeReceipt, &str) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::StockEnvelopeSource::receipt(&self) -> radroots_storage::inventory::StockEnvelopeReceipt
+pub fn radroots_storage::inventory::StockEnvelopeSource::with_json<T>(&self, impl core::ops::function::FnOnce(&str) -> T) -> T
+impl core::fmt::Debug for radroots_storage::inventory::StockEnvelopeSource
+pub fn radroots_storage::inventory::StockEnvelopeSource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::inventory::StockEvidenceReceipt
 impl radroots_storage::inventory::StockEvidenceReceipt
 pub const fn radroots_storage::inventory::StockEvidenceReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
@@ -1498,6 +1533,7 @@ impl core::fmt::Debug for radroots_storage::inventory::StockEvidenceRequest
 pub fn radroots_storage::inventory::StockEvidenceRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub trait radroots_storage::inventory::InventoryStore: radroots_storage::workspace::WorkspaceStore
 pub fn radroots_storage::inventory::InventoryStore::abort_proven_unissued(&self, radroots_storage::inventory::StockAbortRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::inventory::StockAbortOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::inventory::InventoryStore::capture_stock_envelope<'a>(&'a self, radroots_storage::inventory::StockEnvelopeRequest, radroots_storage::workspace::AttachmentProof, &'a radroots_storage::command::PrivateEnvelopeCandidate) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::inventory::StockEnvelopeOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::capture_stock_evidence<'a>(&'a self, &'a radroots_storage::inventory::StockEvidenceRequest, &'a radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::inventory::StockEvidenceOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::execute_inventory(&self, radroots_storage::inventory::InventoryRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::inventory::InventoryOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::inventory_operation(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, core::option::Option<radroots_domain::identifier::CommandDigest>, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::inventory::InventoryReceipt>, radroots_storage::command::OperationError>>
@@ -1505,6 +1541,7 @@ pub fn radroots_storage::inventory::InventoryStore::option_mapping(&self, radroo
 pub fn radroots_storage::inventory::InventoryStore::pool(&self, radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::PoolId, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_domain::stock::PoolView>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::prepare_stock_acceptance(&self, radroots_storage::inventory::StockAcceptanceRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<radroots_storage::inventory::StockAcceptanceOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::reconcile_stock_evidence<'a>(&'a self, &'a radroots_storage::inventory::StockEvidenceRequest, &'a radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'a, core::result::Result<radroots_storage::inventory::StockEvidenceOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_storage::inventory::InventoryStore::stock_envelope(&self, radroots_storage::inventory::StockEnvelopeRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::inventory::StockEnvelopeSource>, radroots_storage::command::OperationError>>
 pub fn radroots_storage::inventory::InventoryStore::stock_preparation_abort(&self, radroots_storage::inventory::StockAbortRequest, radroots_storage::workspace::AttachmentProof) -> radroots_transport::source::BoxFuture<'_, core::result::Result<core::option::Option<radroots_storage::inventory::StockAbortReceipt>, radroots_storage::command::OperationError>>
 pub mod radroots_storage::journal
 pub use radroots_storage::journal::BoxFuture

@@ -27,7 +27,7 @@ pub use self::private::PrivateEnvelopeCandidate;
 const SIGNED_MAX_BYTES: usize = 65_536;
 const MAX_TIME: u64 = 253_402_300_799;
 
-fn outer(raw: &str, recipient: PublicKey) -> Result<SignedEvent, OperationError> {
+pub(crate) fn outer(raw: &str, recipient: PublicKey) -> Result<SignedEvent, OperationError> {
     if raw.len() > SIGNED_MAX_BYTES {
         return Err(OperationError::InvalidEvidence);
     }

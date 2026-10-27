@@ -9,9 +9,13 @@ pub use radroots_protocol::command::{CapturedInventoryCommand, InventoryCommandK
 use radroots_transport::BoxFuture;
 mod abort;
 mod acceptance;
+mod envelope;
 mod evidence;
 pub use abort::{StockAbortOutcome, StockAbortReceipt, StockAbortRequest};
 pub use acceptance::{StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest};
+pub use envelope::{
+    StockEnvelopeOutcome, StockEnvelopeReceipt, StockEnvelopeRequest, StockEnvelopeSource,
+};
 pub use evidence::{StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest};
 
 /// Exact captured owner-private inventory command and original authenticated observation.
@@ -287,6 +291,26 @@ pub trait InventoryStore: WorkspaceStore {
         _request: &'a StockEvidenceRequest,
         _proof: &'a AttachmentProof,
     ) -> BoxFuture<'a, Result<StockEvidenceOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Retains an obtained outer against actual original stock S/T2. The host
+    /// must verify exact containment and commit before any transport right.
+    /// Capture grants no dispatch permission; unsupported hosts refuse.
+    fn capture_stock_envelope<'a>(
+        &'a self,
+        _request: StockEnvelopeRequest,
+        _proof: AttachmentProof,
+        _candidate: &'a crate::command::PrivateEnvelopeCandidate,
+    ) -> BoxFuture<'a, Result<StockEnvelopeOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Reads the exact original retained outer under current recovery access.
+    /// Absence is not permission to generate or dispatch a replacement.
+    fn stock_envelope(
+        &self,
+        _request: StockEnvelopeRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<StockEnvelopeSource>, OperationError>> {
         Box::pin(async { Err(OperationError::UnsupportedOperation) })
     }
     /// Prepares an original acceptance with complete atomic holds and the order

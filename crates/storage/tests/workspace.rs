@@ -9,6 +9,9 @@ use radroots_storage::workspace::{
 #[path = "workspace/inventory_abort.rs"]
 mod inventory_abort;
 #[cfg(feature = "protected_outbox")]
+#[path = "workspace/inventory_envelope.rs"]
+mod inventory_envelope;
+#[cfg(feature = "protected_outbox")]
 #[path = "workspace/inventory_evidence.rs"]
 mod inventory_evidence;
 fn key() -> PublicKey {
