@@ -11,8 +11,8 @@ pub fn radroots_execution::session::command::CommandRuntime::new(alloc::sync::Ar
 pub trait radroots_execution::session::command::CommandIo: radroots_execution::session::HostBound
 pub fn radroots_execution::session::command::CommandIo::delivery_id(&self) -> core::result::Result<alloc::string::String, radroots_storage::command::OperationError>
 pub fn radroots_execution::session::command::CommandIo::enabled(&self) -> bool
-pub fn radroots_execution::session::command::CommandIo::envelope(&self, radroots_storage::command::installation::PublicationWork, &str) -> core::result::Result<radroots_storage::command::delivery::EnvelopeCandidate, radroots_storage::command::OperationError>
 pub fn radroots_execution::session::command::CommandIo::now(&self) -> core::result::Result<radroots_domain::context::UnixSeconds, radroots_storage::command::OperationError>
+pub fn radroots_execution::session::command::CommandIo::private_envelope(&self, radroots_identity::key::PublicKey, &str) -> core::result::Result<radroots_storage::command::delivery::private::PrivateEnvelopeCandidate, radroots_storage::command::OperationError>
 pub fn radroots_execution::session::command::CommandIo::public_targets(&self) -> core::result::Result<radroots_transport::target::TargetSet, radroots_storage::command::OperationError>
 pub fn radroots_execution::session::command::CommandIo::publication_policy(&self) -> radroots_transport::policy::SatisfactionPolicy
 pub fn radroots_execution::session::command::CommandIo::publish(&self, radroots_transport::sink::DeliveryRequest, radroots_transport::target::TargetSet) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_transport::sink::DeliveryReceipt, radroots_transport::sink::SinkFailure>>

@@ -7,7 +7,7 @@ use radroots_execution::session::{
 use radroots_nostr::signing::gift_wrap::{randomized_past_time, wrap_retained_seal};
 use radroots_protocol::nip59::CapturedDmRoute;
 use radroots_signing::provider::{NonceSource, ProviderError};
-use radroots_storage::command::{EnvelopeCandidate, OperationError, PublicationWork};
+use radroots_storage::command::{OperationError, PrivateEnvelopeCandidate};
 use radroots_transport::{
     EventSink, EventSource, TargetSet,
     policy::{SatisfactionClass, SatisfactionPolicy},
@@ -149,17 +149,16 @@ impl CommandIo for BrowserCommands {
     fn publication_policy(&self) -> SatisfactionPolicy {
         self.policy.clone()
     }
-    fn envelope(
+    fn private_envelope(
         &self,
-        work: PublicationWork,
+        recipient: PublicKey,
         raw_seal: &str,
-    ) -> Result<EnvelopeCandidate, OperationError> {
+    ) -> Result<PrivateEnvelopeCandidate, OperationError> {
         let now = NonZeroU64::new(self.now()?.get()).ok_or(OperationError::RecoveryRequired)?;
-        let recipient = work.recipient();
         let wrapped = wrap_retained_seal(raw_seal, recipient, now, &BrowserNonceSource)
             .map_err(|_| OperationError::InvalidEvidence)?;
         wrapped.with_wrapping_key(|key| {
-            EnvelopeCandidate::from_obtained(work, wrapped.signed_json(), key)
+            PrivateEnvelopeCandidate::from_obtained(recipient, wrapped.signed_json(), key)
         })
     }
     fn delivery_id(&self) -> Result<String, OperationError> {

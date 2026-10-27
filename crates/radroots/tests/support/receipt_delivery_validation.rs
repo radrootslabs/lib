@@ -1,7 +1,9 @@
 //! Untrusted data projections must not bypass the retained native graph.
 use super::*;
 use radroots_domain::TransactionId;
-use radroots_storage::command::{DeliveryAttemptSummary, OperationSnapshot};
+use radroots_storage::command::{
+    DeliveryAttemptSummary, OperationSnapshot, PrivateEnvelopeCandidate,
+};
 use radroots_transport::{
     Target, TransportId, outcome::DeliveryOutcome, sink::DeliveryTargetReceipt, target::TargetScope,
 };
@@ -187,6 +189,51 @@ async fn snapshot(ready: &Ready) -> OperationSnapshot {
 }
 
 #[tokio::test]
+async fn work_independent_envelope_binds_original_recipient_and_retains_exact_native_bytes() {
+    let ready = Ready::new(&[String::from("ws://127.0.0.1:9")], 245).await;
+    let obtained = ready.candidate.with_wrapping_key(|key| {
+        PrivateEnvelopeCandidate::from_obtained(
+            ready.work.recipient(),
+            ready.candidate.raw_json(),
+            key,
+        )
+        .unwrap()
+    });
+    let copied = obtained.retained_copy();
+    drop(obtained);
+    let bound = EnvelopeCandidate::from_private(ready.work, copied).unwrap();
+    let DeliveryAttemptOutcome::Claimed(retained) = ready
+        .store
+        .prepare_delivery_attempt(ready.request(1), copy(&ready.proof), Some(&bound))
+        .await
+        .unwrap()
+    else {
+        panic!("actual original envelope must be retained before transport");
+    };
+    assert_eq!(retained.raw_json(), ready.candidate.raw_json());
+    assert_eq!(retained.intent().event_id(), bound.event_id());
+    assert_eq!(
+        ready
+            .query(&ready.store, retained.intent().request_id())
+            .await
+            .raw_json(),
+        bound.raw_json()
+    );
+    assert_ne!(ready.work.recipient(), key());
+    let foreign = PrivateEnvelopeCandidate::from_obtained(
+        key(),
+        &outer_variant(&ready, 1059, retained.retained_at().get(), Some(1)),
+        &[3; 32],
+    )
+    .unwrap();
+    assert!(matches!(
+        EnvelopeCandidate::from_private(ready.work, foreign),
+        Err(OperationError::InvalidEvidence)
+    ));
+    ready.store.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn malformed_carriers_and_reconstructed_attempts_cannot_replace_original_native_bytes() {
     let ready = Ready::new(&[String::from("ws://127.0.0.1:9")], 246).await;
     let retained = ready.retain(1).await;
@@ -200,6 +247,10 @@ async fn malformed_carriers_and_reconstructed_attempts_cannot_replace_original_n
         outer_variant(&ready, 1059, time, None),
         outer_variant(&ready, 1059, time, Some(1)),
     ] {
+        assert!(matches!(
+            PrivateEnvelopeCandidate::from_obtained(ready.work.recipient(), &raw, &wrapping_key),
+            Err(OperationError::InvalidEvidence)
+        ));
         assert!(matches!(
             EnvelopeCandidate::from_obtained(ready.work, &raw, &wrapping_key),
             Err(OperationError::InvalidEvidence)

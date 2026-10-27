@@ -21,6 +21,9 @@ use sha2::{Digest, Sha256};
 use std::{boxed::Box, collections::BTreeSet, string::String, vec, vec::Vec};
 use zeroize::Zeroizing;
 
+mod private;
+pub use self::private::PrivateEnvelopeCandidate;
+
 const SIGNED_MAX_BYTES: usize = 65_536;
 const MAX_TIME: u64 = 253_402_300_799;
 
@@ -93,12 +96,7 @@ fn payload(raw: &str, work: PublicationArtifact) -> Result<SignedEvent, Operatio
 /// signature proves neither original-seal containment nor an actual store link.
 pub struct EnvelopeCandidate {
     work: PublicationWork,
-    event: EnvelopeEventId,
-    author: PublicKey,
-    created_at: UnixSeconds,
-    digest: [u8; 32],
-    raw: Zeroizing<String>,
-    key: Zeroizing<[u8; 32]>,
+    envelope: PrivateEnvelopeCandidate,
 }
 impl EnvelopeCandidate {
     /// Bounds before copying and verifies the exact one-recipient outer carrier.
@@ -109,17 +107,21 @@ impl EnvelopeCandidate {
         raw: &str,
         wrapping_key: &[u8; 32],
     ) -> Result<Self, OperationError> {
-        let carrier = outer(raw, work.recipient())?;
-        Ok(Self {
+        Self::from_private(
             work,
-            event: EnvelopeEventId::from_bytes(*carrier.envelope().id().as_bytes()),
-            author: *carrier.envelope().author(),
-            created_at: UnixSeconds::new(carrier.envelope().created_at_u64())
-                .map_err(|_| OperationError::InvalidEvidence)?,
-            digest: Sha256::digest(raw.as_bytes()).into(),
-            raw: Zeroizing::new(String::from(raw)),
-            key: Zeroizing::new(*wrapping_key),
-        })
+            PrivateEnvelopeCandidate::from_obtained(work.recipient(), raw, wrapping_key)?,
+        )
+    }
+    /// Binds a work-independent candidate to its reported original recipient.
+    /// The store must still authenticate the work and exact inner containment.
+    pub fn from_private(
+        work: PublicationWork,
+        envelope: PrivateEnvelopeCandidate,
+    ) -> Result<Self, OperationError> {
+        if envelope.recipient() != work.recipient() {
+            return Err(OperationError::InvalidEvidence);
+        }
+        Ok(Self { work, envelope })
     }
     /// Reported original work; a getter does not authenticate backend state.
     pub const fn work(&self) -> PublicationWork {
@@ -127,39 +129,34 @@ impl EnvelopeCandidate {
     }
     /// Actual signed outer event identity, separate from the original seal.
     pub const fn event_id(&self) -> EnvelopeEventId {
-        self.event
+        self.envelope.event_id()
     }
     /// Actual outer author; native capture must prove this temporary key.
     pub const fn author(&self) -> PublicKey {
-        self.author
+        self.envelope.author()
     }
     /// Signed randomized outer time, not a grant or trusted clock observation.
     pub const fn created_at(&self) -> UnixSeconds {
-        self.created_at
+        self.envelope.created_at()
     }
     /// SHA-256 of the exact original outer representation.
     pub const fn digest(&self) -> &[u8; 32] {
-        &self.digest
+        self.envelope.digest()
     }
     /// Exact obtained bytes for protected handling; never diagnostic output.
     pub fn raw_json(&self) -> &str {
-        &self.raw
+        self.envelope.raw_json()
     }
     /// Scoped borrow for native containment verification only.
     pub fn with_wrapping_key<T>(&self, verify: impl FnOnce(&[u8; 32]) -> T) -> T {
-        verify(&self.key)
+        self.envelope.with_wrapping_key(verify)
     }
     /// Explicit bounded owner copy; the caller retains its original until the
     /// actual outcome is reconciled. This creates no persistence fact.
     pub fn retained_copy(&self) -> Self {
         Self {
             work: self.work,
-            event: self.event,
-            author: self.author,
-            created_at: self.created_at,
-            digest: self.digest,
-            raw: Zeroizing::new(String::from(self.raw_json())),
-            key: Zeroizing::new(*self.key),
+            envelope: self.envelope.retained_copy(),
         }
     }
 }

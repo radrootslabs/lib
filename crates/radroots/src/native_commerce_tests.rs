@@ -35,7 +35,7 @@ use radroots_signing::{
     signer::BoxFuture,
 };
 use radroots_storage::{
-    command::{EnvelopeCandidate, OperationError, PublicationWork},
+    command::{OperationError, PrivateEnvelopeCandidate},
     event::SourceGeneration,
     inventory::{InventoryCheckpointRef, InventoryOutcome, InventoryRequest, InventoryStore},
     workspace::{
@@ -268,7 +268,11 @@ impl CommandIo for Io {
     fn publication_policy(&self) -> radroots_transport::policy::SatisfactionPolicy {
         panic!("acceptance does not start D")
     }
-    fn envelope(&self, _: PublicationWork, _: &str) -> Result<EnvelopeCandidate, OperationError> {
+    fn private_envelope(
+        &self,
+        _: PublicKey,
+        _: &str,
+    ) -> Result<PrivateEnvelopeCandidate, OperationError> {
         panic!("acceptance does not wrap")
     }
     fn delivery_id(&self) -> Result<String, OperationError> {

@@ -27,7 +27,7 @@ use radroots_storage::{
         BoundSigningPlan, ClaimAttemptOutcome, ClaimAttemptRequest, DeliveryAttemptOutcome,
         DeliveryAttemptRequest, DeliveryIntent, DeliveryObservation, EnvelopeCandidate,
         EvidenceCaptureOutcome, InstallationRequest, OperationError, OperationJournal,
-        PlanBindingOutcome, PreparedOperation, PublicationArtifact, PublicationWork,
+        PlanBindingOutcome, PreparedOperation, PrivateEnvelopeCandidate, PublicationArtifact,
     },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
@@ -61,11 +61,11 @@ pub trait CommandIo: HostBound {
     /// Explicit relay acceptance criterion, frozen by the first retained D.
     fn publication_policy(&self) -> radroots_transport::policy::SatisfactionPolicy;
     /// Wraps the original obtained seal with a fresh temporary envelope key.
-    fn envelope(
+    fn private_envelope(
         &self,
-        work: PublicationWork,
+        recipient: PublicKey,
         raw_seal: &str,
-    ) -> Result<EnvelopeCandidate, OperationError>;
+    ) -> Result<PrivateEnvelopeCandidate, OperationError>;
     /// Fresh full-width transport-attempt identity from qualified entropy.
     fn delivery_id(&self) -> Result<String, OperationError>;
     /// Dispatches only an actual freshly committed original delivery claim.
@@ -623,7 +623,13 @@ impl CommandRuntime {
                         .await?
                         .ok_or(OperationError::RecoveryRequired)?;
                     let envelope = if original.is_none() {
-                        Some(self.io.envelope(private, captured.evidence().raw_json())?)
+                        Some(EnvelopeCandidate::from_private(
+                            private,
+                            self.io.private_envelope(
+                                private.recipient(),
+                                captured.evidence().raw_json(),
+                            )?,
+                        )?)
                     } else {
                         None
                     };

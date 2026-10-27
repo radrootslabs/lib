@@ -26,7 +26,7 @@ pub use publication::PublicationArtifact;
 mod snapshot;
 pub use delivery::{
     DeliveryAttempt, DeliveryAttemptOutcome, DeliveryAttemptRequest, DeliveryIntent,
-    EnvelopeCandidate,
+    EnvelopeCandidate, PrivateEnvelopeCandidate,
 };
 pub use delivery_summary::DeliveryAttemptSummary;
 pub use dm_source::SignedDmRelaySource;

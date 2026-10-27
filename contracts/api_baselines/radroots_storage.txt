@@ -1078,6 +1078,7 @@ pub const fn radroots_storage::command::EnvelopeCandidate::created_at(&self) -> 
 pub const fn radroots_storage::command::EnvelopeCandidate::digest(&self) -> &[u8; 32]
 pub const fn radroots_storage::command::EnvelopeCandidate::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
 pub fn radroots_storage::command::EnvelopeCandidate::from_obtained(radroots_storage::command::PublicationWork, &str, &[u8; 32]) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::EnvelopeCandidate::from_private(radroots_storage::command::PublicationWork, radroots_storage::command::PrivateEnvelopeCandidate) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::command::EnvelopeCandidate::raw_json(&self) -> &str
 pub fn radroots_storage::command::EnvelopeCandidate::retained_copy(&self) -> Self
 pub fn radroots_storage::command::EnvelopeCandidate::with_wrapping_key<T>(&self, impl core::ops::function::FnOnce(&[u8; 32]) -> T) -> T
@@ -1156,6 +1157,19 @@ pub const fn radroots_storage::command::PreparedOperation::revision(&self) -> ra
 pub const fn radroots_storage::command::PreparedOperation::transaction_id(&self) -> radroots_domain::identifier::TransactionId
 impl core::fmt::Debug for radroots_storage::command::PreparedOperation
 pub fn radroots_storage::command::PreparedOperation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::command::PrivateEnvelopeCandidate
+impl radroots_storage::command::PrivateEnvelopeCandidate
+pub const fn radroots_storage::command::PrivateEnvelopeCandidate::author(&self) -> radroots_identity::key::PublicKey
+pub const fn radroots_storage::command::PrivateEnvelopeCandidate::created_at(&self) -> radroots_domain::context::UnixSeconds
+pub const fn radroots_storage::command::PrivateEnvelopeCandidate::digest(&self) -> &[u8; 32]
+pub const fn radroots_storage::command::PrivateEnvelopeCandidate::event_id(&self) -> radroots_domain::identifier::EnvelopeEventId
+pub fn radroots_storage::command::PrivateEnvelopeCandidate::from_obtained(radroots_identity::key::PublicKey, &str, &[u8; 32]) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage::command::PrivateEnvelopeCandidate::raw_json(&self) -> &str
+pub const fn radroots_storage::command::PrivateEnvelopeCandidate::recipient(&self) -> radroots_identity::key::PublicKey
+pub fn radroots_storage::command::PrivateEnvelopeCandidate::retained_copy(&self) -> Self
+pub fn radroots_storage::command::PrivateEnvelopeCandidate::with_wrapping_key<T>(&self, impl core::ops::function::FnOnce(&[u8; 32]) -> T) -> T
+impl core::fmt::Debug for radroots_storage::command::PrivateEnvelopeCandidate
+pub fn radroots_storage::command::PrivateEnvelopeCandidate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::command::PublicPublicationWork
 impl radroots_storage::command::PublicPublicationWork
 pub const fn radroots_storage::command::PublicPublicationWork::evidence(&self) -> radroots_storage::command::EvidenceReceipt
