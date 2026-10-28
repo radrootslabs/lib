@@ -260,6 +260,7 @@ struct Body<'a> {
 }
 pub(super) struct Retained {
     pub frame: ledger::Retained,
+    pub observed_at: UnixSeconds,
     pub command: CapturedOrderAcceptance,
     pub mode: StockConsentMode,
     pub resources: StockResources,
@@ -386,6 +387,7 @@ pub(super) async fn read(
     let authorization = body.authorization;
     let subject_digest = body.subject_digest;
     Ok(Some(Retained {
+        observed_at: body.observed_at,
         frame,
         command,
         mode,
@@ -422,7 +424,7 @@ pub(in crate::workspace) async fn issue(
     proof: AttachmentProof,
 ) -> Result<StockConsentOutcome, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7..=16) {
+    if !matches!(access.authority.catalog, 7..=17) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()
@@ -683,7 +685,7 @@ pub(in crate::workspace) async fn query(
     proof: AttachmentProof,
 ) -> Result<Option<StockConsentReceipt>, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7..=16) {
+    if !matches!(access.authority.catalog, 7..=17) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator() && access.current.input().grant_id() != subject {

@@ -4,6 +4,42 @@ use core::num::NonZeroU64;
 use radroots_domain::{PublicKey, SigningAttemptId};
 use zeroize::Zeroizing;
 
+/// Bounded original signed bytes read by the qualified protected owner.
+/// Construction checks representation identity, not current access or issuance.
+pub struct StockEvidenceSource {
+    receipt: StockEvidenceReceipt,
+    raw: Zeroizing<String>,
+}
+impl StockEvidenceSource {
+    pub fn from_retained_wire(
+        receipt: StockEvidenceReceipt,
+        raw: &str,
+    ) -> Result<Self, OperationError> {
+        use sha2::{Digest, Sha256};
+        if raw.is_empty()
+            || raw.len() > 64 * 1024
+            || <[u8; 32]>::from(Sha256::digest(raw.as_bytes())) != *receipt.digest()
+        {
+            return Err(OperationError::InvalidEvidence);
+        }
+        Ok(Self {
+            receipt,
+            raw: Zeroizing::new(raw.to_string()),
+        })
+    }
+    pub const fn receipt(&self) -> StockEvidenceReceipt {
+        self.receipt
+    }
+    pub fn with_json<T>(&self, use_json: impl FnOnce(&str) -> T) -> T {
+        use_json(&self.raw)
+    }
+}
+impl core::fmt::Debug for StockEvidenceSource {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("StockEvidenceSource(<redacted>)")
+    }
+}
+
 /// Obtained original wire bytes, never proof of a protected claim or authority.
 /// The concrete store must authenticate the actual retained claim and verify
 /// these bytes against it before append. Construction performs no cryptography.

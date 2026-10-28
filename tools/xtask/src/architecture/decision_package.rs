@@ -112,6 +112,7 @@ struct StockEnvelopeRetention {
     worker_charge_bytes: u32,
     capture_port: String,
     query_port: String,
+    recovery_port: String,
     original_preparation_plan_claim_seal_installation_required: bool,
     temporary_key_derivation_and_exact_decryption_required: bool,
     temporary_key_retained: bool,
@@ -129,6 +130,7 @@ struct StockEnvelopeRetention {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NativeSellerStockAuthority {
+    delivery: StockDelivery,
     envelope_retention: StockEnvelopeRetention,
     qualified_local_recovery: QualifiedLocalRecovery,
     source_payload_schemas: Vec<String>,
@@ -220,6 +222,49 @@ struct NativeSellerStockAuthority {
     automatic_outbox_migration: bool,
     historical_obligations_recovered: bool,
     business_effects_qualified: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StockDelivery {
+    supported_catalogs: Vec<u16>,
+    retained_unsupported_catalogs: Vec<u16>,
+    attempt_journal_family: u16,
+    observation_journal_family: u16,
+    attempt_payload_version: u16,
+    observation_payload_version: u16,
+    attempt_body_max_bytes: u32,
+    observation_body_max_bytes: u32,
+    target_max: u16,
+    attempts_per_target: u16,
+    attempts_per_operation_max: u16,
+    observations_per_operation_max: u16,
+    observation_page_max: u16,
+    summary_target_max: u16,
+    worker_charge_bytes: u32,
+    storage_ports: Vec<String>,
+    original_stock_evidence_installation_outer_required: bool,
+    original_captured_route_and_current_write_policy_required: bool,
+    fresh_current_scoped_consent_grant_clock_required: bool,
+    installed_original_recovery_delivery_supported: bool,
+    fresh_claim_requires_confirmed_commit: bool,
+    existing_attempt_grants_dispatch: bool,
+    unknown_commit_grants_dispatch: bool,
+    query_grants_dispatch: bool,
+    first_complete_targets_and_criterion_immutable: bool,
+    ordinary_command_replays_existing_attempt: bool,
+    explicit_resume_claims_bounded_new_attempt: bool,
+    retries_use_original_outer_bytes: bool,
+    observation_nullable: bool,
+    original_credential_capture_requires_live_clock_or_grant: bool,
+    same_owner_obtained_material_reconciliation_required: bool,
+    first_observation_per_class_immutable: bool,
+    wrong_event_request_target_ack_rejected: bool,
+    protected_refs_indexes_complete_ancestry_required: bool,
+    final_transaction_witnesses_required: bool,
+    unbounded_attempt_or_observation_collections: bool,
+    physical_stock_effect: bool,
+    transport_inside_sql: bool,
 }
 
 #[derive(Deserialize)]
@@ -640,13 +685,14 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
         envelope.journal_family == 10
             && envelope.payload_version == 1
             && envelope.payload_prefix_bytes == 213
-            && envelope.supported_catalogs == [16]
+            && envelope.supported_catalogs == [16, 17]
             && envelope.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             && envelope.raw_max_bytes == 65536
             && envelope.worker_charge_bytes == 1048576
             && envelope.capture_port == "InventoryStore.capture_stock_envelope"
             && envelope.query_port == "InventoryStore.stock_envelope"
+            && envelope.recovery_port == "InventoryStore.reconcile_stock_envelope"
             && envelope.original_preparation_plan_claim_seal_installation_required
             && envelope.temporary_key_derivation_and_exact_decryption_required
             && !envelope.temporary_key_retained
@@ -661,17 +707,68 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !envelope.provider_io_inside_sql,
         "stock envelope retention drift",
     )?;
+    let delivery = &stock.delivery;
+    require(
+        delivery.supported_catalogs == [17]
+            && delivery.retained_unsupported_catalogs
+                == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+            && delivery.attempt_journal_family == 11
+            && delivery.observation_journal_family == 12
+            && delivery.attempt_payload_version == 1
+            && delivery.observation_payload_version == 1
+            && delivery.attempt_body_max_bytes == 65536
+            && delivery.observation_body_max_bytes == 16384
+            && delivery.target_max == 16
+            && delivery.attempts_per_target == 12
+            && delivery.attempts_per_operation_max == 384
+            && delivery.observations_per_operation_max == 2304
+            && delivery.observation_page_max == 16
+            && delivery.summary_target_max == 16
+            && delivery.worker_charge_bytes == 1048576
+            && delivery.storage_ports
+                == [
+                    "InventoryStore.prepare_stock_delivery_attempt",
+                    "InventoryStore.stock_delivery_attempt",
+                    "InventoryStore.stock_delivery_summary",
+                    "InventoryStore.record_stock_delivery_observation",
+                    "InventoryStore.reconcile_stock_delivery_observation",
+                    "InventoryStore.stock_delivery_observations",
+                ]
+            && delivery.original_stock_evidence_installation_outer_required
+            && delivery.original_captured_route_and_current_write_policy_required
+            && delivery.fresh_current_scoped_consent_grant_clock_required
+            && delivery.installed_original_recovery_delivery_supported
+            && delivery.fresh_claim_requires_confirmed_commit
+            && !delivery.existing_attempt_grants_dispatch
+            && !delivery.unknown_commit_grants_dispatch
+            && !delivery.query_grants_dispatch
+            && delivery.first_complete_targets_and_criterion_immutable
+            && !delivery.ordinary_command_replays_existing_attempt
+            && delivery.explicit_resume_claims_bounded_new_attempt
+            && delivery.retries_use_original_outer_bytes
+            && delivery.observation_nullable
+            && !delivery.original_credential_capture_requires_live_clock_or_grant
+            && delivery.same_owner_obtained_material_reconciliation_required
+            && delivery.first_observation_per_class_immutable
+            && delivery.wrong_event_request_target_ack_rejected
+            && delivery.protected_refs_indexes_complete_ancestry_required
+            && delivery.final_transaction_witnesses_required
+            && !delivery.unbounded_attempt_or_observation_collections
+            && !delivery.physical_stock_effect
+            && !delivery.transport_inside_sql,
+        "stock delivery ownership or bounds drift",
+    )?;
     require(
         stock.capability_contract.id == "radroots.seller_stock.native_inventory"
             && stock.capability_contract.version == "1"
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 16
+            && stock.schema_version == 17
             && stock.retained_enrollment_versions == [1]
             && stock.retained_inventory_versions
-                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v16"
+                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v17"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -950,7 +1047,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
             && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
-            && stock.qualified_local_recovery.native_catalog == 16
+            && stock.qualified_local_recovery.native_catalog == 17
             && stock.qualified_local_recovery.worker_charge_bytes == 1048576
             && stock
                 .qualified_local_recovery
@@ -1013,7 +1110,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.preparation_abort.unsupported_hosts_return == "capability_unavailable"
             && stock.preparation_abort.retained_payload_versions == [1]
             && stock.preparation_abort.retained_v1_requires_absent_claims
-            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16]
+            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16, 17]
             && stock.preparation_abort.untracked_claimed_catalogs == [13, 14]
             && stock.preparation_abort.per_recipient_proof_count == 2
             && stock
@@ -2372,6 +2469,64 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/native_seller_stock_authority/envelope_retention/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
+
+    #[test]
+    fn stock_delivery_requires_fresh_confirmed_claims_and_bounded_original_outcomes() {
+        for (field, bad) in [
+            ("supported_catalogs", json!([16, 17])),
+            ("attempt_journal_family", json!(10)),
+            ("observation_journal_family", json!(11)),
+            ("attempts_per_target", json!(13)),
+            ("observation_page_max", json!(1000)),
+            ("worker_charge_bytes", json!(65536)),
+            (
+                "original_stock_evidence_installation_outer_required",
+                json!(false),
+            ),
+            (
+                "original_captured_route_and_current_write_policy_required",
+                json!(false),
+            ),
+            (
+                "fresh_current_scoped_consent_grant_clock_required",
+                json!(false),
+            ),
+            ("fresh_claim_requires_confirmed_commit", json!(false)),
+            ("existing_attempt_grants_dispatch", json!(true)),
+            ("unknown_commit_grants_dispatch", json!(true)),
+            ("query_grants_dispatch", json!(true)),
+            (
+                "first_complete_targets_and_criterion_immutable",
+                json!(false),
+            ),
+            ("ordinary_command_replays_existing_attempt", json!(true)),
+            ("retries_use_original_outer_bytes", json!(false)),
+            ("observation_nullable", json!(false)),
+            (
+                "original_credential_capture_requires_live_clock_or_grant",
+                json!(true),
+            ),
+            (
+                "same_owner_obtained_material_reconciliation_required",
+                json!(false),
+            ),
+            ("first_observation_per_class_immutable", json!(false)),
+            ("wrong_event_request_target_ack_rejected", json!(false)),
+            ("final_transaction_witnesses_required", json!(false)),
+            ("unbounded_attempt_or_observation_collections", json!(true)),
+            ("physical_stock_effect", json!(true)),
+            ("transport_inside_sql", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/delivery/{field}"),
                     bad
                 ))
                 .is_err(),

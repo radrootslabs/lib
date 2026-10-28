@@ -26,6 +26,8 @@ pub(super) enum Family {
     OriginalUnissued,
     ReplayAdmission,
     Envelope,
+    DeliveryAttempt,
+    DeliveryObservation,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -83,6 +85,8 @@ impl Header {
                     | Family::OriginalUnissued
                     | Family::ReplayAdmission
                     | Family::Envelope
+                    | Family::DeliveryAttempt
+                    | Family::DeliveryObservation
             ) != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
@@ -340,6 +344,8 @@ impl Family {
             Self::OriginalUnissued => 8,
             Self::ReplayAdmission => 9,
             Self::Envelope => 10,
+            Self::DeliveryAttempt => 11,
+            Self::DeliveryObservation => 12,
         }
     }
 }
@@ -447,6 +453,7 @@ pub(super) struct MovementWitness {
 /// A completely decoded original effect. Only the owning family decoder
 /// supplies its pool effects and movement witnesses; SQL indexes do not.
 pub(super) struct HistoryEntry {
+    pub delivery: Option<super::delivery::Projection>,
     pub envelope: Option<super::envelope::Projection>,
     pub aborted: Option<super::inventory::abort::Projection>,
     pub preparation: Option<[u8; 32]>,
@@ -476,150 +483,365 @@ pub(super) async fn history(
             .fetch_optional(&mut *connection)
             .await
             .map_err(|_| OperationError::RecoveryRequired)?;
+    if matches!(family, Some(11 | 12)) && authority.catalog >= 17 {
+        return Box::pin(delivery_history(
+            connection, input, crypto, binding, authority, operation, family,
+        ))
+        .await;
+    }
     match family {
         None => Ok(None),
         Some(0) => {
-            let retained = Box::pin(super::inventory::read_operation(
-                connection, input, crypto, binding, operation,
+            Box::pin(history_family_0(
+                connection, input, crypto, binding, authority, operation,
             ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?;
-            let (header, parts_witness) = retained.frame.ok_or(OperationError::RecoveryRequired)?;
-            let movements = match (retained.movement, retained.movement_protected) {
-                (Some(id), Some(protected)) => vec![MovementWitness {
-                    id,
-                    pool: retained.receipt.pool().id(),
-                    grant: retained.original_grant,
-                    protected,
-                }],
-                (None, None) => vec![],
-                _ => return Err(OperationError::RecoveryRequired),
-            };
-            Ok(Some(HistoryEntry {
-                envelope: None,
-                aborted: None,
-                preparation: None,
-                local_record: None,
-                installation: None,
-                signing: None,
-                header,
-                protected: retained.protected,
-                parts_witness,
-                pools: vec![retained.receipt.pool()],
-                mapping: retained.receipt.mapping(),
-                movements,
-            }))
+            .await
         }
         Some(1) => {
-            let retained = Box::pin(super::consent::read(
+            Box::pin(history_family_1(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(2) if matches!(authority.catalog, 9..=17) => {
+            Box::pin(history_family_2(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(2) => Err(OperationError::UnsupportedOperation),
+        Some(3) if matches!(authority.catalog, 10..=17) => {
+            Box::pin(history_family_3(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(4) if authority.catalog >= 11 => {
+            Box::pin(history_family_4(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(5) if authority.catalog >= 11 => {
+            Box::pin(history_family_5(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(6) if matches!(authority.catalog, 12..=17) => {
+            Box::pin(history_family_6(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(7) if authority.catalog >= 13 => {
+            Box::pin(history_family_7(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(8) if authority.catalog >= 14 => {
+            Box::pin(history_family_8(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(9) if authority.catalog >= 15 => {
+            Box::pin(history_family_9(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(10) if authority.catalog >= 16 => {
+            Box::pin(history_family_10(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(_) => Err(OperationError::RecoveryRequired),
+    }
+}
+// Isolate each authenticated family decoder from the dispatch polling frame.
+async fn history_family_0(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    {
+        let retained = Box::pin(super::inventory::read_operation(
+            connection, input, crypto, binding, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
+        let (header, parts_witness) = retained.frame.ok_or(OperationError::RecoveryRequired)?;
+        let movements = match (retained.movement, retained.movement_protected) {
+            (Some(id), Some(protected)) => vec![MovementWitness {
+                id,
+                pool: retained.receipt.pool().id(),
+                grant: retained.original_grant,
+                protected,
+            }],
+            (None, None) => vec![],
+            _ => return Err(OperationError::RecoveryRequired),
+        };
+        Ok(Some(HistoryEntry {
+            delivery: None,
+            envelope: None,
+            aborted: None,
+            preparation: None,
+            local_record: None,
+            installation: None,
+            signing: None,
+            header,
+            protected: retained.protected,
+            parts_witness,
+            pools: vec![retained.receipt.pool()],
+            mapping: retained.receipt.mapping(),
+            movements,
+        }))
+    }
+}
+async fn history_family_1(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    {
+        let retained = Box::pin(super::consent::read(
+            connection,
+            input,
+            crypto,
+            authority.input.grant_id(),
+            operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM stock_movements WHERE actor=? AND operation_id=?",
+        )
+        .bind(input.participant().as_bytes().as_slice())
+        .bind(operation.as_bytes().as_slice())
+        .fetch_one(connection)
+        .await
+        .map_err(|_| OperationError::RecoveryRequired)?;
+        if count != 0 {
+            return Err(OperationError::RecoveryRequired);
+        }
+        Ok(Some(HistoryEntry {
+            delivery: None,
+            envelope: None,
+            aborted: None,
+            preparation: None,
+            local_record: None,
+            installation: None,
+            signing: None,
+            header: retained.frame.header,
+            protected: retained.frame.protected,
+            parts_witness: retained.frame.parts_witness,
+            pools: vec![],
+            mapping: None,
+            movements: vec![],
+        }))
+    }
+}
+async fn history_family_2(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::inventory::acceptance::codec::read(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+async fn history_family_3(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    {
+        let retained = Box::pin(super::signing_plan::read_entry(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
+        Ok(Some(retained.into_history()))
+    }
+}
+async fn history_family_4(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::issuance::read_entry(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+async fn history_family_5(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::issuance::evidence::read_entry(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+async fn history_family_6(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::inventory::installation::read_entry(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+async fn history_family_7(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::inventory::abort::read_entry(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+async fn history_family_8(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::issuance::unissued::read_entry(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+async fn history_family_9(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    _binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::issuance::replay_admission::read_entry(
+            connection, input, crypto, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+async fn history_family_10(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    _authority: &Authority,
+    operation: OperationId,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    Ok(Some(
+        Box::pin(super::envelope::read_entry(
+            connection, input, crypto, binding, operation,
+        ))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?
+        .into_history(),
+    ))
+}
+
+// Keep the new large delivery reports outside the legacy history polling frame.
+async fn delivery_history(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    authority: &Authority,
+    operation: OperationId,
+    family: Option<i64>,
+) -> Result<Option<HistoryEntry>, OperationError> {
+    match family {
+        Some(11) => Ok(Some(
+            Box::pin(super::delivery::attempt::read_entry(
                 connection,
                 input,
                 crypto,
+                binding,
                 authority.input.grant_id(),
                 operation,
             ))
             .await?
-            .ok_or(OperationError::RecoveryRequired)?;
-            let count: i64 = sqlx::query_scalar(
-                "SELECT count(*) FROM stock_movements WHERE actor=? AND operation_id=?",
-            )
-            .bind(input.participant().as_bytes().as_slice())
-            .bind(operation.as_bytes().as_slice())
-            .fetch_one(connection)
-            .await
-            .map_err(|_| OperationError::RecoveryRequired)?;
-            if count != 0 {
-                return Err(OperationError::RecoveryRequired);
-            }
-            Ok(Some(HistoryEntry {
-                envelope: None,
-                aborted: None,
-                preparation: None,
-                local_record: None,
-                installation: None,
-                signing: None,
-                header: retained.frame.header,
-                protected: retained.frame.protected,
-                parts_witness: retained.frame.parts_witness,
-                pools: vec![],
-                mapping: None,
-                movements: vec![],
-            }))
-        }
-        Some(2) if matches!(authority.catalog, 9..=16) => Ok(Some(
-            Box::pin(super::inventory::acceptance::codec::read(
-                connection, input, crypto, operation,
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
+        )),
+        Some(12) => Ok(Some(
+            Box::pin(super::delivery::observation::read_entry(
+                connection,
+                input,
+                crypto,
+                binding,
+                authority.input.grant_id(),
+                operation,
             ))
             .await?
             .ok_or(OperationError::RecoveryRequired)?
             .into_history(),
         )),
-        Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10..=16) => {
-            let retained = Box::pin(super::signing_plan::read_entry(
-                connection, input, crypto, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?;
-            Ok(Some(retained.into_history()))
-        }
-        Some(4) if authority.catalog >= 11 => Ok(Some(
-            Box::pin(super::issuance::read_entry(
-                connection, input, crypto, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?
-            .into_history(),
-        )),
-        Some(5) if authority.catalog >= 11 => Ok(Some(
-            Box::pin(super::issuance::evidence::read_entry(
-                connection, input, crypto, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?
-            .into_history(),
-        )),
-        Some(6) if matches!(authority.catalog, 12..=16) => Ok(Some(
-            Box::pin(super::inventory::installation::read_entry(
-                connection, input, crypto, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?
-            .into_history(),
-        )),
-        Some(7) if authority.catalog >= 13 => Ok(Some(
-            Box::pin(super::inventory::abort::read_entry(
-                connection, input, crypto, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?
-            .into_history(),
-        )),
-        Some(8) if authority.catalog >= 14 => Ok(Some(
-            Box::pin(super::issuance::unissued::read_entry(
-                connection, input, crypto, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?
-            .into_history(),
-        )),
-        Some(9) if authority.catalog >= 15 => Ok(Some(
-            Box::pin(super::issuance::replay_admission::read_entry(
-                connection, input, crypto, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?
-            .into_history(),
-        )),
-        Some(10) if authority.catalog >= 16 => Ok(Some(
-            Box::pin(super::envelope::read_entry(
-                connection, input, crypto, binding, operation,
-            ))
-            .await?
-            .ok_or(OperationError::RecoveryRequired)?
-            .into_history(),
-        )),
-        Some(_) => Err(OperationError::RecoveryRequired),
+        _ => Err(OperationError::RecoveryRequired),
     }
 }
 pub(super) fn hash_optional(hash: &mut Sha256, value: Option<&[u8]>) -> Result<(), OperationError> {
@@ -719,6 +941,22 @@ impl HistoryEntry {
                 hash.update(projection.digest(header.actor.participant(), header.operation))
             }
             (Family::Envelope, None) | (_, Some(_)) => {
+                return Err(OperationError::RecoveryRequired);
+            }
+            (_, None) => {}
+        }
+        match (header.family, self.delivery) {
+            (
+                Family::DeliveryAttempt,
+                Some(projection @ super::delivery::Projection::Attempt { .. }),
+            )
+            | (
+                Family::DeliveryObservation,
+                Some(projection @ super::delivery::Projection::Observation { .. }),
+            ) => {
+                hash.update(projection.digest(header.actor.participant(), header.operation));
+            }
+            (Family::DeliveryAttempt | Family::DeliveryObservation, _) | (_, Some(_)) => {
                 return Err(OperationError::RecoveryRequired);
             }
             (_, None) => {}

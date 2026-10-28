@@ -82,7 +82,7 @@
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
       "captured_replay": "local_replay_safe",
-      "native_catalog": 16,
+      "native_catalog": 17,
       "worker_charge_bytes": 1048576,
       "existing_protected_claim_required": true,
       "current_execute_consent_required": true,
@@ -111,7 +111,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 16,
+    "schema_version": 17,
     "retained_enrollment_versions": [
       1
     ],
@@ -129,9 +129,10 @@
       12,
       13,
       14,
-      15
+      15,
+      16
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v16",
+    "authority_payload_schema": "radroots.seller_stock.authority.v17",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -395,7 +396,8 @@
       "retained_v1_requires_absent_claims": true,
       "claimed_cleanup_catalogs": [
         15,
-        16
+        16,
+        17
       ],
       "untracked_claimed_catalogs": [
         13,
@@ -414,7 +416,8 @@
       "payload_version": 1,
       "payload_prefix_bytes": 213,
       "supported_catalogs": [
-        16
+        16,
+        17
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -448,7 +451,74 @@
       "existing_original_bytes_may_be_replaced": false,
       "capture_grants_dispatch": false,
       "capture_changes_physical_stock": false,
-      "provider_io_inside_sql": false
+      "provider_io_inside_sql": false,
+      "recovery_port": "InventoryStore.reconcile_stock_envelope"
+    },
+    "delivery": {
+      "supported_catalogs": [
+        17
+      ],
+      "retained_unsupported_catalogs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "attempt_journal_family": 11,
+      "observation_journal_family": 12,
+      "attempt_payload_version": 1,
+      "observation_payload_version": 1,
+      "attempt_body_max_bytes": 65536,
+      "observation_body_max_bytes": 16384,
+      "target_max": 16,
+      "attempts_per_target": 12,
+      "attempts_per_operation_max": 384,
+      "observations_per_operation_max": 2304,
+      "observation_page_max": 16,
+      "summary_target_max": 16,
+      "worker_charge_bytes": 1048576,
+      "storage_ports": [
+        "InventoryStore.prepare_stock_delivery_attempt",
+        "InventoryStore.stock_delivery_attempt",
+        "InventoryStore.stock_delivery_summary",
+        "InventoryStore.record_stock_delivery_observation",
+        "InventoryStore.reconcile_stock_delivery_observation",
+        "InventoryStore.stock_delivery_observations"
+      ],
+      "original_stock_evidence_installation_outer_required": true,
+      "original_captured_route_and_current_write_policy_required": true,
+      "fresh_current_scoped_consent_grant_clock_required": true,
+      "installed_original_recovery_delivery_supported": true,
+      "fresh_claim_requires_confirmed_commit": true,
+      "existing_attempt_grants_dispatch": false,
+      "unknown_commit_grants_dispatch": false,
+      "query_grants_dispatch": false,
+      "first_complete_targets_and_criterion_immutable": true,
+      "ordinary_command_replays_existing_attempt": false,
+      "explicit_resume_claims_bounded_new_attempt": true,
+      "retries_use_original_outer_bytes": true,
+      "observation_nullable": true,
+      "original_credential_capture_requires_live_clock_or_grant": false,
+      "same_owner_obtained_material_reconciliation_required": true,
+      "first_observation_per_class_immutable": true,
+      "wrong_event_request_target_ack_rejected": true,
+      "protected_refs_indexes_complete_ancestry_required": true,
+      "final_transaction_witnesses_required": true,
+      "unbounded_attempt_or_observation_collections": false,
+      "physical_stock_effect": false,
+      "transport_inside_sql": false
     }
   },
   "provenance": {

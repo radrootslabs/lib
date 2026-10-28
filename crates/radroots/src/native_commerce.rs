@@ -132,6 +132,9 @@ impl AcceptanceSnapshot for Snapshot {
     fn aborted(&self) -> bool {
         self.0.aborted().is_some()
     }
+    fn delivery(&self) -> Option<&[radroots_storage::inventory::StockDeliverySummary; 2]> {
+        self.0.delivery()
+    }
 }
 impl AcceptanceDispatch for Dispatch {
     fn claim(&self) -> AcceptanceClaim {
@@ -181,6 +184,38 @@ fn select(value: AcceptanceSelection, recipient: PublicKey) -> StockClaimRequest
     )
 }
 impl AcceptanceStore for NativeCommerce {
+    fn signing_evidence<'a>(
+        &'a self,
+        selection: AcceptanceSelection,
+        receipt: radroots_storage::inventory::StockEvidenceReceipt,
+        proof: &'a AttachmentProof,
+    ) -> HostFuture<
+        'a,
+        Result<Option<radroots_storage::inventory::StockEvidenceSource>, OperationError>,
+    > {
+        Box::pin(async move {
+            let source = self
+                .0
+                .stock_signing_evidence(
+                    select(selection, receipt.recipient()),
+                    *receipt.digest(),
+                    proof,
+                )
+                .await?;
+            source
+                .map(|source| {
+                    if source.receipt() != receipt {
+                        return Err(OperationError::RecoveryRequired);
+                    }
+                    source.with_json(|raw| {
+                        radroots_storage::inventory::StockEvidenceSource::from_retained_wire(
+                            receipt, raw,
+                        )
+                    })
+                })
+                .transpose()
+        })
+    }
     fn snapshot<'a>(
         &'a self,
         value: AcceptanceSelection,

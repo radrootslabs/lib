@@ -1,3 +1,4 @@
+mod dispatch;
 use super::{
     AttachmentInput, AttachmentProof, WorkspaceBinding, WorkspaceClock, WorkspaceCrypto,
     WorkspaceError,
@@ -88,6 +89,46 @@ enum Job {
         Box<stock::StockClaimRequest>,
         AttachmentProof,
         Reply<Option<stock::StockUnissuedReceipt>, OperationError>,
+    ),
+    PrepareStockDelivery(
+        Box<radroots_storage::inventory::StockDeliveryRequest>,
+        AttachmentProof,
+        Reply<radroots_storage::inventory::StockDeliveryAttemptOutcome, OperationError>,
+    ),
+    StockDeliveryAttempt(
+        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        radroots_transport::sink::DeliveryRequestId,
+        AttachmentProof,
+        Reply<Option<radroots_storage::inventory::StockDeliveryAttempt>, OperationError>,
+    ),
+    StockDeliverySummary(
+        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        AttachmentProof,
+        Reply<radroots_storage::inventory::StockDeliverySummary, OperationError>,
+    ),
+    RecordStockDeliveryObservation(
+        Box<WorkspaceBinding>,
+        AttachmentProof,
+        Box<radroots_storage::inventory::StockDeliveryObservation>,
+        Reply<radroots_storage::inventory::StockDeliveryObservationOutcome, OperationError>,
+    ),
+    StockDeliveryObservations(
+        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        Option<radroots_domain::Sequence>,
+        AttachmentProof,
+        Reply<radroots_storage::inventory::StockDeliveryObservationPage, OperationError>,
+    ),
+    RecoverStockEnvelope(
+        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        AttachmentProof,
+        Box<radroots_storage::command::PrivateEnvelopeCandidate>,
+        Reply<radroots_storage::inventory::StockEnvelopeOutcome, OperationError>,
+    ),
+    RecoverStockObservation(
+        Box<WorkspaceBinding>,
+        AttachmentProof,
+        Box<radroots_storage::inventory::StockDeliveryObservation>,
+        Reply<radroots_storage::inventory::StockDeliveryObservationOutcome, OperationError>,
     ),
     CaptureStockEnvelope(
         Box<radroots_storage::inventory::StockEnvelopeRequest>,
@@ -367,6 +408,27 @@ impl Job {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::CaptureStockEvidence(_, _, reply) | Self::RecoverStockEvidence(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::PrepareStockDelivery(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockDeliveryAttempt(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockDeliverySummary(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::RecordStockDeliveryObservation(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockDeliveryObservations(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::RecoverStockEnvelope(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::RecoverStockObservation(_, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::CaptureStockEnvelope(_, _, _, reply) => {
@@ -650,6 +712,13 @@ impl Handle {
                                         | Job::CaptureStockUnissued(..)
                                         | Job::RecoverStockUnissued(..)
                                         | Job::StockUnissued(..)
+                                        | Job::PrepareStockDelivery(..)
+                                        | Job::StockDeliveryAttempt(..)
+                                        | Job::StockDeliverySummary(..)
+                                        | Job::RecordStockDeliveryObservation(..)
+                                        | Job::StockDeliveryObservations(..)
+                                        | Job::RecoverStockEnvelope(..)
+                                        | Job::RecoverStockObservation(..)
                                         | Job::CaptureStockEnvelope(..)
                                         | Job::StockEnvelope(..)
                                         | Job::CaptureStockEvidence(..)
@@ -669,6 +738,47 @@ impl Handle {
                                 continue;
                             }
                             let job = match job {
+                                Job::RecoverStockEnvelope(request, proof, candidate, reply) => {
+                                    let result = Box::pin(
+                                        super::recovery::RecoveryTurn {
+                                            connection: &mut connection,
+                                            cached_grant: &mut cached_grant,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                            options: &options,
+                                        }
+                                        .capture_envelope(*request, proof, *candidate),
+                                    )
+                                    .await;
+                                    let _ = reply.send(result);
+                                    continue;
+                                }
+                                Job::RecoverStockObservation(
+                                    binding,
+                                    proof,
+                                    observation,
+                                    reply,
+                                ) => {
+                                    let result = Box::pin(
+                                        super::recovery::RecoveryTurn {
+                                            connection: &mut connection,
+                                            cached_grant: &mut cached_grant,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                            options: &options,
+                                        }
+                                        .capture_observation(*binding, proof, *observation),
+                                    )
+                                    .await;
+                                    let _ = reply.send(result);
+                                    continue;
+                                }
                                 Job::RecoverStockUnissued(request, proof, reply) => {
                                     let result = Box::pin(
                                         super::recovery::RecoveryTurn {
@@ -727,985 +837,19 @@ impl Handle {
                                 job.reject_recovery();
                                 continue;
                             };
-                            match job {
-                                Job::ChangeStockGrant(change, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock && !uncertain {
-                                        stock::grants::change(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *change,
-                                            proof,
-                                        )
-                                        .await
-                                    } else {
-                                        Err(WorkspaceError::RecoveryRequired)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::ExecuteInventory(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::inventory::Turn {
-                                            connection,
-                                            namespace: &namespace,
-                                            selected: &input,
-                                            crypto: &crypto,
-                                            clock: clock.as_ref(),
-                                            uncertain: &mut uncertain,
-                                        }
-                                        .create(*request, proof)
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::InventoryOperation(
-                                    binding,
-                                    minimum,
-                                    operation,
-                                    digest,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::inventory::Turn {
-                                            connection,
-                                            namespace: &namespace,
-                                            selected: &input,
-                                            crypto: &crypto,
-                                            clock: clock.as_ref(),
-                                            uncertain: &mut uncertain,
-                                        }
-                                        .creation(*binding, minimum, operation, digest, proof)
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::IssueStockConsent(binding, minimum, capture, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::consent::issue(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            minimum,
-                                            *capture,
-                                            proof,
-                                        )
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockConsent(
-                                    binding,
-                                    minimum,
-                                    operation,
-                                    subject,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::consent::query(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            minimum,
-                                            operation,
-                                            subject,
-                                            proof,
-                                        )
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::RetainStockListing(
-                                    binding,
-                                    minimum,
-                                    capture,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::public_source::retain(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            minimum,
-                                            *capture,
-                                            proof,
-                                        )
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockListing(binding, minimum, lookup, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::public_source::query(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            minimum,
-                                            lookup,
-                                            proof,
-                                        )
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::RetainStockSource(binding, minimum, capture, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::source::retain(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            minimum,
-                                            *capture,
-                                            proof,
-                                        )
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::InstallStockAgreement(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::inventory::installation::install(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockAgreementInstallation(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::inventory::installation::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::AbortStockPreparation(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::inventory::abort::abort(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockPreparationAbort(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::inventory::abort::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockSnapshot(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::snapshot::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockEvidencePage(request, after, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::evidence::page(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            after,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::CaptureStockUnissued(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::unissued::capture(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockUnissued(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::unissued::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::CaptureStockEnvelope(request, proof, candidate, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::envelope::capture(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                            *candidate,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockEnvelope(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::envelope::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::CaptureStockEvidence(evidence, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::evidence::capture(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *evidence,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockEvidence(request, digest, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::evidence::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            digest,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::ClaimStockSigning(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::claim::claim(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::AuthorizeStockExactReplay(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::recovery::authorize(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockSigningAttempt(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::issuance::claim::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::BindStockSigningPlan(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::signing_plan::bind(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockSigningPlan(
-                                    binding,
-                                    minimum,
-                                    operation,
-                                    digest,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::signing_plan::read(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            minimum,
-                                            operation,
-                                            digest,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::PrepareStockAcceptance(request, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::inventory::acceptance::admit(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *request,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockOrderRequest(
-                                    binding,
-                                    inventory_minimum,
-                                    minimum,
-                                    listings,
-                                    selected,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::source::inspect_request(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            inventory_minimum,
-                                            minimum,
-                                            listings,
-                                            selected,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockOrderHistory(
-                                    binding,
-                                    inventory_minimum,
-                                    minimum,
-                                    listings,
-                                    scope,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        Box::pin(stock::source::query_history(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            inventory_minimum,
-                                            minimum,
-                                            listings,
-                                            scope,
-                                            proof,
-                                        ))
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockSource(binding, minimum, envelope, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::source::query(
-                                            &mut stock::inventory::Turn {
-                                                connection,
-                                                namespace: &namespace,
-                                                selected: &input,
-                                                crypto: &crypto,
-                                                clock: clock.as_ref(),
-                                                uncertain: &mut uncertain,
-                                            },
-                                            *binding,
-                                            minimum,
-                                            envelope,
-                                            proof,
-                                        )
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::OptionMapping(binding, minimum, key, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::inventory::Turn {
-                                            connection,
-                                            namespace: &namespace,
-                                            selected: &input,
-                                            crypto: &crypto,
-                                            clock: clock.as_ref(),
-                                            uncertain: &mut uncertain,
-                                        }
-                                        .option_mapping(*binding, minimum, key, proof)
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::Pool(binding, minimum, id, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock {
-                                        stock::inventory::Turn {
-                                            connection,
-                                            namespace: &namespace,
-                                            selected: &input,
-                                            crypto: &crypto,
-                                            clock: clock.as_ref(),
-                                            uncertain: &mut uncertain,
-                                        }
-                                        .pool(*binding, minimum, id, proof)
-                                        .await
-                                    } else {
-                                        Err(OperationError::UnsupportedOperation)
-                                    };
-                                    let _ = reply.send(result);
-                                }
-                                Job::StockAuthority(selected, proof, reply) => {
-                                    let result = if kind == Kind::SellerStock && !uncertain {
-                                        stock::authenticate(
-                                            connection,
-                                            &namespace,
-                                            &input,
-                                            &crypto,
-                                            clock.as_ref(),
-                                            &selected,
-                                            &proof,
-                                        )
-                                        .await
-                                        .map(|(receipt, _)| receipt)
-                                    } else {
-                                        Err(WorkspaceError::RecoveryRequired)
-                                    };
-                                    if result == Err(WorkspaceError::CommitUnknown) {
-                                        uncertain = true;
-                                    }
-                                    let _ = reply.send(result);
-                                }
-                                job @ (Job::RecoverCapture(..)
-                                | Job::RecoverStockEvidence(..)
-                                | Job::RecoverStockUnissued(..)) => job.reject_recovery(),
-                                Job::CaptureDeliveryObservation(
-                                    binding,
-                                    proof,
-                                    observation,
-                                    reply,
-                                ) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .capture_delivery_observation(*binding, proof, *observation)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::QueryDeliveryObservations(
-                                    binding,
-                                    operation,
-                                    digest,
-                                    recipient,
-                                    request,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .query_delivery_observations(
-                                        *binding, operation, digest, recipient, request, proof,
-                                    )
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::PrepareDelivery(request, proof, candidate, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .prepare_delivery(
-                                        *request,
-                                        proof,
-                                        candidate.map(|value| *value),
-                                    )
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::QueryDelivery(
-                                    binding,
-                                    operation,
-                                    digest,
-                                    recipient,
-                                    request,
-                                    proof,
-                                    reply,
-                                ) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .query_delivery(
-                                        *binding, operation, digest, recipient, request, proof,
-                                    )
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Install(request, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .install_chat(*request, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Snapshot(binding, operation, digest, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .query_snapshot(*binding, operation, digest, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Claim(request, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .claim_issuance(*request, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Attempt(request, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .query_issuance(*request, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Capture(selected, proof, evidence, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .capture_issuance(*selected, proof, *evidence)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Captured(request, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .query_captured(*request, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::BindPlan(binding, plan, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .bind_plan(*binding, plan, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::SigningPlan(binding, operation_id, digest, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .query_plan(*binding, operation_id, digest, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Authenticate(selected, proof, reply) => {
-                                    let result = if uncertain {
-                                        Err(WorkspaceError::RecoveryRequired)
-                                    } else if kind == Kind::SellerStock {
-                                        stock::authenticate(
-                                            connection,
-                                            &namespace,
-                                            &input,
-                                            &crypto,
-                                            clock.as_ref(),
-                                            &selected,
-                                            &proof,
-                                        )
-                                        .await
-                                        .map(|(_, binding)| binding)
-                                    } else {
-                                        authenticate(
-                                            connection,
-                                            &namespace,
-                                            &input,
-                                            &crypto,
-                                            clock.as_ref(),
-                                            &selected,
-                                            &proof,
-                                        )
-                                        .await
-                                        .map(|(_, binding)| binding)
-                                    };
-                                    if result == Err(WorkspaceError::CommitUnknown) {
-                                        uncertain = true;
-                                    }
-                                    let _ = reply.send(result);
-                                }
-                                Job::Revoke(selected, proof, reply) => {
-                                    let result = if uncertain {
-                                        Err(WorkspaceError::RecoveryRequired)
-                                    } else if kind == Kind::SellerStock {
-                                        stock::revoke(
-                                            connection,
-                                            &namespace,
-                                            &input,
-                                            &crypto,
-                                            clock.as_ref(),
-                                            &selected,
-                                            &proof,
-                                        )
-                                        .await
-                                    } else {
-                                        revoke(
-                                            connection,
-                                            &namespace,
-                                            &input,
-                                            &crypto,
-                                            clock.as_ref(),
-                                            &selected,
-                                            &proof,
-                                        )
-                                        .await
-                                    };
-                                    if result == Err(WorkspaceError::CommitUnknown) {
-                                        uncertain = true;
-                                    }
-                                    let _ = reply.send(result);
-                                }
-                                Job::Admit(request, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .admit(*request, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                                Job::Operation(binding, operation_id, digest, proof, reply) => {
-                                    let result = Journal {
-                                        connection,
-                                        namespace: &namespace,
-                                        selected: &input,
-                                        crypto: &crypto,
-                                        clock: clock.as_ref(),
-                                        uncertain: &mut uncertain,
-                                    }
-                                    .query(*binding, operation_id, digest, proof)
-                                    .await;
-                                    let _ = reply.send(result);
-                                }
-                            }
+                            dispatch::run(
+                                job,
+                                kind,
+                                stock::inventory::Turn {
+                                    connection,
+                                    namespace: &namespace,
+                                    selected: &input,
+                                    crypto: &crypto,
+                                    clock: clock.as_ref(),
+                                    uncertain: &mut uncertain,
+                                },
+                            )
+                            .await;
                         }
                     }
                     // The admission sender is gone. All admitted work has drained.
@@ -2008,6 +1152,104 @@ impl Handle {
         self.send(Job::RecoverStockEvidence(Box::new(request), proof, reply))?;
         result.await.unwrap_or(Ok(unknown))
     }
+
+    pub(super) async fn reconcile_stock_envelope(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+        candidate: radroots_storage::command::PrivateEnvelopeCandidate,
+    ) -> Result<radroots_storage::inventory::StockEnvelopeOutcome, OperationError> {
+        let unknown = radroots_storage::inventory::StockEnvelopeOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::RecoverStockEnvelope(
+            Box::new(request),
+            proof,
+            Box::new(candidate),
+            reply,
+        ))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn prepare_stock_delivery_attempt(
+        &self,
+        request: radroots_storage::inventory::StockDeliveryRequest,
+        proof: AttachmentProof,
+    ) -> Result<radroots_storage::inventory::StockDeliveryAttemptOutcome, OperationError> {
+        let unknown = radroots_storage::inventory::StockDeliveryAttemptOutcome::Unknown {
+            operation: request.attempt(),
+            request: request.intent().request_id().clone(),
+        };
+        let (reply, result) = oneshot::channel();
+        self.send(Job::PrepareStockDelivery(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_delivery_attempt(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        request_id: radroots_transport::sink::DeliveryRequestId,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_storage::inventory::StockDeliveryAttempt>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockDeliveryAttempt(
+            Box::new(request),
+            request_id,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn stock_delivery_summary(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+    ) -> Result<radroots_storage::inventory::StockDeliverySummary, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockDeliverySummary(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn record_stock_delivery_observation(
+        &self,
+        binding: WorkspaceBinding,
+        proof: AttachmentProof,
+        observation: radroots_storage::inventory::StockDeliveryObservation,
+        recovering: bool,
+    ) -> Result<radroots_storage::inventory::StockDeliveryObservationOutcome, OperationError> {
+        let source = observation.source().attempt();
+        let unknown = radroots_storage::inventory::StockDeliveryObservationOutcome::Unknown(
+            radroots_storage::command::CommitAttempt::new(
+                source.workspace_id(),
+                source.operation_id(),
+                source.command_digest(),
+                None,
+            ),
+        );
+        let (reply, result) = oneshot::channel();
+        self.send(if recovering {
+            Job::RecoverStockObservation(Box::new(binding), proof, Box::new(observation), reply)
+        } else {
+            Job::RecordStockDeliveryObservation(
+                Box::new(binding),
+                proof,
+                Box::new(observation),
+                reply,
+            )
+        })?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_delivery_observations(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        after: Option<radroots_domain::Sequence>,
+        proof: AttachmentProof,
+    ) -> Result<radroots_storage::inventory::StockDeliveryObservationPage, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockDeliveryObservations(
+            Box::new(request),
+            after,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn capture_stock_envelope(
         &self,
         request: radroots_storage::inventory::StockEnvelopeRequest,
@@ -2218,7 +1460,14 @@ impl Handle {
             | Job::RecoverStockUnissued(..)
             | Job::CaptureStockEvidence(..)
             | Job::RecoverStockEvidence(..) => 256 * 1024,
-            Job::CaptureStockEnvelope(..)
+            Job::PrepareStockDelivery(..)
+            | Job::StockDeliveryAttempt(..)
+            | Job::StockDeliverySummary(..)
+            | Job::RecordStockDeliveryObservation(..)
+            | Job::StockDeliveryObservations(..)
+            | Job::RecoverStockEnvelope(..)
+            | Job::RecoverStockObservation(..)
+            | Job::CaptureStockEnvelope(..)
             | Job::StockEnvelope(..)
             | Job::StockEvidence(..)
             | Job::StockUnissued(..)

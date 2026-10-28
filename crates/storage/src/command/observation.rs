@@ -10,6 +10,46 @@ use radroots_transport::{
     target::TargetFingerprint,
 };
 
+/// Mechanical target normalization shared by independently authenticated owners.
+pub(crate) fn normalize(
+    intent: &super::DeliveryIntent,
+    ordinals: &[u8],
+    report: &DeliveryTargetReceipt,
+    observed_at: Option<NonZeroU64>,
+) -> Result<(DeliveryObservationKind, u8), OperationError> {
+    if observed_at.is_some_and(|time| time.get() > 253_402_300_799_999)
+        || !intent.targets().targets().contains(report.target())
+        || report.outcome().kind() == DeliveryOutcomeKind::Delivered
+    {
+        return Err(OperationError::InvalidEvidence);
+    }
+    let kind = if !report.was_attempted() {
+        DeliveryObservationKind::NotAttempted
+    } else {
+        match report.outcome().kind() {
+            DeliveryOutcomeKind::Accepted => DeliveryObservationKind::Accepted,
+            DeliveryOutcomeKind::Rejected => DeliveryObservationKind::Rejected,
+            DeliveryOutcomeKind::Failed | DeliveryOutcomeKind::Unavailable => {
+                match report.outcome().code() {
+                    Some("timeout" | "deadline_exceeded") => DeliveryObservationKind::TimedOut,
+                    Some("connection_failed" | "disconnected") => {
+                        DeliveryObservationKind::Disconnected
+                    }
+                    _ => DeliveryObservationKind::Unknown,
+                }
+            }
+            DeliveryOutcomeKind::Delivered => return Err(OperationError::InvalidEvidence),
+        }
+    };
+    let index = intent
+        .selection()
+        .iter()
+        .position(|target| target == report.target().fingerprint())
+        .ok_or(OperationError::InvalidEvidence)?;
+    let ordinal = *ordinals.get(index).ok_or(OperationError::InvalidEvidence)?;
+    Ok((kind, ordinal))
+}
+
 /// Independent append-only outcome classes. Each actual attempt/target has at
 /// most one original observation of each class; a later class never erases it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -100,44 +140,12 @@ impl DeliveryObservation {
         report: &DeliveryTargetReceipt,
         observed_at_unix_ms: Option<NonZeroU64>,
     ) -> Result<Self, OperationError> {
-        if observed_at_unix_ms.is_some_and(|time| time.get() > 253_402_300_799_999)
-            || !attempt
-                .intent()
-                .targets()
-                .targets()
-                .contains(report.target())
-            || report.outcome().kind() == DeliveryOutcomeKind::Delivered
-        {
-            return Err(OperationError::InvalidEvidence);
-        }
-        let kind = if !report.was_attempted() {
-            DeliveryObservationKind::NotAttempted
-        } else {
-            match report.outcome().kind() {
-                DeliveryOutcomeKind::Accepted => DeliveryObservationKind::Accepted,
-                DeliveryOutcomeKind::Rejected => DeliveryObservationKind::Rejected,
-                DeliveryOutcomeKind::Failed | DeliveryOutcomeKind::Unavailable => {
-                    match report.outcome().code() {
-                        Some("timeout" | "deadline_exceeded") => DeliveryObservationKind::TimedOut,
-                        Some("connection_failed" | "disconnected") => {
-                            DeliveryObservationKind::Disconnected
-                        }
-                        _ => DeliveryObservationKind::Unknown,
-                    }
-                }
-                DeliveryOutcomeKind::Delivered => return Err(OperationError::InvalidEvidence),
-            }
-        };
-        let index = attempt
-            .intent()
-            .selection()
-            .iter()
-            .position(|target| target == report.target().fingerprint())
-            .ok_or(OperationError::InvalidEvidence)?;
-        let ordinal = *attempt
-            .target_ordinals()
-            .get(index)
-            .ok_or(OperationError::InvalidEvidence)?;
+        let (kind, ordinal) = normalize(
+            attempt.intent(),
+            attempt.target_ordinals(),
+            report,
+            observed_at_unix_ms,
+        )?;
         Ok(Self {
             work: attempt.work(),
             request: attempt.intent().request_id().clone(),

@@ -221,6 +221,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            delivery: None,
             envelope: None,
             aborted: None,
             preparation: None,

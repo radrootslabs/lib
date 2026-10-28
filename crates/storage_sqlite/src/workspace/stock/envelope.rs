@@ -14,8 +14,9 @@ use sqlx::Row;
 use zeroize::Zeroizing;
 mod codec;
 mod projection;
+use codec::Original;
+pub(in crate::workspace::stock) use codec::Retained;
 pub(super) use codec::read_entry;
-use codec::{Original, Retained};
 pub(super) use projection::{Projection, raw_projection};
 
 async fn selected_entry(
@@ -41,7 +42,7 @@ async fn selected_entry(
     })
     .transpose()
 }
-async fn lookup(
+pub(in crate::workspace::stock) async fn lookup(
     turn: &mut Turn<'_>,
     request: &StockEnvelopeRequest,
 ) -> Result<Option<Retained>, OperationError> {
@@ -73,7 +74,7 @@ async fn lookup(
     }
     Ok(Some(retained))
 }
-async fn full_proof(
+pub(in crate::workspace::stock) async fn full_proof(
     turn: &mut Turn<'_>,
     request: &StockEnvelopeRequest,
     authority: &Authority,
@@ -121,7 +122,7 @@ pub(in crate::workspace) async fn capture(
         return Err(OperationError::Unauthorized);
     }
     let (authority, record, root, grant) = super::read(turn.connection, input, turn.crypto).await?;
-    if authority.catalog != 16 {
+    if !matches!(authority.catalog, 16 | 17) {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
@@ -300,7 +301,7 @@ pub(in crate::workspace) async fn read(
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if catalog != 16 {
+    if !matches!(catalog, 16 | 17) {
         return Err(OperationError::UnsupportedOperation);
     }
     let auth = Box::pin(super::signing_plan::load(
@@ -312,7 +313,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if auth.access.authority.catalog != 16 {
+    if !matches!(auth.access.authority.catalog, 16 | 17) {
         return Err(OperationError::UnsupportedOperation);
     }
     let witness = Box::pin(full_proof(turn, &request, &auth.access.authority)).await?;

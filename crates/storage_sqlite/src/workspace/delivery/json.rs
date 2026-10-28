@@ -8,7 +8,7 @@ use serde_json::value::RawValue;
 // Allocation-free structural preflight, followed by the actual closed serde
 // codec. Fixed identifier arrays contain 32 bytes; descriptor lists use the
 // stricter sixteen-element visitor below.
-pub(super) fn bounded(raw: &[u8], array_limit: usize) -> bool {
+pub(in crate::workspace) fn bounded(raw: &[u8], array_limit: usize) -> bool {
     let mut stack = [(0u8, false, 0usize); 16];
     let mut depth = 0usize;
     let mut quoted = false;
@@ -63,7 +63,7 @@ pub(super) fn bounded(raw: &[u8], array_limit: usize) -> bool {
     !quoted && !escaped && depth == 0
 }
 
-pub(super) fn small_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+pub(in crate::workspace) fn small_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
@@ -88,7 +88,7 @@ where
     deserializer.deserialize_seq(Items(PhantomData))
 }
 
-pub(super) fn targets<'de, D: Deserializer<'de>>(
+pub(in crate::workspace) fn targets<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<radroots_transport::TargetSet, D::Error> {
     #[derive(Deserialize)]
@@ -101,7 +101,7 @@ pub(super) fn targets<'de, D: Deserializer<'de>>(
     radroots_transport::TargetSet::new(wire.targets).map_err(de::Error::custom)
 }
 
-pub(super) fn policy<'de, D: Deserializer<'de>>(
+pub(in crate::workspace) fn policy<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<radroots_transport::policy::SatisfactionPolicy, D::Error> {
     let raw = <&RawValue>::deserialize(deserializer)?;

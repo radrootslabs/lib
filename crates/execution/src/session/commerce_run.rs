@@ -117,6 +117,27 @@ pub(crate) fn observe(
         }
     }
     Ok(AcceptanceStatus {
+        delivery: match snapshot.delivery() {
+            Some(values) => {
+                for (value, recipient) in values.iter().zip(&recipients) {
+                    if value.checkpoint() != snapshot.checkpoint()
+                        || value.source().is_some_and(|source| {
+                            !same(source.attempt(), selection)
+                                || source.recipient() != recipient.recipient
+                                || recipient.evidence != Some(source.evidence())
+                                || installation.is_none_or(|installed| {
+                                    Some(source.installation_transaction_id())
+                                        != installed.attempt.transaction_id()
+                                })
+                        })
+                    {
+                        return Err(OperationError::RecoveryRequired);
+                    }
+                }
+                Some(alloc::boxed::Box::new(values.clone()))
+            }
+            None => None,
+        },
         attempt: original.attempt(),
         record: original.rumor().record_id(),
         checkpoint: snapshot.checkpoint(),

@@ -122,7 +122,7 @@ async fn late_order_grant_pool_and_unrelated_preparation_changes_never_commit_a_
                 .unwrap();
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
         let mut pending = Box::pin(
             r.store
                 .abort_proven_unissued(selected, r.enrollment.proof()),
@@ -279,7 +279,7 @@ async fn losing_abort_observer_drains_original_admitted_work_before_reopen() {
     let selected = abort_request(&r, &receipt).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
     let mut pending = Box::pin(
         r.store
             .abort_proven_unissued(selected, r.enrollment.proof()),

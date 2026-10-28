@@ -414,7 +414,7 @@ async fn lost_t2_observer_drains_and_reopens_one_atomic_installation() {
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
     let mut pending = Box::pin(
         r.store
             .install_stock_agreement(selected, r.enrollment.proof()),
@@ -453,7 +453,7 @@ async fn late_t2_backing_or_grant_or_evidence_change_never_commits_partial_insta
         let mut db = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
         let mut pending = Box::pin(
             r.store
                 .install_stock_agreement(selected, r.enrollment.proof()),

@@ -9,6 +9,7 @@ use radroots_storage::workspace::seller_stock::{
     SellerAuthoritySelection, StockAction, StockAuthorizationRef, StockGrantRecord, StockGrantScope,
 };
 pub(in crate::workspace) mod consent;
+pub(in crate::workspace) mod delivery;
 pub use consent::{
     StockConsentCapture, StockConsentMode, StockConsentOutcome, StockConsentReceipt,
 };
@@ -444,10 +445,10 @@ struct AuthorityV8 {
 }
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
-        if !matches!(self.catalog, 8..=16) && self.public_sources.is_some() {
+        if !matches!(self.catalog, 8..=17) && self.public_sources.is_some() {
             return Err(WorkspaceError::RecoveryRequired);
         }
-        if matches!(self.catalog, 8..=16) {
+        if matches!(self.catalog, 8..=17) {
             let public_sources = self
                 .public_sources
                 .ok_or(WorkspaceError::RecoveryRequired)?;
@@ -699,7 +700,7 @@ impl Authority {
                     public_sources: None,
                 }
             }
-            8..=16 => {
+            8..=17 => {
                 let value: AuthorityV8 = closed_record(bytes)?;
                 value.public_sources.validate()?;
                 if i64::from(value.version) != catalog
@@ -830,7 +831,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=16")
+            sqlx::query("PRAGMA user_version=17")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -1189,6 +1190,130 @@ impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
         >,
     > {
         Box::pin(self.worker.stock_envelope(request, proof))
+    }
+    fn reconcile_stock_envelope<'a>(
+        &'a self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+        candidate: &'a radroots_storage::command::PrivateEnvelopeCandidate,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<
+            radroots_storage::inventory::StockEnvelopeOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(async move {
+            self.worker
+                .reconcile_stock_envelope(request, proof, candidate.retained_copy())
+                .await
+        })
+    }
+    fn prepare_stock_delivery_attempt(
+        &self,
+        request: radroots_storage::inventory::StockDeliveryRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::inventory::StockDeliveryAttemptOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.prepare_stock_delivery_attempt(request, proof))
+    }
+    fn stock_delivery_attempt(
+        &self,
+        source: radroots_storage::inventory::StockEnvelopeRequest,
+        request_id: radroots_transport::sink::DeliveryRequestId,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::inventory::StockDeliveryAttempt>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .stock_delivery_attempt(source, request_id, proof),
+        )
+    }
+    fn stock_delivery_summary(
+        &self,
+        source: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::inventory::StockDeliverySummary,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.stock_delivery_summary(source, proof))
+    }
+    fn record_stock_delivery_observation<'a>(
+        &'a self,
+        binding: &'a WorkspaceBinding,
+        proof: &'a AttachmentProof,
+        observation: &'a radroots_storage::inventory::StockDeliveryObservation,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<
+            radroots_storage::inventory::StockDeliveryObservationOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(async move {
+            self.worker
+                .record_stock_delivery_observation(
+                    binding.clone(),
+                    proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?,
+                    observation.clone(),
+                    false,
+                )
+                .await
+        })
+    }
+    fn reconcile_stock_delivery_observation<'a>(
+        &'a self,
+        binding: &'a WorkspaceBinding,
+        proof: &'a AttachmentProof,
+        observation: &'a radroots_storage::inventory::StockDeliveryObservation,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<
+            radroots_storage::inventory::StockDeliveryObservationOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(async move {
+            self.worker
+                .record_stock_delivery_observation(
+                    binding.clone(),
+                    proof.with_secret(|bytes| AttachmentProof::from_protected_input(bytes))?,
+                    observation.clone(),
+                    true,
+                )
+                .await
+        })
+    }
+    fn stock_delivery_observations(
+        &self,
+        source: radroots_storage::inventory::StockEnvelopeRequest,
+        after: Option<Sequence>,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::inventory::StockDeliveryObservationPage,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(
+            self.worker
+                .stock_delivery_observations(source, after, proof),
+        )
     }
     fn prepare_stock_acceptance(
         &self,

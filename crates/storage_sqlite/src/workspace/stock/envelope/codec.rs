@@ -151,12 +151,16 @@ pub(super) fn head(header: &ledger::Header, body: &[u8]) -> CheckpointDigest {
     CheckpointDigest::from_bytes(hash.finalize().into())
 }
 pub(in crate::workspace::stock) struct Retained {
-    frame: ledger::Retained,
+    pub(in crate::workspace::stock) frame: ledger::Retained,
     pub source: StockEnvelopeSource,
     projection: Projection,
+    installation: OperationId,
 }
 impl Retained {
-    pub(super) async fn confirm(
+    pub(in crate::workspace::stock) fn installation_entry(&self) -> OperationId {
+        self.installation
+    }
+    pub(in crate::workspace::stock) async fn confirm(
         &self,
         connection: &mut SqliteConnection,
     ) -> Result<(), OperationError> {
@@ -191,6 +195,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            delivery: None,
             envelope: Some(self.projection),
             aborted: None,
             preparation: None,
@@ -330,6 +335,7 @@ async fn decode_entry(
     let source = StockEnvelopeSource::from_retained_wire(receipt, raw)
         .map_err(|_| OperationError::RecoveryRequired)?;
     let retained = Retained {
+        installation: original.installation.frame.header.operation,
         projection: Projection {
             operation,
             recipient: receipt.recipient(),

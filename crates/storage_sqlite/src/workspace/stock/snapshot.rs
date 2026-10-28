@@ -124,8 +124,14 @@ pub struct StockOperationSnapshot {
     recipients: [StockRecipientSnapshot; 2],
     installation: Option<super::StockInstallationReceipt>,
     aborted: Option<super::StockAbortReceipt>,
+    delivery: Option<Box<[radroots_storage::inventory::StockDeliverySummary; 2]>>,
 }
 impl StockOperationSnapshot {
+    /// Coherent original per-recipient delivery progress; retained catalogs
+    /// without stock D expose no supported delivery view.
+    pub fn delivery(&self) -> Option<&[radroots_storage::inventory::StockDeliverySummary; 2]> {
+        self.delivery.as_deref()
+    }
     pub fn aborted(&self) -> Option<&super::StockAbortReceipt> {
         self.aborted.as_ref()
     }
@@ -332,6 +338,25 @@ async fn read_authorized(
         .authority
         .inventory
         .ok_or(OperationError::RecoveryRequired)?;
+    let delivery = if auth.access.authority.catalog == 17 {
+        Some(Box::new(
+            Box::pin(super::delivery::snapshot(
+                turn,
+                radroots_storage::inventory::StockEnvelopeRequest::new(
+                    request.binding.clone(),
+                    request.minimum,
+                    request.operation,
+                    request.digest,
+                    auth.original.receipt.rumor().recipients()[0],
+                    None,
+                )?,
+                &auth.access.authority,
+            ))
+            .await?,
+        ))
+    } else {
+        None
+    };
     let minimum = InventoryCheckpointRef::from_host_metadata(
         turn.selected.authority(),
         Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
@@ -414,6 +439,7 @@ async fn read_authorized(
             .ok_or(OperationError::RecoveryRequired)?,
     );
     Ok(StockOperationSnapshot {
+        delivery,
         aborted: aborted.and_then(|(retained, _)| retained.map(|value| value.receipt)),
         installation: installation.and_then(|(retained, _)| retained.map(|value| value.receipt)),
         preparation: auth.original.receipt,

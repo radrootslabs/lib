@@ -9,14 +9,25 @@ pub use radroots_protocol::command::{CapturedInventoryCommand, InventoryCommandK
 use radroots_transport::BoxFuture;
 mod abort;
 mod acceptance;
+mod delivery;
+mod delivery_state;
 mod envelope;
 mod evidence;
 pub use abort::{StockAbortOutcome, StockAbortReceipt, StockAbortRequest};
 pub use acceptance::{StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest};
+pub use delivery::{
+    StockDeliveryAttempt, StockDeliveryAttemptOutcome, StockDeliveryObservation,
+    StockDeliveryObservationOutcome, StockDeliveryObservationReceipt, StockDeliveryRequest,
+};
+pub use delivery_state::{
+    StockDeliveryObservationPage, StockDeliverySummary, StockDeliveryTargetProgress,
+};
 pub use envelope::{
     StockEnvelopeOutcome, StockEnvelopeReceipt, StockEnvelopeRequest, StockEnvelopeSource,
 };
-pub use evidence::{StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest};
+pub use evidence::{
+    StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest, StockEvidenceSource,
+};
 
 /// Exact captured owner-private inventory command and original authenticated observation.
 pub struct InventoryRequest {
@@ -311,6 +322,70 @@ pub trait InventoryStore: WorkspaceStore {
         _request: StockEnvelopeRequest,
         _proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Option<StockEnvelopeSource>, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Reconciles borrowed original outer material on the same retained owner.
+    /// Unsupported hosts cannot replace this with another wrap or a new writer.
+    fn reconcile_stock_envelope<'a>(
+        &'a self,
+        _request: StockEnvelopeRequest,
+        _proof: AttachmentProof,
+        _candidate: &'a crate::command::PrivateEnvelopeCandidate,
+    ) -> BoxFuture<'a, Result<StockEnvelopeOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Commits an actual potential invocation before transport. Existing or
+    /// uncertain attempts never confer another dispatch right.
+    fn prepare_stock_delivery_attempt(
+        &self,
+        _request: StockDeliveryRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<StockDeliveryAttemptOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Reads one original request without replay or deadline renewal.
+    fn stock_delivery_attempt(
+        &self,
+        _source: StockEnvelopeRequest,
+        _request_id: radroots_transport::sink::DeliveryRequestId,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<StockDeliveryAttempt>, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Reads bounded current per-endpoint progress under current recovery access.
+    fn stock_delivery_summary(
+        &self,
+        _source: StockEnvelopeRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<StockDeliverySummary, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Captures already obtained original outcome data without requiring a
+    /// fresh clock or live grant. The caller retains its original across errors.
+    fn record_stock_delivery_observation<'a>(
+        &'a self,
+        _binding: &'a WorkspaceBinding,
+        _proof: &'a AttachmentProof,
+        _observation: &'a StockDeliveryObservation,
+    ) -> BoxFuture<'a, Result<StockDeliveryObservationOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Reconciles only the borrowed obtained outcome on its original owner.
+    fn reconcile_stock_delivery_observation<'a>(
+        &'a self,
+        _binding: &'a WorkspaceBinding,
+        _proof: &'a AttachmentProof,
+        _observation: &'a StockDeliveryObservation,
+    ) -> BoxFuture<'a, Result<StockDeliveryObservationOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Pages original independent outcomes; a read never issues transport.
+    fn stock_delivery_observations(
+        &self,
+        _source: StockEnvelopeRequest,
+        _after: Option<radroots_domain::Sequence>,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<StockDeliveryObservationPage, OperationError>> {
         Box::pin(async { Err(OperationError::UnsupportedOperation) })
     }
     /// Prepares an original acceptance with complete atomic holds and the order

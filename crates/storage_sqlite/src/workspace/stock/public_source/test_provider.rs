@@ -157,7 +157,7 @@ async fn public_source_close_drains_admitted_work_after_observer_loss() {
     let minimum = r.minimum().await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
     let mut future = Box::pin(r.store.retain_stock_listing(
         r.binding.clone(),
         minimum,
@@ -213,7 +213,7 @@ async fn public_source_writes_recheck_expiry_and_head_rows_after_actual_protecti
         let mut raw = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
         let mut future = Box::pin(r.store.retain_stock_listing(
             r.binding.clone(),
             minimum,

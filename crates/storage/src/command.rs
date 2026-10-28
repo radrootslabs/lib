@@ -23,6 +23,8 @@ mod dm_source;
 mod installation;
 mod issuance;
 mod observation;
+#[cfg(feature = "protected_outbox")]
+pub(crate) use observation::normalize as normalize_delivery_observation;
 mod publication;
 pub use publication::PublicationArtifact;
 mod snapshot;

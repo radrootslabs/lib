@@ -60,6 +60,7 @@ impl radroots_execution::session::commerce::AcceptanceStatus
 pub const fn radroots_execution::session::commerce::AcceptanceStatus::aborted(&self) -> bool
 pub const fn radroots_execution::session::commerce::AcceptanceStatus::attempt(&self) -> radroots_storage::command::CommitAttempt
 pub const fn radroots_execution::session::commerce::AcceptanceStatus::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub fn radroots_execution::session::commerce::AcceptanceStatus::delivery(&self) -> core::option::Option<&[radroots_storage::inventory::delivery_state::StockDeliverySummary; 2]>
 pub const fn radroots_execution::session::commerce::AcceptanceStatus::installation(&self) -> core::option::Option<radroots_execution::session::commerce::InstalledAcceptance>
 pub const fn radroots_execution::session::commerce::AcceptanceStatus::plan_bound(&self) -> bool
 pub const fn radroots_execution::session::commerce::AcceptanceStatus::recipients(&self) -> &[radroots_execution::session::commerce::AcceptanceRecipient; 2]
@@ -85,6 +86,7 @@ pub fn radroots_execution::session::commerce::AcceptanceDispatch::dispatch<'a>(a
 pub trait radroots_execution::session::commerce::AcceptanceSnapshot: radroots_execution::session::HostBound
 pub fn radroots_execution::session::commerce::AcceptanceSnapshot::aborted(&self) -> bool
 pub fn radroots_execution::session::commerce::AcceptanceSnapshot::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub fn radroots_execution::session::commerce::AcceptanceSnapshot::delivery(&self) -> core::option::Option<&[radroots_storage::inventory::delivery_state::StockDeliverySummary; 2]>
 pub fn radroots_execution::session::commerce::AcceptanceSnapshot::installation(&self) -> core::option::Option<radroots_execution::session::commerce::InstalledAcceptance>
 pub fn radroots_execution::session::commerce::AcceptanceSnapshot::plan(&self) -> core::option::Option<&radroots_protocol::commerce::signing_plan::CommerceSigningPlan>
 pub fn radroots_execution::session::commerce::AcceptanceSnapshot::preparation(&self) -> &radroots_storage::inventory::acceptance::StockAcceptanceReceipt
@@ -94,6 +96,7 @@ pub fn radroots_execution::session::commerce::AcceptanceStore::bind<'a>(&'a self
 pub fn radroots_execution::session::commerce::AcceptanceStore::claim<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, radroots_identity::key::PublicKey, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<radroots_execution::session::commerce::AcceptanceClaimOutcome, radroots_storage::command::OperationError>>
 pub fn radroots_execution::session::commerce::AcceptanceStore::exact_replay<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, radroots_identity::key::PublicKey, radroots_signing::provider::ProviderCall, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<(radroots_signing::issuance::exact_recovery::ExactRecoveryRequest, radroots_execution::session::commerce::AcceptanceClaim), radroots_storage::command::OperationError>>
 pub fn radroots_execution::session::commerce::AcceptanceStore::install<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<radroots_execution::session::commerce::AcceptanceInstallationOutcome, radroots_storage::command::OperationError>>
+pub fn radroots_execution::session::commerce::AcceptanceStore::signing_evidence<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, radroots_storage::inventory::evidence::StockEvidenceReceipt, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<core::option::Option<radroots_storage::inventory::evidence::StockEvidenceSource>, radroots_storage::command::OperationError>>
 pub fn radroots_execution::session::commerce::AcceptanceStore::snapshot<'a>(&'a self, radroots_execution::session::commerce::AcceptanceSelection, &'a radroots_storage::workspace::AttachmentProof) -> radroots_execution::session::HostFuture<'a, core::result::Result<alloc::boxed::Box<dyn radroots_execution::session::commerce::AcceptanceSnapshot>, radroots_storage::command::OperationError>>
 pub trait radroots_execution::session::commerce::AcceptanceUnissued: radroots_execution::session::HostBound
 pub fn radroots_execution::session::commerce::AcceptanceUnissued::capture(&self) -> radroots_execution::session::HostFuture<'_, core::result::Result<radroots_execution::session::commerce::AcceptanceUnissuedOutcome, radroots_storage::command::OperationError>>

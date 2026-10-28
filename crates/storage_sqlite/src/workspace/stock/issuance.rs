@@ -46,6 +46,12 @@ pub(super) async fn check_counts(connection: &mut SqliteConnection) -> Result<()
             return Err(WorkspaceError::RecoveryRequired);
         }
     }
+    if catalog >= 17 {
+        let (attempts, attempt_entries, observations, observation_entries): (i64,i64,i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM stock_delivery_attempts),(SELECT count(*) FROM stock_operations WHERE family=11),(SELECT count(*) FROM stock_delivery_observations),(SELECT count(*) FROM stock_operations WHERE family=12)").fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
+        if attempts != attempt_entries || observations != observation_entries {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+    }
     if catalog >= 16 {
         let (rows, entries): (i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM stock_envelopes),(SELECT count(*) FROM stock_operations WHERE family=10)").fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
         if rows != entries {

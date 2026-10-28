@@ -8,7 +8,10 @@ use super::{
 };
 use radroots_storage::{
     command::{ArtifactEvidence, EvidenceCaptureOutcome, OperationError},
-    inventory::{StockEvidenceOutcome, StockEvidenceRequest},
+    inventory::{
+        StockDeliveryObservation, StockDeliveryObservationOutcome, StockEnvelopeOutcome,
+        StockEnvelopeRequest, StockEvidenceOutcome, StockEvidenceRequest,
+    },
     workspace::seller_stock::SellerAuthoritySelection,
 };
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
@@ -39,6 +42,13 @@ enum Material {
     Outbox(Box<(AttachmentInput, ArtifactEvidence)>),
     Stock(Box<StockEvidenceRequest>),
     Unissued(Box<stock::issuance::unissued::Request>),
+    Envelope(
+        Box<(
+            StockEnvelopeRequest,
+            radroots_storage::command::PrivateEnvelopeCandidate,
+        )>,
+    ),
+    Observation(Box<(super::WorkspaceBinding, StockDeliveryObservation)>),
 }
 impl Material {
     fn input(&self) -> &AttachmentInput {
@@ -46,6 +56,8 @@ impl Material {
             Self::Outbox(value) => &value.0,
             Self::Stock(value) => value.binding().input(),
             Self::Unissued(value) => value.binding.input(),
+            Self::Envelope(value) => value.0.binding().input(),
+            Self::Observation(value) => value.0.input(),
         }
     }
 }
@@ -53,6 +65,8 @@ enum Captured {
     Outbox(EvidenceCaptureOutcome),
     Stock(StockEvidenceOutcome),
     Unissued(stock::StockUnissuedOutcome),
+    Envelope(StockEnvelopeOutcome),
+    Observation(StockDeliveryObservationOutcome),
 }
 impl Captured {
     fn committed(&self) -> bool {
@@ -61,6 +75,8 @@ impl Captured {
             Self::Outbox(EvidenceCaptureOutcome::Committed(_))
                 | Self::Stock(StockEvidenceOutcome::Committed(_))
                 | Self::Unissued(stock::StockUnissuedOutcome::Committed(_))
+                | Self::Envelope(StockEnvelopeOutcome::Committed(_))
+                | Self::Observation(StockDeliveryObservationOutcome::Committed(_))
         )
     }
 }
@@ -116,6 +132,53 @@ impl RecoveryTurn<'_> {
             _ => Err(OperationError::RecoveryRequired),
         }
     }
+    pub(super) async fn capture_envelope(
+        &mut self,
+        request: StockEnvelopeRequest,
+        proof: AttachmentProof,
+        candidate: radroots_storage::command::PrivateEnvelopeCandidate,
+    ) -> Result<StockEnvelopeOutcome, OperationError> {
+        if self.namespace.kind() != Kind::SellerStock {
+            return Err(OperationError::UnsupportedOperation);
+        }
+        if !SellerAuthoritySelection::from_attachment(self.selected)
+            .matches_attachment(request.binding().input())
+        {
+            return Err(OperationError::Unauthorized);
+        }
+        match self
+            .recover(Material::Envelope(Box::new((request, candidate))), proof)
+            .await?
+        {
+            Captured::Envelope(value) => Ok(value),
+            _ => Err(OperationError::RecoveryRequired),
+        }
+    }
+    pub(super) async fn capture_observation(
+        &mut self,
+        binding: super::WorkspaceBinding,
+        proof: AttachmentProof,
+        observation: StockDeliveryObservation,
+    ) -> Result<StockDeliveryObservationOutcome, OperationError> {
+        if self.namespace.kind() != Kind::SellerStock {
+            return Err(OperationError::UnsupportedOperation);
+        }
+        if !SellerAuthoritySelection::from_attachment(self.selected)
+            .matches_attachment(binding.input())
+        {
+            return Err(OperationError::Unauthorized);
+        }
+        match self
+            .recover(
+                Material::Observation(Box::new((binding, observation))),
+                proof,
+            )
+            .await?
+        {
+            Captured::Observation(value) => Ok(value),
+            _ => Err(OperationError::RecoveryRequired),
+        }
+    }
     pub(super) async fn capture_unissued(
         &mut self,
         request: stock::issuance::unissued::Request,
@@ -157,6 +220,42 @@ impl RecoveryTurn<'_> {
             &mut *self.uncertain
         };
         let result = match material {
+            Material::Envelope(value) => {
+                let (request, candidate) = *value;
+                Box::pin(stock::envelope::capture(
+                    &mut stock::inventory::Turn {
+                        connection,
+                        namespace: self.namespace,
+                        selected: self.selected,
+                        crypto: self.crypto,
+                        clock: self.clock,
+                        uncertain: uncertainty,
+                    },
+                    request,
+                    proof,
+                    candidate,
+                ))
+                .await
+                .map(Captured::Envelope)
+            }
+            Material::Observation(value) => {
+                let (binding, observation) = *value;
+                Box::pin(stock::delivery::capture_observation(
+                    &mut stock::inventory::Turn {
+                        connection,
+                        namespace: self.namespace,
+                        selected: self.selected,
+                        crypto: self.crypto,
+                        clock: self.clock,
+                        uncertain: uncertainty,
+                    },
+                    binding,
+                    proof,
+                    observation,
+                ))
+                .await
+                .map(Captured::Observation)
+            }
             Material::Outbox(value) => {
                 let (input, evidence) = *value;
                 Journal {

@@ -613,6 +613,36 @@ async fn ordinary_acceptance_uses_real_t0_t1_s_t2_and_preserves_original_retry()
         .await
         .unwrap();
     assert_eq!(observed.installation(), status.installation());
+    // The coherent supported view reports no D; the existing workflow has
+    // not wrapped or invoked transport. Actual protected S is independently
+    // readable through the same native owner under current access.
+    assert!(observed.delivery().unwrap().iter().all(|value| {
+        value.checkpoint() == observed.checkpoint()
+            && value.source().is_none()
+            && value.attempt_count() == 0
+    }));
+    let evidence = observed.recipients()[0].evidence.unwrap();
+    let source = radroots_execution::session::commerce::AcceptanceStore::signing_evidence(
+        &crate::native_commerce::NativeCommerce(Arc::new(r.native.clone())),
+        radroots_execution::session::commerce::AcceptanceSelection {
+            binding: r.scope.binding().clone(),
+            minimum,
+            operation: command.context().operation_id(),
+            digest: command.digest(),
+        },
+        evidence,
+        r.enrollment.proof(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(source.receipt(), evidence);
+    source.with_json(|raw| {
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(raw).unwrap()["kind"],
+            13
+        )
+    });
     r.clock.0.store(231, Ordering::SeqCst);
     let refused = r
         .client

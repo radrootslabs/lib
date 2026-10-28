@@ -13,7 +13,10 @@ use radroots_signing::{
 };
 use radroots_storage::{
     command::{CommitAttempt, OperationError},
-    inventory::{InventoryCheckpointRef, StockAcceptanceReceipt, StockEvidenceReceipt},
+    inventory::{
+        InventoryCheckpointRef, StockAcceptanceReceipt, StockDeliverySummary, StockEvidenceReceipt,
+        StockEvidenceSource,
+    },
     workspace::{AttachmentProof, WorkspaceBinding},
 };
 
@@ -94,6 +97,9 @@ pub trait AcceptanceSnapshot: HostBound {
     fn installation(&self) -> Option<InstalledAcceptance>;
     /// Whether an actual original proven-unissued abort was observed.
     fn aborted(&self) -> bool;
+    /// Coherent bounded original per-recipient delivery progress, in the same
+    /// canonical order as recipients. None means unsupported by this catalog.
+    fn delivery(&self) -> Option<&[StockDeliverySummary; 2]>;
 }
 
 #[path = "commerce_dispatch.rs"]
@@ -134,6 +140,16 @@ pub enum AcceptanceInstallationOutcome {
 /// replacement application workflow. The ordinary facade selects the same owner
 /// as its InventoryStore; custom hosts require their own executed qualification.
 pub trait AcceptanceStore: HostBound {
+    /// Reads the exact retained signed seal under current recovery access.
+    /// This cannot create signing material or confer dispatch permission.
+    fn signing_evidence<'a>(
+        &'a self,
+        _selection: AcceptanceSelection,
+        _receipt: StockEvidenceReceipt,
+        _proof: &'a AttachmentProof,
+    ) -> HostFuture<'a, Result<Option<StockEvidenceSource>, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
     /// Reads original T0/T1, independent recipient S and initial T2 coherently.
     fn snapshot<'a>(
         &'a self,
@@ -183,8 +199,14 @@ pub struct AcceptanceStatus {
     pub(crate) plan_bound: bool,
     pub(crate) installation: Option<InstalledAcceptance>,
     pub(crate) aborted: bool,
+    pub(crate) delivery: Option<Box<[StockDeliverySummary; 2]>>,
 }
 impl AcceptanceStatus {
+    /// Original per-recipient delivery progress, independently of installation
+    /// or buyer receipt. Absence means this catalog does not support stock D.
+    pub fn delivery(&self) -> Option<&[StockDeliverySummary; 2]> {
+        self.delivery.as_deref()
+    }
     /// Original confirmed T0 anchor.
     pub const fn attempt(&self) -> CommitAttempt {
         self.attempt

@@ -1,4 +1,6 @@
 //! Shape checks remain independent of concrete persistence and permission.
+#[path = "inventory_delivery.rs"]
+mod delivery;
 use super::*;
 use radroots_domain::{
     CommandDigest, EnvelopeEventId, OperationId, SigningAttemptId, TransactionId,

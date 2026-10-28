@@ -3,7 +3,7 @@
 mod codec;
 pub(super) mod containment;
 pub(super) mod graph;
-mod json;
+pub(in crate::workspace) mod json;
 pub(super) mod observation;
 mod observation_operations;
 mod operations;

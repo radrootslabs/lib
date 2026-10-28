@@ -166,7 +166,7 @@ async fn stock_process_child() {
     if control.before {
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
     }
     let work = async {
         match control.edge {

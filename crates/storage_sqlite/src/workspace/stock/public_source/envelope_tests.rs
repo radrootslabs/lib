@@ -7,6 +7,8 @@ use radroots_storage::{
     inventory::{InventoryStore, StockEnvelopeOutcome, StockEnvelopeReceipt, StockEnvelopeRequest},
 };
 use std::num::NonZeroU64;
+#[path = "delivery_tests.rs"]
+mod delivery_tests;
 fn proof(r: &Rig) -> AttachmentProof {
     r.enrollment
         .proof()
@@ -33,7 +35,7 @@ fn wrapped(raw: &str, recipient: PublicKey) -> PrivateEnvelopeCandidate {
     let pending = wrap_retained_seal(
         raw,
         recipient,
-        NonZeroU64::new(150000).unwrap(),
+        NonZeroU64::new(150).unwrap(),
         &OsNonceSource,
     )
     .unwrap();
@@ -85,7 +87,7 @@ async fn capture(
 #[tokio::test]
 async fn original_peer_and_self_outers_retain_exact_bytes_once_and_reopen_without_new_stock_effects()
  {
-    let (mut r, original, installed, peer_outer) = setup(16).await;
+    let (mut r, original, installed, peer_outer) = setup(17).await;
     let before = inventory_minimum(&r).await;
     let first = committed_envelope(capture(&r, &original, &peer_outer, None).await.unwrap());
     assert_eq!(
@@ -142,7 +144,7 @@ async fn original_peer_and_self_outers_retain_exact_bytes_once_and_reopen_withou
 }
 #[tokio::test]
 async fn invalid_key_wrong_original_seal_and_rewrapping_cannot_replace_the_original_outer() {
-    let (r, original, _, outer) = setup(16).await;
+    let (r, original, _, outer) = setup(17).await;
     let before = inventory_minimum(&r).await;
     let wrong =
         PrivateEnvelopeCandidate::from_obtained(outer.recipient(), outer.raw_json(), &[9; 32])
@@ -232,7 +234,7 @@ async fn invalid_key_wrong_original_seal_and_rewrapping_cannot_replace_the_origi
 async fn original_credential_captures_after_clock_loss_expiry_or_revocation_but_never_grants_read_access()
  {
     for mode in ["clock_unavailable", "expired", "revoked"] {
-        let (r, original, _, outer) = setup(16).await;
+        let (r, original, _, outer) = setup(17).await;
         let selected = envelope_request(&r, &original, outer.recipient(), None).await;
         let read = envelope_request(&r, &original, outer.recipient(), None).await;
         match mode {
@@ -284,13 +286,13 @@ async fn late_original_or_projection_damage_cannot_commit_a_partially_authentica
         "UPDATE stock_publication_work SET recipient=randomblob(32)",
         "UPDATE stock_operations SET protected=randomblob(length(protected)) WHERE family=3",
     ] {
-        let (mut r, original, _, outer) = setup(16).await;
+        let (mut r, original, _, outer) = setup(17).await;
         let selected = envelope_request(&r, &original, outer.recipient(), None).await;
         let provider = reopen(&mut r).await;
         let mut db = database(&r).await;
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
         let mut pending = Box::pin(r.store.capture_stock_envelope(selected, proof(&r), &outer));
         assert!(futures::poll!(pending.as_mut()).is_pending());
         provider.gate.entered();
@@ -353,7 +355,7 @@ async fn every_outer_write_failure_retains_caller_bytes_and_no_partial_row_or_st
         "CREATE TRIGGER fault BEFORE INSERT ON stock_envelopes BEGIN SELECT RAISE(ABORT,'fixture'); END",
         "CREATE TRIGGER fault BEFORE UPDATE ON stock_authority BEGIN SELECT RAISE(ABORT,'fixture'); END",
     ] {
-        let (r, original, _, outer) = setup(16).await;
+        let (r, original, _, outer) = setup(17).await;
         let before = inventory_minimum(&r).await;
         let raw = outer.raw_json().to_owned();
         let mut db = database(&r).await;
@@ -384,7 +386,7 @@ async fn every_outer_write_failure_retains_caller_bytes_and_no_partial_row_or_st
 }
 #[tokio::test]
 async fn uncertain_outer_commit_fences_owner_and_original_bytes_can_be_retained_after_reopen() {
-    let (mut r, original, _, outer) = setup(16).await;
+    let (mut r, original, _, outer) = setup(17).await;
     let before = inventory_minimum(&r).await;
     let mut db = database(&r).await;
     sqlx::raw_sql("CREATE TABLE deferred_fault(value INTEGER REFERENCES stock_authority(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER fault AFTER INSERT ON stock_envelopes BEGIN INSERT INTO deferred_fault VALUES(2); END").execute(&mut db).await.unwrap();
@@ -423,12 +425,12 @@ async fn uncertain_outer_commit_fences_owner_and_original_bytes_can_be_retained_
 }
 #[tokio::test]
 async fn lost_outer_observer_is_drained_and_one_exact_record_survives_reopen() {
-    let (mut r, original, _, outer) = setup(16).await;
+    let (mut r, original, _, outer) = setup(17).await;
     let selected = envelope_request(&r, &original, outer.recipient(), None).await;
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
     let mut pending = Box::pin(r.store.capture_stock_envelope(selected, proof(&r), &outer));
     assert!(futures::poll!(pending.as_mut()).is_pending());
     provider.gate.entered();
@@ -461,7 +463,7 @@ async fn protected_outer_or_cache_damage_is_recovery_evidence_not_missing_work()
         "DELETE FROM stock_publication_work",
         "UPDATE stock_signing_evidence SET evidence_digest=randomblob(32)",
     ] {
-        let (r, original, _, outer) = setup(16).await;
+        let (r, original, _, outer) = setup(17).await;
         committed_envelope(capture(&r, &original, &outer, None).await.unwrap());
         let selected = envelope_request(&r, &original, outer.recipient(), None).await;
         sqlx::raw_sql(statement)
@@ -478,4 +480,29 @@ async fn protected_outer_or_cache_damage_is_recovery_evidence_not_missing_work()
         );
         r.store.close().await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn retained16_keeps_exact_outer_capture_and_query_without_a_catalog_upgrade() {
+    let (r, original, _, outer) = setup(16).await;
+    let receipt = committed_envelope(capture(&r, &original, &outer, None).await.unwrap());
+    let source = r
+        .store
+        .stock_envelope(
+            envelope_request(&r, &original, outer.recipient(), None).await,
+            proof(&r),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(source.receipt(), receipt);
+    source.with_json(|raw| assert_eq!(raw, outer.raw_json()));
+    let mut db = database(&r).await;
+    let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut db)
+        .await
+        .unwrap();
+    assert_eq!(catalog, 16);
+    db.close().await.unwrap();
+    r.store.close().await.unwrap();
 }

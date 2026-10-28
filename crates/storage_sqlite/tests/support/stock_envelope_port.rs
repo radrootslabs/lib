@@ -129,7 +129,7 @@ async fn envelope_ports_refuse_stock_without_original_work_and_ordinary_outbox_w
         .fetch_one(&mut connection)
         .await
         .unwrap();
-    assert_eq!(catalog, 16);
+    assert_eq!(catalog, 17);
     assert_eq!(entries, 0);
     connection.close().await.unwrap();
     assert!(
