@@ -5,7 +5,7 @@ use checkpoint::{EntryIdentity, IdentityTarget};
 use radroots_domain::{OrderId, PublicKey, RecordId, stock::StockTicks};
 mod codec;
 mod projection;
-pub(in crate::workspace::stock) use codec::read_entry;
+pub(in crate::workspace::stock) use codec::{Retained, read_entry};
 pub(in crate::workspace::stock) use projection::{Projection, raw_projection};
 
 /// Captured original-operation selector; does not establish permission or evidence.
@@ -222,7 +222,7 @@ pub(in crate::workspace) async fn install(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12..=15) {
+    if !matches!(auth.access.authority.catalog, 12..=16) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;
@@ -481,7 +481,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12..=15) {
+    if !matches!(auth.access.authority.catalog, 12..=16) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (retained, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;

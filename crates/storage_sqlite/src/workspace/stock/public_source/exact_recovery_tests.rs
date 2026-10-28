@@ -437,7 +437,7 @@ async fn replay_authorization_rechecks_actual_late_root_grant_plan_claim_backing
         let mut raw = database(&r).await;
         provider
             .gate
-            .arm(Direction::Unwrap, "radroots.seller_stock.authority.v15", 0);
+            .arm(Direction::Unwrap, "radroots.seller_stock.authority.v16", 0);
         let mut pending = Box::pin(
             r.store
                 .authorize_stock_exact_replay(request, r.enrollment.proof()),
@@ -491,7 +491,7 @@ async fn observer_loss_drains_authorization_without_signing_or_a_new_claim_and_r
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v15", 0);
+        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v16", 0);
     let mut pending = Box::pin(
         r.store
             .authorize_stock_exact_replay(request, r.enrollment.proof()),

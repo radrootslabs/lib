@@ -102,7 +102,34 @@ struct StockCapabilityContract {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct StockEnvelopeRetention {
+    journal_family: u32,
+    payload_version: u32,
+    payload_prefix_bytes: u32,
+    supported_catalogs: Vec<u32>,
+    retained_unsupported_catalogs: Vec<u32>,
+    raw_max_bytes: u32,
+    worker_charge_bytes: u32,
+    capture_port: String,
+    query_port: String,
+    original_preparation_plan_claim_seal_installation_required: bool,
+    temporary_key_derivation_and_exact_decryption_required: bool,
+    temporary_key_retained: bool,
+    original_party_as_outer_author_allowed: bool,
+    body_derived_projection_and_complete_ancestry_required: bool,
+    original_credential_capture_requires_live_clock_or_grant: bool,
+    query_requires_current_recovery_access: bool,
+    observation_nullable: bool,
+    existing_original_bytes_may_be_replaced: bool,
+    capture_grants_dispatch: bool,
+    capture_changes_physical_stock: bool,
+    provider_io_inside_sql: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NativeSellerStockAuthority {
+    envelope_retention: StockEnvelopeRetention,
     qualified_local_recovery: QualifiedLocalRecovery,
     source_payload_schemas: Vec<String>,
     source_profile_dispositions: Vec<String>,
@@ -608,16 +635,43 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
         "local outbox authority drift",
     )?;
     let stock = &p.native_seller_stock_authority;
+    let envelope = &stock.envelope_retention;
+    require(
+        envelope.journal_family == 10
+            && envelope.payload_version == 1
+            && envelope.payload_prefix_bytes == 213
+            && envelope.supported_catalogs == [16]
+            && envelope.retained_unsupported_catalogs
+                == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            && envelope.raw_max_bytes == 65536
+            && envelope.worker_charge_bytes == 1048576
+            && envelope.capture_port == "InventoryStore.capture_stock_envelope"
+            && envelope.query_port == "InventoryStore.stock_envelope"
+            && envelope.original_preparation_plan_claim_seal_installation_required
+            && envelope.temporary_key_derivation_and_exact_decryption_required
+            && !envelope.temporary_key_retained
+            && !envelope.original_party_as_outer_author_allowed
+            && envelope.body_derived_projection_and_complete_ancestry_required
+            && !envelope.original_credential_capture_requires_live_clock_or_grant
+            && envelope.query_requires_current_recovery_access
+            && envelope.observation_nullable
+            && !envelope.existing_original_bytes_may_be_replaced
+            && !envelope.capture_grants_dispatch
+            && !envelope.capture_changes_physical_stock
+            && !envelope.provider_io_inside_sql,
+        "stock envelope retention drift",
+    )?;
     require(
         stock.capability_contract.id == "radroots.seller_stock.native_inventory"
             && stock.capability_contract.version == "1"
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 15
+            && stock.schema_version == 16
             && stock.retained_enrollment_versions == [1]
-            && stock.retained_inventory_versions == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v15"
+            && stock.retained_inventory_versions
+                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v16"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -896,7 +950,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
             && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
-            && stock.qualified_local_recovery.native_catalog == 15
+            && stock.qualified_local_recovery.native_catalog == 16
             && stock.qualified_local_recovery.worker_charge_bytes == 1048576
             && stock
                 .qualified_local_recovery
@@ -959,7 +1013,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.preparation_abort.unsupported_hosts_return == "capability_unavailable"
             && stock.preparation_abort.retained_payload_versions == [1]
             && stock.preparation_abort.retained_v1_requires_absent_claims
-            && stock.preparation_abort.claimed_cleanup_catalogs == [15]
+            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16]
             && stock.preparation_abort.untracked_claimed_catalogs == [13, 14]
             && stock.preparation_abort.per_recipient_proof_count == 2
             && stock
@@ -2280,6 +2334,50 @@ mod tests {
             ))
             .is_err()
         );
+    }
+
+    #[test]
+    fn stock_envelope_retention_cannot_become_dispatch_permission_or_a_cache_authority() {
+        for (field, bad) in [
+            ("journal_family", json!(9)),
+            ("payload_prefix_bytes", json!(212)),
+            ("supported_catalogs", json!([15, 16])),
+            ("raw_max_bytes", json!(65537)),
+            ("worker_charge_bytes", json!(65536)),
+            (
+                "original_preparation_plan_claim_seal_installation_required",
+                json!(false),
+            ),
+            (
+                "temporary_key_derivation_and_exact_decryption_required",
+                json!(false),
+            ),
+            ("temporary_key_retained", json!(true)),
+            ("original_party_as_outer_author_allowed", json!(true)),
+            (
+                "body_derived_projection_and_complete_ancestry_required",
+                json!(false),
+            ),
+            (
+                "original_credential_capture_requires_live_clock_or_grant",
+                json!(true),
+            ),
+            ("query_requires_current_recovery_access", json!(false)),
+            ("observation_nullable", json!(false)),
+            ("existing_original_bytes_may_be_replaced", json!(true)),
+            ("capture_grants_dispatch", json!(true)),
+            ("capture_changes_physical_stock", json!(true)),
+            ("provider_io_inside_sql", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/envelope_retention/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
     }
 
     #[test]

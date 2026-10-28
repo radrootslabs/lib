@@ -104,6 +104,7 @@ impl Retained {
             )
         });
         ledger::HistoryEntry {
+            envelope: None,
             aborted: None,
             preparation,
             local_record: None,
@@ -323,7 +324,7 @@ pub(in crate::workspace::stock) async fn read(
         .map_err(|_| OperationError::RecoveryRequired)?;
     let operation_keyed = match catalog {
         1..=12 => false,
-        13..=15 => true,
+        13..=16 => true,
         _ => return Err(OperationError::RecoveryRequired),
     };
     let actor = header.actor.participant();

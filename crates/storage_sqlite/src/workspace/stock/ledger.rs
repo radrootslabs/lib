@@ -25,6 +25,7 @@ pub(super) enum Family {
     AbortedPreparation,
     OriginalUnissued,
     ReplayAdmission,
+    Envelope,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -81,6 +82,7 @@ impl Header {
                     | Family::AbortedPreparation
                     | Family::OriginalUnissued
                     | Family::ReplayAdmission
+                    | Family::Envelope
             ) != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
@@ -337,6 +339,7 @@ impl Family {
             Self::AbortedPreparation => 7,
             Self::OriginalUnissued => 8,
             Self::ReplayAdmission => 9,
+            Self::Envelope => 10,
         }
     }
 }
@@ -444,6 +447,7 @@ pub(super) struct MovementWitness {
 /// A completely decoded original effect. Only the owning family decoder
 /// supplies its pool effects and movement witnesses; SQL indexes do not.
 pub(super) struct HistoryEntry {
+    pub envelope: Option<super::envelope::Projection>,
     pub aborted: Option<super::inventory::abort::Projection>,
     pub preparation: Option<[u8; 32]>,
     pub header: Header,
@@ -492,6 +496,7 @@ pub(super) async fn history(
                 _ => return Err(OperationError::RecoveryRequired),
             };
             Ok(Some(HistoryEntry {
+                envelope: None,
                 aborted: None,
                 preparation: None,
                 local_record: None,
@@ -527,6 +532,7 @@ pub(super) async fn history(
                 return Err(OperationError::RecoveryRequired);
             }
             Ok(Some(HistoryEntry {
+                envelope: None,
                 aborted: None,
                 preparation: None,
                 local_record: None,
@@ -540,7 +546,7 @@ pub(super) async fn history(
                 movements: vec![],
             }))
         }
-        Some(2) if matches!(authority.catalog, 9..=15) => Ok(Some(
+        Some(2) if matches!(authority.catalog, 9..=16) => Ok(Some(
             Box::pin(super::inventory::acceptance::codec::read(
                 connection, input, crypto, operation,
             ))
@@ -549,7 +555,7 @@ pub(super) async fn history(
             .into_history(),
         )),
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10..=15) => {
+        Some(3) if matches!(authority.catalog, 10..=16) => {
             let retained = Box::pin(super::signing_plan::read_entry(
                 connection, input, crypto, operation,
             ))
@@ -573,7 +579,7 @@ pub(super) async fn history(
             .ok_or(OperationError::RecoveryRequired)?
             .into_history(),
         )),
-        Some(6) if matches!(authority.catalog, 12..=15) => Ok(Some(
+        Some(6) if matches!(authority.catalog, 12..=16) => Ok(Some(
             Box::pin(super::inventory::installation::read_entry(
                 connection, input, crypto, operation,
             ))
@@ -600,6 +606,14 @@ pub(super) async fn history(
         Some(9) if authority.catalog >= 15 => Ok(Some(
             Box::pin(super::issuance::replay_admission::read_entry(
                 connection, input, crypto, operation,
+            ))
+            .await?
+            .ok_or(OperationError::RecoveryRequired)?
+            .into_history(),
+        )),
+        Some(10) if authority.catalog >= 16 => Ok(Some(
+            Box::pin(super::envelope::read_entry(
+                connection, input, crypto, binding, operation,
             ))
             .await?
             .ok_or(OperationError::RecoveryRequired)?
@@ -696,6 +710,15 @@ impl HistoryEntry {
                 hash.update(projection.digest(header.actor.participant(), header.operation))
             }
             (Family::Installation, None) | (_, Some(_)) => {
+                return Err(OperationError::RecoveryRequired);
+            }
+            (_, None) => {}
+        }
+        match (header.family, self.envelope) {
+            (Family::Envelope, Some(projection)) => {
+                hash.update(projection.digest(header.actor.participant(), header.operation))
+            }
+            (Family::Envelope, None) | (_, Some(_)) => {
                 return Err(OperationError::RecoveryRequired);
             }
             (_, None) => {}

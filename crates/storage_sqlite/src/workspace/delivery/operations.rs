@@ -5,16 +5,13 @@ use super::super::{
     snapshot::RetainedGraph,
 };
 use super::{codec, graph::Graph, observation::Observations};
-use nostr::JsonUtil;
 use radroots_domain::{CommandDigest, OperationId, TransactionId};
 use radroots_storage::command::{
     CommitAttempt, DeliveryAttempt, DeliveryAttemptOutcome, DeliveryAttemptRequest,
     EnvelopeCandidate, OperationError, PublicationArtifact, PublicationWork, SigningTarget,
 };
 use radroots_transport::sink::DeliveryRequestId;
-use sha2::{Digest, Sha256};
 use sqlx::Connection;
-use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
 fn contains_original(
@@ -43,30 +40,16 @@ fn contains_original(
     {
         return Err(OperationError::InvalidEvidence);
     }
-    let event = nostr::Event::from_json(candidate.raw_json())
-        .map_err(|_| OperationError::InvalidEvidence)?;
-    event
-        .verify()
-        .map_err(|_| OperationError::InvalidEvidence)?;
-    let recipient = nostr::PublicKey::from_slice(work.recipient().as_bytes())
-        .map_err(|_| OperationError::InvalidEvidence)?;
-    let opened = candidate.with_wrapping_key(|key| {
-        let secret =
-            nostr::SecretKey::from_slice(key).map_err(|_| OperationError::InvalidEvidence)?;
-        let keys = nostr::Keys::new(secret);
-        if keys.public_key().to_bytes() != *candidate.author().as_bytes() {
-            return Err(OperationError::InvalidEvidence);
-        }
-        nostr::nips::nip44::decrypt(keys.secret_key(), &recipient, &event.content)
-            .map(Zeroizing::new)
-            .map_err(|_| OperationError::InvalidEvidence)
+    candidate.with_wrapping_key(|key| {
+        super::containment::verify(
+            candidate.raw_json(),
+            candidate.author(),
+            key,
+            work.recipient(),
+            source.raw_json(),
+            source.digest(),
+        )
     })?;
-    let digest: [u8; 32] = Sha256::digest(opened.as_bytes()).into();
-    if digest.ct_eq(source.digest()).unwrap_u8() != 1
-        || opened.as_bytes() != source.raw_json().as_bytes()
-    {
-        return Err(OperationError::InvalidEvidence);
-    }
     Ok(())
 }
 fn work(

@@ -189,14 +189,14 @@ impl Turn<'_> {
             return Err(OperationError::UnsupportedOperation);
         }
 
-        let minimum_proof = authenticate_minimum(
+        let minimum_proof = Box::pin(authenticate_minimum(
             self.connection,
             self.selected,
             self.crypto,
             &current,
             &authority,
             minimum,
-        )
+        ))
         .await?;
         self.namespace.validate()?;
         Ok(Access {
@@ -452,7 +452,7 @@ impl Turn<'_> {
             access.authority.authorization,
             mapping.as_ref().map(|value| value.effect),
         )?;
-        let framed = if matches!(catalog, 7..=15) {
+        let framed = if matches!(catalog, 7..=16) {
             Some(
                 super::ledger::prepare(
                     self.crypto,
@@ -866,7 +866,7 @@ pub(super) async fn read_operation(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let (frame, request, decoded) = if matches!(catalog, 7..=15) {
+    let (frame, request, decoded) = if matches!(catalog, 7..=16) {
         let retained = super::ledger::read(connection, input, crypto, operation)
             .await?
             .ok_or(OperationError::RecoveryRequired)?;

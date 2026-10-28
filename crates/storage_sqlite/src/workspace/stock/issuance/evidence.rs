@@ -9,7 +9,7 @@ use std::num::NonZeroU64;
 use zeroize::Zeroizing;
 mod codec;
 pub(in crate::workspace::stock) mod selection;
-pub(in crate::workspace::stock) use codec::read_entry;
+pub(in crate::workspace::stock) use codec::{Retained, read_entry};
 const MAX_RAW: usize = 64 * 1024;
 
 /// Independently checked obtained bytes. A store error leaves the caller's
@@ -114,15 +114,25 @@ pub(in crate::workspace) async fn page(
     after: Option<Sequence>,
     proof: AttachmentProof,
 ) -> Result<StockEvidencePage, OperationError> {
-    let auth = super::super::signing_plan::load(
+    let auth = Box::pin(super::super::signing_plan::load(
         turn,
         &request.binding,
         request.minimum,
         request.operation,
         request.digest,
         &proof,
-    )
+    ))
     .await?;
+    Box::pin(page_authorized(turn, request, after, proof, auth)).await
+}
+
+async fn page_authorized(
+    turn: &mut Turn<'_>,
+    request: StockClaimRequest,
+    after: Option<Sequence>,
+    proof: AttachmentProof,
+    auth: super::super::signing_plan::Authorized,
+) -> Result<StockEvidencePage, OperationError> {
     if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
@@ -131,14 +141,14 @@ pub(in crate::workspace) async fn page(
         Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
         None,
     )?;
-    let witness = checkpoint::authenticate_minimum(
+    let witness = Box::pin(checkpoint::authenticate_minimum(
         turn.connection,
         turn.selected,
         turn.crypto,
         &auth.access.current,
         &auth.access.authority,
         minimum,
-    )
+    ))
     .await?;
     let selected = selection::page(
         turn.connection,
@@ -220,12 +230,12 @@ pub(in crate::workspace) async fn capture(
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
-    let original = claim::read_entry(
+    let original = Box::pin(claim::read_entry(
         turn.connection,
         turn.selected,
         turn.crypto,
         OperationId::from_bytes(*supplied.signing_attempt_id().as_bytes()),
-    )
+    ))
     .await?
     .ok_or(OperationError::RecoveryRequired)?;
     if original.frame.header.actor != supplied.binding().actor()
@@ -259,14 +269,14 @@ pub(in crate::workspace) async fn capture(
         Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
         None,
     )?;
-    let witness = checkpoint::authenticate_minimum(
+    let witness = Box::pin(checkpoint::authenticate_minimum(
         turn.connection,
         turn.selected,
         turn.crypto,
         supplied.binding(),
         &authority,
         minimum,
-    )
+    ))
     .await?;
     let existing = lookup(
         turn.connection,
@@ -416,15 +426,25 @@ pub(in crate::workspace) async fn read(
     digest: [u8; 32],
     proof: AttachmentProof,
 ) -> Result<Option<StockCapturedEvidence>, OperationError> {
-    let auth = super::super::signing_plan::load(
+    let auth = Box::pin(super::super::signing_plan::load(
         turn,
         &request.binding,
         request.minimum,
         request.operation,
         request.digest,
         &proof,
-    )
+    ))
     .await?;
+    Box::pin(read_authorized(turn, request, digest, proof, auth)).await
+}
+
+async fn read_authorized(
+    turn: &mut Turn<'_>,
+    request: StockClaimRequest,
+    digest: [u8; 32],
+    proof: AttachmentProof,
+    auth: super::super::signing_plan::Authorized,
+) -> Result<Option<StockCapturedEvidence>, OperationError> {
     if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
     }
@@ -447,14 +467,14 @@ pub(in crate::workspace) async fn read(
         Sequence::new(0).map_err(|_| WorkspaceError::InvalidInput)?,
         None,
     )?;
-    let witness = checkpoint::authenticate_minimum(
+    let witness = Box::pin(checkpoint::authenticate_minimum(
         turn.connection,
         turn.selected,
         turn.crypto,
         &auth.access.current,
         &auth.access.authority,
         minimum,
-    )
+    ))
     .await?;
     let mut tx = turn
         .connection

@@ -26,7 +26,7 @@ pub struct StockExactReplayPermit {
     admission: Option<StockReplayAdmissionReceipt>,
 }
 impl StockExactReplayPermit {
-    /// Confirmed first replay admission in current catalog15. Retained13/14
+    /// Confirmed first replay admission in tracked catalogs15–16. Retained13/14
     /// permits are explicitly untracked and return None; no report authorizes
     /// stock release, a fresh first dispatch or another replay invocation.
     pub const fn admission(&self) -> Option<StockReplayAdmissionReceipt> {
@@ -81,7 +81,7 @@ pub(in crate::workspace) async fn authorize(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 13..=15) {
+    if !matches!(auth.access.authority.catalog, 13..=16) {
         return Err(OperationError::UnsupportedOperation);
     }
     let plan = auth.plan.as_ref().ok_or(OperationError::StaleState)?;

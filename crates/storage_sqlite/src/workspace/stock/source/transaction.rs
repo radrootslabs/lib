@@ -28,7 +28,7 @@ async fn access(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, binding.input(), turn.crypto).await?;
-    if !(6..=15).contains(&authority.catalog) {
+    if !(6..=16).contains(&authority.catalog) {
         return Err(OperationError::UnsupportedOperation);
     }
     let current = record.authenticate(binding.input(), proof, turn.clock.now()?)?;
@@ -114,7 +114,7 @@ pub(in crate::workspace) async fn history(
     proof: AttachmentProof,
 ) -> Result<StockHistorySnapshot, OperationError> {
     let access = access(turn, &binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 8..=15) {
+    if !matches!(access.authority.catalog, 8..=16) {
         return Err(OperationError::UnsupportedOperation);
     }
     let prepared = Box::pin(super::history::prepare(
@@ -175,7 +175,7 @@ pub(in crate::workspace) async fn inspect_request(
     proof: AttachmentProof,
 ) -> Result<StockRequestSnapshot, OperationError> {
     let access = access(turn, &binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 8..=15) {
+    if !matches!(access.authority.catalog, 8..=16) {
         return Err(OperationError::UnsupportedOperation);
     }
     let prepared = Box::pin(super::request::prepare(

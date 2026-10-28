@@ -74,6 +74,16 @@ pub(in crate::workspace::stock) async fn read_entry(
     let Some(frame) = ledger::read(connection, input, crypto, entry).await? else {
         return Ok(None);
     };
+    Ok(Some(
+        Box::pin(read_frame(connection, input, crypto, frame)).await?,
+    ))
+}
+async fn read_frame(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    frame: ledger::Retained,
+) -> Result<Retained, OperationError> {
     let body = frame.body.as_slice();
     if frame.header.family != ledger::Family::SigningEvidence
         || !(PREFIX..=PREFIX + MAX_RAW).contains(&body.len())
@@ -173,7 +183,7 @@ pub(in crate::workspace::stock) async fn read_entry(
         local_record: Box::new(local_record),
     };
     retained.confirm(connection).await?;
-    Ok(Some(retained))
+    Ok(retained)
 }
 impl Retained {
     pub(in crate::workspace::stock) async fn confirm(
@@ -211,6 +221,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            envelope: None,
             aborted: None,
             preparation: None,
             installation: None,

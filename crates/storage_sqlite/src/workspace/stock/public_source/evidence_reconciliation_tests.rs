@@ -128,13 +128,13 @@ async fn refused_stock_recovery_preflight_keeps_writer_and_cached_original_autho
     remove_fault(&mut database, true).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v15", 0);
+        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v16", 0);
     let mut recovery = Box::pin(reconcile(&r, &request));
     assert!(futures::poll!(recovery.as_mut()).is_pending());
     provider.gate.entered();
     // The authorized old snapshot has already been read. Future schema then
     // refuses read-only preflight after close; no migration or repair occurs.
-    sqlx::raw_sql("PRAGMA user_version=16")
+    sqlx::raw_sql("PRAGMA user_version=17")
         .execute(&mut database)
         .await
         .unwrap();
@@ -146,7 +146,7 @@ async fn refused_stock_recovery_preflight_keeps_writer_and_cached_original_autho
             .fetch_one(&mut database)
             .await
             .unwrap(),
-        16
+        17
     );
     let wrong = AttachmentProof::from_protected_input(&[99; 32]).unwrap();
     assert!(
@@ -155,7 +155,7 @@ async fn refused_stock_recovery_preflight_keeps_writer_and_cached_original_autho
             .is_err()
     );
     request.with_json(|value| assert_eq!(value, raw));
-    sqlx::raw_sql("PRAGMA user_version=15")
+    sqlx::raw_sql("PRAGMA user_version=16")
         .execute(&mut database)
         .await
         .unwrap();
@@ -184,7 +184,7 @@ async fn lost_reconciliation_observer_drains_the_actual_replacement_and_original
     remove_fault(&mut database, true).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v15", 0);
+        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v16", 0);
     let mut recovery = Box::pin(reconcile(&r, &request));
     assert!(futures::poll!(recovery.as_mut()).is_pending());
     provider.gate.entered();

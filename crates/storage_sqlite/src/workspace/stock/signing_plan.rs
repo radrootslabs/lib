@@ -147,8 +147,8 @@ pub(in crate::workspace::stock) async fn load(
     digest: CommandDigest,
     proof: &AttachmentProof,
 ) -> Result<Authorized, OperationError> {
-    let access = turn.access(binding, minimum, proof).await?;
-    if !matches!(access.authority.catalog, 10..=15) {
+    let access = Box::pin(turn.access(binding, minimum, proof)).await?;
+    if !matches!(access.authority.catalog, 10..=16) {
         return Err(OperationError::UnsupportedOperation);
     }
     let original = Box::pin(acceptance::codec::read(
@@ -162,17 +162,18 @@ pub(in crate::workspace::stock) async fn load(
     if original.frame.header.digest != digest {
         return Err(OperationError::IdempotencyConflict);
     }
-    let original_proof = checkpoint::authenticate_identity(
+    let original_proof = Box::pin(checkpoint::authenticate_identity(
         turn.connection,
         turn.selected,
         turn.crypto,
         &access.current,
         &access.authority,
         IdentityTarget::Operation(operation, Some(original.identity())),
-    )
+    ))
     .await?;
     let command = original.command()?;
-    let (consent, consent_proof) = acceptance::current_consent(turn, &access, &command).await?;
+    let (consent, consent_proof) =
+        Box::pin(acceptance::current_consent(turn, &access, &command)).await?;
     acceptance::check_consent(
         &access,
         &consent,
@@ -207,7 +208,7 @@ pub(in crate::workspace::stock) async fn load(
     } else {
         None
     };
-    let plan_proof = checkpoint::authenticate_identity(
+    let plan_proof = Box::pin(checkpoint::authenticate_identity(
         turn.connection,
         turn.selected,
         turn.crypto,
@@ -217,7 +218,7 @@ pub(in crate::workspace::stock) async fn load(
             operation,
             expected: plan.as_ref().map(codec::Retained::identity),
         },
-    )
+    ))
     .await?;
     Ok(Authorized {
         access,

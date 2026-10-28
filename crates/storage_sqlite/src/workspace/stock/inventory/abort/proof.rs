@@ -150,7 +150,7 @@ pub(super) async fn prepare(
                 recipient: *recipient,
             }),
             Some(original) => {
-                if auth.access.authority.catalog != 15 {
+                if !matches!(auth.access.authority.catalog, 15..=16) {
                     return Err(OperationError::RecoveryRequired);
                 }
                 if at < original.report.claimed_at() {
@@ -180,7 +180,7 @@ pub(super) async fn prepare(
             }
         }
     }
-    let payload = if auth.access.authority.catalog == 15 {
+    let payload = if matches!(auth.access.authority.catalog, 15..=16) {
         Payload::Current(Box::new(
             encoded
                 .try_into()
@@ -217,7 +217,7 @@ pub(super) async fn read(
             .fetch_one(&mut *connection)
             .await
             .map_err(|_| OperationError::RecoveryRequired)?;
-        if catalog != 15 {
+        if !matches!(catalog, 15..=16) {
             return Err(OperationError::RecoveryRequired);
         }
         for (proof, expected) in proofs.iter().zip(recipients) {

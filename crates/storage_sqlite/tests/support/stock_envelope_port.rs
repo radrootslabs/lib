@@ -1,4 +1,4 @@
-//! This checkpoint exports descriptors, not a stock-envelope backend.
+//! Actual stock refusal and shared report/carrier boundaries.
 use super::*;
 use nostr::JsonUtil;
 use radroots_domain::{
@@ -32,7 +32,7 @@ fn minimum(input: &AttachmentInput, revision: u64) -> InventoryCheckpointRef {
 fn request(binding: &WorkspaceBinding) -> StockEnvelopeRequest {
     StockEnvelopeRequest::new(
         binding.clone(),
-        minimum(binding.input(), 0),
+        minimum(binding.input(), 0).with_optional_authorization(binding.stock_authorization()),
         OperationId::from_bytes([80; 32]),
         CommandDigest::from_bytes([81; 32]),
         key(),
@@ -82,26 +82,36 @@ async fn stock(f: &Fixture) -> (NativeWorkspace, StockEnrollment, WorkspaceBindi
 }
 
 #[tokio::test]
-async fn envelope_ports_explicitly_refuse_on_current_stock_and_ordinary_outbox_without_writes() {
+async fn envelope_ports_refuse_stock_without_original_work_and_ordinary_outbox_without_writes() {
     let f = Fixture::new();
     let (store, enrollment, binding) = stock(&f).await;
     let outbox_fixture = Fixture::new();
     let (outbox, _, _) = outbox_fixture.create().await;
     let candidate = PrivateEnvelopeCandidate::from_obtained(key(), &carrier(), &[3; 32]).unwrap();
-    for port in [
-        &store as &dyn InventoryStore,
-        &outbox as &dyn InventoryStore,
+    for (port, capture_error, query_error) in [
+        (
+            &store as &dyn InventoryStore,
+            OperationError::MissingHistory,
+            OperationError::StaleState,
+        ),
+        (
+            &outbox as &dyn InventoryStore,
+            OperationError::UnsupportedOperation,
+            OperationError::UnsupportedOperation,
+        ),
     ] {
-        assert!(matches!(
+        assert_eq!(
             port.capture_stock_envelope(request(&binding), copy(enrollment.proof()), &candidate)
-                .await,
-            Err(OperationError::UnsupportedOperation)
-        ));
-        assert!(matches!(
+                .await
+                .unwrap_err(),
+            capture_error
+        );
+        assert_eq!(
             port.stock_envelope(request(&binding), copy(enrollment.proof()))
-                .await,
-            Err(OperationError::UnsupportedOperation)
-        ));
+                .await
+                .unwrap_err(),
+            query_error
+        );
     }
     // Current catalog and authoritative history remain unchanged by refusal.
     let mut connection = sqlx::SqliteConnection::connect_with(
@@ -119,7 +129,7 @@ async fn envelope_ports_explicitly_refuse_on_current_stock_and_ordinary_outbox_w
         .fetch_one(&mut connection)
         .await
         .unwrap();
-    assert_eq!(catalog, 15);
+    assert_eq!(catalog, 16);
     assert_eq!(entries, 0);
     connection.close().await.unwrap();
     assert!(

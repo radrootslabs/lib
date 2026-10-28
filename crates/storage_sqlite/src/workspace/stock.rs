@@ -444,10 +444,10 @@ struct AuthorityV8 {
 }
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
-        if !matches!(self.catalog, 8..=15) && self.public_sources.is_some() {
+        if !matches!(self.catalog, 8..=16) && self.public_sources.is_some() {
             return Err(WorkspaceError::RecoveryRequired);
         }
-        if matches!(self.catalog, 8..=15) {
+        if matches!(self.catalog, 8..=16) {
             let public_sources = self
                 .public_sources
                 .ok_or(WorkspaceError::RecoveryRequired)?;
@@ -699,7 +699,7 @@ impl Authority {
                     public_sources: None,
                 }
             }
-            8..=15 => {
+            8..=16 => {
                 let value: AuthorityV8 = closed_record(bytes)?;
                 value.public_sources.validate()?;
                 if i64::from(value.version) != catalog
@@ -746,6 +746,7 @@ pub(super) struct Initial {
     pub expires_at: radroots_domain::UnixSeconds,
     pub clock: Arc<dyn WorkspaceClock>,
 }
+pub(in crate::workspace) mod envelope;
 pub(super) mod inventory;
 mod schema;
 pub(super) async fn initialize(
@@ -829,7 +830,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=15")
+            sqlx::query("PRAGMA user_version=16")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -1157,6 +1158,37 @@ impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
                 )
                 .await
         })
+    }
+    fn capture_stock_envelope<'a>(
+        &'a self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+        candidate: &'a radroots_storage::command::PrivateEnvelopeCandidate,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<
+            radroots_storage::inventory::StockEnvelopeOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(async move {
+            self.worker
+                .capture_stock_envelope(request, proof, candidate.retained_copy())
+                .await
+        })
+    }
+    fn stock_envelope(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::inventory::StockEnvelopeSource>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.stock_envelope(request, proof))
     }
     fn prepare_stock_acceptance(
         &self,

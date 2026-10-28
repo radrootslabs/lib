@@ -91,6 +91,16 @@ pub(in crate::workspace::stock) async fn read_entry(
     let Some(frame) = ledger::read(connection, input, crypto, operation).await? else {
         return Ok(None);
     };
+    Ok(Some(
+        Box::pin(read_frame(connection, input, crypto, frame)).await?,
+    ))
+}
+async fn read_frame(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    frame: ledger::Retained,
+) -> Result<Retained, OperationError> {
     if frame.header.family != ledger::Family::Installation {
         return Err(OperationError::RecoveryRequired);
     }
@@ -248,7 +258,7 @@ pub(in crate::workspace::stock) async fn read_entry(
         movements,
     };
     retained.confirm(connection).await?;
-    Ok(Some(retained))
+    Ok(retained)
 }
 impl Retained {
     pub(in crate::workspace::stock) async fn confirm(
@@ -292,6 +302,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            envelope: None,
             aborted: None,
             preparation: None,
             local_record: None,

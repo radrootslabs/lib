@@ -324,7 +324,7 @@ pub(in crate::workspace) async fn change(
     }
     let (mut authority, record, old_root, old_grant) =
         super::read(turn.connection, change.caller.input(), turn.crypto).await?;
-    if !(4..=15).contains(&authority.catalog) {
+    if !(4..=16).contains(&authority.catalog) {
         return Err(WorkspaceError::Unauthorized);
     }
     let catalog = authority.catalog;

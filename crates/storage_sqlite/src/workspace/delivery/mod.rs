@@ -1,6 +1,7 @@
 //! Append-only protected transport attempts on the existing workspace owner.
 
 mod codec;
+pub(super) mod containment;
 pub(super) mod graph;
 mod json;
 pub(super) mod observation;

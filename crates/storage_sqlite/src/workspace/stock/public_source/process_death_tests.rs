@@ -1,4 +1,4 @@
-//! Private process-death qualification of S, T2 and proven-unissued abort.
+//! Private process-death qualification of S, T2, original outer retention and abort.
 use super::*;
 use radroots_domain::{CommandDigest, OperationId};
 use radroots_secrets::{
@@ -22,6 +22,7 @@ enum Edge {
     Capture,
     Install,
     Abort,
+    Envelope,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,6 +33,7 @@ struct Control {
     digest: CommandDigest,
     recipient: PublicKey,
     raw: String,
+    wrapping_key: Option<[u8; 32]>,
     edge: Edge,
     before: bool,
 }
@@ -142,7 +144,7 @@ async fn stock_process_child() {
         .unwrap()
         .inventory_checkpoint()
         .unwrap();
-    let capture = if matches!(control.edge, Edge::Abort) {
+    let capture = if matches!(control.edge, Edge::Abort | Edge::Envelope) {
         None
     } else {
         let report = store
@@ -164,7 +166,7 @@ async fn stock_process_child() {
     if control.before {
         provider
             .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v15", 0);
+            .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
     }
     let work = async {
         match control.edge {
@@ -191,6 +193,36 @@ async fn stock_process_child() {
                         .await
                         .unwrap(),
                 );
+            }
+            Edge::Envelope => {
+                let candidate = radroots_storage::command::PrivateEnvelopeCandidate::from_obtained(
+                    control.recipient,
+                    &control.raw,
+                    &control.wrapping_key.unwrap(),
+                )
+                .unwrap();
+                let request = radroots_storage::inventory::StockEnvelopeRequest::new(
+                    binding,
+                    minimum,
+                    control.operation,
+                    control.digest,
+                    control.recipient,
+                    None,
+                )
+                .unwrap();
+                assert!(matches!(
+                    radroots_storage::inventory::InventoryStore::capture_stock_envelope(
+                        &store,
+                        request,
+                        proof
+                            .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                            .unwrap(),
+                        &candidate,
+                    )
+                    .await
+                    .unwrap(),
+                    radroots_storage::inventory::StockEnvelopeOutcome::Committed(_),
+                ));
             }
             Edge::Abort => {
                 aborts::released(
@@ -225,9 +257,9 @@ async fn stock_process_child() {
 }
 
 #[tokio::test]
-async fn process_death_before_and_after_capture_install_or_abort_preserves_original_stock_and_evidence()
+async fn process_death_before_and_after_capture_install_abort_or_envelope_preserves_original_stock_and_evidence()
  {
-    for edge in [Edge::Capture, Edge::Install, Edge::Abort] {
+    for edge in [Edge::Capture, Edge::Install, Edge::Abort, Edge::Envelope] {
         for before in [true, false] {
             let mut r = Rig::new().await;
             let receipt = if matches!(edge, Edge::Abort) {
@@ -236,13 +268,13 @@ async fn process_death_before_and_after_capture_install_or_abort_preserves_origi
                 Box::pin(ready(&r)).await
             };
             let recipient = peer(&r, &receipt);
-            let (report, raw) = if matches!(edge, Edge::Abort) {
+            let (report, mut raw) = if matches!(edge, Edge::Abort) {
                 (None, String::new())
             } else {
                 let (report, raw) = Box::pin(obtained(&r, &receipt, recipient)).await;
                 (Some(report), raw)
             };
-            if matches!(edge, Edge::Install) {
+            if matches!(edge, Edge::Install | Edge::Envelope) {
                 let capture = StockEvidenceCapture::verify(
                     r.binding.clone(),
                     report.as_ref().unwrap(),
@@ -257,6 +289,20 @@ async fn process_death_before_and_after_capture_install_or_abort_preserves_origi
                         .unwrap(),
                 );
             }
+            let wrapping_key = if matches!(edge, Edge::Envelope) {
+                installed(install(&r, &receipt).await.unwrap());
+                let pending = radroots_nostr::signing::gift_wrap::wrap_retained_seal(
+                    &raw,
+                    recipient,
+                    std::num::NonZeroU64::new(150000).unwrap(),
+                    &radroots_nostr::signing::OsNonceSource,
+                )
+                .unwrap();
+                raw = pending.signed_json().to_owned();
+                Some(pending.with_wrapping_key(|key| *key))
+            } else {
+                None
+            };
             let minimum = inventory_minimum(&r).await;
             let control = Control {
                 input: r.enrollment.input().clone(),
@@ -265,6 +311,7 @@ async fn process_death_before_and_after_capture_install_or_abort_preserves_origi
                 digest: receipt.attempt().command_digest(),
                 recipient,
                 raw,
+                wrapping_key,
                 edge,
                 before,
             };
@@ -311,10 +358,11 @@ async fn process_death_before_and_after_capture_install_or_abort_preserves_origi
                 .iter()
                 .find(|value| value.recipient() == recipient)
                 .unwrap();
-            let has_evidence =
-                matches!(edge, Edge::Install) || (matches!(edge, Edge::Capture) && !before);
+            let has_evidence = matches!(edge, Edge::Install | Edge::Envelope)
+                || (matches!(edge, Edge::Capture) && !before);
             assert_eq!(peer.first_evidence().is_some(), has_evidence);
-            let has_installation = matches!(edge, Edge::Install) && !before;
+            let has_installation =
+                matches!(edge, Edge::Envelope) || (matches!(edge, Edge::Install) && !before);
             assert_eq!(snapshot.installation().is_some(), has_installation);
             let has_abort = matches!(edge, Edge::Abort) && !before;
             assert_eq!(snapshot.aborted().is_some(), has_abort);
@@ -366,6 +414,64 @@ async fn process_death_before_and_after_capture_install_or_abort_preserves_origi
                         .await
                         .unwrap(),
                 );
+            }
+            if matches!(edge, Edge::Envelope) {
+                let request = radroots_storage::inventory::StockEnvelopeRequest::new(
+                    r.binding.clone(),
+                    inventory_minimum(&r).await,
+                    control.operation,
+                    control.digest,
+                    control.recipient,
+                    None,
+                )
+                .unwrap();
+                let found = radroots_storage::inventory::InventoryStore::stock_envelope(
+                    &r.store,
+                    request,
+                    r.enrollment
+                        .proof()
+                        .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+                assert_eq!(found.is_some(), !before);
+                if let Some(found) = &found {
+                    found.with_json(|raw| assert_eq!(raw, control.raw));
+                }
+                let candidate = radroots_storage::command::PrivateEnvelopeCandidate::from_obtained(
+                    control.recipient,
+                    &control.raw,
+                    &control.wrapping_key.unwrap(),
+                )
+                .unwrap();
+                let request = radroots_storage::inventory::StockEnvelopeRequest::new(
+                    r.binding.clone(),
+                    inventory_minimum(&r).await,
+                    control.operation,
+                    control.digest,
+                    control.recipient,
+                    None,
+                )
+                .unwrap();
+                let radroots_storage::inventory::StockEnvelopeOutcome::Committed(saved) =
+                    radroots_storage::inventory::InventoryStore::capture_stock_envelope(
+                        &r.store,
+                        request,
+                        r.enrollment
+                            .proof()
+                            .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                            .unwrap(),
+                        &candidate,
+                    )
+                    .await
+                    .unwrap()
+                else {
+                    panic!("original outer must reconcile");
+                };
+                if let Some(found) = found {
+                    assert_eq!(*saved, found.receipt());
+                }
             }
             let final_installation = installed(install(&r, &receipt).await.unwrap());
             assert_eq!(final_installation.record_id(), receipt.rumor().record_id());

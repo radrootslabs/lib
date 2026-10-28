@@ -157,12 +157,8 @@ async fn current_claimed_cleanup_releases_exact_originals_once_and_preserves_eve
 }
 #[tokio::test]
 async fn unrecorded_original_refusal_and_untracked_retained_claims_never_authorize_cleanup() {
-    for catalog in [14, 15] {
-        let r = if catalog == 14 {
-            Rig::with_catalog(catalog).await
-        } else {
-            Rig::new().await
-        };
+    for catalog in [14, 15, 16] {
+        let r = Rig::with_catalog(catalog).await;
         let receipt = Box::pin(replay_ready(&r)).await;
         refused(&r, &receipt, peer(&r, &receipt), catalog == 14).await;
         let before = inventory_minimum(&r).await;
@@ -404,7 +400,7 @@ async fn lost_claimed_cleanup_waiter_drains_before_reopen_and_keeps_original_pro
     let provider = reopen(&mut r).await;
     provider
         .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v15", 0);
+        .arm(Direction::Wrap, "radroots.seller_stock.authority.v16", 0);
     let mut pending = Box::pin(r.store.abort_proven_unissued(request, r.enrollment.proof()));
     assert!(futures::poll!(pending.as_mut()).is_pending());
     provider.gate.entered();

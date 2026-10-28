@@ -305,6 +305,7 @@ impl Retained {
     }
     pub fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            envelope: None,
             preparation: None,
             local_record: None,
             installation: None,

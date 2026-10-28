@@ -256,14 +256,14 @@ pub(in crate::workspace) async fn claim(
     request: StockClaimRequest,
     proof: AttachmentProof,
 ) -> Result<StockClaimOutcome, OperationError> {
-    let mut auth = signing_plan::load(
+    let mut auth = Box::pin(signing_plan::load(
         turn,
         &request.binding,
         request.minimum,
         request.operation,
         request.digest,
         &proof,
-    )
+    ))
     .await?;
     if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);
@@ -424,14 +424,14 @@ pub(in crate::workspace) async fn read(
     request: StockClaimRequest,
     proof: AttachmentProof,
 ) -> Result<Option<StockSigningAttempt>, OperationError> {
-    let auth = signing_plan::load(
+    let auth = Box::pin(signing_plan::load(
         turn,
         &request.binding,
         request.minimum,
         request.operation,
         request.digest,
         &proof,
-    )
+    ))
     .await?;
     if auth.access.authority.catalog < 11 {
         return Err(OperationError::UnsupportedOperation);

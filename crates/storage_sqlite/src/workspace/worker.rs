@@ -89,6 +89,17 @@ enum Job {
         AttachmentProof,
         Reply<Option<stock::StockUnissuedReceipt>, OperationError>,
     ),
+    CaptureStockEnvelope(
+        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        AttachmentProof,
+        Box<radroots_storage::command::PrivateEnvelopeCandidate>,
+        Reply<radroots_storage::inventory::StockEnvelopeOutcome, OperationError>,
+    ),
+    StockEnvelope(
+        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        AttachmentProof,
+        Reply<Option<radroots_storage::inventory::StockEnvelopeSource>, OperationError>,
+    ),
     CaptureStockEvidence(
         Box<radroots_storage::inventory::StockEvidenceRequest>,
         AttachmentProof,
@@ -356,6 +367,12 @@ impl Job {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::CaptureStockEvidence(_, _, reply) | Self::RecoverStockEvidence(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::CaptureStockEnvelope(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockEnvelope(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
             Self::StockEvidence(_, _, _, reply) => {
@@ -633,6 +650,8 @@ impl Handle {
                                         | Job::CaptureStockUnissued(..)
                                         | Job::RecoverStockUnissued(..)
                                         | Job::StockUnissued(..)
+                                        | Job::CaptureStockEnvelope(..)
+                                        | Job::StockEnvelope(..)
                                         | Job::CaptureStockEvidence(..)
                                         | Job::RecoverStockEvidence(..)
                                         | Job::StockEvidence(..)
@@ -1038,6 +1057,47 @@ impl Handle {
                                 Job::StockUnissued(request, proof, reply) => {
                                     let result = if kind == Kind::SellerStock {
                                         Box::pin(stock::issuance::unissued::read(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::CaptureStockEnvelope(request, proof, candidate, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::envelope::capture(
+                                            &mut stock::inventory::Turn {
+                                                connection,
+                                                namespace: &namespace,
+                                                selected: &input,
+                                                crypto: &crypto,
+                                                clock: clock.as_ref(),
+                                                uncertain: &mut uncertain,
+                                            },
+                                            *request,
+                                            proof,
+                                            *candidate,
+                                        ))
+                                        .await
+                                    } else {
+                                        Err(OperationError::UnsupportedOperation)
+                                    };
+                                    let _ = reply.send(result);
+                                }
+                                Job::StockEnvelope(request, proof, reply) => {
+                                    let result = if kind == Kind::SellerStock {
+                                        Box::pin(stock::envelope::read(
                                             &mut stock::inventory::Turn {
                                                 connection,
                                                 namespace: &namespace,
@@ -1948,6 +2008,31 @@ impl Handle {
         self.send(Job::RecoverStockEvidence(Box::new(request), proof, reply))?;
         result.await.unwrap_or(Ok(unknown))
     }
+    pub(super) async fn capture_stock_envelope(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+        candidate: radroots_storage::command::PrivateEnvelopeCandidate,
+    ) -> Result<radroots_storage::inventory::StockEnvelopeOutcome, OperationError> {
+        let unknown = radroots_storage::inventory::StockEnvelopeOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::CaptureStockEnvelope(
+            Box::new(request),
+            proof,
+            Box::new(candidate),
+            reply,
+        ))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_envelope(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_storage::inventory::StockEnvelopeSource>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockEnvelope(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn capture_stock_signing_evidence(
         &self,
         evidence: radroots_storage::inventory::StockEvidenceRequest,
@@ -2133,7 +2218,9 @@ impl Handle {
             | Job::RecoverStockUnissued(..)
             | Job::CaptureStockEvidence(..)
             | Job::RecoverStockEvidence(..) => 256 * 1024,
-            Job::StockEvidence(..)
+            Job::CaptureStockEnvelope(..)
+            | Job::StockEnvelope(..)
+            | Job::StockEvidence(..)
             | Job::StockUnissued(..)
             | Job::StockEvidencePage(..)
             | Job::StockSnapshot(..)

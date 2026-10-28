@@ -82,7 +82,7 @@
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
       "captured_replay": "local_replay_safe",
-      "native_catalog": 15,
+      "native_catalog": 16,
       "worker_charge_bytes": 1048576,
       "existing_protected_claim_required": true,
       "current_execute_consent_required": true,
@@ -111,7 +111,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 15,
+    "schema_version": 16,
     "retained_enrollment_versions": [
       1
     ],
@@ -128,9 +128,10 @@
       11,
       12,
       13,
-      14
+      14,
+      15
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v15",
+    "authority_payload_schema": "radroots.seller_stock.authority.v16",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -393,7 +394,8 @@
       ],
       "retained_v1_requires_absent_claims": true,
       "claimed_cleanup_catalogs": [
-        15
+        15,
+        16
       ],
       "untracked_claimed_catalogs": [
         13,
@@ -406,6 +408,47 @@
       "contradictory_evidence_retained": true,
       "contradiction_requires_recovery": true,
       "caller_reports_are_release_authority": false
+    },
+    "envelope_retention": {
+      "journal_family": 10,
+      "payload_version": 1,
+      "payload_prefix_bytes": 213,
+      "supported_catalogs": [
+        16
+      ],
+      "retained_unsupported_catalogs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "raw_max_bytes": 65536,
+      "worker_charge_bytes": 1048576,
+      "capture_port": "InventoryStore.capture_stock_envelope",
+      "query_port": "InventoryStore.stock_envelope",
+      "original_preparation_plan_claim_seal_installation_required": true,
+      "temporary_key_derivation_and_exact_decryption_required": true,
+      "temporary_key_retained": false,
+      "original_party_as_outer_author_allowed": false,
+      "body_derived_projection_and_complete_ancestry_required": true,
+      "original_credential_capture_requires_live_clock_or_grant": false,
+      "query_requires_current_recovery_access": true,
+      "observation_nullable": true,
+      "existing_original_bytes_may_be_replaced": false,
+      "capture_grants_dispatch": false,
+      "capture_changes_physical_stock": false,
+      "provider_io_inside_sql": false
     }
   },
   "provenance": {
