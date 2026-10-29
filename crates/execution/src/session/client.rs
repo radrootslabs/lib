@@ -18,6 +18,10 @@ mod inventory;
 #[path = "client_commerce.rs"]
 mod commerce;
 
+#[cfg(feature = "workspace_session")]
+#[path = "client_rewrap.rs"]
+mod rewrap;
+
 struct Resources<H> {
     host: H,
     signer: Shared<Mutex<Option<SignerSession>>>,

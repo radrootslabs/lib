@@ -158,14 +158,18 @@ pub async fn radroots::operations::Operations<'a>::resume(&self, radroots_domain
 pub mod radroots::orders
 pub use radroots::orders::AcceptOrderInput
 pub use radroots::orders::AcceptanceRecipient
+pub use radroots::orders::AcceptanceRewrapStatus
 pub use radroots::orders::AcceptanceStatus
 pub use radroots::orders::AcceptanceUnissuedReceipt
 pub use radroots::orders::InstalledAcceptance
 pub struct radroots::orders::Orders<'a>
 impl<'a> radroots::orders::Orders<'a>
 pub async fn radroots::orders::Orders<'a>::accept(&self, radroots_execution::workspace::CommandContext, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::source::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::source::StockListingCheckpointRef, radroots_protocol::command::order_acceptance::AcceptOrderInput) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots::orders::Orders<'a>::acceptance_rewrap_status(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, radroots_domain::identifier::OperationId) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceRewrapStatus>
 pub async fn radroots::orders::Orders<'a>::acceptance_status(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::Result<radroots_execution::session::commerce::AcceptanceStatus>
 pub async fn radroots::orders::Orders<'a>::resume_acceptance(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceStatus>
+pub async fn radroots::orders::Orders<'a>::resume_acceptance_rewrap(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, radroots_domain::identifier::OperationId) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceRewrapStatus>
+pub async fn radroots::orders::Orders<'a>::rewrap_acceptance(&self, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, radroots_domain::identifier::OperationId) -> radroots_execution::ExecutionResult<radroots_execution::session::commerce::AcceptanceRewrapStatus>
 pub mod radroots::signing
 pub use radroots::signing::ArtifactFingerprint
 pub use radroots::signing::ArtifactRole

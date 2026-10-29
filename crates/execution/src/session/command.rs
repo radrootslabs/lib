@@ -105,6 +105,7 @@ pub(super) struct SigningResources {
     pub(super) lease: Shared<dyn HostBound>,
     pub(super) stock_captures: Shared<super::stock_evidence::Owner>,
 }
+#[derive(Clone, Copy)]
 pub(super) enum RunMode {
     Command,
     Resume,

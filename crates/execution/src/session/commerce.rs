@@ -23,6 +23,7 @@ use radroots_storage::{
 #[path = "commerce_run.rs"]
 mod run;
 pub(crate) use run::observe;
+pub(in crate::session) use run::rewrap_status;
 
 /// Original operation selectors and independently retained minimum; no authority.
 #[derive(Clone)]
@@ -239,5 +240,40 @@ impl AcceptanceStatus {
 impl fmt::Debug for AcceptanceStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("AcceptanceStatus(<redacted>)")
+    }
+}
+
+/// Separate current-access observations of one explicitly requested rewrap.
+/// A missing outer is an unknown wrapping outcome, never proof of nonissuance
+/// or permission to regenerate. Delivery carries its own authenticated read
+/// checkpoint; this report does not claim an atomic combined absence snapshot.
+#[derive(Clone)]
+pub struct AcceptanceRewrapStatus {
+    id: OperationId,
+    recipient: PublicKey,
+    state: Option<radroots_storage::inventory::StockRewrapState>,
+    delivery: Option<StockDeliverySummary>,
+}
+impl AcceptanceRewrapStatus {
+    /// Explicit request identity, distinct from the original business command.
+    pub const fn rewrap_id(&self) -> OperationId {
+        self.id
+    }
+    /// Recipient whose original evidence and additional outer were selected.
+    pub const fn recipient(&self) -> PublicKey {
+        self.recipient
+    }
+    /// Observed admission and optional captured outer; absence grants no work.
+    pub const fn state(&self) -> Option<radroots_storage::inventory::StockRewrapState> {
+        self.state
+    }
+    /// Independent current delivery observation for the exact captured outer.
+    pub const fn delivery(&self) -> Option<&StockDeliverySummary> {
+        self.delivery.as_ref()
+    }
+}
+impl fmt::Debug for AcceptanceRewrapStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("AcceptanceRewrapStatus(<redacted>)")
     }
 }

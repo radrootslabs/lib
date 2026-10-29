@@ -921,6 +921,8 @@ async fn lost_observer_cannot_discard_actual_peer_artifact_and_close_installs_be
 mod delivery;
 #[path = "native_refusal_tests.rs"]
 mod original_refusals;
+#[path = "native_stock_rewrap_tests.rs"]
+mod rewrap;
 
 #[tokio::test]
 async fn peer_installation_survives_self_refusal_and_resume_uses_original_exact_recovery() {

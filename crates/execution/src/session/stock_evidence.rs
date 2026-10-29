@@ -16,6 +16,9 @@ pub(super) use unissued::RetainedUnissued;
 #[path = "stock_delivery.rs"]
 mod delivery;
 pub(super) use delivery::{DeliveryContext, RetainedDelivery, RetainedEnvelope};
+#[path = "stock_rewrap.rs"]
+mod rewrap;
+pub(super) use rewrap::RetainedAdmission;
 
 pub(super) struct Pending {
     store: Shared<dyn InventoryStore>,
@@ -31,6 +34,7 @@ pub(super) struct Owner {
     unissued: Mutex<Vec<Shared<RetainedUnissued>>>,
     envelopes: Mutex<Vec<Shared<RetainedEnvelope>>>,
     deliveries: Mutex<Vec<Shared<RetainedDelivery>>>,
+    rewraps: Mutex<Vec<Shared<RetainedAdmission>>>,
     pub(super) delivery_serial: futures::lock::Mutex<()>,
     serial: futures::lock::Mutex<()>,
 }
@@ -58,11 +62,16 @@ impl Owner {
             .deliveries
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let rewraps = self
+            .rewraps
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if pending.is_empty()
             && unmapped.is_empty()
             && unissued.is_empty()
             && envelopes.is_empty()
             && deliveries.is_empty()
+            && rewraps.is_empty()
         {
             Ok(())
         } else {

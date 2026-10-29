@@ -512,6 +512,7 @@
       "first_complete_targets_and_criterion_immutable": true,
       "ordinary_command_replays_existing_attempt": false,
       "ordinary_fresh_claim_binds_observed_attempt_count": true,
+      "ordinary_repeat_uses_selected_envelope_attempt_count": true,
       "ordinary_obtained_material_owner": "ClientSession.stock_captures",
       "ordinary_peer_delivery_precedes_self_signing": true,
       "installed_original_delivery_requires_signer": false,
@@ -586,7 +587,15 @@
       "existing_or_uncertain_admission_grants_invocation": false,
       "unknown_admissions_count_toward_limit": true,
       "descriptor_includes_uncaptured_admissions": true,
-      "admission_repair_grants_history_or_invocation": false
+      "admission_repair_grants_history_or_invocation": false,
+      "ordinary_owner": "ClientSession.stock_captures",
+      "ordinary_facade_methods": [
+        "Orders.rewrap_acceptance",
+        "Orders.resume_acceptance_rewrap",
+        "Orders.acceptance_rewrap_status"
+      ],
+      "ordinary_resume_generates_key_or_business_signature": false,
+      "ordinary_status_is_atomic_absence_proof": false
     }
   },
   "provenance": {

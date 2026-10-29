@@ -15,6 +15,7 @@ struct Recipient {
     first: Option<DeliveryIntent>,
     first_source: Option<radroots_storage::inventory::StockEnvelopeReceipt>,
     attempts: u16,
+    selected_attempts: u16,
     endpoints: Vec<Endpoint>,
 }
 impl Recipient {
@@ -67,6 +68,14 @@ impl Recipient {
             .attempts
             .checked_add(1)
             .ok_or(OperationError::RecoveryRequired)?;
+        if self.source.as_ref().is_some_and(|source| {
+            source.source.receipt().event_id() == value.source().receipt().event_id()
+        }) {
+            self.selected_attempts = self
+                .selected_attempts
+                .checked_add(1)
+                .ok_or(OperationError::RecoveryRequired)?;
+        }
         if self.attempts > 16 * 12 {
             return Err(OperationError::RecoveryRequired);
         }
@@ -162,6 +171,7 @@ impl Graph {
                 first: None,
                 first_source: None,
                 attempts: 0,
+                selected_attempts: 0,
                 endpoints: vec![],
             });
         }
@@ -173,7 +183,7 @@ impl Graph {
             found_observation: None,
             last_at: None,
         };
-        let rows = sqlx::query("SELECT d.entry_id FROM stock_delivery_attempts d JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.entry_id WHERE d.actor=? AND d.operation_id=? ORDER BY o.revision LIMIT 385")
+        let rows = sqlx::query("SELECT CASE WHEN length(d.entry_id)=32 THEN d.entry_id END FROM stock_delivery_attempts d JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.entry_id WHERE d.actor=? AND d.operation_id=? ORDER BY o.revision LIMIT 385")
             .bind(turn.selected.participant().as_bytes().as_slice()).bind(request.operation_id().as_bytes().as_slice())
             .fetch_all(&mut *turn.connection).await.map_err(|_|OperationError::RecoveryRequired)?;
         if rows.len() > ATTEMPT_COUNT_MAX {
@@ -212,7 +222,7 @@ impl Graph {
                 result.found_attempt = Some(value);
             }
         }
-        let rows = sqlx::query("SELECT d.entry_id FROM stock_delivery_observations d JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.entry_id WHERE d.actor=? AND d.operation_id=? ORDER BY o.revision LIMIT 2305")
+        let rows = sqlx::query("SELECT CASE WHEN length(d.entry_id)=32 THEN d.entry_id END FROM stock_delivery_observations d JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.entry_id WHERE d.actor=? AND d.operation_id=? ORDER BY o.revision LIMIT 2305")
             .bind(turn.selected.participant().as_bytes().as_slice()).bind(request.operation_id().as_bytes().as_slice())
             .fetch_all(&mut *turn.connection).await.map_err(|_|OperationError::RecoveryRequired)?;
         if rows.len() > OBSERVATION_COUNT_MAX {
@@ -327,6 +337,7 @@ impl Graph {
             value.first_source,
             value.first.clone(),
             value.attempts,
+            value.selected_attempts,
             targets,
             checkpoint,
         )

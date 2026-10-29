@@ -141,6 +141,7 @@ fn selected_envelope_retains_a_separate_first_policy_source_without_weakening_or
         Some(original),
         Some(intent.clone()),
         1,
+        1,
         progress(&intent, &[false, false]),
         checkpoint(4),
     )
@@ -156,6 +157,7 @@ fn selected_envelope_retains_a_separate_first_policy_source_without_weakening_or
             Some(new),
             Some(wrong_policy),
             Some(intent.clone()),
+            1,
             1,
             progress(&intent, &[false, false]),
             checkpoint(5)
@@ -376,5 +378,73 @@ fn stock_intent_refuses_public_artifacts_and_empty_outcome_pages_do_not_advance(
     assert_eq!(
         format!("{page:?}"),
         "StockDeliveryObservationPage(<redacted>)"
+    );
+}
+
+#[test]
+fn scoped_delivery_counts_refuse_observations_without_a_selected_invocation() {
+    let (request, original, intent) = fixture();
+    let new = rewrapped(&request, original, 1);
+    let selected = StockEnvelopeRequest::new(
+        request.binding().clone(),
+        request.minimum_checkpoint(),
+        request.operation_id(),
+        request.command_digest(),
+        request.recipient(),
+        None,
+    )
+    .unwrap()
+    .with_envelope(new.event_id());
+    let none = StockDeliverySummary::from_store_report_with_policy_source(
+        &selected,
+        Some(new),
+        Some(original),
+        Some(intent.clone()),
+        1,
+        0,
+        progress(&intent, &[false, false])
+            .into_iter()
+            .map(|target| {
+                StockDeliveryTargetProgress::from_store_report(
+                    target.target().clone(),
+                    target.potential_attempts(),
+                    false,
+                    None,
+                    None,
+                )
+                .unwrap()
+            })
+            .collect(),
+        checkpoint(5),
+    )
+    .unwrap();
+    assert_eq!(none.attempt_count(), 1);
+    assert_eq!(none.selected_attempt_count(), 0);
+    assert!(!none.acceptance_satisfied().unwrap());
+    assert!(
+        StockDeliverySummary::from_store_report_with_policy_source(
+            &selected,
+            Some(new),
+            Some(original),
+            Some(intent.clone()),
+            1,
+            2,
+            progress(&intent, &[false, false]),
+            checkpoint(5)
+        )
+        .is_err()
+    );
+    assert!(
+        StockDeliverySummary::from_store_report_with_policy_source(
+            &selected,
+            Some(new),
+            Some(original),
+            Some(intent.clone()),
+            1,
+            0,
+            progress(&intent, &[true, false]),
+            checkpoint(5)
+        )
+        .is_err()
     );
 }

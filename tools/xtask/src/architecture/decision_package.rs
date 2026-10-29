@@ -143,6 +143,10 @@ struct StockRewrapping {
     unknown_admissions_count_toward_limit: bool,
     descriptor_includes_uncaptured_admissions: bool,
     admission_repair_grants_history_or_invocation: bool,
+    ordinary_owner: String,
+    ordinary_facade_methods: Vec<String>,
+    ordinary_resume_generates_key_or_business_signature: bool,
+    ordinary_status_is_atomic_absence_proof: bool,
 
     payload_version: u16,
     payload_prefix_bytes: u32,
@@ -299,6 +303,7 @@ struct StockDelivery {
     first_complete_targets_and_criterion_immutable: bool,
     ordinary_command_replays_existing_attempt: bool,
     ordinary_fresh_claim_binds_observed_attempt_count: bool,
+    ordinary_repeat_uses_selected_envelope_attempt_count: bool,
     ordinary_obtained_material_owner: String,
     ordinary_peer_delivery_precedes_self_signing: bool,
     installed_original_delivery_requires_signer: bool,
@@ -771,6 +776,15 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && rewrap.unknown_admissions_count_toward_limit
             && rewrap.descriptor_includes_uncaptured_admissions
             && !rewrap.admission_repair_grants_history_or_invocation
+            && rewrap.ordinary_owner == "ClientSession.stock_captures"
+            && rewrap.ordinary_facade_methods
+                == [
+                    "Orders.rewrap_acceptance",
+                    "Orders.resume_acceptance_rewrap",
+                    "Orders.acceptance_rewrap_status",
+                ]
+            && !rewrap.ordinary_resume_generates_key_or_business_signature
+            && !rewrap.ordinary_status_is_atomic_absence_proof
             && rewrap.payload_version == 1
             && rewrap.payload_prefix_bytes == 117
             && rewrap.supported_catalogs == [18]
@@ -837,6 +851,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && delivery.first_complete_targets_and_criterion_immutable
             && !delivery.ordinary_command_replays_existing_attempt
             && delivery.ordinary_fresh_claim_binds_observed_attempt_count
+            && delivery.ordinary_repeat_uses_selected_envelope_attempt_count
             && delivery.ordinary_obtained_material_owner == "ClientSession.stock_captures"
             && delivery.ordinary_peer_delivery_precedes_self_signing
             && !delivery.installed_original_delivery_requires_signer
@@ -2545,6 +2560,13 @@ mod tests {
             ("unknown_admissions_count_toward_limit", json!(false)),
             ("descriptor_includes_uncaptured_admissions", json!(false)),
             ("admission_repair_grants_history_or_invocation", json!(true)),
+            ("ordinary_owner", json!("application")),
+            ("ordinary_facade_methods", json!([])),
+            (
+                "ordinary_resume_generates_key_or_business_signature",
+                json!(true),
+            ),
+            ("ordinary_status_is_atomic_absence_proof", json!(true)),
             ("supported_catalogs", json!([17, 18])),
             ("payload_prefix_bytes", json!(118)),
             ("additional_envelopes_per_recipient_max", json!(193)),
@@ -2651,6 +2673,10 @@ mod tests {
                 json!(false),
             ),
             ("ordinary_obtained_material_owner", json!("application")),
+            (
+                "ordinary_repeat_uses_selected_envelope_attempt_count",
+                json!(false),
+            ),
             ("ordinary_peer_delivery_precedes_self_signing", json!(false)),
             ("installed_original_delivery_requires_signer", json!(true)),
             ("retries_use_original_outer_bytes", json!(false)),

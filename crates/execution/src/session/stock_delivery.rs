@@ -13,12 +13,13 @@ pub(in crate::session) struct DeliveryContext {
     pub store: Shared<dyn InventoryStore>,
     pub proof: AttachmentProof,
     pub _lease: Shared<dyn HostBound>,
+    pub rewrap: Option<StockRewrapAdmission>,
 }
 impl DeliveryContext {
-    fn error(&self, reason: OperationError) -> Error {
+    pub(super) fn error(&self, reason: OperationError) -> Error {
         Error::capture_pending(reason, OperationContext::retained(self.selection.operation))
     }
-    fn request(
+    pub(super) fn request(
         &self,
         observed: Option<NonZeroU64>,
     ) -> Result<StockEnvelopeRequest, OperationError> {
@@ -31,7 +32,7 @@ impl DeliveryContext {
             observed,
         )
     }
-    fn proof(&self) -> Result<AttachmentProof, OperationError> {
+    pub(super) fn proof(&self) -> Result<AttachmentProof, OperationError> {
         self.proof
             .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
             .map_err(Into::into)
@@ -91,7 +92,21 @@ impl Owner {
         }
         let request = c.request(entry.observed).map_err(|e| c.error(e))?;
         let proof = c.proof().map_err(|e| c.error(e))?;
-        let outcome = if reconciling {
+        let outcome = if let Some(admission) = c.rewrap {
+            let request = StockRewrapRequest::new(
+                request.with_envelope(entry.candidate.event_id()),
+                admission.rewrap_id(),
+            );
+            if reconciling {
+                c.store
+                    .reconcile_stock_rewrap(request, proof, &entry.candidate)
+                    .await
+            } else {
+                c.store
+                    .capture_stock_rewrap(request, proof, &entry.candidate)
+                    .await
+            }
+        } else if reconciling {
             c.store
                 .reconcile_stock_envelope(request, proof, &entry.candidate)
                 .await
@@ -112,6 +127,8 @@ impl Owner {
             || receipt.recipient() != c.recipient
             || receipt.event_id() != entry.candidate.event_id()
             || receipt.digest() != entry.candidate.digest()
+            || receipt.rewrap_admission_transaction_id()
+                != c.rewrap.map(|admission| admission.transaction_id())
             || receipt.checkpoint().authority() != c.selection.minimum.authority()
         {
             return Err(c.error(OperationError::RecoveryRequired));
@@ -249,6 +266,7 @@ impl Owner {
         Ok(())
     }
     pub(super) async fn drain_delivery(&self) -> crate::Result<()> {
+        self.drain_rewrap_admissions().await?;
         loop {
             let entry = self
                 .envelopes

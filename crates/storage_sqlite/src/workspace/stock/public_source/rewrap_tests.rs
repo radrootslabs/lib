@@ -222,6 +222,8 @@ async fn rewrapping_delivery_preserves_global_policy_and_counters_but_scopes_acc
     assert_eq!(selected_summary.original_intent(), Some(initial.intent()));
     assert_eq!(original_summary.attempt_count(), 2);
     assert_eq!(selected_summary.attempt_count(), 2);
+    assert_eq!(selected_summary.selected_attempt_count(), 1);
+    assert_eq!(original_summary.selected_attempt_count(), 1);
     assert_eq!(selected_summary.targets()[0].potential_attempts(), 2);
     let accepted = save(&r, &observed(&attempt, DeliveryOutcome::accepted(), None)).await;
     let page = r
@@ -343,6 +345,8 @@ async fn rewrapping_first_delivery_does_not_fabricate_original_envelope_acceptan
     assert_eq!(old.source(), Some(first));
     assert_eq!(old.publication_policy_source(), Some(saved));
     assert_eq!(old.attempt_count(), 1);
+    assert_eq!(old.selected_attempt_count(), 0);
+    assert_eq!(new_summary.selected_attempt_count(), 1);
     let page = r
         .store
         .stock_delivery_observations(

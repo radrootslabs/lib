@@ -59,7 +59,7 @@ impl CommandRuntime {
             .and_then(|values| values.get(index))
             .ok_or_else(|| fail(OperationError::UnsupportedOperation))?;
         if state.acceptance_satisfied().map_err(fail)?
-            || (state.attempt_count() != 0 && matches!(mode, RunMode::Command))
+            || (state.selected_attempt_count() != 0 && matches!(mode, RunMode::Command))
         {
             return Ok(());
         }
@@ -67,41 +67,14 @@ impl CommandRuntime {
             .plan()
             .and_then(|plan| plan.routes().iter().find(|v| v.participant() == recipient))
             .ok_or_else(|| fail(OperationError::RecoveryRequired))?;
-        let allowed = self.io.targets(route).map_err(fail)?;
-        let (targets, policy) = match state.original_intent() {
-            Some(original) => {
-                if original.targets().targets().iter().any(|target| {
-                    !allowed
-                        .targets()
-                        .iter()
-                        .any(|v| v.fingerprint() == target.fingerprint())
-                }) {
-                    return Err(fail(OperationError::UnverifiedApproval));
-                }
-                (original.targets().clone(), original.policy().clone())
-            }
-            None => (allowed, self.io.publication_policy()),
-        };
-        let selected = targets
-            .targets()
-            .iter()
-            .filter(|target| {
-                !state.targets().iter().any(|v| {
-                    v.target() == target.fingerprint()
-                        && (v.accepted() || v.potential_attempts() >= 12)
-                })
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        if selected.is_empty() {
+        let Some(plan) = self.stock_delivery_plan(state, route, mode).map_err(fail)? else {
             return Ok(());
-        }
-        let selected =
-            TargetSet::new(selected).map_err(|_| fail(OperationError::RecoveryRequired))?;
+        };
         let context = || -> Result<DeliveryContext, OperationError> {
             Ok(DeliveryContext {
                 selection: selection.clone(),
                 recipient,
+                rewrap: None,
                 store: inventory.clone(),
                 proof: copy(proof)?,
                 _lease: resources.lease.clone(),
@@ -136,6 +109,85 @@ impl CommandRuntime {
                 resources.stock_captures.capture_envelope(&pending).await?
             }
         };
+        self.send_stock_delivery(
+            &resources.stock_captures,
+            context().map_err(fail)?,
+            outer,
+            state,
+            plan,
+            None,
+        )
+        .await
+    }
+    pub(super) fn stock_publication_policy(
+        &self,
+        route: &radroots_protocol::nip59::CapturedDmRoute,
+        original: Option<&DeliveryIntent>,
+    ) -> Result<(TargetSet, radroots_transport::policy::SatisfactionPolicy), OperationError> {
+        let allowed = self.io.targets(route)?;
+        if let Some(original) = original {
+            if original.targets().targets().iter().any(|target| {
+                !allowed
+                    .targets()
+                    .iter()
+                    .any(|v| v.fingerprint() == target.fingerprint())
+            }) {
+                return Err(OperationError::UnverifiedApproval);
+            }
+            Ok((original.targets().clone(), original.policy().clone()))
+        } else {
+            Ok((allowed, self.io.publication_policy()))
+        }
+    }
+    pub(super) fn stock_delivery_plan(
+        &self,
+        state: &radroots_storage::inventory::StockDeliverySummary,
+        route: &radroots_protocol::nip59::CapturedDmRoute,
+        mode: &RunMode,
+    ) -> Result<Option<StockDeliveryPlan>, OperationError> {
+        if state.acceptance_satisfied()?
+            || (state.selected_attempt_count() != 0 && matches!(mode, RunMode::Command))
+        {
+            return Ok(None);
+        }
+        let (targets, policy) = self.stock_publication_policy(route, state.original_intent())?;
+        let selected = targets
+            .targets()
+            .iter()
+            .filter(|target| {
+                !state.targets().iter().any(|v| {
+                    v.target() == target.fingerprint()
+                        && (v.accepted() || v.potential_attempts() >= 12)
+                })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if selected.is_empty() {
+            return Ok(None);
+        }
+        let selected = TargetSet::new(selected).map_err(|_| OperationError::RecoveryRequired)?;
+        Ok(Some(StockDeliveryPlan {
+            targets,
+            selected,
+            policy,
+        }))
+    }
+    /// One transport path for originals and explicitly selected retained outers.
+    pub(super) async fn send_stock_delivery(
+        &self,
+        owner: &crate::session::stock_evidence::Owner,
+        c: DeliveryContext,
+        outer: radroots_storage::inventory::StockEnvelopeReceipt,
+        state: &radroots_storage::inventory::StockDeliverySummary,
+        plan: StockDeliveryPlan,
+        selected_event: Option<radroots_domain::EnvelopeEventId>,
+    ) -> crate::ExecutionResult<()> {
+        let fail = |e| {
+            crate::ExecutionFailure::from(Error::operation(
+                e,
+                OperationContext::retained(c.selection.operation),
+            ))
+        };
         let deadline = self
             .io
             .now()
@@ -148,27 +200,32 @@ impl CommandRuntime {
         let intent = DeliveryIntent::new(
             &self.io.delivery_id().map_err(fail)?,
             outer.event_id(),
-            &targets,
-            &policy,
+            &plan.targets,
+            &plan.policy,
             deadline,
         )
-        .and_then(|v| v.with_selection(&selected))
+        .and_then(|v| v.with_selection(&plan.selected))
         .map_err(fail)?;
-        let context = context().map_err(fail)?;
         // The original outer's capture checkpoint is historical metadata. Use
         // the authenticated current selection, including authorization state.
         let request = StockDeliveryRequest::new(
-            selection.binding.clone(),
-            selection.minimum,
-            selection.operation,
-            selection.digest,
-            recipient,
+            c.selection.binding.clone(),
+            c.selection.minimum,
+            c.selection.operation,
+            c.selection.digest,
+            c.recipient,
             intent.clone(),
         )
         .and_then(|request| request.with_expected_attempt_count(state.attempt_count()))
         .map_err(fail)?;
-        let attempt = match inventory
-            .prepare_stock_delivery_attempt(request, copy(proof).map_err(fail)?)
+        let request = if let Some(event) = selected_event {
+            request.with_envelope(event).map_err(fail)?
+        } else {
+            request
+        };
+        let attempt = match c
+            .store
+            .prepare_stock_delivery_attempt(request, copy(&c.proof).map_err(fail)?)
             .await
             .map_err(fail)?
         {
@@ -194,10 +251,14 @@ impl CommandRuntime {
             .ok()
             .and_then(|v| v.get().checked_mul(1000))
             .and_then(NonZeroU64::new);
-        let pending = resources
-            .stock_captures
-            .retain_delivery(context, attempt, result, observed);
-        resources.stock_captures.capture_delivery(&pending).await?;
+        let pending = owner.retain_delivery(c, attempt, result, observed);
+        owner.capture_delivery(&pending).await?;
         Ok(())
     }
+}
+
+pub(super) struct StockDeliveryPlan {
+    targets: TargetSet,
+    selected: TargetSet,
+    policy: radroots_transport::policy::SatisfactionPolicy,
 }

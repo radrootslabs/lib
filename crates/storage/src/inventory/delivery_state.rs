@@ -75,6 +75,7 @@ pub struct StockDeliverySummary {
     first: Option<DeliveryIntent>,
     policy_source: Option<StockEnvelopeReceipt>,
     attempts: u16,
+    selected_attempts: u16,
     targets: Box<[StockDeliveryTargetProgress]>,
     checkpoint: InventoryCheckpointRef,
 }
@@ -96,6 +97,7 @@ impl StockDeliverySummary {
             policy_source,
             first,
             attempts,
+            attempts,
             targets,
             checkpoint,
         )
@@ -103,18 +105,26 @@ impl StockDeliverySummary {
     /// Validates an envelope-scoped projection while retaining the actual first
     /// publication policy's source. A new carrier cannot renew its target set,
     /// criterion or cumulative invocation budget. Reports grant no dispatch.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_store_report_with_policy_source(
         request: &StockEnvelopeRequest,
         source: Option<StockEnvelopeReceipt>,
         policy_source: Option<StockEnvelopeReceipt>,
         first: Option<DeliveryIntent>,
         attempts: u16,
+        selected_attempts: u16,
         targets: Vec<StockDeliveryTargetProgress>,
         checkpoint: InventoryCheckpointRef,
     ) -> Result<Self, OperationError> {
         if checkpoint.authority() != request.binding().input().authority()
             || checkpoint.revision().get() == 0
             || attempts > 16 * 12
+            || selected_attempts > attempts
+            || (selected_attempts == 0
+                && targets
+                    .iter()
+                    .any(|target| target.accepted || target.last.is_some()))
+            || (source.is_none() && selected_attempts != 0)
             || targets.len() > 16
         {
             return Err(OperationError::RecoveryRequired);
@@ -184,6 +194,7 @@ impl StockDeliverySummary {
             first,
             policy_source,
             attempts,
+            selected_attempts,
             targets: targets.into_boxed_slice(),
             checkpoint,
         })
@@ -201,6 +212,11 @@ impl StockDeliverySummary {
     }
     pub const fn attempt_count(&self) -> u16 {
         self.attempts
+    }
+    /// Potential invocations for the selected exact outer, independent of the
+    /// cumulative count used to enforce the shared recipient/endpoint quotas.
+    pub const fn selected_attempt_count(&self) -> u16 {
+        self.selected_attempts
     }
     pub fn targets(&self) -> &[StockDeliveryTargetProgress] {
         &self.targets

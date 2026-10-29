@@ -2,7 +2,8 @@
 use crate::{Client, CommandContext, Result, WorkspaceSession};
 use radroots_domain::{CommandDigest, OperationId};
 pub use radroots_execution::session::commerce::{
-    AcceptanceRecipient, AcceptanceStatus, AcceptanceUnissuedReceipt, InstalledAcceptance,
+    AcceptanceRecipient, AcceptanceRewrapStatus, AcceptanceStatus, AcceptanceUnissuedReceipt,
+    InstalledAcceptance,
 };
 pub use radroots_protocol::command::AcceptOrderInput;
 use radroots_storage::{
@@ -81,6 +82,76 @@ impl<'a> Orders<'a> {
                 minimum,
                 operation,
                 digest,
+            )
+            .await
+    }
+    /// Creates one explicitly requested additional carrier for the same original
+    /// commitment. Existing/unknown admissions never generate another key.
+    pub async fn rewrap_acceptance(
+        &self,
+        minimum: InventoryCheckpointRef,
+        operation: OperationId,
+        digest: CommandDigest,
+        recipient: radroots_domain::PublicKey,
+        rewrap_id: OperationId,
+    ) -> crate::ExecutionResult<AcceptanceRewrapStatus> {
+        self.client
+            .session
+            .rewrap_stock_acceptance(
+                self.client.inventory()?,
+                self.client.acceptance_store()?,
+                &self.scope,
+                minimum,
+                operation,
+                digest,
+                recipient,
+                rewrap_id,
+            )
+            .await
+    }
+    /// Explicitly retries only a known captured carrier within its original
+    /// policy and cumulative invocation budget. Unknown bytes never regenerate.
+    pub async fn resume_acceptance_rewrap(
+        &self,
+        minimum: InventoryCheckpointRef,
+        operation: OperationId,
+        digest: CommandDigest,
+        recipient: radroots_domain::PublicKey,
+        rewrap_id: OperationId,
+    ) -> crate::ExecutionResult<AcceptanceRewrapStatus> {
+        self.client
+            .session
+            .resume_stock_rewrap(
+                self.client.inventory()?,
+                self.client.acceptance_store()?,
+                &self.scope,
+                minimum,
+                operation,
+                digest,
+                recipient,
+                rewrap_id,
+            )
+            .await
+    }
+    /// Reads retained carrier facts without wrapping, signing or dispatch.
+    pub async fn acceptance_rewrap_status(
+        &self,
+        minimum: InventoryCheckpointRef,
+        operation: OperationId,
+        digest: CommandDigest,
+        recipient: radroots_domain::PublicKey,
+        rewrap_id: OperationId,
+    ) -> Result<AcceptanceRewrapStatus> {
+        self.client
+            .session
+            .stock_acceptance_rewrap_status(
+                self.client.inventory()?,
+                &self.scope,
+                minimum,
+                operation,
+                digest,
+                recipient,
+                rewrap_id,
             )
             .await
     }

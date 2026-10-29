@@ -153,7 +153,88 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         >,
     ) -> crate::ExecutionResult<AcceptanceStatus> {
         let proposed = OperationContext::proposed(Some(operation));
-        if matches!(&mode, RunMode::Command) {
+        self.submit_stock_commerce(
+            scope,
+            operation,
+            mode,
+            capture,
+            move |(selection, request): (AcceptanceSelection, Option<StockAcceptanceRequest>),
+                  proof,
+                  runtime,
+                  resources| {
+                Box::pin(async move {
+                    if let Some(request) = request {
+                        let credential = proof
+                            .with_secret(|bytes| {
+                                radroots_storage::workspace::AttachmentProof::from_protected_input(
+                                    bytes,
+                                )
+                            })
+                            .map_err(|e| Error::operation(e.into(), proposed))?;
+                        match inventory
+                            .prepare_stock_acceptance(request, credential)
+                            .await
+                            .map_err(|e| Error::operation(e, proposed))?
+                        {
+                            StockAcceptanceOutcome::Unknown(_) => {
+                                return Err(Error::admission_uncertain(operation).into());
+                            }
+                            StockAcceptanceOutcome::Prepared(value)
+                                if value.attempt().workspace_id()
+                                    == selection.binding.input().workspace_id()
+                                    && value.attempt().operation_id() == operation
+                                    && value.attempt().command_digest() == selection.digest
+                                    && value.attempt().transaction_id().is_some() => {}
+                            StockAcceptanceOutcome::Aborted(value)
+                                if value.attempt().workspace_id()
+                                    == selection.binding.input().workspace_id()
+                                    && value.attempt().operation_id() == operation
+                                    && value.attempt().command_digest() == selection.digest
+                                    && value.attempt().transaction_id().is_some() => {}
+                            _ => {
+                                return Err(Error::operation(
+                                    OperationError::RecoveryRequired,
+                                    OperationContext::admission_unknown(operation),
+                                )
+                                .into());
+                            }
+                        }
+                    }
+                    if let Some(runtime) = runtime {
+                        runtime
+                            .run_acceptance(store, inventory, selection, &proof, resources, mode)
+                            .await
+                    } else {
+                        let retained = OperationContext::retained(operation);
+                        let view = store
+                            .snapshot(selection.clone(), &proof)
+                            .await
+                            .map_err(|e| Error::operation(e, retained))?;
+                        crate::session::commerce::observe(&selection, view.as_ref())
+                            .map_err(|e| Error::operation(e, retained).into())
+                    }
+                })
+            },
+        )
+        .await
+    }
+    /// One owned lifecycle path for initial acceptance and explicit rewrapping.
+    /// Caller observation never owns the admitted task or obtained materials.
+    pub(super) async fn submit_stock_commerce<P: HostBound + 'static, T: HostBound + 'static>(
+        &self,
+        scope: &WorkspaceSession,
+        operation: OperationId,
+        mode: RunMode,
+        prepare: impl FnOnce(WorkspaceBinding) -> Result<P, OperationError>,
+        work: impl FnOnce(
+            P,
+            radroots_storage::workspace::AttachmentProof,
+            Option<Shared<crate::session::command::CommandRuntime>>,
+            SigningResources,
+        ) -> crate::session::HostFuture<'static, crate::ExecutionResult<T>>,
+    ) -> crate::ExecutionResult<T> {
+        let proposed = OperationContext::proposed(Some(operation));
+        if matches!(mode, RunMode::Command) {
             self.stock_captures
                 .ensure_ready()
                 .map_err(|e| Error::operation(e, proposed))?;
@@ -179,74 +260,25 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         let (binding, proof) = scope
             .captured_input()
             .map_err(|e| Error::operation(e.into(), proposed))?;
-        let (selection, request) = capture(binding).map_err(|e| Error::operation(e, proposed))?;
-        let runtime = self.commands.clone();
+        let input = prepare(binding).map_err(|e| Error::operation(e, proposed))?;
         let resources = SigningResources {
             signer: self.signer_session(),
             lease: Shared::new((permit, budget)) as Shared<dyn HostBound>,
             stock_captures: self.stock_captures.clone(),
         };
+        let captures = self.stock_captures.clone();
+        let future = work(input, proof, self.commands.clone(), resources);
         let (reply, observed) = futures::channel::oneshot::channel();
         host.submit(Box::pin(async move {
             let result = async {
-                if matches!(&mode, RunMode::Resume) {
-                    resources.stock_captures.drain().await?;
+                if matches!(mode, RunMode::Resume) {
+                    captures.drain().await?;
                 } else {
-                    resources
-                        .stock_captures
+                    captures
                         .ensure_ready()
                         .map_err(|e| Error::operation(e, proposed))?;
                 }
-                if let Some(request) = request {
-                    let credential = proof
-                        .with_secret(|bytes| {
-                            radroots_storage::workspace::AttachmentProof::from_protected_input(
-                                bytes,
-                            )
-                        })
-                        .map_err(|e| Error::operation(e.into(), proposed))?;
-                    match inventory
-                        .prepare_stock_acceptance(request, credential)
-                        .await
-                        .map_err(|e| Error::operation(e, proposed))?
-                    {
-                        StockAcceptanceOutcome::Unknown(_) => {
-                            return Err(Error::admission_uncertain(operation).into());
-                        }
-                        StockAcceptanceOutcome::Prepared(value)
-                            if value.attempt().workspace_id()
-                                == selection.binding.input().workspace_id()
-                                && value.attempt().operation_id() == operation
-                                && value.attempt().command_digest() == selection.digest
-                                && value.attempt().transaction_id().is_some() => {}
-                        StockAcceptanceOutcome::Aborted(value)
-                            if value.attempt().workspace_id()
-                                == selection.binding.input().workspace_id()
-                                && value.attempt().operation_id() == operation
-                                && value.attempt().command_digest() == selection.digest
-                                && value.attempt().transaction_id().is_some() => {}
-                        _ => {
-                            return Err(Error::operation(
-                                OperationError::RecoveryRequired,
-                                OperationContext::admission_unknown(operation),
-                            )
-                            .into());
-                        }
-                    }
-                }
-                if let Some(runtime) = runtime {
-                    runtime
-                        .run_acceptance(store, inventory, selection, &proof, resources, mode)
-                        .await
-                } else {
-                    let retained = OperationContext::retained(operation);
-                    let view = store
-                        .snapshot(selection.clone(), &proof)
-                        .await
-                        .map_err(|e| Error::operation(e, retained))?;
-                    crate::session::commerce::observe(&selection, view.as_ref())
-                        .map_err(|e| Error::operation(e, retained).into())
-                }
+                future.await
             }
             .await;
             let _ = reply.send(result);

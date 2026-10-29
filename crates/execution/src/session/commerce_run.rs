@@ -22,6 +22,9 @@ use radroots_signing::{
 use radroots_storage::inventory::{InventoryStore, StockEvidenceOutcome};
 #[path = "commerce_delivery.rs"]
 mod delivery;
+#[path = "commerce_rewrap.rs"]
+mod rewrap;
+pub(in crate::session) use rewrap::status as rewrap_status;
 
 fn same(attempt: CommitAttempt, selection: &AcceptanceSelection) -> bool {
     attempt.workspace_id() == selection.binding.input().workspace_id()
