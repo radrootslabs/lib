@@ -244,6 +244,13 @@ pub enum radroots_domain::stock::AvailableStockCorrection
 pub radroots_domain::stock::AvailableStockCorrection::Add
 pub radroots_domain::stock::AvailableStockCorrection::Remove
 pub radroots_domain::stock::AvailableStockCorrection::Spoil
+pub enum radroots_domain::stock::HeldStockCategory
+pub radroots_domain::stock::HeldStockCategory::Committed
+pub radroots_domain::stock::HeldStockCategory::Preparatory
+pub radroots_domain::stock::HeldStockCategory::Quarantined
+pub enum radroots_domain::stock::HeldStockLoss
+pub radroots_domain::stock::HeldStockLoss::Removal
+pub radroots_domain::stock::HeldStockLoss::Spoilage
 #[non_exhaustive] pub enum radroots_domain::stock::MappingError
 pub radroots_domain::stock::MappingError::InvalidVersion
 pub radroots_domain::stock::MappingError::Quantity(radroots_domain::QuantityError)
@@ -261,6 +268,7 @@ pub radroots_domain::stock::StockError::ConservationViolation
 pub radroots_domain::stock::StockError::FractionalCount
 pub radroots_domain::stock::StockError::InvalidFormat
 pub radroots_domain::stock::StockError::InvalidScale
+pub radroots_domain::stock::StockError::ObligationMismatch
 pub radroots_domain::stock::StockError::OutOfRange
 pub radroots_domain::stock::StockError::PrecisionLoss
 pub radroots_domain::stock::StockError::Underflow
@@ -280,6 +288,22 @@ pub const fn radroots_domain::stock::AllocationClaim::pool_id(self) -> radroots_
 pub const fn radroots_domain::stock::AllocationClaim::quantity(self) -> radroots_domain::Quantity
 impl core::fmt::Debug for radroots_domain::stock::AllocationClaim
 pub fn radroots_domain::stock::AllocationClaim::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::stock::ObligationBacking
+impl radroots_domain::stock::ObligationBacking
+pub const fn radroots_domain::stock::ObligationBacking::backed(self) -> radroots_domain::stock::StockTicks
+pub fn radroots_domain::stock::ObligationBacking::consume_backed(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub const fn radroots_domain::stock::ObligationBacking::deficit(self) -> radroots_domain::stock::StockTicks
+pub fn radroots_domain::stock::ObligationBacking::lose_backing(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::ObligationBacking::new(radroots_domain::stock::StockTicks, radroots_domain::stock::StockTicks, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::ObligationBacking::release_residual(self, radroots_domain::stock::StockTicks, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub const fn radroots_domain::stock::ObligationBacking::remaining(self) -> radroots_domain::stock::StockTicks
+pub fn radroots_domain::stock::ObligationBacking::restore_backing(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+impl core::fmt::Debug for radroots_domain::stock::ObligationBacking
+pub fn radroots_domain::stock::ObligationBacking::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for radroots_domain::stock::ObligationBacking
+pub fn radroots_domain::stock::ObligationBacking::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::ObligationBacking
+pub fn radroots_domain::stock::ObligationBacking::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::OptionMappingKey
 impl radroots_domain::stock::OptionMappingKey
 pub const fn radroots_domain::stock::OptionMappingKey::listing(self) -> radroots_domain::listing::ListingCoordinate
@@ -320,6 +344,15 @@ pub fn radroots_domain::stock::PhysicalBalances::serialize<S: serde_core::ser::S
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::PhysicalBalances
 pub fn radroots_domain::stock::PhysicalBalances::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub struct radroots_domain::stock::PoolBalances
+impl radroots_domain::stock::PoolBalances
+pub fn radroots_domain::stock::PoolBalances::consume_committed(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::consume_quarantined(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::deplete_held(self, radroots_domain::stock::HeldStockCategory, radroots_domain::stock::HeldStockLoss, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::quarantine_committed(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::quarantine_preparatory(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::release_committed(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::release_quarantined(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
+pub fn radroots_domain::stock::PoolBalances::restore_quarantined(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
 impl radroots_domain::stock::PoolBalances
 pub fn radroots_domain::stock::PoolBalances::correct_available(self, radroots_domain::stock::AvailableStockCorrection, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>
 pub fn radroots_domain::stock::PoolBalances::hold_available(self, radroots_domain::stock::StockTicks) -> core::result::Result<Self, radroots_domain::stock::StockError>

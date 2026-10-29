@@ -1,5 +1,7 @@
 //! Closed value codecs. Successful decoding still proves no stock authority.
-use super::{PhysicalBalances, PoolBalances, PoolSnapshot, PoolUnit, StockTicks};
+use super::{
+    ObligationBacking, PhysicalBalances, PoolBalances, PoolSnapshot, PoolUnit, StockTicks,
+};
 use crate::{PoolId, Sequence, listing::MeasurementUnit};
 use core::fmt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
@@ -110,6 +112,30 @@ impl<'de> Deserialize<'de> for PoolBalances {
         Self::new(v.introduced, v.physical).map_err(de::Error::custom)
     }
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Backing {
+    remaining: StockTicks,
+    backed: StockTicks,
+    deficit: StockTicks,
+}
+impl Serialize for ObligationBacking {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Backing {
+            remaining: self.remaining(),
+            backed: self.backed(),
+            deficit: self.deficit(),
+        }
+        .serialize(serializer)
+    }
+}
+impl<'de> Deserialize<'de> for ObligationBacking {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value: Backing = object(deserializer)?;
+        Self::new(value.remaining, value.backed, value.deficit).map_err(de::Error::custom)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Snapshot {

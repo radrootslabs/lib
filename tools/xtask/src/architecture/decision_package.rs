@@ -33,10 +33,26 @@ struct Policy {
     packages: Vec<Package>,
     values: Values,
     limits: BTreeMap<String, u64>,
+    stock_accounting: StockAccounting,
     execution: Execution,
     protocol: Protocol,
     cutover: Cutover,
     qualification: Qualification,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StockAccounting {
+    value_owner: String,
+    scope: String,
+    obligation_equation: String,
+    ticks_max: u64,
+    values_create_store_effects: bool,
+    deficit_counts_as_physical_stock: bool,
+    receipt_consumes_again: bool,
+    released_deficit_adds_available: bool,
+    loss_deletes_obligation: bool,
+    native_atomic_allocation_and_identity_required: bool,
 }
 
 #[derive(Deserialize)]
@@ -712,6 +728,20 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     require(raw.len() <= MAX_BYTES, "source byte limit exceeded")?;
     let p: Policy = serde_json::from_slice(raw)
         .map_err(|_| "shared SDK contract: invalid closed JSON shape".to_owned())?;
+    let accounting = &p.stock_accounting;
+    require(
+        accounting.value_owner == "radroots_domain.stock"
+            && accounting.scope == "one_fixed_pool_unit"
+            && accounting.obligation_equation == "remaining = backed + deficit"
+            && accounting.ticks_max == 1_000_000_000_000_000_000
+            && !accounting.values_create_store_effects
+            && !accounting.deficit_counts_as_physical_stock
+            && !accounting.receipt_consumes_again
+            && !accounting.released_deficit_adds_available
+            && !accounting.loss_deletes_obligation
+            && accounting.native_atomic_allocation_and_identity_required,
+        "stock accounting value or native effect authority drift",
+    )?;
     require(
         p.schema_version == 1
             && p.contract_id == "radroots.shared_sdk.refactor.v1"
@@ -1748,6 +1778,29 @@ mod tests {
     #[test]
     fn approved_scope_is_valid_without_claiming_current_implementation() {
         validate_bytes(SOURCE.as_bytes()).unwrap();
+    }
+
+    #[test]
+    fn physical_accounting_cannot_mint_stock_erase_deficits_or_claim_native_effects() {
+        for (field, value) in [
+            ("value_owner", json!("application")),
+            ("scope", json!("mixed_pool_units")),
+            ("obligation_equation", json!("remaining = backed")),
+            ("ticks_max", json!(1_000_000_000_000_000_001u64)),
+            ("values_create_store_effects", json!(true)),
+            ("deficit_counts_as_physical_stock", json!(true)),
+            ("receipt_consumes_again", json!(true)),
+            ("released_deficit_adds_available", json!(true)),
+            ("loss_deletes_obligation", json!(true)),
+            (
+                "native_atomic_allocation_and_identity_required",
+                json!(false),
+            ),
+        ] {
+            assert!(
+                validate_bytes(&changed(&format!("/stock_accounting/{field}"), value)).is_err()
+            );
+        }
     }
 
     #[test]

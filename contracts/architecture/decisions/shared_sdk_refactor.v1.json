@@ -1086,6 +1086,18 @@
     "delivery_attempts_per_target": 12,
     "first_issuance_seconds": 120
   },
+  "stock_accounting": {
+    "value_owner": "radroots_domain.stock",
+    "scope": "one_fixed_pool_unit",
+    "obligation_equation": "remaining = backed + deficit",
+    "ticks_max": 1000000000000000000,
+    "values_create_store_effects": false,
+    "deficit_counts_as_physical_stock": false,
+    "receipt_consumes_again": false,
+    "released_deficit_adds_available": false,
+    "loss_deletes_obligation": false,
+    "native_atomic_allocation_and_identity_required": true
+  },
   "execution": {
     "ordinary_inventory_owner": {
       "owned_capture_method": "capture_stock_evidence",

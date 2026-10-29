@@ -5,10 +5,14 @@ use crate::{PoolId, Quantity, Sequence, listing::MeasurementUnit};
 use core::{fmt, str::FromStr};
 mod allocation;
 mod mapping;
+mod movements;
+mod obligation;
 pub use allocation::{
     AllocationClaim, AllocationPlanError, PoolHoldProposal, StockAllocation, plan_allocations,
 };
 pub use mapping::{MappingError, OptionMappingKey, OptionPoolMapping};
+pub use movements::{HeldStockCategory, HeldStockLoss};
+pub use obligation::ObligationBacking;
 
 /// A bounded, input-free stock value failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,7 +34,9 @@ pub enum StockError {
     PrecisionLoss,
     /// The seven physical categories do not sum to introduced stock.
     ConservationViolation,
-    /// An audited physical movement cannot have zero quantity.
+    /// Backed remaining and deficit do not equal the remaining obligation.
+    ObligationMismatch,
+    /// An accounting movement cannot have zero quantity.
     ZeroMovement,
 }
 impl fmt::Display for StockError {
@@ -46,7 +52,8 @@ impl fmt::Display for StockError {
             Self::ConservationViolation => {
                 "physical stock categories do not conserve introduced stock"
             }
-            Self::ZeroMovement => "physical movement quantity must be positive",
+            Self::ObligationMismatch => "backing and deficit do not reconcile the obligation",
+            Self::ZeroMovement => "accounting movement quantity must be positive",
         })
     }
 }
