@@ -1,6 +1,6 @@
-//! Private process-death qualification of S, T2, original outer retention and abort.
+//! Private process-death qualification of confirmed stock and original delivery writes.
 use super::*;
-use radroots_domain::{CommandDigest, OperationId};
+use radroots_domain::{CommandDigest, OperationId, TransactionId};
 use radroots_secrets::{
     file::{FileOpenMode, FileProvider},
     wrapping::SecretMaterial,
@@ -16,13 +16,17 @@ use std::{
 
 const BARRIER: &str = "RADROOTS_STOCK_PROCESS_BOUNDARY_V1";
 const CHILD: &str = "workspace::stock::public_source::tests::provider::history::acceptance::signing::claims::evidence::installations::process_death::stock_process_child";
+#[path = "process_delivery_tests.rs"]
+mod delivery;
 
-#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 enum Edge {
     Capture,
     Install,
     Abort,
     Envelope,
+    Delivery,
+    Observation,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -36,6 +40,7 @@ struct Control {
     wrapping_key: Option<[u8; 32]>,
     edge: Edge,
     before: bool,
+    delivery_transaction: Option<TransactionId>,
 }
 struct KillOnDrop(Child);
 impl Drop for KillOnDrop {
@@ -44,7 +49,7 @@ impl Drop for KillOnDrop {
         let _ = self.0.wait();
     }
 }
-fn stop_at_boundary(root: &std::path::Path) {
+fn stop_at_boundary(root: &std::path::Path) -> Option<TransactionId> {
     let mut child = KillOnDrop(
         Command::new(std::env::current_exe().unwrap())
             .args([
@@ -66,21 +71,26 @@ fn stop_at_boundary(root: &std::path::Path) {
     let stdout = child.0.stdout.take().unwrap();
     let (send, receive) = mpsc::channel();
     let reader = std::thread::spawn(move || {
+        let mut transaction = None;
         for line in std::io::BufReader::new(stdout).lines().take(12) {
             let line = line.unwrap();
+            if let Some(value) = line.strip_prefix("STOCK_TRANSACTION=") {
+                transaction = serde_json::from_str(value).unwrap();
+            }
             if line.ends_with(BARRIER) {
-                let _ = send.send(());
+                let _ = send.send(transaction);
                 return;
             }
         }
     });
-    receive.recv_timeout(Duration::from_secs(60)).unwrap();
+    let transaction = receive.recv_timeout(Duration::from_secs(60)).unwrap();
     assert!(child.0.try_wait().unwrap().is_none());
     child.0.kill().unwrap();
     let status = child.0.wait().unwrap();
     use std::os::unix::process::ExitStatusExt;
     assert_eq!(status.signal(), Some(9));
     reader.join().unwrap();
+    transaction
 }
 
 #[tokio::test]
@@ -139,12 +149,15 @@ async fn stock_process_child() {
         .await
         .unwrap();
     let minimum = store
-        .stock_authority(control.input, &proof)
+        .stock_authority(control.input.clone(), &proof)
         .await
         .unwrap()
         .inventory_checkpoint()
         .unwrap();
-    let capture = if matches!(control.edge, Edge::Abort | Edge::Envelope) {
+    let capture = if matches!(
+        control.edge,
+        Edge::Abort | Edge::Envelope | Edge::Delivery | Edge::Observation
+    ) {
         None
     } else {
         let report = store
@@ -240,15 +253,24 @@ async fn stock_process_child() {
                         .unwrap(),
                 );
             }
+            Edge::Delivery | Edge::Observation => {
+                return Some(delivery::apply(&store, binding, minimum, &proof, &control).await);
+            }
         }
+        None
     };
     let mut work = Box::pin(work);
-    if control.before {
+    let transaction = if control.before {
         assert!(futures::poll!(work.as_mut()).is_pending());
         provider.gate.entered();
+        None
     } else {
-        work.as_mut().await;
-    }
+        work.as_mut().await
+    };
+    println!(
+        "\nSTOCK_TRANSACTION={}",
+        serde_json::to_string(&transaction).unwrap()
+    );
     println!("{BARRIER}");
     std::io::stdout().flush().unwrap();
     loop {
@@ -257,10 +279,18 @@ async fn stock_process_child() {
 }
 
 #[tokio::test]
-async fn process_death_before_and_after_capture_install_abort_or_envelope_preserves_original_stock_and_evidence()
+async fn process_death_before_and_after_confirmed_stock_writes_preserves_originals_and_dispatch_boundaries()
  {
-    for edge in [Edge::Capture, Edge::Install, Edge::Abort, Edge::Envelope] {
+    for edge in [
+        Edge::Capture,
+        Edge::Install,
+        Edge::Abort,
+        Edge::Envelope,
+        Edge::Delivery,
+        Edge::Observation,
+    ] {
         for before in [true, false] {
+            println!("stock boundary {edge:?} before={before}");
             let mut r = Rig::new().await;
             let receipt = if matches!(edge, Edge::Abort) {
                 Box::pin(prepared(&r)).await.1
@@ -274,7 +304,10 @@ async fn process_death_before_and_after_capture_install_abort_or_envelope_preser
                 let (report, raw) = Box::pin(obtained(&r, &receipt, recipient)).await;
                 (Some(report), raw)
             };
-            if matches!(edge, Edge::Install | Edge::Envelope) {
+            if matches!(
+                edge,
+                Edge::Install | Edge::Envelope | Edge::Delivery | Edge::Observation
+            ) {
                 let capture = StockEvidenceCapture::verify(
                     r.binding.clone(),
                     report.as_ref().unwrap(),
@@ -289,22 +322,22 @@ async fn process_death_before_and_after_capture_install_abort_or_envelope_preser
                         .unwrap(),
                 );
             }
-            let wrapping_key = if matches!(edge, Edge::Envelope) {
-                installed(install(&r, &receipt).await.unwrap());
-                let pending = radroots_nostr::signing::gift_wrap::wrap_retained_seal(
-                    &raw,
-                    recipient,
-                    std::num::NonZeroU64::new(150000).unwrap(),
-                    &radroots_nostr::signing::OsNonceSource,
-                )
-                .unwrap();
-                raw = pending.signed_json().to_owned();
-                Some(pending.with_wrapping_key(|key| *key))
-            } else {
-                None
-            };
-            let minimum = inventory_minimum(&r).await;
-            let control = Control {
+            let wrapping_key =
+                if matches!(edge, Edge::Envelope | Edge::Delivery | Edge::Observation) {
+                    installed(install(&r, &receipt).await.unwrap());
+                    let pending = radroots_nostr::signing::gift_wrap::wrap_retained_seal(
+                        &raw,
+                        recipient,
+                        std::num::NonZeroU64::new(150).unwrap(),
+                        &radroots_nostr::signing::OsNonceSource,
+                    )
+                    .unwrap();
+                    raw = pending.signed_json().to_owned();
+                    Some(pending.with_wrapping_key(|key| *key))
+                } else {
+                    None
+                };
+            let mut control = Control {
                 input: r.enrollment.input().clone(),
                 proof: r.enrollment.proof().with_secret(|bytes| bytes.to_vec()),
                 operation: receipt.attempt().operation_id(),
@@ -314,7 +347,12 @@ async fn process_death_before_and_after_capture_install_abort_or_envelope_preser
                 wrapping_key,
                 edge,
                 before,
+                delivery_transaction: None,
             };
+            if matches!(edge, Edge::Delivery | Edge::Observation) {
+                control.delivery_transaction = Box::pin(delivery::prepare(&r, &control)).await;
+            }
+            let minimum = inventory_minimum(&r).await;
             let mut file = std::fs::OpenOptions::new()
                 .create_new(true)
                 .write(true)
@@ -325,7 +363,7 @@ async fn process_death_before_and_after_capture_install_abort_or_envelope_preser
                 .unwrap();
             file.sync_all().unwrap();
             r.store.close().await.unwrap();
-            stop_at_boundary(&r.fixture.root());
+            let transaction = stop_at_boundary(&r.fixture.root());
             reopen_plain(&mut r).await;
             let current = inventory_minimum(&r).await;
             assert_eq!(
@@ -358,11 +396,14 @@ async fn process_death_before_and_after_capture_install_abort_or_envelope_preser
                 .iter()
                 .find(|value| value.recipient() == recipient)
                 .unwrap();
-            let has_evidence = matches!(edge, Edge::Install | Edge::Envelope)
-                || (matches!(edge, Edge::Capture) && !before);
+            let has_evidence = matches!(
+                edge,
+                Edge::Install | Edge::Envelope | Edge::Delivery | Edge::Observation
+            ) || (matches!(edge, Edge::Capture) && !before);
             assert_eq!(peer.first_evidence().is_some(), has_evidence);
             let has_installation =
-                matches!(edge, Edge::Envelope) || (matches!(edge, Edge::Install) && !before);
+                matches!(edge, Edge::Envelope | Edge::Delivery | Edge::Observation)
+                    || (matches!(edge, Edge::Install) && !before);
             assert_eq!(snapshot.installation().is_some(), has_installation);
             let has_abort = matches!(edge, Edge::Abort) && !before;
             assert_eq!(snapshot.aborted().is_some(), has_abort);
@@ -384,6 +425,9 @@ async fn process_death_before_and_after_capture_install_abort_or_envelope_preser
                 balances(&r, 81, 8, 2, 0, 2).await;
             }
             assert_eq!(inventory_minimum(&r).await, current);
+            if matches!(edge, Edge::Delivery | Edge::Observation) {
+                Box::pin(delivery::verify(&r, &control, transaction)).await;
+            }
             if matches!(edge, Edge::Abort) {
                 let first = aborts::released(aborts::abort(&r, &receipt).await.unwrap());
                 if let Some(original) = snapshot.aborted() {

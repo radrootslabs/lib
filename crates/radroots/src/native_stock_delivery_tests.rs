@@ -2,66 +2,88 @@
 use super::*;
 
 #[tokio::test]
-async fn obtained_outer_is_retained_through_failed_sql_capture_and_clockless_drain() {
+async fn obtained_outer_is_retained_through_statement_and_commit_failure_and_clockless_drain() {
     use sqlx::Connection;
-    let r = Rig::new().await;
-    r.control.pause_peer.store(true, Ordering::SeqCst);
-    let (command, context) = r.captured().await;
-    let (private, public, minimum) = r.minima().await;
-    let input = AcceptOrderInput::new(
-        command.input().request(),
-        command.input().terms_digest(),
-        AllocationSelection::automatic(),
-    );
-    let client = r.client.clone();
-    let scope = r.scope.clone();
-    let waiter = tokio::spawn(async move {
-        client
-            .orders(&scope)
-            .accept(context, minimum, private, public, input)
+    for uncertain in [false, true] {
+        let r = Rig::new().await;
+        r.control.pause_peer.store(true, Ordering::SeqCst);
+        let (command, context) = r.captured().await;
+        let (private, public, minimum) = r.minima().await;
+        let input = AcceptOrderInput::new(
+            command.input().request(),
+            command.input().terms_digest(),
+            AllocationSelection::automatic(),
+        );
+        let client = r.client.clone();
+        let scope = r.scope.clone();
+        let waiter = tokio::spawn(async move {
+            client
+                .orders(&scope)
+                .accept(context, minimum, private, public, input)
+                .await
+        });
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            r.control.entered.notified(),
+        )
+        .await
+        .unwrap();
+        let path = r._temp.path().join("stock/stock_execution_v1.sqlite");
+        let mut fault = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
             .await
-    });
-    tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        r.control.entered.notified(),
-    )
-    .await
-    .unwrap();
-    let path = r._temp.path().join("stock/stock_execution_v1.sqlite");
-    let mut fault = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
-        .await
-        .unwrap();
-    sqlx::query("CREATE TRIGGER controlled_outer_failure BEFORE INSERT ON stock_envelopes BEGIN SELECT RAISE(ABORT, 'controlled_outer_failure'); END").execute(&mut fault).await.unwrap();
-    r.control.release.notify_one();
-    let error = waiter.await.unwrap().unwrap_err();
-    assert_eq!(error.code(), crate::Code::StorageFailure);
-    assert_eq!(r.io.wraps.load(Ordering::SeqCst), 1);
-    assert!(r.io.sent.lock().unwrap().is_empty());
-    sqlx::query("DROP TRIGGER controlled_outer_failure")
-        .execute(&mut fault)
-        .await
-        .unwrap();
-    fault.close().await.unwrap();
-    r.clock.0.store(0, Ordering::SeqCst);
-    r.client.stock(&r.scope).drain_evidence().await.unwrap();
-    assert_eq!(r.io.wraps.load(Ordering::SeqCst), 1);
-    r.clock.0.store(150, Ordering::SeqCst);
-    let resumed = r
-        .client
-        .orders(&r.scope)
-        .resume_acceptance(minimum, command.context().operation_id(), command.digest())
-        .await
-        .unwrap();
-    assert!(
-        resumed
-            .delivery()
-            .unwrap()
-            .iter()
-            .all(|v| v.acceptance_satisfied().unwrap())
-    );
-    assert_eq!(r.io.wraps.load(Ordering::SeqCst), 2);
-    assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
-    r.client.close().await.unwrap();
+            .unwrap();
+        if uncertain {
+            sqlx::raw_sql("CREATE TABLE outer_deferred_fault(value INTEGER REFERENCES stock_authority(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER controlled_outer_failure AFTER INSERT ON stock_envelopes BEGIN INSERT INTO outer_deferred_fault VALUES(2); END").execute(&mut fault).await.unwrap();
+        } else {
+            sqlx::query("CREATE TRIGGER controlled_outer_failure BEFORE INSERT ON stock_envelopes BEGIN SELECT RAISE(ABORT, 'controlled_outer_failure'); END").execute(&mut fault).await.unwrap();
+        }
+        r.control.release.notify_one();
+        let error = waiter.await.unwrap().unwrap_err();
+        assert_eq!(
+            error.code(),
+            if uncertain {
+                crate::Code::RecoveryRequired
+            } else {
+                crate::Code::StorageFailure
+            }
+        );
+        assert_eq!(r.io.wraps.load(Ordering::SeqCst), 1);
+        assert!(r.io.sent.lock().unwrap().is_empty());
+        r.clock.0.store(0, Ordering::SeqCst);
+        assert!(r.client.stock(&r.scope).drain_evidence().await.is_err());
+        assert!(r.provider.upgrade().is_some());
+        sqlx::query("DROP TRIGGER controlled_outer_failure")
+            .execute(&mut fault)
+            .await
+            .unwrap();
+        if uncertain {
+            sqlx::query("DROP TABLE outer_deferred_fault")
+                .execute(&mut fault)
+                .await
+                .unwrap();
+        }
+        fault.close().await.unwrap();
+        r.clock.0.store(0, Ordering::SeqCst);
+        r.client.stock(&r.scope).drain_evidence().await.unwrap();
+        assert_eq!(r.io.wraps.load(Ordering::SeqCst), 1);
+        r.clock.0.store(150, Ordering::SeqCst);
+        let resumed = r
+            .client
+            .orders(&r.scope)
+            .resume_acceptance(minimum, command.context().operation_id(), command.digest())
+            .await
+            .unwrap();
+        assert!(
+            resumed
+                .delivery()
+                .unwrap()
+                .iter()
+                .all(|v| v.acceptance_satisfied().unwrap())
+        );
+        assert_eq!(r.io.wraps.load(Ordering::SeqCst), 2);
+        assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+        r.client.close().await.unwrap();
+    }
 }
 
 #[tokio::test]
@@ -322,56 +344,86 @@ async fn repeated_command_does_not_resend_and_signerless_resume_uses_exact_origi
 }
 
 #[tokio::test]
-async fn obtained_delivery_survives_failed_append_lost_waiter_and_clock_loss() {
+async fn obtained_delivery_survives_statement_and_commit_failure_lost_waiter_and_clock_loss() {
     use sqlx::Connection;
-    let r = Rig::new().await;
-    r.io.pause_delivery.store(true, Ordering::SeqCst);
-    let (command, context) = r.captured().await;
-    let (private, public, minimum) = r.minima().await;
-    let input = AcceptOrderInput::new(
-        command.input().request(),
-        command.input().terms_digest(),
-        AllocationSelection::automatic(),
-    );
-    let client = r.client.clone();
-    let scope = r.scope.clone();
-    let waiter = tokio::spawn(async move {
-        client
-            .orders(&scope)
-            .accept(context, minimum, private, public, input)
+    for uncertain in [false, true] {
+        let r = Rig::new().await;
+        r.io.pause_delivery.store(true, Ordering::SeqCst);
+        let (command, context) = r.captured().await;
+        let (private, public, minimum) = r.minima().await;
+        let input = AcceptOrderInput::new(
+            command.input().request(),
+            command.input().terms_digest(),
+            AllocationSelection::automatic(),
+        );
+        let client = r.client.clone();
+        let scope = r.scope.clone();
+        let waiter = tokio::spawn(async move {
+            client
+                .orders(&scope)
+                .accept(context, minimum, private, public, input)
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(30), r.io.entered.notified())
             .await
-    });
-    tokio::time::timeout(std::time::Duration::from_secs(30), r.io.entered.notified())
-        .await
-        .unwrap();
-    assert_eq!(r.io.sent.lock().unwrap().len(), 1);
-    assert_eq!(r.control.signs.load(Ordering::SeqCst), 1);
-    waiter.abort();
-    assert!(waiter.await.unwrap_err().is_cancelled());
-    let path = r._temp.path().join("stock/stock_execution_v1.sqlite");
-    let mut fault = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
-        .await
-        .unwrap();
-    sqlx::query("CREATE TRIGGER controlled_d_failure BEFORE INSERT ON stock_delivery_observations BEGIN SELECT RAISE(ABORT, 'controlled_d_failure'); END").execute(&mut fault).await.unwrap();
-    r.clock.0.store(0, Ordering::SeqCst);
-    r.io.release.notify_one();
-    // Close drains the admitted task and then its retained raw result, keeping
-    // the original credential and resource lease through the actual SQL fault.
-    let error = r.client.close().await.unwrap_err();
-    assert_eq!(error.code(), crate::Code::StorageFailure);
-    assert!(r.provider.upgrade().is_some());
-    sqlx::query("DROP TRIGGER controlled_d_failure")
-        .execute(&mut fault)
-        .await
-        .unwrap();
-    r.client.close().await.unwrap();
-    assert!(r.provider.upgrade().is_none());
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_delivery_observations")
-        .fetch_one(&mut fault)
-        .await
-        .unwrap();
-    assert_eq!(count, 1);
-    assert_eq!(r.io.sent.lock().unwrap().len(), 1);
-    assert_eq!(r.control.signs.load(Ordering::SeqCst), 1);
-    fault.close().await.unwrap();
+            .unwrap();
+        assert_eq!(r.io.sent.lock().unwrap().len(), 1);
+        assert_eq!(r.control.signs.load(Ordering::SeqCst), 1);
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        let path = r._temp.path().join("stock/stock_execution_v1.sqlite");
+        let mut fault = sqlx::SqliteConnection::connect(&format!("sqlite://{}", path.display()))
+            .await
+            .unwrap();
+        let original: (Vec<u8>, Vec<u8>) =
+            sqlx::query_as("SELECT entry_id,request_key FROM stock_delivery_attempts")
+                .fetch_one(&mut fault)
+                .await
+                .unwrap();
+        if uncertain {
+            sqlx::raw_sql("CREATE TABLE delivery_deferred_fault(value INTEGER REFERENCES stock_authority(singleton) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER controlled_d_failure AFTER INSERT ON stock_delivery_observations BEGIN INSERT INTO delivery_deferred_fault VALUES(2); END").execute(&mut fault).await.unwrap();
+        } else {
+            sqlx::query("CREATE TRIGGER controlled_d_failure BEFORE INSERT ON stock_delivery_observations BEGIN SELECT RAISE(ABORT, 'controlled_d_failure'); END").execute(&mut fault).await.unwrap();
+        }
+        r.clock.0.store(0, Ordering::SeqCst);
+        r.io.release.notify_one();
+        // Close drains the admitted task and then its retained raw result, keeping
+        // the original credential and resource lease through the actual SQL fault.
+        let error = r.client.close().await.unwrap_err();
+        assert_eq!(
+            error.code(),
+            if uncertain {
+                crate::Code::RecoveryRequired
+            } else {
+                crate::Code::StorageFailure
+            }
+        );
+        assert!(r.provider.upgrade().is_some());
+        sqlx::query("DROP TRIGGER controlled_d_failure")
+            .execute(&mut fault)
+            .await
+            .unwrap();
+        if uncertain {
+            sqlx::query("DROP TABLE delivery_deferred_fault")
+                .execute(&mut fault)
+                .await
+                .unwrap();
+        }
+        r.client.close().await.unwrap();
+        assert!(r.provider.upgrade().is_none());
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_delivery_observations")
+            .fetch_one(&mut fault)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+        let attempts: Vec<(Vec<u8>, Vec<u8>)> =
+            sqlx::query_as("SELECT entry_id,request_key FROM stock_delivery_attempts")
+                .fetch_all(&mut fault)
+                .await
+                .unwrap();
+        assert_eq!(attempts, vec![original]);
+        assert_eq!(r.io.sent.lock().unwrap().len(), 1);
+        assert_eq!(r.control.signs.load(Ordering::SeqCst), 1);
+        fault.close().await.unwrap();
+    }
 }
