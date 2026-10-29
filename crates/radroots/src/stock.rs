@@ -5,7 +5,9 @@ use radroots_domain::{
     stock::{AvailableStockCorrection, OptionMappingKey, OptionPoolMapping, PoolView},
 };
 pub use radroots_protocol::command::{CreatePoolInput, MapOptionInput, PoolCorrectionInput};
-pub use radroots_storage::inventory::{InventoryCheckpointRef, InventoryOutcome, InventoryReceipt};
+pub use radroots_storage::inventory::{
+    InventoryCheckpointRef, InventoryOutcome, InventoryReceipt, StockDeficit,
+};
 pub use radroots_storage::inventory::{
     StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest,
 };
@@ -55,7 +57,8 @@ impl<'a> Stock<'a> {
             )
             .await
     }
-    /// Applies an explicit positive addition or available-stock removal.
+    /// Applies an explicit positive addition or physical-stock removal.
+    /// Qualified hosts retain deficits if installed original backing is lost.
     pub async fn adjust(
         &self,
         context: CommandContext,
@@ -67,7 +70,8 @@ impl<'a> Stock<'a> {
         }
         self.correct(context, minimum, input).await
     }
-    /// Records physical spoilage without silently spending held quantities.
+    /// Records physical spoilage and retains affected installed obligations.
+    /// Preparatory and quarantine claims require their explicit resolution.
     pub async fn spoil(
         &self,
         context: CommandContext,

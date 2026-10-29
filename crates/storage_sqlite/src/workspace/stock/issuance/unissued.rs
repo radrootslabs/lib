@@ -224,6 +224,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            deficit: None,
             delivery: None,
             envelope: None,
             aborted: None,
@@ -339,7 +340,7 @@ pub(in crate::workspace) async fn capture(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, input, turn.crypto).await?;
-    if !matches!(authority.catalog, 14..=18) {
+    if !matches!(authority.catalog, 14..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
@@ -493,7 +494,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     )
     .await?;
-    if !matches!(auth.access.authority.catalog, 14..=18) {
+    if !matches!(auth.access.authority.catalog, 14..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let witness = Box::pin(checkpoint::authenticate_minimum(

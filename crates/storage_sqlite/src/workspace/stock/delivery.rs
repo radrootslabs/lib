@@ -146,6 +146,7 @@ async fn confirm_record(
 }
 fn history(frame: ledger::Retained, projection: Projection) -> ledger::HistoryEntry {
     ledger::HistoryEntry {
+        deficit: None,
         delivery: Some(projection),
         envelope: None,
         aborted: None,
@@ -181,7 +182,7 @@ impl Prepared {
         append: Append,
         body: &[u8],
     ) -> Result<Self, OperationError> {
-        if !matches!(authority.catalog, 17 | 18) {
+        if !matches!(authority.catalog, 17..=19) {
             return Err(OperationError::UnsupportedOperation);
         }
         let before = authority

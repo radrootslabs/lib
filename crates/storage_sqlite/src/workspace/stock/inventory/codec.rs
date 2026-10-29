@@ -106,11 +106,23 @@ struct OperationV4<'a> {
     #[serde(deserialize_with = "super::required_nullable")]
     mapping: Option<super::mapping::MappingEffect>,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OperationV5<'a> {
+    version: u8,
+    authorization: StockAuthorizationRef,
+    #[serde(borrow)]
+    operation: &'a RawValue,
+    #[serde(deserialize_with = "super::required_nullable")]
+    mapping: Option<super::mapping::MappingEffect>,
+    losses: Vec<super::deficit::Loss>,
+}
 pub(super) fn encode_operation(
     value: &OperationWire<'_>,
     catalog: i64,
     authorization: Option<StockAuthorizationRef>,
     mapping: Option<super::mapping::MappingEffect>,
+    losses: &[super::deficit::Loss],
 ) -> Result<zeroize::Zeroizing<Vec<u8>>, OperationError> {
     let clear = super::encode(value)?;
     if catalog < 4 {
@@ -120,6 +132,18 @@ pub(super) fn encode_operation(
         String::from_utf8(clear.to_vec()).map_err(|_| OperationError::StorageFailure)?,
     )
     .map_err(|_| OperationError::StorageFailure)?;
+    if catalog == 19 {
+        return super::encode(&OperationV5 {
+            version: 5,
+            authorization: authorization.ok_or(OperationError::RecoveryRequired)?,
+            operation: &raw,
+            mapping,
+            losses: losses.to_vec(),
+        });
+    }
+    if !losses.is_empty() {
+        return Err(OperationError::UnsupportedOperation);
+    }
     if matches!(catalog, 5..=18) {
         return super::encode(&OperationV4 {
             version: 4,
@@ -135,6 +159,7 @@ pub(super) fn encode_operation(
     })
 }
 pub(super) struct OperationData {
+    pub(super) losses: Vec<super::deficit::Loss>,
     pub(super) mapping: Option<super::mapping::MappingEffect>,
     pub(super) authorization: Option<StockAuthorizationRef>,
     pub(super) version: u8,
@@ -158,6 +183,18 @@ fn decode_inner(
     catalog: i64,
     allow_mapping: bool,
 ) -> Result<(InventoryRequest, OperationData), OperationError> {
+    if catalog == 19 {
+        let decoded: OperationV5<'_> =
+            super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
+        if decoded.version != 5 || decoded.losses.len() > super::deficit::MAX_LOSSES {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let (request, mut data) = decode_inner(decoded.operation.get().as_bytes(), 3, true)?;
+        data.authorization = Some(decoded.authorization);
+        data.mapping = decoded.mapping;
+        data.losses = decoded.losses;
+        return Ok((request, data));
+    }
     if matches!(catalog, 5..=18) {
         let decoded: OperationV4<'_> =
             super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
@@ -213,6 +250,7 @@ fn decode_inner(
             Ok((
                 request,
                 OperationData {
+                    losses: Vec::new(),
                     mapping: None,
                     authorization: None,
                     version: decoded.version,

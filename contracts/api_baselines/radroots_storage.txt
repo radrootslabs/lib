@@ -1426,12 +1426,14 @@ pub struct radroots_storage::inventory::InventoryReceipt
 impl radroots_storage::inventory::InventoryReceipt
 pub const fn radroots_storage::inventory::InventoryReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
 pub const fn radroots_storage::inventory::InventoryReceipt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
+pub fn radroots_storage::inventory::InventoryReceipt::deficits(&self) -> &[radroots_storage::inventory::StockDeficit]
 pub fn radroots_storage::inventory::InventoryReceipt::from_committed_mapping(radroots_storage::command::CommitAttempt, radroots_domain::stock::PoolSnapshot, radroots_domain::stock::mapping::OptionPoolMapping, radroots_storage::inventory::InventoryCheckpointRef) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage::inventory::InventoryReceipt::from_committed_store(radroots_storage::command::CommitAttempt, radroots_protocol::command::inventory::InventoryCommandKind, radroots_domain::stock::PoolSnapshot, radroots_storage::inventory::InventoryCheckpointRef) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub const fn radroots_storage::inventory::InventoryReceipt::kind(&self) -> radroots_protocol::command::inventory::InventoryCommandKind
 pub const fn radroots_storage::inventory::InventoryReceipt::mapping(&self) -> core::option::Option<radroots_domain::stock::mapping::OptionPoolMapping>
 pub const fn radroots_storage::inventory::InventoryReceipt::pool(&self) -> radroots_domain::stock::PoolSnapshot
 pub const fn radroots_storage::inventory::InventoryReceipt::transaction_id(&self) -> core::option::Option<radroots_domain::identifier::TransactionId>
+pub fn radroots_storage::inventory::InventoryReceipt::with_deficits(self, alloc::vec::Vec<radroots_storage::inventory::StockDeficit>) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub struct radroots_storage::inventory::InventoryRequest
 impl radroots_storage::inventory::InventoryRequest
 pub const fn radroots_storage::inventory::InventoryRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
@@ -1492,6 +1494,16 @@ pub const fn radroots_storage::inventory::StockAcceptanceRequest::minimum_checkp
 pub const fn radroots_storage::inventory::StockAcceptanceRequest::source_checkpoint(&self) -> radroots_storage::workspace::seller_stock::StockSourceCheckpointRef
 impl core::fmt::Debug for radroots_storage::inventory::StockAcceptanceRequest
 pub fn radroots_storage::inventory::StockAcceptanceRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_storage::inventory::StockDeficit
+impl radroots_storage::inventory::StockDeficit
+pub const fn radroots_storage::inventory::StockDeficit::acceptance(self) -> radroots_domain::identifier::OperationId
+pub const fn radroots_storage::inventory::StockDeficit::backing(self) -> radroots_domain::stock::obligation::ObligationBacking
+pub const fn radroots_storage::inventory::StockDeficit::from_host_metadata(radroots_domain::identifier::OperationId, radroots_domain::identifier::OperationId, radroots_domain::identifier::AgreementLineId, radroots_domain::identifier::PoolId, radroots_domain::stock::obligation::ObligationBacking) -> Self
+pub const fn radroots_storage::inventory::StockDeficit::installation(self) -> radroots_domain::identifier::OperationId
+pub const fn radroots_storage::inventory::StockDeficit::line(self) -> radroots_domain::identifier::AgreementLineId
+pub const fn radroots_storage::inventory::StockDeficit::pool(self) -> radroots_domain::identifier::PoolId
+impl core::fmt::Debug for radroots_storage::inventory::StockDeficit
+pub fn radroots_storage::inventory::StockDeficit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::inventory::StockDeliveryAttempt
 impl radroots_storage::inventory::StockDeliveryAttempt
 pub const fn radroots_storage::inventory::StockDeliveryAttempt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef

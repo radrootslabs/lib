@@ -3,13 +3,14 @@ use super::*;
 pub(super) fn record_version(catalog: i64) -> Result<u8, OperationError> {
     match catalog {
         2 => Ok(1),
-        3..=18 => Ok(2),
+        3..=19 => Ok(2),
         _ => Err(OperationError::RecoveryRequired),
     }
 }
 pub(super) fn plan_effect(
     command: &radroots_storage::inventory::CapturedInventoryCommand,
     before: Option<PoolSnapshot>,
+    held_loss: radroots_domain::stock::StockTicks,
 ) -> Result<
     (
         PoolSnapshot,
@@ -70,14 +71,51 @@ pub(super) fn plan_effect(
                         .map_err(|_| OperationError::InvalidCommand)?,
                 )
                 .map_err(|_| OperationError::InvalidCommand)?;
-            let balances = before
-                .balances()
-                .correct_available(input.kind(), quantity)
-                .map_err(|error| match error {
-                    StockError::Underflow => OperationError::StaleState,
-                    StockError::OutOfRange => WorkspaceError::Capacity.into(),
-                    _ => OperationError::InvalidCommand,
-                })?;
+            let available_quantity = quantity
+                .checked_sub(held_loss)
+                .map_err(|_| OperationError::RecoveryRequired)?;
+            if held_loss != radroots_domain::stock::StockTicks::ZERO
+                && (input.kind() == AvailableStockCorrection::Add
+                    || available_quantity != before.balances().physical().available)
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+            let balances = if available_quantity == radroots_domain::stock::StockTicks::ZERO {
+                before.balances()
+            } else {
+                before
+                    .balances()
+                    .correct_available(input.kind(), available_quantity)
+                    .map_err(|error| match error {
+                        StockError::Underflow => OperationError::StaleState,
+                        StockError::OutOfRange => WorkspaceError::Capacity.into(),
+                        _ => OperationError::InvalidCommand,
+                    })?
+            };
+            let balances = if held_loss == radroots_domain::stock::StockTicks::ZERO {
+                Ok(balances)
+            } else {
+                balances.deplete_held(
+                    radroots_domain::stock::HeldStockCategory::Committed,
+                    match input.kind() {
+                        AvailableStockCorrection::Remove => {
+                            radroots_domain::stock::HeldStockLoss::Removal
+                        }
+                        AvailableStockCorrection::Spoil => {
+                            radroots_domain::stock::HeldStockLoss::Spoilage
+                        }
+                        AvailableStockCorrection::Add => {
+                            return Err(OperationError::RecoveryRequired);
+                        }
+                    },
+                    held_loss,
+                )
+            }
+            .map_err(|error| match error {
+                StockError::Underflow => OperationError::StaleState,
+                StockError::OutOfRange => WorkspaceError::Capacity.into(),
+                _ => OperationError::InvalidCommand,
+            })?;
             let version = Sequence::new(
                 before
                     .version()

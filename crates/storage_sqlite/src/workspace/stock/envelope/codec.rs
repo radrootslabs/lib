@@ -195,6 +195,7 @@ impl Retained {
     }
     pub(in crate::workspace::stock) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            deficit: None,
             delivery: None,
             envelope: Some(self.projection),
             aborted: None,

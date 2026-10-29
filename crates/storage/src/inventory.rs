@@ -9,7 +9,9 @@ pub use radroots_protocol::command::{CapturedInventoryCommand, InventoryCommandK
 use radroots_transport::BoxFuture;
 mod abort;
 mod acceptance;
+mod deficit;
 mod delivery;
+pub use deficit::StockDeficit;
 mod delivery_state;
 mod envelope;
 mod evidence;
@@ -204,6 +206,7 @@ pub struct InventoryReceipt {
     attempt: CommitAttempt,
     pool: PoolSnapshot,
     kind: InventoryCommandKind,
+    deficits: Vec<StockDeficit>,
     mapping: Option<radroots_domain::stock::OptionPoolMapping>,
     checkpoint: InventoryCheckpointRef,
 }
@@ -229,6 +232,7 @@ impl InventoryReceipt {
             kind,
             pool,
             mapping: None,
+            deficits: Vec::new(),
             checkpoint,
         })
     }
@@ -253,8 +257,37 @@ impl InventoryReceipt {
             pool,
             kind: InventoryCommandKind::MapOption,
             mapping: Some(mapping),
+            deficits: Vec::new(),
             checkpoint,
         })
+    }
+    /// Adds retained allocation metadata only; this creates no effect or authority.
+    pub fn with_deficits(mut self, deficits: Vec<StockDeficit>) -> Result<Self, OperationError> {
+        if deficits.len() > 32
+            || deficits.iter().any(|value| {
+                value.pool() != self.pool.id()
+                    || value.backing().deficit() == radroots_domain::stock::StockTicks::ZERO
+            })
+            || deficits.iter().enumerate().any(|(index, value)| {
+                deficits[..index].iter().any(|prior| {
+                    prior.acceptance() == value.acceptance() && prior.line() == value.line()
+                })
+            })
+            || (!deficits.is_empty()
+                && !matches!(
+                    self.kind,
+                    InventoryCommandKind::SpoilStock | InventoryCommandKind::RemoveStock
+                ))
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        self.deficits = deficits;
+        Ok(self)
+    }
+    /// Deficits caused by this transaction at its retained checkpoint.
+    /// These are not a current full-obligation balance or disclosure grant.
+    pub fn deficits(&self) -> &[StockDeficit] {
+        &self.deficits
     }
     /// Original private mapping effect; absent for physical inventory commands.
     pub const fn mapping(&self) -> Option<radroots_domain::stock::OptionPoolMapping> {

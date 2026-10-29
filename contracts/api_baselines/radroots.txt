@@ -199,6 +199,7 @@ pub use radroots::stock::InventoryOutcome
 pub use radroots::stock::InventoryReceipt
 pub use radroots::stock::MapOptionInput
 pub use radroots::stock::PoolCorrectionInput
+pub use radroots::stock::StockDeficit
 pub use radroots::stock::StockEvidenceOutcome
 pub use radroots::stock::StockEvidenceReceipt
 pub use radroots::stock::StockEvidenceRequest

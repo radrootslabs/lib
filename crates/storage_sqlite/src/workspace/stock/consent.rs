@@ -424,7 +424,7 @@ pub(in crate::workspace) async fn issue(
     proof: AttachmentProof,
 ) -> Result<StockConsentOutcome, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7..=18) {
+    if !matches!(access.authority.catalog, 7..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()
@@ -685,7 +685,7 @@ pub(in crate::workspace) async fn query(
     proof: AttachmentProof,
 ) -> Result<Option<StockConsentReceipt>, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7..=18) {
+    if !matches!(access.authority.catalog, 7..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator() && access.current.input().grant_id() != subject {

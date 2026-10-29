@@ -53,6 +53,21 @@ struct StockAccounting {
     released_deficit_adds_available: bool,
     loss_deletes_obligation: bool,
     native_atomic_allocation_and_identity_required: bool,
+    native_correction: NativeCorrection,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeCorrection {
+    catalog: u8,
+    selection: String,
+    max_affected_allocations: u8,
+    protected_original_allocation_required: bool,
+    deficit_projection_in_final_transaction: bool,
+    quantity_storage: String,
+    worker_charge_bytes: u32,
+    preparatory_loss_implicit: bool,
+    quarantine_loss_implicit: bool,
 }
 
 #[derive(Deserialize)]
@@ -729,6 +744,19 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     let p: Policy = serde_json::from_slice(raw)
         .map_err(|_| "shared SDK contract: invalid closed JSON shape".to_owned())?;
     let accounting = &p.stock_accounting;
+    let correction = &accounting.native_correction;
+    require(
+        correction.catalog == 19
+            && correction.selection == "available_then_original_installation_and_allocation_order"
+            && correction.max_affected_allocations == 32
+            && correction.protected_original_allocation_required
+            && correction.deficit_projection_in_final_transaction
+            && correction.quantity_storage == "protected_original_operation_body"
+            && correction.worker_charge_bytes == 1048576
+            && !correction.preparatory_loss_implicit
+            && !correction.quarantine_loss_implicit,
+        "native correction original allocation, projection or category policy drift",
+    )?;
     require(
         accounting.value_owner == "radroots_domain.stock"
             && accounting.scope == "one_fixed_pool_unit"
@@ -769,7 +797,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
         envelope.journal_family == 10
             && envelope.payload_version == 1
             && envelope.payload_prefix_bytes == 213
-            && envelope.supported_catalogs == [16, 17, 18]
+            && envelope.supported_catalogs == [16, 17, 18, 19]
             && envelope.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             && envelope.raw_max_bytes == 65536
@@ -817,7 +845,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !rewrap.ordinary_status_is_atomic_absence_proof
             && rewrap.payload_version == 1
             && rewrap.payload_prefix_bytes == 117
-            && rewrap.supported_catalogs == [18]
+            && rewrap.supported_catalogs == [18, 19]
             && rewrap.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
             && rewrap.raw_max_bytes == 65536
@@ -845,7 +873,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     )?;
     let delivery = &stock.delivery;
     require(
-        delivery.supported_catalogs == [17, 18]
+        delivery.supported_catalogs == [17, 18, 19]
             && delivery.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
             && delivery.attempt_journal_family == 11
@@ -905,11 +933,11 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 18
+            && stock.schema_version == 19
             && stock.retained_enrollment_versions == [1]
             && stock.retained_inventory_versions
-                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v18"
+                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v19"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -1188,7 +1216,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
             && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
-            && stock.qualified_local_recovery.native_catalog == 18
+            && stock.qualified_local_recovery.native_catalog == 19
             && stock.qualified_local_recovery.worker_charge_bytes == 1048576
             && stock
                 .qualified_local_recovery
@@ -1251,7 +1279,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.preparation_abort.unsupported_hosts_return == "capability_unavailable"
             && stock.preparation_abort.retained_payload_versions == [1]
             && stock.preparation_abort.retained_v1_requires_absent_claims
-            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16, 17, 18]
+            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16, 17, 18, 19]
             && stock.preparation_abort.untracked_claimed_catalogs == [13, 14]
             && stock.preparation_abort.per_recipient_proof_count == 2
             && stock
@@ -1799,6 +1827,29 @@ mod tests {
         ] {
             assert!(
                 validate_bytes(&changed(&format!("/stock_accounting/{field}"), value)).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn native_corrections_require_original_allocations_and_atomic_deficits() {
+        for (field, value) in [
+            ("catalog", json!(18)),
+            ("selection", json!("latest_mapping")),
+            ("max_affected_allocations", json!(33)),
+            ("protected_original_allocation_required", json!(false)),
+            ("deficit_projection_in_final_transaction", json!(false)),
+            ("quantity_storage", json!("plaintext_sql_index")),
+            ("worker_charge_bytes", json!(65536)),
+            ("preparatory_loss_implicit", json!(true)),
+            ("quarantine_loss_implicit", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/stock_accounting/native_correction/{field}"),
+                    value
+                ))
+                .is_err()
             );
         }
     }

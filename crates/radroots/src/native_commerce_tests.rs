@@ -924,6 +924,9 @@ mod original_refusals;
 #[path = "native_stock_rewrap_tests.rs"]
 mod rewrap;
 
+#[path = "native_stock_deficit_tests.rs"]
+mod deficit;
+
 #[tokio::test]
 async fn peer_installation_survives_self_refusal_and_resume_uses_original_exact_recovery() {
     let r = Rig::new().await;

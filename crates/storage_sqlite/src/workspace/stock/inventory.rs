@@ -4,6 +4,7 @@ pub(in crate::workspace) mod acceptance;
 pub(in crate::workspace::stock) mod backing;
 pub(super) mod checkpoint;
 mod codec;
+pub(in crate::workspace::stock) mod deficit;
 pub(in crate::workspace) mod installation;
 mod mapping;
 mod plan;
@@ -40,6 +41,17 @@ pub(super) async fn check_head(
     checkpoint: InventoryCheckpoint,
 ) -> Result<(), WorkspaceError> {
     super::issuance::check_counts(connection).await?;
+    let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| WorkspaceError::RecoveryRequired)?;
+    if catalog == 19 {
+        let invalid: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM stock_deficits d LEFT JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.operation_id WHERE o.family IS NULL OR o.family!=0) OR EXISTS(SELECT 1 FROM pragma_foreign_key_check('stock_deficits'))")
+            .fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+        if invalid != 0 {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+    }
     if let Some(expected) = checkpoint.orders {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM stock_orders")
             .fetch_one(&mut *connection)
@@ -189,7 +201,7 @@ impl Turn<'_> {
             return Err(OperationError::UnsupportedOperation);
         }
 
-        let minimum_proof = Box::pin(authenticate_minimum(
+        let mut minimum_proof = Box::pin(authenticate_minimum(
             self.connection,
             self.selected,
             self.crypto,
@@ -199,6 +211,22 @@ impl Turn<'_> {
         ))
         .await?;
         self.namespace.validate()?;
+        if authority.catalog == 19 && minimum.revision().get() != 0 {
+            let genesis = radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
+                self.selected.authority(),
+                Sequence::new(0).map_err(|_| OperationError::RecoveryRequired)?,
+                None,
+            )?;
+            minimum_proof = Box::pin(authenticate_minimum(
+                self.connection,
+                self.selected,
+                self.crypto,
+                &current,
+                &authority,
+                genesis,
+            ))
+            .await?;
+        }
         Ok(Access {
             authority,
             record,
@@ -319,7 +347,28 @@ impl Turn<'_> {
             )
             .await?,
         );
-        let (pool, quantity, movement_kind) = plan_effect(request.command(), before)?;
+        let losses = if catalog == 19 {
+            Box::pin(deficit::plan(
+                self.connection,
+                self.selected,
+                self.crypto,
+                request.command(),
+                before,
+                access
+                    .authority
+                    .inventory
+                    .ok_or(OperationError::UnsupportedOperation)?
+                    .revision
+                    .get()
+                    .checked_add(1)
+                    .ok_or(WorkspaceError::Capacity)?,
+            ))
+            .await?
+        } else {
+            Vec::new()
+        };
+        let (pool, quantity, movement_kind) =
+            plan_effect(request.command(), before, deficit::quantity(&losses)?)?;
         let mapping = mapping::prepare(self, &access, &request, pool).await?;
         let label = if let Some(input) = request.command().creation_input() {
             input.label()
@@ -386,6 +435,8 @@ impl Turn<'_> {
                 receipt_checkpoint,
             )?
         };
+        let receipt =
+            receipt.with_deficits(losses.iter().map(|loss| loss.metadata(pool.id())).collect())?;
         let protected_pool = if mapping.is_some() {
             None
         } else {
@@ -451,8 +502,9 @@ impl Turn<'_> {
             catalog,
             access.authority.authorization,
             mapping.as_ref().map(|value| value.effect),
+            &losses,
         )?;
-        let framed = if matches!(catalog, 7..=18) {
+        let framed = if matches!(catalog, 7..=19) {
             Some(
                 super::ledger::prepare(
                     self.crypto,
@@ -575,6 +627,7 @@ impl Turn<'_> {
             sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected) VALUES(?,?,?,?,?,?,?,?,?)")
                 .bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(digest.as_bytes().as_slice()).bind(transaction.as_bytes().as_slice()).bind(pool.id().as_bytes().as_slice()).bind(revision.get() as i64).bind(head.as_bytes().as_slice()).bind(protected_operation).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             if let Some(framed)=&framed {framed.insert_parts(&mut tx,request.binding().actor(),operation).await?;}
+            if catalog == 19 { deficit::insert(&mut tx, request.binding().actor().participant(), operation, pool.id(), &losses).await?; }
             if let (Some(id),Some(protected))=(movement,protected_movement) {
             sqlx::query("INSERT INTO stock_movements(movement_id,actor,grant_id,operation_id,pool_id,protected) VALUES(?,?,?,?,?,?)").bind(id.as_slice()).bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(pool.id().as_bytes().as_slice()).bind(protected).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             }
@@ -825,6 +878,7 @@ async fn read_pool(
     }))
 }
 pub(super) struct Retained {
+    pub(super) deficit_projection: Option<[u8; 32]>,
     pub(super) frame: Option<(super::ledger::Header, [u8; 32])>,
     pub(super) original_grant: GrantId,
     pub(super) previous_head: Option<CheckpointDigest>,
@@ -866,7 +920,7 @@ pub(super) async fn read_operation(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let (frame, request, decoded) = if matches!(catalog, 7..=18) {
+    let (frame, request, decoded) = if matches!(catalog, 7..=19) {
         let retained = super::ledger::read(connection, input, crypto, operation)
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
@@ -913,8 +967,41 @@ pub(super) async fn read_operation(
     if original_grant != request.binding().input().grant_id().as_bytes() {
         return Err(OperationError::RecoveryRequired);
     }
-    let (planned, quantity, movement_kind) = plan_effect(request.command(), decoded.before)
+    let deficit_projection = if catalog == 19 {
+        let expected = Box::pin(deficit::plan(
+            connection,
+            input,
+            crypto,
+            request.command(),
+            decoded.before,
+            decoded.revision.get(),
+        ))
+        .await
         .map_err(|_| OperationError::RecoveryRequired)?;
+        if expected != decoded.losses {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let digest = deficit::digest(decoded.pool.id(), &decoded.losses)?;
+        if deficit::raw_projection(
+            connection,
+            binding.actor().participant().as_bytes(),
+            operation.as_bytes(),
+        )
+        .await?
+            != digest
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        Some(digest)
+    } else {
+        None
+    };
+    let (planned, quantity, movement_kind) = plan_effect(
+        request.command(),
+        decoded.before,
+        deficit::quantity(&decoded.losses)?,
+    )
+    .map_err(|_| OperationError::RecoveryRequired)?;
     let expected_mapping = mapping::effect(
         request.command(),
         decoded.pool,
@@ -1020,7 +1107,15 @@ pub(super) async fn read_operation(
             checkpoint,
         )?
     };
+    let receipt = receipt.with_deficits(
+        decoded
+            .losses
+            .iter()
+            .map(|loss| loss.metadata(decoded.pool.id()))
+            .collect(),
+    )?;
     Ok(Some(Retained {
+        deficit_projection,
         frame,
         original_grant: request.binding().input().grant_id(),
         previous_head: decoded.previous_head,

@@ -25,7 +25,7 @@ pub(in crate::workspace::stock::envelope) async fn capture(
     }
     let (authority, record, root, grant) =
         super::super::super::read(turn.connection, input, turn.crypto).await?;
-    if authority.catalog != 18 {
+    if !matches!(authority.catalog, 18 | 19) {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;

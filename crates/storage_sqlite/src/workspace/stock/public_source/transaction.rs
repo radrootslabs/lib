@@ -31,7 +31,7 @@ async fn access(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, binding.input(), turn.crypto).await?;
-    if !matches!(authority.catalog, 8..=18) || authority.public_sources.is_none() {
+    if !matches!(authority.catalog, 8..=19) || authority.public_sources.is_none() {
         return Err(OperationError::UnsupportedOperation);
     }
     let current = record.authenticate(binding.input(), proof, turn.clock.now()?)?;

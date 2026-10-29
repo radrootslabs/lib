@@ -19,6 +19,7 @@ pub(in crate::workspace::stock) fn catalog_authority_schema(catalog: i64) -> &'s
         16 => "radroots.seller_stock.authority.v16",
         17 => "radroots.seller_stock.authority.v17",
         18 => "radroots.seller_stock.authority.v18",
+        19 => "radroots.seller_stock.authority.v19",
         _ => panic!("unsupported private stock fixture catalog"),
     }
 }
@@ -300,7 +301,7 @@ async fn retained_v10_preserves_prior_families_and_signing_plan_retention() {
 }
 #[tokio::test]
 async fn retained_v11_preserves_prior_families_and_adds_claims_and_obtained_evidence() {
-    assert_eq!(schema::CURRENT, 18);
+    assert_eq!(schema::CURRENT, 19);
     retained_inventory_catalog(11).await;
 }
 // Exact catalog fixtures exercise retained/successor codecs; they are not
@@ -345,7 +346,7 @@ pub(in crate::workspace::stock) async fn literal_enrollment_catalog(
     catalog: i64,
     enrollment: &StockEnrollment,
 ) {
-    assert!(matches!(catalog, 13..=17));
+    assert!(matches!(catalog, 13..=18));
     let record = enrollment.record.lock().unwrap().take().unwrap();
     literal_catalog_contents(
         fixture,
@@ -404,7 +405,7 @@ async fn literal_catalog_contents(
     if catalog >= 7 {
         value["inventory"]["orders"] = serde_json::json!("0");
     }
-    if matches!(catalog, 8..=17) {
+    if matches!(catalog, 8..=18) {
         value["public_sources"] =
             serde_json::json!({"revision":"0","events":"0","heads":"0","parts":"0","head":null});
     }
@@ -454,6 +455,7 @@ async fn literal_catalog_contents(
         15 => "PRAGMA user_version=15",
         16 => "PRAGMA user_version=16",
         17 => "PRAGMA user_version=17",
+        18 => "PRAGMA user_version=18",
         _ => unreachable!(),
     })
     .execute(&mut *tx)
@@ -478,7 +480,7 @@ async fn retained_inventory_catalog(catalog: i64) {
     assert_eq!(authority.source_checkpoint().is_some(), catalog >= 6);
     assert_eq!(
         authority.listing_checkpoint().is_some(),
-        matches!(catalog, 8..=17)
+        matches!(catalog, 8..=18)
     );
     let minimum = authority.inventory_checkpoint().unwrap();
     let context = CommandContextData::new(
@@ -721,7 +723,7 @@ async fn retained_inventory_catalog(catalog: i64) {
             .fetch_one(&mut connection)
             .await
             .unwrap();
-    let old = if matches!(catalog, 7..=17) {
+    let old = if matches!(catalog, 7..=18) {
         let retained = ledger::read(
             &mut connection,
             &input,
@@ -774,7 +776,7 @@ async fn retained_inventory_catalog(catalog: i64) {
         // inside a real SQL transaction. Row counts and the protected header
         // stay unchanged while one referenced ciphertext changes.
         for part in [false, true] {
-            if part && !matches!(catalog, 7..=17) {
+            if part && !matches!(catalog, 7..=18) {
                 continue;
             }
             let (authority, _, _, _) = read(&mut connection, &input, &fixture.crypto())
@@ -854,6 +856,7 @@ async fn retained_inventory_catalog(catalog: i64) {
         15 => "PRAGMA user_version=14",
         16 => "PRAGMA user_version=15",
         17 => "PRAGMA user_version=16",
+        18 => "PRAGMA user_version=17",
         _ => unreachable!(),
     })
     .execute(&mut connection)
@@ -983,36 +986,42 @@ async fn retained_enrollment_v1_authenticates_but_never_auto_creates_inventory()
 
 #[tokio::test]
 async fn retained_v12_preserves_initial_installation_catalog_without_upgrade() {
-    assert_eq!(schema::CURRENT, 18);
+    assert_eq!(schema::CURRENT, 19);
     retained_inventory_catalog(12).await;
 }
 
 #[tokio::test]
 async fn retained_v13_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 18);
+    assert_eq!(schema::CURRENT, 19);
     retained_inventory_catalog(13).await;
 }
 
 #[tokio::test]
 async fn retained_v14_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 18);
+    assert_eq!(schema::CURRENT, 19);
     retained_inventory_catalog(14).await;
 }
 
 #[tokio::test]
 async fn retained_v15_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 18);
+    assert_eq!(schema::CURRENT, 19);
     retained_inventory_catalog(15).await;
 }
 
 #[tokio::test]
 async fn retained_v16_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 18);
+    assert_eq!(schema::CURRENT, 19);
     retained_inventory_catalog(16).await;
 }
 
 #[tokio::test]
 async fn retained_v17_authenticates_original_delivery_catalog_without_upgrade() {
-    assert_eq!(schema::CURRENT, 18);
+    assert_eq!(schema::CURRENT, 19);
     retained_inventory_catalog(17).await;
+}
+
+#[tokio::test]
+async fn retained_v18_authenticates_original_rewrap_catalog_without_upgrade() {
+    assert_eq!(schema::CURRENT, 19);
+    retained_inventory_catalog(18).await;
 }

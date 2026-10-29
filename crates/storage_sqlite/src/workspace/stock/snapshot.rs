@@ -338,7 +338,7 @@ async fn read_authorized(
         .authority
         .inventory
         .ok_or(OperationError::RecoveryRequired)?;
-    let delivery = if matches!(auth.access.authority.catalog, 17 | 18) {
+    let delivery = if matches!(auth.access.authority.catalog, 17..=19) {
         Some(Box::new(
             Box::pin(super::delivery::snapshot(
                 turn,

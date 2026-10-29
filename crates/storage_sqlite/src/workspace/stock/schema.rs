@@ -1,7 +1,7 @@
 //! Exact stock catalogs. Enrollment-only version1 is retained without upgrade.
 use super::WorkspaceError;
 use sqlx::SqliteConnection;
-pub(super) const CURRENT: i64 = 18;
+pub(super) const CURRENT: i64 = 19;
 const AUTHORITY: &str = "CREATE TABLE stock_authority (singleton INTEGER PRIMARY KEY CHECK(singleton=1), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT";
 const GRANTS: &str = "CREATE TABLE stock_grants (grant_id BLOB PRIMARY KEY CHECK(length(grant_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
 const POOLS: &str = "CREATE TABLE stock_pools (pool_id BLOB PRIMARY KEY CHECK(length(pool_id)=32), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID";
@@ -32,7 +32,7 @@ pub(super) fn objects(
     ];
     match version {
         1 => {}
-        2..=18 => objects.extend([
+        2..=19 => objects.extend([
             ("table", "stock_pools", "stock_pools", POOLS),
             (
                 "table",
@@ -97,7 +97,7 @@ pub(super) fn objects(
     if version >= 5 {
         objects.push(("table","stock_mappings","stock_mappings","CREATE TABLE stock_mappings (listing_author BLOB NOT NULL CHECK(length(listing_author)=32), listing_d BLOB NOT NULL CHECK(length(listing_d)=16), option_id BLOB NOT NULL CHECK(length(option_id)=32), pool_id BLOB NOT NULL REFERENCES stock_pools(pool_id), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144), PRIMARY KEY(listing_author,listing_d,option_id)) STRICT, WITHOUT ROWID"));
     }
-    if (6..=18).contains(&version) {
+    if (6..=19).contains(&version) {
         objects.push(("table","stock_source_records","stock_source_records","CREATE TABLE stock_source_records (record_id BLOB PRIMARY KEY CHECK(length(record_id)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         objects.push(("table","stock_source_evidence","stock_source_evidence","CREATE TABLE stock_source_evidence (envelope_id BLOB PRIMARY KEY CHECK(length(envelope_id)=32), record_id BLOB REFERENCES stock_source_records(record_id), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         objects.push(("index","stock_source_transaction_identity","stock_source_evidence","CREATE UNIQUE INDEX stock_source_transaction_identity ON stock_source_evidence(transaction_id)"));
@@ -133,7 +133,7 @@ pub(super) fn objects(
             objects.push(("table","stock_orders","stock_orders","CREATE TABLE stock_orders (order_id BLOB PRIMARY KEY CHECK(length(order_id)=32), revision INTEGER NOT NULL CHECK(revision>0), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         }
     }
-    if matches!(version, 8..=18) {
+    if matches!(version, 8..=19) {
         objects.push(("table","stock_public_events","stock_public_events","CREATE TABLE stock_public_events (event_id BLOB PRIMARY KEY CHECK(length(event_id)=32), listing_author BLOB NOT NULL CHECK(length(listing_author)=32), listing_d BLOB NOT NULL CHECK(length(listing_d)=16), created_at BLOB NOT NULL CHECK(length(created_at)=8), transaction_id BLOB NOT NULL CHECK(length(transaction_id)=32), revision INTEGER NOT NULL CHECK(revision>0), chain_head BLOB NOT NULL CHECK(length(chain_head)=32), protected BLOB NOT NULL CHECK(length(protected)>0 AND length(protected)<=262144)) STRICT, WITHOUT ROWID"));
         objects.push(("index","stock_public_transaction_identity","stock_public_events","CREATE UNIQUE INDEX stock_public_transaction_identity ON stock_public_events(transaction_id)"));
         objects.push((
@@ -222,6 +222,9 @@ pub(super) fn objects(
             "stock_rewraps",
             "CREATE UNIQUE INDEX stock_rewrap_entry ON stock_rewraps(actor,entry_id)",
         ));
+    }
+    if version >= 19 {
+        objects.push(("table", "stock_deficits", "stock_deficits", "CREATE TABLE stock_deficits (actor BLOB NOT NULL CHECK(length(actor)=32), operation_id BLOB NOT NULL CHECK(length(operation_id)=32), acceptance_id BLOB NOT NULL CHECK(length(acceptance_id)=32), installation_id BLOB NOT NULL CHECK(length(installation_id)=32), line_id BLOB NOT NULL CHECK(length(line_id)=32), pool_id BLOB NOT NULL REFERENCES stock_pools(pool_id), PRIMARY KEY(actor,operation_id,acceptance_id,line_id), FOREIGN KEY(actor,operation_id) REFERENCES stock_operations(actor,operation_id), FOREIGN KEY(actor,acceptance_id) REFERENCES stock_orders(actor,operation_id), FOREIGN KEY(actor,installation_id) REFERENCES stock_operations(actor,operation_id)) STRICT, WITHOUT ROWID"));
     }
     Ok(objects)
 }

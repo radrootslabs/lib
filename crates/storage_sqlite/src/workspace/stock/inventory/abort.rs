@@ -160,7 +160,7 @@ async fn abort_authorized(
     proof: AttachmentProof,
     auth: signing_plan::Authorized,
 ) -> Result<StockAbortOutcome, OperationError> {
-    if !matches!(auth.access.authority.catalog, 13..=18) {
+    if !matches!(auth.access.authority.catalog, 13..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation_id())).await?;
@@ -381,7 +381,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 13..=18) {
+    if !matches!(auth.access.authority.catalog, 13..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth.access, request.operation_id())).await?;

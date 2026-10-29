@@ -29,6 +29,13 @@ impl Retained {
             .map(|effect| (effect.before().id(), effect.quantity()))
             .collect())
     }
+    pub(in crate::workspace::stock) fn original_allocations(
+        &self,
+    ) -> Result<Vec<radroots_domain::stock::StockAllocation>, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        Ok(body.allocations)
+    }
     pub fn command(&self) -> Result<CapturedOrderAcceptance, OperationError> {
         let body: Body = super::super::super::closed_record(&self.frame.body)
             .map_err(|_| OperationError::RecoveryRequired)?;
@@ -104,6 +111,7 @@ impl Retained {
             )
         });
         ledger::HistoryEntry {
+            deficit: None,
             delivery: None,
             envelope: None,
             aborted: None,
@@ -325,7 +333,7 @@ pub(in crate::workspace::stock) async fn read(
         .map_err(|_| OperationError::RecoveryRequired)?;
     let operation_keyed = match catalog {
         1..=12 => false,
-        13..=18 => true,
+        13..=19 => true,
         _ => return Err(OperationError::RecoveryRequired),
     };
     let actor = header.actor.participant();

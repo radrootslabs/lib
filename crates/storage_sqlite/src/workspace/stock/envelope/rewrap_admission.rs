@@ -86,7 +86,7 @@ pub(super) async fn read_entry(
         .ok_or(OperationError::RecoveryRequired)?;
     let (authority, _, _, _) = super::super::read(connection, input, crypto).await?;
     let body = frame.body.as_slice();
-    if catalog != 18
+    if !matches!(catalog, 18 | 19)
         || frame.header.family != ledger::Family::RewrapAdmission
         || body.len() != BYTES
         || &body[..8] != MAGIC
@@ -223,6 +223,7 @@ impl Admitted {
     }
     pub(super) fn into_history(self) -> ledger::HistoryEntry {
         ledger::HistoryEntry {
+            deficit: None,
             envelope: Some(self.projection),
             delivery: None,
             aborted: None,
@@ -255,7 +256,7 @@ pub(in crate::workspace) async fn prepare(
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if catalog != 18 {
+    if !matches!(catalog, 18 | 19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let auth = Box::pin(super::super::signing_plan::load(
@@ -267,7 +268,7 @@ pub(in crate::workspace) async fn prepare(
         &proof,
     ))
     .await?;
-    if auth.access.authority.catalog != 18
+    if !matches!(auth.access.authority.catalog, 18 | 19)
         || !auth
             .original
             .receipt
@@ -458,7 +459,7 @@ pub(in crate::workspace) async fn reconcile(
     }
     let (authority, record, root, grant) =
         super::super::read(turn.connection, input, turn.crypto).await?;
-    if authority.catalog != 18 {
+    if !matches!(authority.catalog, 18 | 19) {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;

@@ -1595,6 +1595,12 @@ impl Handle {
             | Job::StockAgreementInstallation(..)
             | Job::AbortStockPreparation(..)
             | Job::StockPreparationAbort(..) => 1024 * 1024,
+            // Catalog19 inventory access authenticates original installed
+            // allocations and protected deficit history before its SQL fence.
+            Job::ExecuteInventory(..)
+            | Job::InventoryOperation(..)
+            | Job::Pool(..)
+            | Job::OptionMapping(..) => 1024 * 1024,
             Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,
             Job::BindStockSigningPlan(..)
             | Job::StockSigningPlan(..)
@@ -1602,7 +1608,7 @@ impl Handle {
             | Job::StockSigningAttempt(..)
             | Job::AuthorizeStockExactReplay(..) => 1024 * 1024,
             Job::RetainStockSource(..) => 256 * 1024,
-            Job::ChangeStockGrant(..) | Job::ExecuteInventory(..) => 64 * 1024,
+            Job::ChangeStockGrant(..) => 64 * 1024,
             Job::CaptureDeliveryObservation(..) => 96 * 1024,
             Job::PrepareDelivery(..) => 1024 * 1024,
             Job::BindPlan(..) => 1024 * 1024,

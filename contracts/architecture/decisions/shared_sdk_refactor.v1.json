@@ -82,7 +82,7 @@
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
       "captured_replay": "local_replay_safe",
-      "native_catalog": 18,
+      "native_catalog": 19,
       "worker_charge_bytes": 1048576,
       "existing_protected_claim_required": true,
       "current_execute_consent_required": true,
@@ -111,7 +111,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 18,
+    "schema_version": 19,
     "retained_enrollment_versions": [
       1
     ],
@@ -131,9 +131,10 @@
       14,
       15,
       16,
-      17
+      17,
+      18
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v18",
+    "authority_payload_schema": "radroots.seller_stock.authority.v19",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -399,7 +400,8 @@
         15,
         16,
         17,
-        18
+        18,
+        19
       ],
       "untracked_claimed_catalogs": [
         13,
@@ -420,7 +422,8 @@
       "supported_catalogs": [
         16,
         17,
-        18
+        18,
+        19
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -460,7 +463,8 @@
     "delivery": {
       "supported_catalogs": [
         17,
-        18
+        18,
+        19
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -534,7 +538,8 @@
       "payload_version": 1,
       "payload_prefix_bytes": 117,
       "supported_catalogs": [
-        18
+        18,
+        19
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -1096,7 +1101,18 @@
     "receipt_consumes_again": false,
     "released_deficit_adds_available": false,
     "loss_deletes_obligation": false,
-    "native_atomic_allocation_and_identity_required": true
+    "native_atomic_allocation_and_identity_required": true,
+    "native_correction": {
+      "catalog": 19,
+      "selection": "available_then_original_installation_and_allocation_order",
+      "max_affected_allocations": 32,
+      "protected_original_allocation_required": true,
+      "deficit_projection_in_final_transaction": true,
+      "quantity_storage": "protected_original_operation_body",
+      "worker_charge_bytes": 1048576,
+      "preparatory_loss_implicit": false,
+      "quarantine_loss_implicit": false
+    }
   },
   "execution": {
     "ordinary_inventory_owner": {

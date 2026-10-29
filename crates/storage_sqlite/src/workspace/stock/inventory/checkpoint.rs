@@ -96,6 +96,12 @@ impl MinimumProof {
                     super::super::ledger::raw_parts_witness(connection, &actor, &operation).await?;
                 hash.update([parts]);
                 hash.update(witness);
+                if catalog == 19 && family == 0 {
+                    hash.update(b"D19");
+                    hash.update(
+                        super::deficit::raw_projection(connection, &actor, &operation).await?,
+                    );
+                }
                 if matches!(family, 11 | 12) {
                     hash.update(
                         super::super::delivery::raw_projection(
@@ -187,7 +193,7 @@ pub(in crate::workspace::stock) async fn authenticate_order_state(
     authority: &Authority,
     order: radroots_domain::OrderId,
 ) -> Result<super::super::order_state::Checked, OperationError> {
-    if !matches!(authority.catalog, 13..=18) {
+    if !matches!(authority.catalog, 13..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let current = authority
@@ -256,7 +262,7 @@ pub(super) async fn authenticate_order_absence(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    if !matches!(authority.catalog, 9..=18) {
+    if !matches!(authority.catalog, 9..=19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let upper = current.revision.get();
@@ -338,7 +344,7 @@ pub(in crate::workspace::stock) async fn authenticate_identity(
     let current = authority
         .inventory
         .ok_or(OperationError::UnsupportedOperation)?;
-    let multipart = matches!(authority.catalog, 7..=18);
+    let multipart = matches!(authority.catalog, 7..=19);
     let upper = current.revision.get();
     let mut previous = current.head;
     let mut hash = history_hash(multipart);
@@ -515,7 +521,7 @@ pub(in crate::workspace::stock) async fn authenticate_minimum_with_local(
         minimum.revision().get().max(1)
     };
     let upper = current.revision.get();
-    let multipart = matches!(authority.catalog, 7..=18);
+    let multipart = matches!(authority.catalog, 7..=19);
     let mut hash = history_hash(multipart);
     let mut expected = current.head;
     for revision in (lower..=upper).rev() {
@@ -779,7 +785,7 @@ async fn authenticate_projected(
         .ok_or(OperationError::UnsupportedOperation)?;
     let upper = current.revision.get();
     let mut expected = current.head;
-    let multipart = matches!(authority.catalog, 7..=18);
+    let multipart = matches!(authority.catalog, 7..=19);
     let mut hash = history_hash(multipart);
     for revision in (1..=upper).rev() {
         let id:Vec<u8>=sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE revision=? AND length(operation_id)=32").bind(revision as i64).fetch_optional(&mut *connection).await.map_err(|_|OperationError::RecoveryRequired)?.ok_or(OperationError::RecoveryRequired)?;

@@ -51,7 +51,7 @@ pub(super) async fn lookup(
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if catalog != 18 {
+    if !matches!(catalog, 18 | 19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let entry: Option<Vec<u8>> = sqlx::query_scalar("SELECT CASE WHEN length(entry_id)=32 THEN entry_id END FROM stock_rewraps WHERE actor=? AND operation_id=? AND recipient=? AND event_id=?")
@@ -96,7 +96,7 @@ pub(super) async fn decode_entry(
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
     let body = frame.body.as_slice();
-    if catalog != 18
+    if !matches!(catalog, 18 | 19)
         || frame.header.family != ledger::Family::RewrappedEnvelope
         || !(PREFIX..=PREFIX + 65536).contains(&body.len())
         || &body[..8] != MAGIC
@@ -283,7 +283,7 @@ async fn query(
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if catalog != 18 {
+    if !matches!(catalog, 18 | 19) {
         return Err(OperationError::UnsupportedOperation);
     }
     let auth = Box::pin(super::super::signing_plan::load(
@@ -295,7 +295,7 @@ async fn query(
         proof,
     ))
     .await?;
-    if auth.access.authority.catalog != 18
+    if !matches!(auth.access.authority.catalog, 18 | 19)
         || !auth
             .original
             .receipt

@@ -459,6 +459,7 @@ pub(super) struct MovementWitness {
 /// A completely decoded original effect. Only the owning family decoder
 /// supplies its pool effects and movement witnesses; SQL indexes do not.
 pub(super) struct HistoryEntry {
+    pub deficit: Option<[u8; 32]>,
     pub delivery: Option<super::delivery::Projection>,
     pub envelope: Option<super::envelope::Projection>,
     pub aborted: Option<super::inventory::abort::Projection>,
@@ -509,14 +510,14 @@ pub(super) async fn history(
             ))
             .await
         }
-        Some(2) if matches!(authority.catalog, 9..=18) => {
+        Some(2) if matches!(authority.catalog, 9..=19) => {
             Box::pin(history_family_2(
                 connection, input, crypto, binding, authority, operation,
             ))
             .await
         }
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10..=18) => {
+        Some(3) if matches!(authority.catalog, 10..=19) => {
             Box::pin(history_family_3(
                 connection, input, crypto, binding, authority, operation,
             ))
@@ -534,7 +535,7 @@ pub(super) async fn history(
             ))
             .await
         }
-        Some(6) if matches!(authority.catalog, 12..=18) => {
+        Some(6) if matches!(authority.catalog, 12..=19) => {
             Box::pin(history_family_6(
                 connection, input, crypto, binding, authority, operation,
             ))
@@ -606,6 +607,7 @@ async fn history_family_0(
             _ => return Err(OperationError::RecoveryRequired),
         };
         Ok(Some(HistoryEntry {
+            deficit: retained.deficit_projection,
             delivery: None,
             envelope: None,
             aborted: None,
@@ -652,6 +654,7 @@ async fn history_family_1(
             return Err(OperationError::RecoveryRequired);
         }
         Ok(Some(HistoryEntry {
+            deficit: None,
             delivery: None,
             envelope: None,
             aborted: None,
@@ -909,6 +912,13 @@ impl HistoryEntry {
         )?;
         hash.update([header.parts]);
         hash.update(self.parts_witness);
+        if let Some(deficit) = self.deficit {
+            if header.family != Family::Inventory {
+                return Err(OperationError::RecoveryRequired);
+            }
+            hash.update(b"D19");
+            hash.update(deficit);
+        }
         match (header.family, self.aborted) {
             (Family::AbortedPreparation, Some(projection)) => {
                 hash.update(projection.digest(header.actor.participant(), header.operation))
