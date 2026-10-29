@@ -222,7 +222,7 @@ pub(in crate::workspace) async fn install(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12..=17) {
+    if !matches!(auth.access.authority.catalog, 12..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;
@@ -481,7 +481,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12..=17) {
+    if !matches!(auth.access.authority.catalog, 12..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (retained, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;

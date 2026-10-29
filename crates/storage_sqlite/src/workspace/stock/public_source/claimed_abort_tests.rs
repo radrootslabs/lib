@@ -398,9 +398,7 @@ async fn lost_claimed_cleanup_waiter_drains_before_reopen_and_keeps_original_pro
     refused(&r, &receipt, peer(&r, &receipt), true).await;
     let request = abort_request(&r, &receipt).await;
     let provider = reopen(&mut r).await;
-    provider
-        .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+    provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
     let mut pending = Box::pin(r.store.abort_proven_unissued(request, r.enrollment.proof()));
     assert!(futures::poll!(pending.as_mut()).is_pending());
     provider.gate.entered();

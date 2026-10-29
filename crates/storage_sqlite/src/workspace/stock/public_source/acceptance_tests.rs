@@ -448,9 +448,7 @@ async fn lost_observer_retains_actual_two_pool_preparation_and_drain_precedes_re
     consent(&r, &command).await;
     let request = request(&r, &command).await;
     let provider = reopen(&mut r).await;
-    provider
-        .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+    provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
     let mut pending = Box::pin(
         r.store
             .prepare_stock_acceptance(request, r.enrollment.proof()),
@@ -502,9 +500,7 @@ async fn source_mapping_pool_order_and_grant_rows_are_rechecked_after_final_prov
         let request = request(&r, &command).await;
         let provider = reopen(&mut r).await;
         let mut raw = database(&r).await;
-        provider
-            .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+        provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
         let mut pending = Box::pin(
             r.store
                 .prepare_stock_acceptance(request, r.enrollment.proof()),
@@ -539,9 +535,7 @@ async fn final_clock_recheck_refuses_expiry_and_rollback_after_protection_withou
         consent(&r, &command).await;
         let request = request(&r, &command).await;
         let provider = reopen(&mut r).await;
-        provider
-            .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+        provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
         let mut pending = Box::pin(
             r.store
                 .prepare_stock_acceptance(request, r.enrollment.proof()),

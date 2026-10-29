@@ -18,6 +18,8 @@ const BARRIER: &str = "RADROOTS_STOCK_PROCESS_BOUNDARY_V1";
 const CHILD: &str = "workspace::stock::public_source::tests::provider::history::acceptance::signing::claims::evidence::installations::process_death::stock_process_child";
 #[path = "process_delivery_tests.rs"]
 mod delivery;
+#[path = "process_rewrap_tests.rs"]
+mod rewrap;
 
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 enum Edge {
@@ -27,6 +29,10 @@ enum Edge {
     Envelope,
     Delivery,
     Observation,
+    RewrapAdmission,
+    RewrapEnvelope,
+    RewrapDelivery,
+    RewrapObservation,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -41,6 +47,7 @@ struct Control {
     edge: Edge,
     before: bool,
     delivery_transaction: Option<TransactionId>,
+    rewrap: Option<rewrap::Original>,
 }
 struct KillOnDrop(Child);
 impl Drop for KillOnDrop {
@@ -107,10 +114,10 @@ async fn stock_process_child() {
     let mut bytes = Vec::new();
     std::fs::File::open(root.join("stock-process-control.json"))
         .unwrap()
-        .take(73729)
+        .take(147457)
         .read_to_end(&mut bytes)
         .unwrap();
-    assert!(bytes.len() <= 73728);
+    assert!(bytes.len() <= 147456);
     let control: Control = serde_json::from_slice(&bytes).unwrap();
     let file = Arc::new(
         FileProvider::open(
@@ -156,7 +163,14 @@ async fn stock_process_child() {
         .unwrap();
     let capture = if matches!(
         control.edge,
-        Edge::Abort | Edge::Envelope | Edge::Delivery | Edge::Observation
+        Edge::Abort
+            | Edge::Envelope
+            | Edge::Delivery
+            | Edge::Observation
+            | Edge::RewrapAdmission
+            | Edge::RewrapEnvelope
+            | Edge::RewrapDelivery
+            | Edge::RewrapObservation
     ) {
         None
     } else {
@@ -177,9 +191,13 @@ async fn stock_process_child() {
         Some(StockEvidenceCapture::verify(binding.clone(), &report, &control.raw, None).unwrap())
     };
     if control.before {
-        provider
-            .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+        provider.gate.arm(
+            Direction::Wrap,
+            crate::workspace::stock::tests::catalog_authority_schema(
+                crate::workspace::stock::schema::CURRENT,
+            ),
+            0,
+        );
     }
     let work = async {
         match control.edge {
@@ -253,7 +271,10 @@ async fn stock_process_child() {
                         .unwrap(),
                 );
             }
-            Edge::Delivery | Edge::Observation => {
+            Edge::RewrapAdmission | Edge::RewrapEnvelope => {
+                return Some(rewrap::apply(&store, binding, minimum, &proof, &control).await);
+            }
+            Edge::Delivery | Edge::Observation | Edge::RewrapDelivery | Edge::RewrapObservation => {
                 return Some(delivery::apply(&store, binding, minimum, &proof, &control).await);
             }
         }
@@ -288,6 +309,10 @@ async fn process_death_before_and_after_confirmed_stock_writes_preserves_origina
         Edge::Envelope,
         Edge::Delivery,
         Edge::Observation,
+        Edge::RewrapAdmission,
+        Edge::RewrapEnvelope,
+        Edge::RewrapDelivery,
+        Edge::RewrapObservation,
     ] {
         for before in [true, false] {
             println!("stock boundary {edge:?} before={before}");
@@ -306,7 +331,14 @@ async fn process_death_before_and_after_confirmed_stock_writes_preserves_origina
             };
             if matches!(
                 edge,
-                Edge::Install | Edge::Envelope | Edge::Delivery | Edge::Observation
+                Edge::Install
+                    | Edge::Envelope
+                    | Edge::Delivery
+                    | Edge::Observation
+                    | Edge::RewrapAdmission
+                    | Edge::RewrapEnvelope
+                    | Edge::RewrapDelivery
+                    | Edge::RewrapObservation
             ) {
                 let capture = StockEvidenceCapture::verify(
                     r.binding.clone(),
@@ -322,21 +354,29 @@ async fn process_death_before_and_after_confirmed_stock_writes_preserves_origina
                         .unwrap(),
                 );
             }
-            let wrapping_key =
-                if matches!(edge, Edge::Envelope | Edge::Delivery | Edge::Observation) {
-                    installed(install(&r, &receipt).await.unwrap());
-                    let pending = radroots_nostr::signing::gift_wrap::wrap_retained_seal(
-                        &raw,
-                        recipient,
-                        std::num::NonZeroU64::new(150).unwrap(),
-                        &radroots_nostr::signing::OsNonceSource,
-                    )
-                    .unwrap();
-                    raw = pending.signed_json().to_owned();
-                    Some(pending.with_wrapping_key(|key| *key))
-                } else {
-                    None
-                };
+            let wrapping_key = if matches!(
+                edge,
+                Edge::Envelope
+                    | Edge::Delivery
+                    | Edge::Observation
+                    | Edge::RewrapAdmission
+                    | Edge::RewrapEnvelope
+                    | Edge::RewrapDelivery
+                    | Edge::RewrapObservation
+            ) {
+                installed(install(&r, &receipt).await.unwrap());
+                let pending = radroots_nostr::signing::gift_wrap::wrap_retained_seal(
+                    &raw,
+                    recipient,
+                    std::num::NonZeroU64::new(150).unwrap(),
+                    &radroots_nostr::signing::OsNonceSource,
+                )
+                .unwrap();
+                raw = pending.signed_json().to_owned();
+                Some(pending.with_wrapping_key(|key| *key))
+            } else {
+                None
+            };
             let mut control = Control {
                 input: r.enrollment.input().clone(),
                 proof: r.enrollment.proof().with_secret(|bytes| bytes.to_vec()),
@@ -348,9 +388,19 @@ async fn process_death_before_and_after_confirmed_stock_writes_preserves_origina
                 edge,
                 before,
                 delivery_transaction: None,
+                rewrap: None,
             };
             if matches!(edge, Edge::Delivery | Edge::Observation) {
                 control.delivery_transaction = Box::pin(delivery::prepare(&r, &control)).await;
+            }
+            if matches!(
+                edge,
+                Edge::RewrapAdmission
+                    | Edge::RewrapEnvelope
+                    | Edge::RewrapDelivery
+                    | Edge::RewrapObservation
+            ) {
+                Box::pin(rewrap::prepare(&r, &mut control)).await;
             }
             let minimum = inventory_minimum(&r).await;
             let mut file = std::fs::OpenOptions::new()
@@ -398,12 +448,26 @@ async fn process_death_before_and_after_confirmed_stock_writes_preserves_origina
                 .unwrap();
             let has_evidence = matches!(
                 edge,
-                Edge::Install | Edge::Envelope | Edge::Delivery | Edge::Observation
+                Edge::Install
+                    | Edge::Envelope
+                    | Edge::Delivery
+                    | Edge::Observation
+                    | Edge::RewrapAdmission
+                    | Edge::RewrapEnvelope
+                    | Edge::RewrapDelivery
+                    | Edge::RewrapObservation
             ) || (matches!(edge, Edge::Capture) && !before);
             assert_eq!(peer.first_evidence().is_some(), has_evidence);
-            let has_installation =
-                matches!(edge, Edge::Envelope | Edge::Delivery | Edge::Observation)
-                    || (matches!(edge, Edge::Install) && !before);
+            let has_installation = matches!(
+                edge,
+                Edge::Envelope
+                    | Edge::Delivery
+                    | Edge::Observation
+                    | Edge::RewrapAdmission
+                    | Edge::RewrapEnvelope
+                    | Edge::RewrapDelivery
+                    | Edge::RewrapObservation
+            ) || (matches!(edge, Edge::Install) && !before);
             assert_eq!(snapshot.installation().is_some(), has_installation);
             let has_abort = matches!(edge, Edge::Abort) && !before;
             assert_eq!(snapshot.aborted().is_some(), has_abort);
@@ -425,6 +489,15 @@ async fn process_death_before_and_after_confirmed_stock_writes_preserves_origina
                 balances(&r, 81, 8, 2, 0, 2).await;
             }
             assert_eq!(inventory_minimum(&r).await, current);
+            if matches!(
+                edge,
+                Edge::RewrapAdmission
+                    | Edge::RewrapEnvelope
+                    | Edge::RewrapDelivery
+                    | Edge::RewrapObservation
+            ) {
+                Box::pin(rewrap::verify(&r, &control, transaction)).await;
+            }
             if matches!(edge, Edge::Delivery | Edge::Observation) {
                 Box::pin(delivery::verify(&r, &control, transaction)).await;
             }

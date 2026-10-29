@@ -119,7 +119,7 @@ enum Job {
         Reply<radroots_storage::inventory::StockDeliveryObservationPage, OperationError>,
     ),
     RecoverStockEnvelope(
-        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        stock::envelope::CaptureRequest,
         AttachmentProof,
         Box<radroots_storage::command::PrivateEnvelopeCandidate>,
         Reply<radroots_storage::inventory::StockEnvelopeOutcome, OperationError>,
@@ -131,7 +131,7 @@ enum Job {
         Reply<radroots_storage::inventory::StockDeliveryObservationOutcome, OperationError>,
     ),
     CaptureStockEnvelope(
-        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        stock::envelope::CaptureRequest,
         AttachmentProof,
         Box<radroots_storage::command::PrivateEnvelopeCandidate>,
         Reply<radroots_storage::inventory::StockEnvelopeOutcome, OperationError>,
@@ -140,6 +140,27 @@ enum Job {
         Box<radroots_storage::inventory::StockEnvelopeRequest>,
         AttachmentProof,
         Reply<Option<radroots_storage::inventory::StockEnvelopeSource>, OperationError>,
+    ),
+    PrepareStockRewrap(
+        Box<radroots_storage::inventory::StockRewrapRequest>,
+        AttachmentProof,
+        Reply<radroots_storage::inventory::StockRewrapOutcome, OperationError>,
+    ),
+    StockRewrapAttempt(
+        Box<radroots_storage::inventory::StockRewrapRequest>,
+        AttachmentProof,
+        Reply<Option<radroots_storage::inventory::StockRewrapState>, OperationError>,
+    ),
+    RecoverStockRewrapAdmission(
+        Box<radroots_storage::inventory::StockRewrapRequest>,
+        AttachmentProof,
+        Reply<(), OperationError>,
+    ),
+    StockRewraps(
+        Box<radroots_storage::inventory::StockEnvelopeRequest>,
+        Option<radroots_domain::Sequence>,
+        AttachmentProof,
+        Reply<radroots_storage::inventory::StockRewrapPage, OperationError>,
     ),
     CaptureStockEvidence(
         Box<radroots_storage::inventory::StockEvidenceRequest>,
@@ -437,6 +458,18 @@ impl Job {
             Self::StockEnvelope(_, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
+            Self::PrepareStockRewrap(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockRewrapAttempt(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::RecoverStockRewrapAdmission(_, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
+            Self::StockRewraps(_, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::StockEvidence(_, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -721,6 +754,10 @@ impl Handle {
                                         | Job::RecoverStockObservation(..)
                                         | Job::CaptureStockEnvelope(..)
                                         | Job::StockEnvelope(..)
+                                        | Job::PrepareStockRewrap(..)
+                                        | Job::StockRewrapAttempt(..)
+                                        | Job::RecoverStockRewrapAdmission(..)
+                                        | Job::StockRewraps(..)
                                         | Job::CaptureStockEvidence(..)
                                         | Job::RecoverStockEvidence(..)
                                         | Job::StockEvidence(..)
@@ -738,6 +775,24 @@ impl Handle {
                                 continue;
                             }
                             let job = match job {
+                                Job::RecoverStockRewrapAdmission(request, proof, reply) => {
+                                    let result = Box::pin(
+                                        super::recovery::RecoveryTurn {
+                                            connection: &mut connection,
+                                            cached_grant: &mut cached_grant,
+                                            namespace: &namespace,
+                                            selected: &input,
+                                            crypto: &crypto,
+                                            clock: clock.as_ref(),
+                                            uncertain: &mut uncertain,
+                                            options: &options,
+                                        }
+                                        .reconcile_rewrap_admission(*request, proof),
+                                    )
+                                    .await;
+                                    let _ = reply.send(result);
+                                    continue;
+                                }
                                 Job::RecoverStockEnvelope(request, proof, candidate, reply) => {
                                     let result = Box::pin(
                                         super::recovery::RecoveryTurn {
@@ -750,7 +805,7 @@ impl Handle {
                                             uncertain: &mut uncertain,
                                             options: &options,
                                         }
-                                        .capture_envelope(*request, proof, *candidate),
+                                        .capture_envelope(request, proof, *candidate),
                                     )
                                     .await;
                                     let _ = reply.send(result);
@@ -1162,7 +1217,7 @@ impl Handle {
         let unknown = radroots_storage::inventory::StockEnvelopeOutcome::Unknown(request.attempt());
         let (reply, result) = oneshot::channel();
         self.send(Job::RecoverStockEnvelope(
-            Box::new(request),
+            stock::envelope::CaptureRequest::Original(Box::new(request)),
             proof,
             Box::new(candidate),
             reply,
@@ -1259,7 +1314,7 @@ impl Handle {
         let unknown = radroots_storage::inventory::StockEnvelopeOutcome::Unknown(request.attempt());
         let (reply, result) = oneshot::channel();
         self.send(Job::CaptureStockEnvelope(
-            Box::new(request),
+            stock::envelope::CaptureRequest::Original(Box::new(request)),
             proof,
             Box::new(candidate),
             reply,
@@ -1273,6 +1328,65 @@ impl Handle {
     ) -> Result<Option<radroots_storage::inventory::StockEnvelopeSource>, OperationError> {
         let (reply, result) = oneshot::channel();
         self.send(Job::StockEnvelope(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn prepare_stock_rewrap(
+        &self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+    ) -> Result<radroots_storage::inventory::StockRewrapOutcome, OperationError> {
+        let unknown = radroots_storage::inventory::StockRewrapOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        self.send(Job::PrepareStockRewrap(Box::new(request), proof, reply))?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_rewrap_attempt(
+        &self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_storage::inventory::StockRewrapState>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockRewrapAttempt(Box::new(request), proof, reply))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn reconcile_stock_rewrap_admission(
+        &self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+    ) -> Result<(), OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::RecoverStockRewrapAdmission(
+            Box::new(request),
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
+    pub(super) async fn capture_stock_rewrap(
+        &self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+        candidate: radroots_storage::command::PrivateEnvelopeCandidate,
+        reconcile: bool,
+    ) -> Result<radroots_storage::inventory::StockEnvelopeOutcome, OperationError> {
+        let unknown = radroots_storage::inventory::StockEnvelopeOutcome::Unknown(request.attempt());
+        let (reply, result) = oneshot::channel();
+        let request = stock::envelope::CaptureRequest::Rewrap(Box::new(request));
+        self.send(if reconcile {
+            Job::RecoverStockEnvelope(request, proof, Box::new(candidate), reply)
+        } else {
+            Job::CaptureStockEnvelope(request, proof, Box::new(candidate), reply)
+        })?;
+        result.await.unwrap_or(Ok(unknown))
+    }
+    pub(super) async fn stock_rewraps(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        after: Option<radroots_domain::Sequence>,
+        proof: AttachmentProof,
+    ) -> Result<radroots_storage::inventory::StockRewrapPage, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::StockRewraps(Box::new(request), after, proof, reply))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
     pub(super) async fn capture_stock_signing_evidence(
@@ -1469,6 +1583,10 @@ impl Handle {
             | Job::RecoverStockObservation(..)
             | Job::CaptureStockEnvelope(..)
             | Job::StockEnvelope(..)
+            | Job::PrepareStockRewrap(..)
+            | Job::StockRewrapAttempt(..)
+            | Job::RecoverStockRewrapAdmission(..)
+            | Job::StockRewraps(..)
             | Job::StockEvidence(..)
             | Job::StockUnissued(..)
             | Job::StockEvidencePage(..)

@@ -13,6 +13,7 @@ mod delivery;
 mod delivery_state;
 mod envelope;
 mod evidence;
+mod rewrap;
 pub use abort::{StockAbortOutcome, StockAbortReceipt, StockAbortRequest};
 pub use acceptance::{StockAcceptanceOutcome, StockAcceptanceReceipt, StockAcceptanceRequest};
 pub use delivery::{
@@ -27,6 +28,9 @@ pub use envelope::{
 };
 pub use evidence::{
     StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest, StockEvidenceSource,
+};
+pub use rewrap::{
+    StockRewrapAdmission, StockRewrapOutcome, StockRewrapPage, StockRewrapRequest, StockRewrapState,
 };
 
 /// Exact captured owner-private inventory command and original authenticated observation.
@@ -313,6 +317,64 @@ pub trait InventoryStore: WorkspaceStore {
         _proof: AttachmentProof,
         _candidate: &'a crate::command::PrivateEnvelopeCandidate,
     ) -> BoxFuture<'a, Result<StockEnvelopeOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Confirms one explicit wrapping admission before invoking wrapping.
+    /// Only a qualified host's newly confirmed claim qualifies one invocation;
+    /// existing and uncertain admissions never qualify another invocation.
+    fn prepare_stock_rewrap(
+        &self,
+        _request: StockRewrapRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<StockRewrapOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Queries an admission and any actual captured envelope without qualifying
+    /// another wrapping invocation. Missing bytes cannot authorize regeneration.
+    fn stock_rewrap_attempt(
+        &self,
+        _request: StockRewrapRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<StockRewrapState>, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Repairs the original caller's retained writer state without a fresh
+    /// clock. Returns no history, wrapping permit or dispatch permission;
+    /// subsequent status reads still require current recovery access.
+    fn reconcile_stock_rewrap_admission(
+        &self,
+        _request: StockRewrapRequest,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<(), OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Appends an obtained additional outer to its actual original admission.
+    fn capture_stock_rewrap<'a>(
+        &'a self,
+        _request: StockRewrapRequest,
+        _proof: AttachmentProof,
+        _candidate: &'a crate::command::PrivateEnvelopeCandidate,
+    ) -> BoxFuture<'a, Result<StockEnvelopeOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Reconciles the original additional outer on its retained connection
+    /// owner. This never obtains new wrapping material or renews permission.
+    fn reconcile_stock_rewrap<'a>(
+        &'a self,
+        _request: StockRewrapRequest,
+        _proof: AttachmentProof,
+        _candidate: &'a crate::command::PrivateEnvelopeCandidate,
+    ) -> BoxFuture<'a, Result<StockEnvelopeOutcome, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
+    /// Pages additional-envelope descriptors under current recovery access.
+    /// Queries retain original identities without loading every raw envelope.
+    fn stock_rewraps(
+        &self,
+        _request: StockEnvelopeRequest,
+        _after: Option<radroots_domain::Sequence>,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<StockRewrapPage, OperationError>> {
         Box::pin(async { Err(OperationError::UnsupportedOperation) })
     }
     /// Reads the exact original retained outer under current recovery access.

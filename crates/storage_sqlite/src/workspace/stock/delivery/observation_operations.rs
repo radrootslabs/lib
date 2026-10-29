@@ -18,7 +18,7 @@ pub(in crate::workspace) async fn capture_observation(
     }
     let (authority, credential, root, grant) =
         super::super::read(turn.connection, input, turn.crypto).await?;
-    if authority.catalog != 17 {
+    if !matches!(authority.catalog, 17 | 18) {
         return Err(OperationError::UnsupportedOperation);
     }
     credential.authenticate_retained_capture(input, &proof)?;
@@ -35,6 +35,11 @@ pub(in crate::workspace) async fn capture_observation(
         supplied.source().recipient(),
         None,
     )?;
+    let source = if authority.catalog >= 18 {
+        source.with_envelope(supplied.source().event_id())
+    } else {
+        source
+    };
     let witness = Box::pin(envelope::full_proof(turn, &source, &authority)).await?;
     let mut graph = Box::pin(Graph::read(
         turn,
@@ -175,7 +180,11 @@ pub(in crate::workspace) async fn page(
     after: Option<Sequence>,
     proof: AttachmentProof,
 ) -> Result<StockDeliveryObservationPage, OperationError> {
-    let (auth, witness, _) = Box::pin(operations::read(turn, &source, &proof, None)).await?;
+    let (auth, witness, graph) = Box::pin(operations::read(turn, &source, &proof, None)).await?;
+    let selected_event = graph
+        .source(source.recipient())
+        .ok()
+        .map(|value| value.source.receipt().event_id());
     let current = auth
         .access
         .authority
@@ -184,13 +193,18 @@ pub(in crate::workspace) async fn page(
     if after.is_some_and(|after| after > current.revision) {
         return Err(WorkspaceError::StaleCheckpoint.into());
     }
-    let rows = sqlx::query("SELECT d.entry_id FROM stock_delivery_observations d JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.entry_id WHERE d.actor=? AND d.operation_id=? AND d.recipient=? AND o.revision>? ORDER BY o.revision LIMIT 17")
+    let rows = sqlx::query("SELECT d.entry_id FROM stock_delivery_observations d JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.entry_id WHERE d.actor=? AND d.operation_id=? AND d.recipient=? AND o.revision>? ORDER BY o.revision LIMIT 2305")
         .bind(turn.selected.participant().as_bytes().as_slice()).bind(source.operation_id().as_bytes().as_slice())
         .bind(source.recipient().as_bytes().as_slice()).bind(after.map_or(0, |value| value.get()) as i64)
         .fetch_all(&mut *turn.connection).await.map_err(|_|OperationError::RecoveryRequired)?;
-    let more = rows.len() > PAGE_MAX;
-    let mut entries = Vec::with_capacity(rows.len().min(PAGE_MAX));
-    for row in rows.into_iter().take(PAGE_MAX) {
+    if rows.len() > OBSERVATION_COUNT_MAX {
+        return Err(OperationError::RecoveryRequired);
+    }
+    // The protected history is globally bounded and already authenticated.
+    // Filter by the actual attempt source, never an unauthenticated event index.
+    // Retain at most one extra matching descriptor to establish continuation.
+    let mut entries = Vec::with_capacity(PAGE_MAX + 1);
+    for row in rows {
         let bytes: Vec<u8> = row
             .try_get(0)
             .map_err(|_| OperationError::RecoveryRequired)?;
@@ -209,8 +223,15 @@ pub(in crate::workspace) async fn page(
         ))
         .await?
         .ok_or(OperationError::RecoveryRequired)?;
-        entries.push(value.receipt);
+        if selected_event == Some(value.receipt.observation().source().event_id()) {
+            entries.push(value.receipt);
+            if entries.len() > PAGE_MAX {
+                break;
+            }
+        }
     }
+    let more = entries.len() > PAGE_MAX;
+    entries.truncate(PAGE_MAX);
     Box::pin(operations::confirm_read(turn, &auth, &witness, &proof)).await?;
     StockDeliveryObservationPage::from_store_report(
         &source,

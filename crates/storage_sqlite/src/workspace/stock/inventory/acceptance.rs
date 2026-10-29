@@ -236,7 +236,7 @@ pub(in crate::workspace) async fn admit(
     let access = turn
         .access(request.binding(), request.minimum_checkpoint(), &proof)
         .await?;
-    if !matches!(access.authority.catalog, 9..=17) {
+    if !matches!(access.authority.catalog, 9..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let command = request.command();

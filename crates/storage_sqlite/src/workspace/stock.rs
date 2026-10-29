@@ -445,10 +445,10 @@ struct AuthorityV8 {
 }
 impl Authority {
     fn encode(&self) -> Result<zeroize::Zeroizing<Vec<u8>>, WorkspaceError> {
-        if !matches!(self.catalog, 8..=17) && self.public_sources.is_some() {
+        if !matches!(self.catalog, 8..=18) && self.public_sources.is_some() {
             return Err(WorkspaceError::RecoveryRequired);
         }
-        if matches!(self.catalog, 8..=17) {
+        if matches!(self.catalog, 8..=18) {
             let public_sources = self
                 .public_sources
                 .ok_or(WorkspaceError::RecoveryRequired)?;
@@ -700,7 +700,7 @@ impl Authority {
                     public_sources: None,
                 }
             }
-            8..=17 => {
+            8..=18 => {
                 let value: AuthorityV8 = closed_record(bytes)?;
                 value.public_sources.validate()?;
                 if i64::from(value.version) != catalog
@@ -831,7 +831,7 @@ pub(super) async fn initialize(
                     .await
                     .map_err(|_| WorkspaceError::StorageFailure)?;
             }
-            sqlx::query("PRAGMA user_version=17")
+            sqlx::query("PRAGMA user_version=18")
                 .execute(&mut *tx)
                 .await
                 .map_err(|_| WorkspaceError::StorageFailure)?;
@@ -1173,6 +1173,9 @@ impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
         >,
     > {
         Box::pin(async move {
+            if request.envelope_event_id().is_some() {
+                return Err(radroots_storage::command::OperationError::InvalidCommand);
+            }
             self.worker
                 .capture_stock_envelope(request, proof, candidate.retained_copy())
                 .await
@@ -1204,10 +1207,103 @@ impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
         >,
     > {
         Box::pin(async move {
+            if request.envelope_event_id().is_some() {
+                return Err(radroots_storage::command::OperationError::InvalidCommand);
+            }
             self.worker
                 .reconcile_stock_envelope(request, proof, candidate.retained_copy())
                 .await
         })
+    }
+    fn prepare_stock_rewrap(
+        &self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::inventory::StockRewrapOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.prepare_stock_rewrap(request, proof))
+    }
+    fn stock_rewrap_attempt(
+        &self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::inventory::StockRewrapState>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.stock_rewrap_attempt(request, proof))
+    }
+    fn reconcile_stock_rewrap_admission(
+        &self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<'_, Result<(), radroots_storage::command::OperationError>>
+    {
+        Box::pin(self.worker.reconcile_stock_rewrap_admission(request, proof))
+    }
+    fn capture_stock_rewrap<'a>(
+        &'a self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+        candidate: &'a radroots_storage::command::PrivateEnvelopeCandidate,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<
+            radroots_storage::inventory::StockEnvelopeOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(async move {
+            if request.source().envelope_event_id().is_none() {
+                return Err(radroots_storage::command::OperationError::InvalidCommand);
+            }
+            self.worker
+                .capture_stock_rewrap(request, proof, candidate.retained_copy(), false)
+                .await
+        })
+    }
+    fn reconcile_stock_rewrap<'a>(
+        &'a self,
+        request: radroots_storage::inventory::StockRewrapRequest,
+        proof: AttachmentProof,
+        candidate: &'a radroots_storage::command::PrivateEnvelopeCandidate,
+    ) -> radroots_transport::BoxFuture<
+        'a,
+        Result<
+            radroots_storage::inventory::StockEnvelopeOutcome,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(async move {
+            if request.source().envelope_event_id().is_none() {
+                return Err(radroots_storage::command::OperationError::InvalidCommand);
+            }
+            self.worker
+                .capture_stock_rewrap(request, proof, candidate.retained_copy(), true)
+                .await
+        })
+    }
+    fn stock_rewraps(
+        &self,
+        request: radroots_storage::inventory::StockEnvelopeRequest,
+        after: Option<radroots_domain::Sequence>,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            radroots_storage::inventory::StockRewrapPage,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.stock_rewraps(request, after, proof))
     }
     fn prepare_stock_delivery_attempt(
         &self,

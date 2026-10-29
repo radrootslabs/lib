@@ -51,6 +51,15 @@ impl StockDeliveryRequest {
     pub const fn expected_attempt_count(&self) -> Option<u16> {
         self.expected_attempts
     }
+    /// Selects exact retained bytes for this intent without obtaining another
+    /// outer or renewing the recipient's cumulative invocation budget.
+    pub fn with_envelope(mut self, event: EnvelopeEventId) -> Result<Self, OperationError> {
+        if event != self.intent.event_id() {
+            return Err(OperationError::InvalidCommand);
+        }
+        self.source = self.source.with_envelope(event);
+        Ok(self)
+    }
     pub const fn source(&self) -> &StockEnvelopeRequest {
         &self.source
     }

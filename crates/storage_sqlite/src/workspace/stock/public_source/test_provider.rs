@@ -155,9 +155,7 @@ async fn public_source_close_drains_admitted_work_after_observer_loss() {
     let provider = reopen(&mut r).await;
     let capture = r.capture("listing_fixed");
     let minimum = r.minimum().await;
-    provider
-        .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+    provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
     let mut future = Box::pin(r.store.retain_stock_listing(
         r.binding.clone(),
         minimum,
@@ -211,9 +209,7 @@ async fn public_source_writes_recheck_expiry_and_head_rows_after_actual_protecti
         let capture = r.capture("listing_unsupported");
         let minimum = r.minimum().await;
         let mut raw = database(&r).await;
-        provider
-            .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+        provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
         let mut future = Box::pin(r.store.retain_stock_listing(
             r.binding.clone(),
             minimum,

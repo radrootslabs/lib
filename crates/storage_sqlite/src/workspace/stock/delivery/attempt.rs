@@ -206,7 +206,9 @@ async fn decode_entry(
         || h.revision <= consent.frame.header.revision
         || plan.bound.attempt().operation_id() != original.operation_id()
         || plan.bound.attempt().command_digest() != h.digest
-        || plan.frame.header.actor != outer.frame.header.actor
+        || (outer.frame.header.family == ledger::Family::Envelope
+            && plan.frame.header.actor != outer.frame.header.actor)
+        || plan.frame.header.actor.participant() != outer.frame.header.actor.participant()
         || command.operation_id() != original.operation_id()
         || consent.command.digest() != h.digest
         || value.at >= consent.expires

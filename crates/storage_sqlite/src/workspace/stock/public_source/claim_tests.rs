@@ -327,9 +327,7 @@ async fn lost_claim_observer_drains_and_reopens_as_existing_without_a_permit() {
     let recipient = receipt.rumor().recipients()[0];
     let request = selector(&r, &receipt, recipient).await;
     let provider = reopen(&mut r).await;
-    provider
-        .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+    provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
     let mut pending = Box::pin(
         r.store
             .claim_stock_signing_attempt(request, r.enrollment.proof()),
@@ -404,9 +402,7 @@ async fn claim_rechecks_original_plan_projection_grant_root_and_clock_after_prov
         let request = selector(&r, &receipt, recipient).await;
         let provider = reopen(&mut r).await;
         let mut raw = database(&r).await;
-        provider
-            .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+        provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
         let mut pending = Box::pin(
             r.store
                 .claim_stock_signing_attempt(request, r.enrollment.proof()),

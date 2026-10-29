@@ -14,10 +14,57 @@ use sqlx::Row;
 use zeroize::Zeroizing;
 mod codec;
 mod projection;
+mod rewrap;
+mod rewrap_admission;
 use codec::Original;
 pub(in crate::workspace::stock) use codec::Retained;
 pub(super) use codec::read_entry;
-pub(super) use projection::{Projection, raw_projection};
+pub(super) use projection::{
+    Projection, raw_admission_projection, raw_projection, raw_rewrap_projection,
+};
+pub(in crate::workspace) use rewrap_admission::prepare as prepare_rewrap;
+pub(in crate::workspace::stock) async fn admission_history(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    entry: OperationId,
+) -> Result<ledger::HistoryEntry, OperationError> {
+    Ok(Box::pin(rewrap_admission::read_entry(
+        connection, input, crypto, binding, entry,
+    ))
+    .await?
+    .into_history())
+}
+pub(in crate::workspace) use rewrap::{attempt as rewrap_attempt, page};
+pub(in crate::workspace) use rewrap_admission::reconcile as reconcile_rewrap_admission;
+pub(in crate::workspace) enum CaptureRequest {
+    Original(Box<StockEnvelopeRequest>),
+    Rewrap(Box<radroots_storage::inventory::StockRewrapRequest>),
+}
+impl CaptureRequest {
+    pub(in crate::workspace) fn source(&self) -> &StockEnvelopeRequest {
+        match self {
+            Self::Original(request) => request,
+            Self::Rewrap(request) => request.source(),
+        }
+    }
+}
+pub(in crate::workspace) async fn capture_obtained(
+    turn: &mut Turn<'_>,
+    request: CaptureRequest,
+    proof: AttachmentProof,
+    candidate: PrivateEnvelopeCandidate,
+) -> Result<StockEnvelopeOutcome, OperationError> {
+    match request {
+        CaptureRequest::Original(request) => {
+            Box::pin(capture(turn, *request, proof, candidate)).await
+        }
+        CaptureRequest::Rewrap(request) => {
+            Box::pin(rewrap::capture(turn, *request, proof, candidate)).await
+        }
+    }
+}
 
 async fn selected_entry(
     connection: &mut SqliteConnection,
@@ -26,7 +73,7 @@ async fn selected_entry(
     recipient: PublicKey,
 ) -> Result<Option<OperationId>, OperationError> {
     let row: Option<Vec<u8>> = sqlx::query_scalar(
-        "SELECT entry_id FROM stock_envelopes WHERE actor=? AND operation_id=? AND recipient=?",
+        "SELECT CASE WHEN length(entry_id)=32 THEN entry_id END FROM stock_envelopes WHERE actor=? AND operation_id=? AND recipient=?",
     )
     .bind(actor.as_bytes().as_slice())
     .bind(operation.as_bytes().as_slice())
@@ -42,7 +89,7 @@ async fn selected_entry(
     })
     .transpose()
 }
-pub(in crate::workspace::stock) async fn lookup(
+async fn lookup_original(
     turn: &mut Turn<'_>,
     request: &StockEnvelopeRequest,
 ) -> Result<Option<Retained>, OperationError> {
@@ -73,6 +120,22 @@ pub(in crate::workspace::stock) async fn lookup(
         return Err(OperationError::RecoveryRequired);
     }
     Ok(Some(retained))
+}
+pub(in crate::workspace::stock) async fn lookup(
+    turn: &mut Turn<'_>,
+    request: &StockEnvelopeRequest,
+) -> Result<Option<Retained>, OperationError> {
+    let original = Box::pin(lookup_original(turn, request)).await?;
+    let Some(event) = request.envelope_event_id() else {
+        return Ok(original);
+    };
+    if original
+        .as_ref()
+        .is_some_and(|value| value.source.receipt().event_id() == event)
+    {
+        return Ok(original);
+    }
+    Box::pin(rewrap::lookup(turn, request, event)).await
 }
 pub(in crate::workspace::stock) async fn full_proof(
     turn: &mut Turn<'_>,
@@ -113,6 +176,9 @@ pub(in crate::workspace) async fn capture(
     proof: AttachmentProof,
     candidate: PrivateEnvelopeCandidate,
 ) -> Result<StockEnvelopeOutcome, OperationError> {
+    if request.envelope_event_id().is_some() {
+        return Err(OperationError::InvalidCommand);
+    }
     if *turn.uncertain {
         return Err(OperationError::RecoveryRequired);
     }
@@ -122,7 +188,7 @@ pub(in crate::workspace) async fn capture(
         return Err(OperationError::Unauthorized);
     }
     let (authority, record, root, grant) = super::read(turn.connection, input, turn.crypto).await?;
-    if !matches!(authority.catalog, 16 | 17) {
+    if !matches!(authority.catalog, 16..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
@@ -247,7 +313,7 @@ pub(in crate::workspace) async fn capture(
         }
         if let Some(frame) = &frame {
             frame.insert_record(&mut tx).await?;
-            Projection {
+            Projection::Original {
                 operation: request.operation_id(),
                 recipient: request.recipient(),
             }
@@ -297,11 +363,12 @@ pub(in crate::workspace) async fn read(
         return Err(OperationError::RecoveryRequired);
     }
     turn.namespace.validate()?;
+    let input = request.binding().input();
     let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if !matches!(catalog, 16 | 17) {
+    if !matches!(catalog, 16..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let auth = Box::pin(super::signing_plan::load(
@@ -313,7 +380,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 16 | 17) {
+    if !matches!(auth.access.authority.catalog, 16..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let witness = Box::pin(full_proof(turn, &request, &auth.access.authority)).await?;
@@ -330,6 +397,19 @@ pub(in crate::workspace) async fn read(
         witness.confirm(&mut tx).await?;
         if let Some(retained) = &retained {
             retained.confirm(&mut tx).await?;
+        } else {
+            let count: i64 = if let Some(event) = request.envelope_event_id() {
+                sqlx::query_scalar("SELECT count(*) FROM stock_rewraps WHERE actor=? AND operation_id=? AND recipient=? AND event_id=?")
+                    .bind(input.participant().as_bytes().as_slice())
+                    .bind(request.operation_id().as_bytes().as_slice()).bind(request.recipient().as_bytes().as_slice())
+                    .bind(event.as_bytes().as_slice()).fetch_one(&mut *tx).await.map_err(|_| OperationError::RecoveryRequired)?
+            } else {
+                sqlx::query_scalar("SELECT count(*) FROM stock_envelopes WHERE actor=? AND operation_id=? AND recipient=?")
+                    .bind(input.participant().as_bytes().as_slice())
+                    .bind(request.operation_id().as_bytes().as_slice()).bind(request.recipient().as_bytes().as_slice())
+                    .fetch_one(&mut *tx).await.map_err(|_| OperationError::RecoveryRequired)?
+            };
+            if count != 0 { return Err(OperationError::RecoveryRequired); }
         }
         turn.namespace.validate()?;
         Ok(())

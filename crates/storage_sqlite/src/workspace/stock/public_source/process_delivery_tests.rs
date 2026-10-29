@@ -11,7 +11,7 @@ use radroots_transport::{
     sink::DeliveryTargetReceipt,
 };
 
-fn candidate(c: &Control) -> PrivateEnvelopeCandidate {
+pub(super) fn candidate(c: &Control) -> PrivateEnvelopeCandidate {
     PrivateEnvelopeCandidate::from_obtained(c.recipient, &c.raw, &c.wrapping_key.unwrap()).unwrap()
 }
 fn intent(c: &Control) -> DeliveryIntent {
@@ -24,19 +24,26 @@ fn intent(c: &Control) -> DeliveryIntent {
     )
     .unwrap()
 }
-fn source(
+pub(super) fn source(
     binding: radroots_storage::workspace::WorkspaceBinding,
     minimum: InventoryCheckpointRef,
     c: &Control,
 ) -> StockEnvelopeRequest {
-    StockEnvelopeRequest::new(binding, minimum, c.operation, c.digest, c.recipient, None).unwrap()
+    let request =
+        StockEnvelopeRequest::new(binding, minimum, c.operation, c.digest, c.recipient, None)
+            .unwrap();
+    if c.rewrap.is_some() {
+        request.with_envelope(candidate(c).event_id())
+    } else {
+        request
+    }
 }
-fn request(
+pub(super) fn request(
     binding: radroots_storage::workspace::WorkspaceBinding,
     minimum: InventoryCheckpointRef,
     c: &Control,
 ) -> StockDeliveryRequest {
-    StockDeliveryRequest::new(
+    let request = StockDeliveryRequest::new(
         binding,
         minimum,
         c.operation,
@@ -44,7 +51,12 @@ fn request(
         c.recipient,
         intent(c),
     )
-    .unwrap()
+    .unwrap();
+    if c.rewrap.is_some() {
+        request.with_envelope(candidate(c).event_id()).unwrap()
+    } else {
+        request
+    }
 }
 fn observation(
     attempt: &StockDeliveryAttempt,
@@ -72,7 +84,7 @@ pub(super) async fn prepare(r: &Rig, c: &Control) -> Option<TransactionId> {
             .unwrap(),
         StockEnvelopeOutcome::Committed(_)
     ));
-    if matches!(c.edge, Edge::Observation) {
+    if matches!(c.edge, Edge::Observation | Edge::RewrapObservation) {
         let StockDeliveryAttemptOutcome::Claimed(attempt) = r
             .store
             .prepare_stock_delivery_attempt(
@@ -99,7 +111,7 @@ pub(super) async fn apply(
     proof: &AttachmentProof,
     c: &Control,
 ) -> TransactionId {
-    if matches!(c.edge, Edge::Delivery) {
+    if matches!(c.edge, Edge::Delivery | Edge::RewrapDelivery) {
         let StockDeliveryAttemptOutcome::Claimed(attempt) = store
             .prepare_stock_delivery_attempt(
                 request(binding, minimum, c),
@@ -169,7 +181,7 @@ pub(super) async fn verify(r: &Rig, c: &Control, transaction: Option<Transaction
         .unwrap();
     assert_eq!(
         loaded.is_some(),
-        matches!(c.edge, Edge::Observation) || !c.before
+        matches!(c.edge, Edge::Observation | Edge::RewrapObservation) || !c.before
     );
     assert_eq!(transaction.is_some(), !c.before);
     let has_attempt = loaded.is_some();
@@ -178,7 +190,7 @@ pub(super) async fn verify(r: &Rig, c: &Control, transaction: Option<Transaction
         assert_eq!(attempt.intent(), &intent(c));
         assert_eq!(
             Some(attempt.transaction_id()),
-            if matches!(c.edge, Edge::Delivery) {
+            if matches!(c.edge, Edge::Delivery | Edge::RewrapDelivery) {
                 transaction
             } else {
                 c.delivery_transaction
@@ -213,7 +225,7 @@ pub(super) async fn verify(r: &Rig, c: &Control, transaction: Option<Transaction
             .await
             .unwrap();
         assert!(page.next_after().is_none());
-        let confirmed = matches!(c.edge, Edge::Observation) && !c.before;
+        let confirmed = matches!(c.edge, Edge::Observation | Edge::RewrapObservation) && !c.before;
         assert_eq!(page.entries().len(), usize::from(confirmed));
         if confirmed {
             let original = &page.entries()[0];
@@ -282,7 +294,7 @@ pub(super) async fn verify(r: &Rig, c: &Control, transaction: Option<Transaction
     assert_eq!(summary.attempt_count(), u16::from(has_attempt));
     assert_eq!(
         summary.acceptance_satisfied().unwrap(),
-        matches!(c.edge, Edge::Observation) && !c.before
+        matches!(c.edge, Edge::Observation | Edge::RewrapObservation) && !c.before
     );
     if has_attempt {
         assert_eq!(summary.targets()[0].potential_attempts(), 1);

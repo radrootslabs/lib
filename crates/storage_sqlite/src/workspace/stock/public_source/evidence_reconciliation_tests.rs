@@ -128,7 +128,7 @@ async fn refused_stock_recovery_preflight_keeps_writer_and_cached_original_autho
     remove_fault(&mut database, true).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v17", 0);
+        .arm(Direction::Unwrap, r.authority_schema(), 0);
     let mut recovery = Box::pin(reconcile(&r, &request));
     assert!(futures::poll!(recovery.as_mut()).is_pending());
     provider.gate.entered();
@@ -184,7 +184,7 @@ async fn lost_reconciliation_observer_drains_the_actual_replacement_and_original
     remove_fault(&mut database, true).await;
     provider
         .gate
-        .arm(Direction::Unwrap, "radroots.seller_stock.authority.v17", 0);
+        .arm(Direction::Unwrap, r.authority_schema(), 0);
     let mut recovery = Box::pin(reconcile(&r, &request));
     assert!(futures::poll!(recovery.as_mut()).is_pending());
     provider.gate.entered();

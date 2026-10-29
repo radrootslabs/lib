@@ -11,17 +11,19 @@ struct Endpoint {
 struct Recipient {
     participant: PublicKey,
     source: Option<envelope::Retained>,
+    original: Option<radroots_storage::inventory::StockEnvelopeReceipt>,
     first: Option<DeliveryIntent>,
+    first_source: Option<radroots_storage::inventory::StockEnvelopeReceipt>,
     attempts: u16,
     endpoints: Vec<Endpoint>,
 }
 impl Recipient {
     fn observe_attempt(&mut self, value: &StockDeliveryAttempt) -> Result<(), OperationError> {
-        if self
-            .source
-            .as_ref()
-            .is_none_or(|source| source.source.receipt() != value.source().receipt())
-        {
+        if self.original.as_ref().is_none_or(|source| {
+            source.evidence() != value.source().receipt().evidence()
+                || source.installation_transaction_id()
+                    != value.source().receipt().installation_transaction_id()
+        }) {
             return Err(OperationError::RecoveryRequired);
         }
         if let Some(original) = &self.first {
@@ -30,6 +32,7 @@ impl Recipient {
             }
         } else {
             self.first = Some(value.intent().clone());
+            self.first_source = Some(value.source().receipt());
             self.endpoints = value
                 .intent()
                 .targets()
@@ -77,6 +80,13 @@ impl Recipient {
             .ok_or(OperationError::RecoveryRequired)?;
         if value.target_ordinal() == 0 || value.target_ordinal() > endpoint.attempts {
             return Err(OperationError::RecoveryRequired);
+        }
+        if self
+            .source
+            .as_ref()
+            .is_none_or(|source| source.source.receipt().event_id() != value.source().event_id())
+        {
+            return Ok(());
         }
         endpoint.accepted |= value.kind() == DeliveryObservationKind::Accepted;
         endpoint.last = Some(value.kind());
@@ -130,11 +140,27 @@ impl Graph {
                 *participant,
                 None,
             )?;
-            let source = Box::pin(envelope::lookup(turn, &selector)).await?;
+            let original_source = Box::pin(envelope::lookup(turn, &selector)).await?;
+            let original = original_source.as_ref().map(|value| value.source.receipt());
+            let source = if *participant == request.recipient() {
+                if let Some(event) = request.envelope_event_id() {
+                    Some(
+                        Box::pin(envelope::lookup(turn, &selector.with_envelope(event)))
+                            .await?
+                            .ok_or(OperationError::MissingHistory)?,
+                    )
+                } else {
+                    original_source
+                }
+            } else {
+                original_source
+            };
             recipients.push(Recipient {
                 participant: *participant,
                 source,
+                original,
                 first: None,
+                first_source: None,
                 attempts: 0,
                 endpoints: vec![],
             });
@@ -295,9 +321,10 @@ impl Graph {
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        StockDeliverySummary::from_store_report(
+        StockDeliverySummary::from_store_report_with_policy_source(
             request,
             value.source.as_ref().map(|source| source.source.receipt()),
+            value.first_source,
             value.first.clone(),
             value.attempts,
             targets,

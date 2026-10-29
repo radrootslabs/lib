@@ -453,7 +453,7 @@ pub(super) fn run<'a>(
         }),
         Job::CaptureStockEnvelope(request, proof, candidate, reply) => Box::pin(async move {
             let result = if kind == Kind::SellerStock {
-                Box::pin(stock::envelope::capture(
+                Box::pin(stock::envelope::capture_obtained(
                     &mut stock::inventory::Turn {
                         connection,
                         namespace,
@@ -462,7 +462,7 @@ pub(super) fn run<'a>(
                         clock,
                         uncertain,
                     },
-                    *request,
+                    request,
                     proof,
                     *candidate,
                 ))
@@ -484,6 +484,67 @@ pub(super) fn run<'a>(
                         uncertain,
                     },
                     *request,
+                    proof,
+                ))
+                .await
+            } else {
+                Err(OperationError::UnsupportedOperation)
+            };
+            let _ = reply.send(result);
+        }),
+        Job::StockRewrapAttempt(request, proof, reply) => Box::pin(async move {
+            let result = if kind == Kind::SellerStock {
+                Box::pin(stock::envelope::rewrap_attempt(
+                    &mut stock::inventory::Turn {
+                        connection,
+                        namespace,
+                        selected: input,
+                        crypto,
+                        clock,
+                        uncertain,
+                    },
+                    *request,
+                    proof,
+                ))
+                .await
+            } else {
+                Err(OperationError::UnsupportedOperation)
+            };
+            let _ = reply.send(result);
+        }),
+        Job::PrepareStockRewrap(request, proof, reply) => Box::pin(async move {
+            let result = if kind == Kind::SellerStock {
+                Box::pin(stock::envelope::prepare_rewrap(
+                    &mut stock::inventory::Turn {
+                        connection,
+                        namespace,
+                        selected: input,
+                        crypto,
+                        clock,
+                        uncertain,
+                    },
+                    *request,
+                    proof,
+                ))
+                .await
+            } else {
+                Err(OperationError::UnsupportedOperation)
+            };
+            let _ = reply.send(result);
+        }),
+        Job::StockRewraps(request, after, proof, reply) => Box::pin(async move {
+            let result = if kind == Kind::SellerStock {
+                Box::pin(stock::envelope::page(
+                    &mut stock::inventory::Turn {
+                        connection,
+                        namespace,
+                        selected: input,
+                        crypto,
+                        clock,
+                        uncertain,
+                    },
+                    *request,
+                    after,
                     proof,
                 ))
                 .await
@@ -793,7 +854,8 @@ pub(super) fn run<'a>(
             }
             let _ = reply.send(result);
         }),
-        job @ (Job::RecoverStockEnvelope(..)
+        job @ (Job::RecoverStockRewrapAdmission(..)
+        | Job::RecoverStockEnvelope(..)
         | Job::RecoverStockObservation(..)
         | Job::RecoverCapture(..)
         | Job::RecoverStockEvidence(..)

@@ -11,7 +11,7 @@ async fn authorized(
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if catalog != 17 {
+    if !matches!(catalog, 17 | 18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let loading = signing_plan::load(
@@ -23,7 +23,7 @@ async fn authorized(
         proof,
     );
     let auth = Box::pin(loading).await?;
-    if auth.access.authority.catalog != 17 {
+    if !matches!(auth.access.authority.catalog, 17 | 18) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !auth
@@ -263,6 +263,13 @@ pub(in crate::workspace) async fn query_attempt(
 ) -> Result<Option<StockDeliveryAttempt>, OperationError> {
     validate_request(&request)?;
     let (auth, witness, mut graph) = Box::pin(read(turn, &source, &proof, Some(&request))).await?;
+    if graph.found_attempt.as_ref().is_some_and(|value| {
+        graph.source(source.recipient()).is_ok_and(|selected| {
+            selected.source.receipt().event_id() != value.report.source().receipt().event_id()
+        })
+    }) {
+        return Err(OperationError::InvalidEvidence);
+    }
     Box::pin(confirm_read(turn, &auth, &witness, &proof)).await?;
     Ok(graph.found_attempt.take().map(|value| value.report))
 }

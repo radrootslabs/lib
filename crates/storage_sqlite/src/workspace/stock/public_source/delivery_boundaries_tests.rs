@@ -127,9 +127,7 @@ async fn late_extra_projection_cannot_cross_the_final_attempt_transaction() {
     let selected = request(&r, &original, &outer, 21).await;
     let provider = reopen(&mut r).await;
     let mut db = database(&r).await;
-    provider
-        .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+    provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
     let mut pending = Box::pin(r.store.prepare_stock_delivery_attempt(selected, proof(&r)));
     assert!(futures::poll!(pending.as_mut()).is_pending());
     provider.gate.entered();

@@ -34,6 +34,7 @@ fn vector(name: &str) -> String {
         .into()
 }
 struct Rig {
+    catalog: i64,
     fixture: CryptoFixture,
     path: std::path::PathBuf,
     store: NativeWorkspace,
@@ -87,6 +88,7 @@ impl Rig {
             .await
             .unwrap();
         Self {
+            catalog,
             fixture,
             path,
             store,
@@ -94,6 +96,9 @@ impl Rig {
             binding,
             clock,
         }
+    }
+    fn authority_schema(&self) -> &'static str {
+        crate::workspace::stock::tests::catalog_authority_schema(self.catalog)
     }
     fn capture_raw(&self, raw: &str) -> StockListingCapture {
         let mut observed = ObservedHead::listing(

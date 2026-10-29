@@ -13,6 +13,7 @@ pub struct StockEnvelopeRequest {
     digest: CommandDigest,
     recipient: PublicKey,
     observed: Option<NonZeroU64>,
+    envelope: Option<EnvelopeEventId>,
 }
 impl StockEnvelopeRequest {
     pub fn new(
@@ -36,7 +37,17 @@ impl StockEnvelopeRequest {
             digest,
             recipient,
             observed,
+            envelope: None,
         })
+    }
+    /// Selects an exact retained outer. This metadata grants neither wrapping
+    /// nor transport permission. Omission keeps original-envelope semantics.
+    pub const fn with_envelope(mut self, event: EnvelopeEventId) -> Self {
+        self.envelope = Some(event);
+        self
+    }
+    pub const fn envelope_event_id(&self) -> Option<EnvelopeEventId> {
+        self.envelope
     }
     pub const fn binding(&self) -> &WorkspaceBinding {
         &self.binding
@@ -81,6 +92,7 @@ pub struct StockEnvelopeReceipt {
     digest: [u8; 32],
     checkpoint: InventoryCheckpointRef,
     observed: Option<NonZeroU64>,
+    rewrap_admission: Option<TransactionId>,
 }
 impl StockEnvelopeReceipt {
     /// Checks scoped report shape only. The concrete host must authenticate
@@ -105,6 +117,9 @@ impl StockEnvelopeReceipt {
             || evidence.recipient() != request.recipient()
             || checkpoint.authority() != request.binding().input().authority()
             || checkpoint.revision().get() == 0
+            || request
+                .envelope_event_id()
+                .is_some_and(|selected| selected != event)
         {
             return Err(OperationError::RecoveryRequired);
         }
@@ -116,6 +131,7 @@ impl StockEnvelopeReceipt {
             digest,
             checkpoint,
             observed: request.observed_at_unix_ms(),
+            rewrap_admission: None,
         })
     }
     pub const fn attempt(&self) -> CommitAttempt {
@@ -141,6 +157,31 @@ impl StockEnvelopeReceipt {
     }
     pub const fn observed_at_unix_ms(&self) -> Option<NonZeroU64> {
         self.observed
+    }
+    pub const fn rewrap_admission_transaction_id(&self) -> Option<TransactionId> {
+        self.rewrap_admission
+    }
+    /// Links a reported additional outer to its original wrapping admission.
+    /// Only shape is checked; the qualified host authenticates actual F13/F14.
+    pub fn with_rewrap_admission(
+        mut self,
+        admission: &super::StockRewrapAdmission,
+    ) -> Result<Self, OperationError> {
+        let original = admission.original();
+        if self.evidence != original.evidence()
+            || self.installation != original.installation_transaction_id()
+            || self.event == original.event_id()
+            || self.checkpoint.authority() != admission.checkpoint().authority()
+            || self.checkpoint.revision() <= admission.checkpoint().revision()
+            || self.attempt.transaction_id() == Some(admission.transaction_id())
+            || self
+                .rewrap_admission
+                .is_some_and(|transaction| transaction != admission.transaction_id())
+        {
+            return Err(OperationError::RecoveryRequired);
+        }
+        self.rewrap_admission = Some(admission.transaction_id());
+        Ok(self)
     }
 }
 impl fmt::Debug for StockEnvelopeReceipt {

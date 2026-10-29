@@ -148,7 +148,7 @@ pub(in crate::workspace::stock) async fn load(
     proof: &AttachmentProof,
 ) -> Result<Authorized, OperationError> {
     let access = Box::pin(turn.access(binding, minimum, proof)).await?;
-    if !matches!(access.authority.catalog, 10..=17) {
+    if !matches!(access.authority.catalog, 10..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let original = Box::pin(acceptance::codec::read(

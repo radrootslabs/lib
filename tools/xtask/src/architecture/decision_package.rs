@@ -129,7 +129,52 @@ struct StockEnvelopeRetention {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct StockRewrapping {
+    journal_family: u16,
+    admission_journal_family: u16,
+    admission_payload_bytes: u16,
+    admission_window_seconds_max: u16,
+    admission_port: String,
+    admission_recovery_port: String,
+    admission_query_port: String,
+    explicit_request_id_required: bool,
+    newly_confirmed_admission_before_wrapping: bool,
+    existing_or_uncertain_admission_grants_invocation: bool,
+    unknown_admissions_count_toward_limit: bool,
+    descriptor_includes_uncaptured_admissions: bool,
+    admission_repair_grants_history_or_invocation: bool,
+
+    payload_version: u16,
+    payload_prefix_bytes: u32,
+    supported_catalogs: Vec<u16>,
+    retained_unsupported_catalogs: Vec<u16>,
+    raw_max_bytes: u32,
+    worker_charge_bytes: u32,
+    additional_envelopes_per_recipient_max: u16,
+    descriptor_page_max: u16,
+    capture_port: String,
+    recovery_port: String,
+    query_port: String,
+    page_port: String,
+    original_f10_and_same_s_t2_required: bool,
+    default_selection_is_original: bool,
+    new_envelope_selection_explicit: bool,
+    first_policy_source_bound: bool,
+    transport_counters_cumulative: bool,
+    outcomes_scoped_to_exact_envelope: bool,
+    natural_index_transaction_witness_required: bool,
+    existing_bytes_may_be_replaced: bool,
+    original_capture_requires_live_clock_or_grant: bool,
+    capture_or_query_grants_dispatch: bool,
+    physical_stock_effect: bool,
+    temporary_key_retained: bool,
+    provider_io_inside_sql: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NativeSellerStockAuthority {
+    rewrapping: StockRewrapping,
     delivery: StockDelivery,
     envelope_retention: StockEnvelopeRetention,
     qualified_local_recovery: QualifiedLocalRecovery,
@@ -689,7 +734,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
         envelope.journal_family == 10
             && envelope.payload_version == 1
             && envelope.payload_prefix_bytes == 213
-            && envelope.supported_catalogs == [16, 17]
+            && envelope.supported_catalogs == [16, 17, 18]
             && envelope.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             && envelope.raw_max_bytes == 65536
@@ -711,9 +756,52 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !envelope.provider_io_inside_sql,
         "stock envelope retention drift",
     )?;
+    let rewrap = &stock.rewrapping;
+    require(
+        rewrap.journal_family == 14
+            && rewrap.admission_journal_family == 13
+            && rewrap.admission_payload_bytes == 248
+            && rewrap.admission_window_seconds_max == 30
+            && rewrap.admission_port == "InventoryStore.prepare_stock_rewrap"
+            && rewrap.admission_recovery_port == "InventoryStore.reconcile_stock_rewrap_admission"
+            && rewrap.admission_query_port == "InventoryStore.stock_rewrap_attempt"
+            && rewrap.explicit_request_id_required
+            && rewrap.newly_confirmed_admission_before_wrapping
+            && !rewrap.existing_or_uncertain_admission_grants_invocation
+            && rewrap.unknown_admissions_count_toward_limit
+            && rewrap.descriptor_includes_uncaptured_admissions
+            && !rewrap.admission_repair_grants_history_or_invocation
+            && rewrap.payload_version == 1
+            && rewrap.payload_prefix_bytes == 117
+            && rewrap.supported_catalogs == [18]
+            && rewrap.retained_unsupported_catalogs
+                == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+            && rewrap.raw_max_bytes == 65536
+            && rewrap.worker_charge_bytes == 1048576
+            && rewrap.additional_envelopes_per_recipient_max == 192
+            && rewrap.descriptor_page_max == 16
+            && rewrap.capture_port == "InventoryStore.capture_stock_rewrap"
+            && rewrap.recovery_port == "InventoryStore.reconcile_stock_rewrap"
+            && rewrap.query_port == "InventoryStore.stock_envelope"
+            && rewrap.page_port == "InventoryStore.stock_rewraps"
+            && rewrap.original_f10_and_same_s_t2_required
+            && rewrap.default_selection_is_original
+            && rewrap.new_envelope_selection_explicit
+            && rewrap.first_policy_source_bound
+            && rewrap.transport_counters_cumulative
+            && rewrap.outcomes_scoped_to_exact_envelope
+            && rewrap.natural_index_transaction_witness_required
+            && !rewrap.existing_bytes_may_be_replaced
+            && !rewrap.original_capture_requires_live_clock_or_grant
+            && !rewrap.capture_or_query_grants_dispatch
+            && !rewrap.physical_stock_effect
+            && !rewrap.temporary_key_retained
+            && !rewrap.provider_io_inside_sql,
+        "stock rewrapping authority or retention drift",
+    )?;
     let delivery = &stock.delivery;
     require(
-        delivery.supported_catalogs == [17]
+        delivery.supported_catalogs == [17, 18]
             && delivery.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
             && delivery.attempt_journal_family == 11
@@ -772,11 +860,11 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 17
+            && stock.schema_version == 18
             && stock.retained_enrollment_versions == [1]
             && stock.retained_inventory_versions
-                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v17"
+                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v18"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -1055,7 +1143,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
             && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
-            && stock.qualified_local_recovery.native_catalog == 17
+            && stock.qualified_local_recovery.native_catalog == 18
             && stock.qualified_local_recovery.worker_charge_bytes == 1048576
             && stock
                 .qualified_local_recovery
@@ -1118,7 +1206,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.preparation_abort.unsupported_hosts_return == "capability_unavailable"
             && stock.preparation_abort.retained_payload_versions == [1]
             && stock.preparation_abort.retained_v1_requires_absent_claims
-            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16, 17]
+            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16, 17, 18]
             && stock.preparation_abort.untracked_claimed_catalogs == [13, 14]
             && stock.preparation_abort.per_recipient_proof_count == 2
             && stock
@@ -2439,6 +2527,49 @@ mod tests {
             ))
             .is_err()
         );
+    }
+
+    #[test]
+    fn stock_rewrapping_cannot_replace_originals_reset_policy_or_invent_dispatch() {
+        for (field, bad) in [
+            ("journal_family", json!(13)),
+            ("admission_journal_family", json!(14)),
+            ("admission_payload_bytes", json!(247)),
+            ("admission_window_seconds_max", json!(31)),
+            ("explicit_request_id_required", json!(false)),
+            ("newly_confirmed_admission_before_wrapping", json!(false)),
+            (
+                "existing_or_uncertain_admission_grants_invocation",
+                json!(true),
+            ),
+            ("unknown_admissions_count_toward_limit", json!(false)),
+            ("descriptor_includes_uncaptured_admissions", json!(false)),
+            ("admission_repair_grants_history_or_invocation", json!(true)),
+            ("supported_catalogs", json!([17, 18])),
+            ("payload_prefix_bytes", json!(118)),
+            ("additional_envelopes_per_recipient_max", json!(193)),
+            ("descriptor_page_max", json!(17)),
+            ("default_selection_is_original", json!(false)),
+            ("new_envelope_selection_explicit", json!(false)),
+            ("first_policy_source_bound", json!(false)),
+            ("transport_counters_cumulative", json!(false)),
+            ("outcomes_scoped_to_exact_envelope", json!(false)),
+            ("natural_index_transaction_witness_required", json!(false)),
+            ("existing_bytes_may_be_replaced", json!(true)),
+            ("capture_or_query_grants_dispatch", json!(true)),
+            ("physical_stock_effect", json!(true)),
+            ("temporary_key_retained", json!(true)),
+            ("provider_io_inside_sql", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/native_seller_stock_authority/rewrapping/{field}"),
+                    bad
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
     }
 
     #[test]

@@ -74,7 +74,11 @@ impl KeyWrapping for Provider {
     fn wrap<'a>(&'a self, request: WrapRequest<'a>) -> BoxFuture<'a, Result<WrappedSecret, Error>> {
         Box::pin(async move {
             let result = self.inner.wrap(request).await;
-            if request.context().payload_schema().as_str() == "radroots.seller_stock.authority.v17"
+            if request.context().payload_schema().as_str()
+                == format!(
+                    "radroots.seller_stock.authority.v{}",
+                    crate::workspace::stock::schema::CURRENT
+                )
             {
                 self.gate.pause();
             }

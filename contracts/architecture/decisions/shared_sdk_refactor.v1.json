@@ -82,7 +82,7 @@
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
       "captured_replay": "local_replay_safe",
-      "native_catalog": 17,
+      "native_catalog": 18,
       "worker_charge_bytes": 1048576,
       "existing_protected_claim_required": true,
       "current_execute_consent_required": true,
@@ -111,7 +111,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 17,
+    "schema_version": 18,
     "retained_enrollment_versions": [
       1
     ],
@@ -130,9 +130,10 @@
       13,
       14,
       15,
-      16
+      16,
+      17
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v17",
+    "authority_payload_schema": "radroots.seller_stock.authority.v18",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -397,7 +398,8 @@
       "claimed_cleanup_catalogs": [
         15,
         16,
-        17
+        17,
+        18
       ],
       "untracked_claimed_catalogs": [
         13,
@@ -417,7 +419,8 @@
       "payload_prefix_bytes": 213,
       "supported_catalogs": [
         16,
-        17
+        17,
+        18
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -456,7 +459,8 @@
     },
     "delivery": {
       "supported_catalogs": [
-        17
+        17,
+        18
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -523,6 +527,66 @@
       "unbounded_attempt_or_observation_collections": false,
       "physical_stock_effect": false,
       "transport_inside_sql": false
+    },
+    "rewrapping": {
+      "journal_family": 14,
+      "payload_version": 1,
+      "payload_prefix_bytes": 117,
+      "supported_catalogs": [
+        18
+      ],
+      "retained_unsupported_catalogs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "raw_max_bytes": 65536,
+      "worker_charge_bytes": 1048576,
+      "additional_envelopes_per_recipient_max": 192,
+      "descriptor_page_max": 16,
+      "capture_port": "InventoryStore.capture_stock_rewrap",
+      "recovery_port": "InventoryStore.reconcile_stock_rewrap",
+      "query_port": "InventoryStore.stock_envelope",
+      "page_port": "InventoryStore.stock_rewraps",
+      "original_f10_and_same_s_t2_required": true,
+      "default_selection_is_original": true,
+      "new_envelope_selection_explicit": true,
+      "first_policy_source_bound": true,
+      "transport_counters_cumulative": true,
+      "outcomes_scoped_to_exact_envelope": true,
+      "natural_index_transaction_witness_required": true,
+      "existing_bytes_may_be_replaced": false,
+      "original_capture_requires_live_clock_or_grant": false,
+      "capture_or_query_grants_dispatch": false,
+      "physical_stock_effect": false,
+      "temporary_key_retained": false,
+      "provider_io_inside_sql": false,
+      "admission_journal_family": 13,
+      "admission_payload_bytes": 248,
+      "admission_window_seconds_max": 30,
+      "admission_port": "InventoryStore.prepare_stock_rewrap",
+      "admission_recovery_port": "InventoryStore.reconcile_stock_rewrap_admission",
+      "admission_query_port": "InventoryStore.stock_rewrap_attempt",
+      "explicit_request_id_required": true,
+      "newly_confirmed_admission_before_wrapping": true,
+      "existing_or_uncertain_admission_grants_invocation": false,
+      "unknown_admissions_count_toward_limit": true,
+      "descriptor_includes_uncaptured_admissions": true,
+      "admission_repair_grants_history_or_invocation": false
     }
   },
   "provenance": {

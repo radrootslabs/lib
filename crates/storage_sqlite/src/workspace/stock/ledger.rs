@@ -28,6 +28,8 @@ pub(super) enum Family {
     Envelope,
     DeliveryAttempt,
     DeliveryObservation,
+    RewrapAdmission,
+    RewrappedEnvelope,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -87,6 +89,8 @@ impl Header {
                     | Family::Envelope
                     | Family::DeliveryAttempt
                     | Family::DeliveryObservation
+                    | Family::RewrappedEnvelope
+                    | Family::RewrapAdmission
             ) != self.related_operation.is_some()
             || (self.family == Family::Consent) != self.subject_grant.is_some()
             || self.bytes == 0
@@ -346,6 +350,8 @@ impl Family {
             Self::Envelope => 10,
             Self::DeliveryAttempt => 11,
             Self::DeliveryObservation => 12,
+            Self::RewrapAdmission => 13,
+            Self::RewrappedEnvelope => 14,
         }
     }
 }
@@ -503,14 +509,14 @@ pub(super) async fn history(
             ))
             .await
         }
-        Some(2) if matches!(authority.catalog, 9..=17) => {
+        Some(2) if matches!(authority.catalog, 9..=18) => {
             Box::pin(history_family_2(
                 connection, input, crypto, binding, authority, operation,
             ))
             .await
         }
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10..=17) => {
+        Some(3) if matches!(authority.catalog, 10..=18) => {
             Box::pin(history_family_3(
                 connection, input, crypto, binding, authority, operation,
             ))
@@ -528,7 +534,7 @@ pub(super) async fn history(
             ))
             .await
         }
-        Some(6) if matches!(authority.catalog, 12..=17) => {
+        Some(6) if matches!(authority.catalog, 12..=18) => {
             Box::pin(history_family_6(
                 connection, input, crypto, binding, authority, operation,
             ))
@@ -553,6 +559,18 @@ pub(super) async fn history(
             .await
         }
         Some(10) if authority.catalog >= 16 => {
+            Box::pin(history_family_10(
+                connection, input, crypto, binding, authority, operation,
+            ))
+            .await
+        }
+        Some(13) if authority.catalog >= 18 => Ok(Some(
+            Box::pin(super::envelope::admission_history(
+                connection, input, crypto, binding, operation,
+            ))
+            .await?,
+        )),
+        Some(14) if authority.catalog >= 18 => {
             Box::pin(history_family_10(
                 connection, input, crypto, binding, authority, operation,
             ))
@@ -937,10 +955,19 @@ impl HistoryEntry {
             (_, None) => {}
         }
         match (header.family, self.envelope) {
-            (Family::Envelope, Some(projection)) => {
+            (Family::Envelope, Some(projection @ super::envelope::Projection::Original { .. })) => {
                 hash.update(projection.digest(header.actor.participant(), header.operation))
             }
-            (Family::Envelope, None) | (_, Some(_)) => {
+            (
+                Family::RewrapAdmission,
+                Some(projection @ super::envelope::Projection::Admission { .. }),
+            ) => hash.update(projection.digest(header.actor.participant(), header.operation)),
+            (
+                Family::RewrappedEnvelope,
+                Some(projection @ super::envelope::Projection::Rewrap { .. }),
+            ) => hash.update(projection.digest(header.actor.participant(), header.operation)),
+            (Family::Envelope | Family::RewrapAdmission | Family::RewrappedEnvelope, _)
+            | (_, Some(_)) => {
                 return Err(OperationError::RecoveryRequired);
             }
             (_, None) => {}

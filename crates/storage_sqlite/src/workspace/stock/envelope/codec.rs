@@ -153,8 +153,8 @@ pub(super) fn head(header: &ledger::Header, body: &[u8]) -> CheckpointDigest {
 pub(in crate::workspace::stock) struct Retained {
     pub(in crate::workspace::stock) frame: ledger::Retained,
     pub source: StockEnvelopeSource,
-    projection: Projection,
-    installation: OperationId,
+    pub(super) projection: Projection,
+    pub(super) installation: OperationId,
 }
 impl Retained {
     pub(in crate::workspace::stock) fn installation_entry(&self) -> OperationId {
@@ -221,9 +221,29 @@ pub(in crate::workspace::stock) async fn read_entry(
     let Some(frame) = Box::pin(ledger::read(connection, input, crypto, entry)).await? else {
         return Ok(None);
     };
+    if frame.header.family == ledger::Family::RewrappedEnvelope {
+        return Ok(Some(
+            Box::pin(super::rewrap::decode_entry(
+                connection, input, crypto, binding, frame,
+            ))
+            .await?,
+        ));
+    }
     Ok(Some(
         Box::pin(decode_entry(connection, input, crypto, binding, frame)).await?,
     ))
+}
+pub(super) async fn read_original_entry(
+    connection: &mut SqliteConnection,
+    input: &AttachmentInput,
+    crypto: &WorkspaceCrypto,
+    binding: &WorkspaceBinding,
+    entry: OperationId,
+) -> Result<Retained, OperationError> {
+    let frame = Box::pin(ledger::read(connection, input, crypto, entry))
+        .await?
+        .ok_or(OperationError::RecoveryRequired)?;
+    Box::pin(decode_entry(connection, input, crypto, binding, frame)).await
 }
 async fn decode_entry(
     connection: &mut SqliteConnection,
@@ -336,7 +356,7 @@ async fn decode_entry(
         .map_err(|_| OperationError::RecoveryRequired)?;
     let retained = Retained {
         installation: original.installation.frame.header.operation,
-        projection: Projection {
+        projection: Projection::Original {
             operation,
             recipient: receipt.recipient(),
         },

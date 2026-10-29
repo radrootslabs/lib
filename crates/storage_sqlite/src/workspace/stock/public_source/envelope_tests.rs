@@ -9,6 +9,8 @@ use radroots_storage::{
 use std::num::NonZeroU64;
 #[path = "delivery_tests.rs"]
 mod delivery_tests;
+#[path = "rewrap_tests.rs"]
+mod rewrapping;
 fn proof(r: &Rig) -> AttachmentProof {
     r.enrollment
         .proof()
@@ -290,9 +292,7 @@ async fn late_original_or_projection_damage_cannot_commit_a_partially_authentica
         let selected = envelope_request(&r, &original, outer.recipient(), None).await;
         let provider = reopen(&mut r).await;
         let mut db = database(&r).await;
-        provider
-            .gate
-            .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+        provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
         let mut pending = Box::pin(r.store.capture_stock_envelope(selected, proof(&r), &outer));
         assert!(futures::poll!(pending.as_mut()).is_pending());
         provider.gate.entered();
@@ -428,9 +428,7 @@ async fn lost_outer_observer_is_drained_and_one_exact_record_survives_reopen() {
     let (mut r, original, _, outer) = setup(17).await;
     let selected = envelope_request(&r, &original, outer.recipient(), None).await;
     let provider = reopen(&mut r).await;
-    provider
-        .gate
-        .arm(Direction::Wrap, "radroots.seller_stock.authority.v17", 0);
+    provider.gate.arm(Direction::Wrap, r.authority_schema(), 0);
     let mut pending = Box::pin(r.store.capture_stock_envelope(selected, proof(&r), &outer));
     assert!(futures::poll!(pending.as_mut()).is_pending());
     provider.gate.entered();

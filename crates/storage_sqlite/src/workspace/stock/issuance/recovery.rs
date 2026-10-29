@@ -81,7 +81,7 @@ pub(in crate::workspace) async fn authorize(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 13..=17) {
+    if !matches!(auth.access.authority.catalog, 13..=18) {
         return Err(OperationError::UnsupportedOperation);
     }
     let plan = auth.plan.as_ref().ok_or(OperationError::StaleState)?;

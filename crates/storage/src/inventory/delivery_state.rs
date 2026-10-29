@@ -73,6 +73,7 @@ impl fmt::Debug for StockDeliveryTargetProgress {
 pub struct StockDeliverySummary {
     source: Option<StockEnvelopeReceipt>,
     first: Option<DeliveryIntent>,
+    policy_source: Option<StockEnvelopeReceipt>,
     attempts: u16,
     targets: Box<[StockDeliveryTargetProgress]>,
     checkpoint: InventoryCheckpointRef,
@@ -83,6 +84,29 @@ impl StockDeliverySummary {
     pub fn from_store_report(
         request: &StockEnvelopeRequest,
         source: Option<StockEnvelopeReceipt>,
+        first: Option<DeliveryIntent>,
+        attempts: u16,
+        targets: Vec<StockDeliveryTargetProgress>,
+        checkpoint: InventoryCheckpointRef,
+    ) -> Result<Self, OperationError> {
+        let policy_source = first.as_ref().and(source);
+        Self::from_store_report_with_policy_source(
+            request,
+            source,
+            policy_source,
+            first,
+            attempts,
+            targets,
+            checkpoint,
+        )
+    }
+    /// Validates an envelope-scoped projection while retaining the actual first
+    /// publication policy's source. A new carrier cannot renew its target set,
+    /// criterion or cumulative invocation budget. Reports grant no dispatch.
+    pub fn from_store_report_with_policy_source(
+        request: &StockEnvelopeRequest,
+        source: Option<StockEnvelopeReceipt>,
+        policy_source: Option<StockEnvelopeReceipt>,
         first: Option<DeliveryIntent>,
         attempts: u16,
         targets: Vec<StockDeliveryTargetProgress>,
@@ -103,6 +127,26 @@ impl StockDeliverySummary {
                 || source.recipient() != request.recipient()
                 || source.checkpoint().authority() != checkpoint.authority()
                 || source.checkpoint().revision() > checkpoint.revision()
+                || request
+                    .envelope_event_id()
+                    .is_some_and(|event| event != source.event_id())
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+        }
+        if let Some(policy_source) = policy_source {
+            let selected = source.ok_or(OperationError::RecoveryRequired)?;
+            let policy_attempt = policy_source.attempt();
+            let selected_attempt = selected.attempt();
+            if policy_source.evidence() != selected.evidence()
+                || policy_source.installation_transaction_id()
+                    != selected.installation_transaction_id()
+                || policy_attempt.workspace_id() != selected_attempt.workspace_id()
+                || policy_attempt.operation_id() != selected_attempt.operation_id()
+                || policy_attempt.command_digest() != selected_attempt.command_digest()
+                || policy_source.checkpoint().authority() != checkpoint.authority()
+                || policy_source.checkpoint().revision() > checkpoint.revision()
+                || first.is_none()
             {
                 return Err(OperationError::RecoveryRequired);
             }
@@ -114,7 +158,8 @@ impl StockDeliverySummary {
             Some(intent)
                 if attempts == 0
                     || intent.role() != ArtifactRole::GiftWrap
-                    || source.is_none_or(|source| source.event_id() != intent.event_id())
+                    || policy_source
+                        .is_none_or(|source| source.event_id() != intent.event_id())
                     || intent
                         .targets()
                         .targets()
@@ -137,6 +182,7 @@ impl StockDeliverySummary {
         Ok(Self {
             source,
             first,
+            policy_source,
             attempts,
             targets: targets.into_boxed_slice(),
             checkpoint,
@@ -147,6 +193,11 @@ impl StockDeliverySummary {
     }
     pub const fn original_intent(&self) -> Option<&DeliveryIntent> {
         self.first.as_ref()
+    }
+    /// Source of the first immutable target policy, which may differ from the
+    /// explicitly selected rewrapped envelope.
+    pub const fn publication_policy_source(&self) -> Option<StockEnvelopeReceipt> {
+        self.policy_source
     }
     pub const fn attempt_count(&self) -> u16 {
         self.attempts
@@ -211,6 +262,9 @@ impl StockDeliveryObservationPage {
                 || original.recipient() != request.recipient()
                 || entry.checkpoint().authority() != checkpoint.authority()
                 || entry.checkpoint().revision() > checkpoint.revision()
+                || request
+                    .envelope_event_id()
+                    .is_some_and(|event| event != original.event_id())
             {
                 return Err(OperationError::RecoveryRequired);
             }

@@ -26,7 +26,7 @@ fn intent(outer: &PrivateEnvelopeCandidate, request: u8) -> DeliveryIntent {
     )
     .unwrap()
 }
-async fn request(
+pub(super) async fn request(
     r: &Rig,
     original: &StockAcceptanceReceipt,
     outer: &PrivateEnvelopeCandidate,
@@ -42,7 +42,7 @@ async fn request(
     )
     .unwrap()
 }
-async fn claim(
+pub(super) async fn claim(
     r: &Rig,
     original: &StockAcceptanceReceipt,
     outer: &PrivateEnvelopeCandidate,
@@ -58,7 +58,7 @@ async fn claim(
     };
     value
 }
-fn observed(
+pub(super) fn observed(
     attempt: &StockDeliveryAttempt,
     outcome: DeliveryOutcome,
     at: Option<NonZeroU64>,
@@ -70,7 +70,10 @@ fn observed(
     )
     .unwrap()
 }
-async fn save(r: &Rig, observation: &StockDeliveryObservation) -> StockDeliveryObservationReceipt {
+pub(super) async fn save(
+    r: &Rig,
+    observation: &StockDeliveryObservation,
+) -> StockDeliveryObservationReceipt {
     let StockDeliveryObservationOutcome::Committed(receipt) = r
         .store
         .record_stock_delivery_observation(&r.binding, r.enrollment.proof(), observation)
