@@ -1535,9 +1535,11 @@ pub fn radroots_storage::inventory::StockDeliveryObservationReceipt::fmt(&self, 
 pub struct radroots_storage::inventory::StockDeliveryRequest
 impl radroots_storage::inventory::StockDeliveryRequest
 pub fn radroots_storage::inventory::StockDeliveryRequest::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::inventory::StockDeliveryRequest::expected_attempt_count(&self) -> core::option::Option<u16>
 pub const fn radroots_storage::inventory::StockDeliveryRequest::intent(&self) -> &radroots_storage::command::DeliveryIntent
 pub fn radroots_storage::inventory::StockDeliveryRequest::new(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_domain::identifier::OperationId, radroots_domain::identifier::CommandDigest, radroots_identity::key::PublicKey, radroots_storage::command::DeliveryIntent) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub const fn radroots_storage::inventory::StockDeliveryRequest::source(&self) -> &radroots_storage::inventory::StockEnvelopeRequest
+pub fn radroots_storage::inventory::StockDeliveryRequest::with_expected_attempt_count(self, u16) -> core::result::Result<Self, radroots_storage::command::OperationError>
 impl core::fmt::Debug for radroots_storage::inventory::StockDeliveryRequest
 pub fn radroots_storage::inventory::StockDeliveryRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage::inventory::StockDeliverySummary

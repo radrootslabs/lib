@@ -253,6 +253,10 @@ struct StockDelivery {
     query_grants_dispatch: bool,
     first_complete_targets_and_criterion_immutable: bool,
     ordinary_command_replays_existing_attempt: bool,
+    ordinary_fresh_claim_binds_observed_attempt_count: bool,
+    ordinary_obtained_material_owner: String,
+    ordinary_peer_delivery_precedes_self_signing: bool,
+    installed_original_delivery_requires_signer: bool,
     explicit_resume_claims_bounded_new_attempt: bool,
     retries_use_original_outer_bytes: bool,
     observation_nullable: bool,
@@ -744,6 +748,10 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !delivery.query_grants_dispatch
             && delivery.first_complete_targets_and_criterion_immutable
             && !delivery.ordinary_command_replays_existing_attempt
+            && delivery.ordinary_fresh_claim_binds_observed_attempt_count
+            && delivery.ordinary_obtained_material_owner == "ClientSession.stock_captures"
+            && delivery.ordinary_peer_delivery_precedes_self_signing
+            && !delivery.installed_original_delivery_requires_signer
             && delivery.explicit_resume_claims_bounded_new_attempt
             && delivery.retries_use_original_outer_bytes
             && delivery.observation_nullable
@@ -2507,6 +2515,13 @@ mod tests {
                 json!(false),
             ),
             ("ordinary_command_replays_existing_attempt", json!(true)),
+            (
+                "ordinary_fresh_claim_binds_observed_attempt_count",
+                json!(false),
+            ),
+            ("ordinary_obtained_material_owner", json!("application")),
+            ("ordinary_peer_delivery_precedes_self_signing", json!(false)),
+            ("installed_original_delivery_requires_signer", json!(true)),
             ("retries_use_original_outer_bytes", json!(false)),
             ("observation_nullable", json!(false)),
             (

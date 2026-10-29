@@ -2,6 +2,65 @@
 use super::*;
 
 #[tokio::test]
+async fn stale_observed_attempt_count_cannot_claim_another_invocation() {
+    let (r, original, _, outer) = setup(17).await;
+    committed_envelope(capture(&r, &original, &outer, None).await.unwrap());
+    let first = request(&r, &original, &outer, 40)
+        .await
+        .with_expected_attempt_count(0)
+        .unwrap();
+    let racing = request(&r, &original, &outer, 41)
+        .await
+        .with_expected_attempt_count(0)
+        .unwrap();
+    assert!(matches!(
+        r.store
+            .prepare_stock_delivery_attempt(first, proof(&r))
+            .await
+            .unwrap(),
+        StockDeliveryAttemptOutcome::Claimed(_)
+    ));
+    let before = inventory_minimum(&r).await;
+    assert!(matches!(
+        r.store
+            .prepare_stock_delivery_attempt(racing, proof(&r))
+            .await,
+        Err(OperationError::StaleState)
+    ));
+    assert_eq!(inventory_minimum(&r).await, before);
+    let repeated = request(&r, &original, &outer, 40)
+        .await
+        .with_expected_attempt_count(0)
+        .unwrap();
+    assert!(matches!(
+        r.store
+            .prepare_stock_delivery_attempt(repeated, proof(&r))
+            .await
+            .unwrap(),
+        StockDeliveryAttemptOutcome::Retained(_)
+    ));
+    let next = request(&r, &original, &outer, 41)
+        .await
+        .with_expected_attempt_count(1)
+        .unwrap();
+    assert!(matches!(
+        r.store
+            .prepare_stock_delivery_attempt(next, proof(&r))
+            .await
+            .unwrap(),
+        StockDeliveryAttemptOutcome::Claimed(_)
+    ));
+    assert!(
+        request(&r, &original, &outer, 42)
+            .await
+            .with_expected_attempt_count(193)
+            .is_err()
+    );
+    balances(&r, 80, 9, 0, 1, 3).await;
+    r.store.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn twelve_potential_invocations_are_retained_and_original_outcomes_page_at_sixteen() {
     let (mut r, original, _, outer) = setup(17).await;
     committed_envelope(capture(&r, &original, &outer, None).await.unwrap());

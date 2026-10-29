@@ -1,5 +1,6 @@
 //! Real facade, SQLx and local crypto with explicitly controlled command IO.
-//! This is no live Nostr transport or host-custody qualification.
+//! Delivery cases additionally exercise explicit loopback Nostr transport.
+//! Host custody and live route discovery remain outside these fixtures.
 use super::{Client, NativeConfig, StartMode};
 use radroots_domain::{CommandContextData, OperationId, PoolId, PublicKey, UnixSeconds};
 use radroots_execution::{
@@ -74,10 +75,23 @@ fn proof(value: &AttachmentProof) -> AttachmentProof {
         .with_secret(|b| AttachmentProof::from_protected_input(b))
         .unwrap()
 }
-struct Clock(AtomicU64);
+struct Clock(AtomicU64, AtomicBool);
+impl Clock {
+    fn enable_realtime(&self) {
+        self.1.store(true, Ordering::SeqCst);
+    }
+}
 impl WorkspaceClock for Clock {
     fn now(&self) -> Result<UnixSeconds, WorkspaceError> {
-        UnixSeconds::new(self.0.load(Ordering::SeqCst)).map_err(|_| WorkspaceError::Unavailable)
+        let seconds = if self.1.load(Ordering::SeqCst) {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| WorkspaceError::Unavailable)?
+                .as_secs()
+        } else {
+            self.0.load(Ordering::SeqCst)
+        };
+        UnixSeconds::new(seconds).map_err(|_| WorkspaceError::Unavailable)
     }
 }
 struct Control {
@@ -232,7 +246,44 @@ impl SignerCallbacks for Callbacks {
         Box::pin(async { Ok(()) })
     }
 }
-struct Io(Arc<Clock>);
+struct Io {
+    clock: Arc<Clock>,
+    next: AtomicUsize,
+    wraps: AtomicUsize,
+    sent: std::sync::Mutex<Vec<String>>,
+    missing_ack: AtomicBool,
+    pause_delivery: AtomicBool,
+    entered: tokio::sync::Notify,
+    release: tokio::sync::Notify,
+    route_override: Option<Vec<String>>,
+    transport: std::sync::Mutex<Option<Arc<radroots_transport_nostr::NostrTransport>>>,
+}
+impl Io {
+    fn new(clock: Arc<Clock>) -> Self {
+        Self {
+            clock,
+            next: AtomicUsize::new(1),
+            wraps: AtomicUsize::new(0),
+            sent: std::sync::Mutex::new(Vec::new()),
+            missing_ack: AtomicBool::new(false),
+            pause_delivery: AtomicBool::new(false),
+            entered: tokio::sync::Notify::new(),
+            release: tokio::sync::Notify::new(),
+            route_override: None,
+            transport: std::sync::Mutex::new(None),
+        }
+    }
+    fn selected(&self) -> TargetSet {
+        self.route_override.as_ref().map_or_else(targets, |uris| {
+            TargetSet::new(
+                uris.iter()
+                    .map(|uri| Target::nostr_relay(uri).unwrap())
+                    .collect(),
+            )
+            .unwrap()
+        })
+    }
+}
 fn targets() -> TargetSet {
     TargetSet::new(vec![Target::nostr_relay("wss://relay.example").unwrap()]).unwrap()
 }
@@ -241,7 +292,7 @@ impl CommandIo for Io {
         true
     }
     fn now(&self) -> Result<UnixSeconds, OperationError> {
-        self.0.now().map_err(Into::into)
+        self.clock.now().map_err(Into::into)
     }
     fn seal_time(&self, now: UnixSeconds) -> Result<UnixSeconds, OperationError> {
         Ok(now)
@@ -252,6 +303,28 @@ impl CommandIo for Io {
         _: NonZeroU64,
     ) -> HostFuture<'_, Result<CapturedDmRoute, OperationError>> {
         Box::pin(async move {
+            if let Some(uris) = &self.route_override {
+                use nostr::JsonUtil;
+                let keys = [2, 3]
+                    .into_iter()
+                    .map(|scalar| {
+                        nostr::Keys::new(
+                            nostr::SecretKey::from_hex(&format!("{scalar:064x}")).unwrap(),
+                        )
+                    })
+                    .find(|key| key.public_key().to_hex() == recipient.to_hex())
+                    .unwrap();
+                let raw = nostr::EventBuilder::new(nostr::Kind::Custom(10050), "")
+                    .tags(
+                        uris.iter()
+                            .map(|uri| nostr::Tag::parse(["relay", uri.as_str()]).unwrap()),
+                    )
+                    .custom_created_at(nostr::Timestamp::from_secs(100))
+                    .sign_with_keys(&keys)
+                    .unwrap()
+                    .as_json();
+                return capture_dm_route(recipient, [raw.as_str()], &self.selected());
+            }
             let value = data();
             let row = value["stock_routes"]
                 .as_array()
@@ -263,28 +336,70 @@ impl CommandIo for Io {
         })
     }
     fn targets(&self, route: &CapturedDmRoute) -> Result<TargetSet, OperationError> {
-        selected_dm_targets(route, &targets())
+        selected_dm_targets(route, &self.selected())
     }
     fn publication_policy(&self) -> radroots_transport::policy::SatisfactionPolicy {
-        panic!("acceptance does not start D")
+        use radroots_transport::policy::{SatisfactionClass, SatisfactionPolicy, TargetPolicy};
+        SatisfactionPolicy::new(SatisfactionClass::Accepted, TargetPolicy::all())
     }
     fn private_envelope(
         &self,
-        _: PublicKey,
-        _: &str,
+        recipient: PublicKey,
+        raw: &str,
     ) -> Result<PrivateEnvelopeCandidate, OperationError> {
-        panic!("acceptance does not wrap")
+        self.wraps.fetch_add(1, Ordering::SeqCst);
+        let wrapped = radroots_nostr::signing::gift_wrap::wrap_retained_seal(
+            raw,
+            recipient,
+            NonZeroU64::new(self.now()?.get()).unwrap(),
+            &radroots_nostr::signing::OsNonceSource,
+        )
+        .map_err(|_| OperationError::InvalidEvidence)?;
+        wrapped.with_wrapping_key(|key| {
+            PrivateEnvelopeCandidate::from_obtained(recipient, wrapped.signed_json(), key)
+        })
     }
     fn delivery_id(&self) -> Result<String, OperationError> {
-        panic!("acceptance does not claim D")
+        Ok(format!("{:064x}", self.next.fetch_add(1, Ordering::SeqCst)))
     }
     fn publish(
         &self,
-        _: radroots_transport::sink::DeliveryRequest,
-        _: TargetSet,
+        request: radroots_transport::sink::DeliveryRequest,
+        selected: TargetSet,
     ) -> HostFuture<'_, Result<radroots_transport::DeliveryReceipt, radroots_transport::SinkFailure>>
     {
-        panic!("acceptance does not publish")
+        Box::pin(async move {
+            self.sent
+                .lock()
+                .unwrap()
+                .push(request.payload().event().raw_json().to_owned());
+            if self.pause_delivery.swap(false, Ordering::SeqCst) {
+                self.entered.notify_one();
+                self.release.notified().await;
+            }
+            let transport = self.transport.lock().unwrap().clone();
+            if let Some(transport) = transport {
+                use radroots_transport::EventSink;
+                return transport.deliver_selected(request, selected).await;
+            }
+            use radroots_transport::{
+                DeliveryReceipt, outcome::DeliveryOutcome, sink::DeliveryTargetReceipt,
+            };
+            let outcome = if self.missing_ack.load(Ordering::SeqCst) {
+                DeliveryOutcome::unavailable()
+            } else {
+                DeliveryOutcome::accepted()
+            };
+            Ok(DeliveryReceipt::for_request(
+                &request,
+                selected
+                    .targets()
+                    .iter()
+                    .map(|target| DeliveryTargetReceipt::attempted(target.clone(), outcome.clone()))
+                    .collect(),
+            )
+            .unwrap())
+        })
     }
 }
 struct Rig {
@@ -297,9 +412,13 @@ struct Rig {
     clock: Arc<Clock>,
     control: Arc<Control>,
     provider: Weak<Provider>,
+    io: Arc<Io>,
 }
 impl Rig {
     async fn new() -> Self {
+        Self::configured(None, 300).await
+    }
+    async fn configured(route: Option<Vec<String>>, expiry: u64) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().canonicalize().unwrap();
         let vault = Arc::new(
@@ -329,7 +448,7 @@ impl Rig {
             AccessPolicy::standard(),
         )
         .unwrap();
-        let clock = Arc::new(Clock(AtomicU64::new(150)));
+        let clock = Arc::new(Clock(AtomicU64::new(150), AtomicBool::new(false)));
         let control = Arc::new(Control::new());
         let provider = Arc::new(Provider {
             inner: LocalSigner::with_clock(
@@ -347,7 +466,7 @@ impl Rig {
                 key,
                 key,
                 "synthetic-ordinary-acceptance",
-                UnixSeconds::new(300).unwrap(),
+                UnixSeconds::new(expiry).unwrap(),
             )
             .unwrap(),
             clock.as_ref(),
@@ -374,10 +493,13 @@ impl Rig {
                 .unwrap();
         // Only IO is controlled. This preserves the actual client task host,
         // attached scopes, stock evidence owner and concrete native adapter.
+        let mut io = Io::new(clock.clone());
+        io.route_override = route;
+        let io = Arc::new(io);
         client.session = client
             .session
             .clone()
-            .with_command_runtime(Arc::new(CommandRuntime::new(Arc::new(Io(clock.clone())))));
+            .with_command_runtime(Arc::new(CommandRuntime::new(io.clone())));
         let scope = client
             .attach(enrollment.input().clone(), proof(enrollment.proof()))
             .await
@@ -398,6 +520,7 @@ impl Rig {
             clock,
             control,
             provider: weak,
+            io,
         };
         rig.seed().await;
         rig
@@ -605,6 +728,7 @@ async fn ordinary_acceptance_uses_real_t0_t1_s_t2_and_preserves_original_retry()
     assert!(status.installation().is_some());
     assert!(status.recipients().iter().all(|v| v.evidence.is_some()));
     assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+    assert_eq!(r.io.sent.lock().unwrap().len(), 2);
     let (_, _, minimum) = r.minima().await;
     let observed = r
         .client
@@ -613,13 +737,13 @@ async fn ordinary_acceptance_uses_real_t0_t1_s_t2_and_preserves_original_retry()
         .await
         .unwrap();
     assert_eq!(observed.installation(), status.installation());
-    // The coherent supported view reports no D; the existing workflow has
-    // not wrapped or invoked transport. Actual protected S is independently
-    // readable through the same native owner under current access.
+    // Actual protected stock delivery uses controlled transport outcomes here.
+    // S remains independently readable through the same native owner.
     assert!(observed.delivery().unwrap().iter().all(|value| {
         value.checkpoint() == observed.checkpoint()
-            && value.source().is_none()
-            && value.attempt_count() == 0
+            && value.source().is_some()
+            && value.attempt_count() == 1
+            && value.acceptance_satisfied().unwrap()
     }));
     let evidence = observed.recipients()[0].evidence.unwrap();
     let source = radroots_execution::session::commerce::AcceptanceStore::signing_evidence(
@@ -793,6 +917,8 @@ async fn lost_observer_cannot_discard_actual_peer_artifact_and_close_installs_be
     reopened.close().await.unwrap();
 }
 
+#[path = "native_stock_delivery_tests.rs"]
+mod delivery;
 #[path = "native_refusal_tests.rs"]
 mod original_refusals;
 
@@ -813,6 +939,17 @@ async fn peer_installation_survives_self_refusal_and_resume_uses_original_exact_
         1
     );
     assert!(!status.aborted());
+    assert_eq!(r.io.sent.lock().unwrap().len(), 1);
+    for (delivery, recipient) in status.delivery().unwrap().iter().zip(status.recipients()) {
+        assert_eq!(
+            delivery.attempt_count(),
+            u16::from(recipient.evidence.is_some())
+        );
+        assert_eq!(
+            delivery.acceptance_satisfied().unwrap(),
+            recipient.evidence.is_some()
+        );
+    }
     let original_refusal = status
         .recipients()
         .iter()
@@ -1091,6 +1228,17 @@ async fn rejected_self_callback_returns_bounded_tampering_without_losing_peer_in
         1
     );
     assert!(!status.aborted());
+    assert_eq!(r.io.sent.lock().unwrap().len(), 1);
+    for (delivery, recipient) in status.delivery().unwrap().iter().zip(status.recipients()) {
+        assert_eq!(
+            delivery.attempt_count(),
+            u16::from(recipient.evidence.is_some())
+        );
+        assert_eq!(
+            delivery.acceptance_satisfied().unwrap(),
+            recipient.evidence.is_some()
+        );
+    }
     r.control.tamper_self.store(false, Ordering::SeqCst);
     let resumed = r
         .client
@@ -1148,10 +1296,13 @@ async fn generic_inquiry_installs_actual_peer_and_returns_original_bounded_self_
         let mut client = Client::open(NativeConfig::public_read(options).with_workspace(native))
             .await
             .unwrap();
-        client.session = client
-            .session
-            .clone()
-            .with_command_runtime(Arc::new(CommandRuntime::new(Arc::new(Io(r.clock.clone())))));
+        client.session =
+            client
+                .session
+                .clone()
+                .with_command_runtime(Arc::new(CommandRuntime::new(Arc::new(Io::new(
+                    r.clock.clone(),
+                )))));
         let scope = client.attach(input, proof(&credential)).await.unwrap();
         client
             .attach_signer(SignerHandle::new(

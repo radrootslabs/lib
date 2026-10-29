@@ -15,6 +15,7 @@ use std::sync::Arc;
 pub struct StockDeliveryRequest {
     source: StockEnvelopeRequest,
     intent: DeliveryIntent,
+    expected_attempts: Option<u16>,
 }
 impl StockDeliveryRequest {
     pub fn new(
@@ -33,7 +34,22 @@ impl StockDeliveryRequest {
                 binding, minimum, operation, digest, recipient, None,
             )?,
             intent,
+            expected_attempts: None,
         })
+    }
+    /// Requires a fresh claim to observe this exact per-recipient attempt count.
+    /// Ordinary execution supplies its authenticated snapshot count to prevent
+    /// concurrent clients from dispatching twice from the same observation.
+    /// An exact existing request remains a read without dispatch permission.
+    pub fn with_expected_attempt_count(mut self, count: u16) -> Result<Self, OperationError> {
+        if count > 16 * 12 {
+            return Err(OperationError::InvalidCommand);
+        }
+        self.expected_attempts = Some(count);
+        Ok(self)
+    }
+    pub const fn expected_attempt_count(&self) -> Option<u16> {
+        self.expected_attempts
     }
     pub const fn source(&self) -> &StockEnvelopeRequest {
         &self.source

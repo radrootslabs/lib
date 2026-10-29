@@ -336,6 +336,8 @@ pub trait InventoryStore: WorkspaceStore {
     }
     /// Commits an actual potential invocation before transport. Existing or
     /// uncertain attempts never confer another dispatch right.
+    /// A fresh claim must enforce the requested expected-attempt-count
+    /// precondition against authenticated history in the same transaction.
     fn prepare_stock_delivery_attempt(
         &self,
         _request: StockDeliveryRequest,

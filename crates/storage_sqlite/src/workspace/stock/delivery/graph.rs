@@ -273,6 +273,9 @@ impl Graph {
             })
             .collect()
     }
+    pub(super) fn attempt_count(&self, recipient: PublicKey) -> Result<u16, OperationError> {
+        Ok(self.recipient(recipient)?.attempts)
+    }
     pub(super) fn summary(
         &self,
         request: &StockEnvelopeRequest,

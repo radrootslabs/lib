@@ -19,10 +19,10 @@ impl<'a> Orders<'a> {
     pub(crate) const fn new(client: &'a Client, scope: WorkspaceSession) -> Self {
         Self { client, scope }
     }
-    /// Owns captured acceptance through actual native T0/T1/S and initial T2.
-    /// Inspect independent recipient/installation facts; this performs no gift
-    /// wrapping or relay publication. Available command IO determines whether
-    /// preparation can proceed to signing; a pending report is not acceptance.
+    /// Owns captured acceptance through native T0/T1/S/T2 and original delivery.
+    /// Inspect independent signing, installation and relay observations. An
+    /// installed peer can reach delivery even if later self signing fails.
+    /// Available command IO controls progress; pending preparation is not acceptance.
     pub async fn accept(
         &self,
         context: CommandContext,

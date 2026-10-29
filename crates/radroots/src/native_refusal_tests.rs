@@ -208,8 +208,11 @@ async fn lost_refusal_waiter_and_failed_close_retain_owner_through_rollback_and_
                 .accept(context, minimum, private, public, input)
                 .await
         });
+        // Ordinary acceptance now retains and delivers the installed peer
+        // before reaching this self-signing barrier. Keep the same assertions
+        // while bounding observation of that larger debug-build prefix.
         tokio::time::timeout(
-            std::time::Duration::from_secs(20),
+            std::time::Duration::from_secs(120),
             r.control.entered.notified(),
         )
         .await

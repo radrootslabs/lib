@@ -24,9 +24,10 @@ use radroots_storage::{
 };
 
 impl<H: SessionHost + 'static> ClientSession<H> {
-    /// Owns the original captured acceptance through T0/T1/S and initial T2.
-    /// The returned independent facts do not claim relay delivery or complete
-    /// self history. Missing IO leaves actual preparation pending without signing.
+    /// Owns original acceptance through T0/T1/S/T2 and bounded original delivery.
+    /// Inspect independent signing, installation and per-recipient relay facts;
+    /// relay acceptance never establishes buyer receipt or stock release.
+    /// Missing IO leaves actual preparation pending without signing.
     #[allow(clippy::too_many_arguments)]
     pub async fn accept_stock_order(
         &self,

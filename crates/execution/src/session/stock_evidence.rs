@@ -13,6 +13,9 @@ pub(super) use obtained::{ObtainedContext, RetainedObtained};
 #[path = "stock_unissued.rs"]
 mod unissued;
 pub(super) use unissued::RetainedUnissued;
+#[path = "stock_delivery.rs"]
+mod delivery;
+pub(super) use delivery::{DeliveryContext, RetainedDelivery, RetainedEnvelope};
 
 pub(super) struct Pending {
     store: Shared<dyn InventoryStore>,
@@ -26,6 +29,9 @@ pub(super) struct Owner {
     unmapped: Mutex<Vec<Shared<RetainedObtained>>>,
     pending: Mutex<Vec<Shared<Pending>>>,
     unissued: Mutex<Vec<Shared<RetainedUnissued>>>,
+    envelopes: Mutex<Vec<Shared<RetainedEnvelope>>>,
+    deliveries: Mutex<Vec<Shared<RetainedDelivery>>>,
+    pub(super) delivery_serial: futures::lock::Mutex<()>,
     serial: futures::lock::Mutex<()>,
 }
 impl Owner {
@@ -44,7 +50,20 @@ impl Owner {
             .unissued
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if pending.is_empty() && unmapped.is_empty() && unissued.is_empty() {
+        let envelopes = self
+            .envelopes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let deliveries = self
+            .deliveries
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if pending.is_empty()
+            && unmapped.is_empty()
+            && unissued.is_empty()
+            && envelopes.is_empty()
+            && deliveries.is_empty()
+        {
             Ok(())
         } else {
             Err(OperationError::RecoveryRequired)
@@ -192,7 +211,7 @@ impl Owner {
                 .first()
                 .cloned();
             let Some(entry) = entry else {
-                return Ok(());
+                return self.drain_delivery().await;
             };
             if let StockEvidenceOutcome::Unknown(_) = self.append(&entry, true).await? {
                 return Err(Error::operation(

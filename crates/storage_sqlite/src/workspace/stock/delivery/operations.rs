@@ -80,6 +80,13 @@ async fn prepare_authorized(
         return Err(OperationError::IdempotencyConflict);
     }
     let fresh = graph.found_attempt.is_none();
+    if fresh
+        && request
+            .expected_attempt_count()
+            .is_some_and(|expected| graph.attempt_count(source.recipient()) != Ok(expected))
+    {
+        return Err(OperationError::StaleState);
+    }
     let now = auth.access.current.observed_at();
     let prepared = if fresh {
         let installed = Box::pin(inventory::installation::read_entry(

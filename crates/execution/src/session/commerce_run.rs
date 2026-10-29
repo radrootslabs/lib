@@ -1,4 +1,4 @@
-//! One shared T1/S/T2 algorithm; target hosts implement transactions only.
+//! One shared T1/S/T2/D algorithm; target hosts implement transactions only.
 use super::*;
 use crate::{
     Error, OperationContext,
@@ -20,6 +20,8 @@ use radroots_signing::{
     recovery::ReplayCapability,
 };
 use radroots_storage::inventory::{InventoryStore, StockEvidenceOutcome};
+#[path = "commerce_delivery.rs"]
+mod delivery;
 
 fn same(attempt: CommitAttempt, selection: &AcceptanceSelection) -> bool {
     attempt.workspace_id() == selection.binding.input().workspace_id()
@@ -210,10 +212,10 @@ impl CommandRuntime {
         }
         self.drain().await?;
         resources.stock_captures.ensure_ready().map_err(fail)?;
-        let Some(signer) = resources.signer.as_ref() else {
-            return Ok(status);
-        };
         if snapshot.plan().is_none() {
+            let Some(signer) = resources.signer.as_ref() else {
+                return Ok(status);
+            };
             let plan = self
                 .acceptance_plan(snapshot.preparation(), signer)
                 .await
@@ -255,6 +257,9 @@ impl CommandRuntime {
                 .find(|v| v.recipient == recipient)
                 .ok_or_else(|| fail(OperationError::RecoveryRequired))?;
             if facts.evidence.is_none() {
+                let Some(signer) = resources.signer.as_ref() else {
+                    continue;
+                };
                 resources.stock_captures.ensure_ready().map_err(fail)?;
                 let plan = current
                     .plan()
@@ -460,6 +465,10 @@ impl CommandRuntime {
                     }
                 }
             }
+            self.deliver_acceptance(
+                &store, &inventory, &selection, proof, &resources, recipient, &mode,
+            )
+            .await?;
         }
         let final_view = store
             .snapshot(selection.clone(), proof)
