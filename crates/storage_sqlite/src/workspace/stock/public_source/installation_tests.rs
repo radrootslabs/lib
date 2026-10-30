@@ -9,6 +9,8 @@ mod local_history;
 #[path = "process_death_tests.rs"]
 mod process_death;
 use super::*;
+#[path = "amendment_tests.rs"]
+mod amendments;
 use crate::workspace::{
     StockInstallationOutcome, StockInstallationReceipt, StockInstallationRequest,
     StockSnapshotRequest,

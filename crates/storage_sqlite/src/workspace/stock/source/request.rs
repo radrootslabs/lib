@@ -7,6 +7,10 @@ use radroots_domain::{
 };
 use radroots_storage::workspace::seller_stock::StockListingCheckpointRef;
 use std::collections::BTreeMap;
+mod replacement;
+pub(in crate::workspace::stock) use replacement::{
+    Selected as ReplacementSource, prepare as prepare_terms,
+};
 
 /// Explicit private request/source data under current administrative read access.
 /// This does not authorize execution or promise a physical hold/agreement.
@@ -78,12 +82,13 @@ impl std::fmt::Debug for StockRequestSnapshot {
 }
 pub(in crate::workspace::stock) struct Prepared {
     pub scope: CausalScope,
-    pub request: RecordId,
+    pub authorization: RecordId,
     pub digest: TermsDigest,
     pub expires: UnixSeconds,
     pub quote: Option<RecordId>,
+    pub replacement: Option<radroots_domain::causal::ReplacementTermsSelection>,
     pub history: history::Prepared,
-    lookup: checkpoint::Proof,
+    lookup: Option<checkpoint::Proof>,
     views: BTreeMap<EnvelopeEventId, super::super::public_source::admission::ListingView>,
 }
 fn claim_error(error: RequestClaimError) -> OperationError {
@@ -105,10 +110,24 @@ impl Prepared {
         match self
             .history
             .records
-            .get(&self.request)
+            .get(
+                &self
+                    .replacement
+                    .map(|value| value.proposal())
+                    .unwrap_or(self.authorization),
+            )
             .map(|record| record.content().payload())
         {
-            Some(radroots_domain::CommercePayload::Request(request)) => Ok(request.terms()),
+            Some(radroots_domain::CommercePayload::Request(request))
+                if self.replacement.is_none() =>
+            {
+                Ok(request.terms())
+            }
+            Some(radroots_domain::CommercePayload::TermsProposed(proposal))
+                if self.replacement.is_some() =>
+            {
+                Ok(proposal.terms())
+            }
             _ => Err(OperationError::RecoveryRequired),
         }
     }
@@ -120,12 +139,14 @@ impl Prepared {
             self.views
                 .get(&line.source().event_id())
                 .ok_or(OperationError::RecoveryRequired)?
-                .validate(line, self.quote.is_some(), at)?;
+                .validate(line, self.quote.is_some() || self.replacement.is_some(), at)?;
         }
         Ok(())
     }
     pub async fn confirm(&self, connection: &mut SqliteConnection) -> Result<(), OperationError> {
-        self.lookup.confirm(connection).await?;
+        if let Some(lookup) = &self.lookup {
+            lookup.confirm(connection).await?;
+        }
         self.history.confirm(connection).await?;
         for view in self.views.values() {
             view.confirm(connection).await?;
@@ -219,12 +240,13 @@ pub(in crate::workspace::stock) async fn prepare(
     }
     Ok(Prepared {
         scope,
-        request,
+        authorization: request,
         digest,
         expires,
         quote,
+        replacement: None,
         history,
-        lookup,
+        lookup: Some(lookup),
         views,
     })
 }

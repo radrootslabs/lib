@@ -283,6 +283,29 @@ pub(in crate::workspace) async fn claim(
         true,
     ))
     .await?;
+    // A later self copy may finish an installed original, but new issuance
+    // from a pending amendment must retain its approved original residual.
+    let installed = current_order
+        .as_ref()
+        .and_then(|state| state.witness.expected)
+        .is_some_and(|state| state.phase == super::super::order_state::Phase::Installed);
+    if !installed {
+        auth.original
+            .confirm_replacement_residual(
+                turn.connection,
+                turn.selected,
+                turn.crypto,
+                auth.access
+                    .authority
+                    .inventory
+                    .ok_or(OperationError::RecoveryRequired)?
+                    .revision
+                    .get()
+                    .checked_add(1)
+                    .ok_or(OperationError::RecoveryRequired)?,
+            )
+            .await?;
+    }
     let at = auth.access.current.observed_at();
     acceptance::check_consent(&auth.access, &auth.consent, &auth.command, true, at)?;
     if at < plan.bound.bound_at() || at >= plan.bound.preparation().first_issue_deadline() {
@@ -291,7 +314,7 @@ pub(in crate::workspace) async fn claim(
     let backing = Box::pin(super::super::inventory::backing::read(
         turn,
         &auth.access,
-        auth.original.receipt.held_pools(),
+        &auth.original.affected_pool_snapshots()?,
     ))
     .await?;
     let entry = OperationId::from_bytes(super::super::super::random()?);

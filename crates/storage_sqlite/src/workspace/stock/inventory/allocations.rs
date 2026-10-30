@@ -16,6 +16,13 @@ impl InstalledAllocation {
         crypto: &WorkspaceCrypto,
         before_revision: u64,
     ) -> Result<ObligationBacking, OperationError> {
+        let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        if catalog >= 20 {
+            return super::changes::current(connection, input, crypto, self, before_revision).await;
+        }
         let prior = super::deficit::prior_quantity(
             connection,
             input,

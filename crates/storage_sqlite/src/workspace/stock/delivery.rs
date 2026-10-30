@@ -182,7 +182,7 @@ impl Prepared {
         append: Append,
         body: &[u8],
     ) -> Result<Self, OperationError> {
-        if !matches!(authority.catalog, 17..=19) {
+        if !matches!(authority.catalog, 17..=20) {
             return Err(OperationError::UnsupportedOperation);
         }
         let before = authority

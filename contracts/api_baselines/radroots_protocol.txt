@@ -476,6 +476,7 @@ pub const radroots_protocol::commerce::RECORD_MAX_BYTES: usize
 pub const radroots_protocol::commerce::SIGNING_PLAN_MAX_BYTES: usize
 pub fn radroots_protocol::commerce::decode(&[u8]) -> core::result::Result<radroots_protocol::commerce::DecodedRecord, radroots_protocol::commerce::RecordWireError>
 pub fn radroots_protocol::commerce::initial_commitment_rumor(&radroots_protocol::command::CapturedOrderAcceptance, &radroots_protocol::commerce::DecodedRecord, core::option::Option<(radroots_domain::identifier::RecordId, radroots_domain::context::Sequence)>, radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_protocol::commerce::EncodedCommerceRumor, radroots_protocol::commerce::RecordWireError>
+pub fn radroots_protocol::commerce::replacement_commitment_rumor(&radroots_protocol::command::CapturedTermsInstallation, &radroots_protocol::commerce::DecodedRecord, &radroots_protocol::commerce::DecodedRecord, &radroots_protocol::commerce::DecodedRecord, (radroots_domain::identifier::RecordId, radroots_domain::context::Sequence), radroots_domain::context::UnixSeconds) -> core::result::Result<radroots_protocol::commerce::EncodedCommerceRumor, radroots_protocol::commerce::RecordWireError>
 pub mod radroots_protocol::error
 pub mod radroots_protocol::error::v1
 pub enum radroots_protocol::error::v1::Class

@@ -201,12 +201,39 @@ pub fn plan_allocations(
     pools: &[PoolSnapshot],
     explicit: Option<&[AllocationClaim]>,
 ) -> Result<(Vec<StockAllocation>, Vec<PoolHoldProposal>), AllocationPlanError> {
+    let result = resolve_allocations(terms, mappings, pools, explicit)?;
+    let available: BTreeMap<_, _> = pools.iter().map(|pool| (pool.id(), *pool)).collect();
+    let mut totals = BTreeMap::new();
+    for allocation in &result {
+        let total = totals.entry(allocation.pool).or_insert(StockTicks::ZERO);
+        *total = total
+            .checked_add(allocation.ticks)
+            .map_err(|_| AllocationPlanError::Capacity)?;
+    }
+    let mut effects = Vec::new();
+    for (id, quantity) in totals {
+        effects.push(PoolHoldProposal::new(available[&id], quantity)?);
+    }
+    Ok((result, effects))
+}
+
+/// Resolves complete line/pool quantities using the supplied exact mappings,
+/// units and versions, without requiring or proposing new available stock.
+/// An amendment executor supplies retained mappings for existing draws. It
+/// must separately compare current residual/original allocations and acquire
+/// positive deltas; successful resolution alone grants no physical backing.
+pub fn resolve_allocations(
+    terms: &Terms,
+    mappings: &[OptionPoolMapping],
+    pools: &[PoolSnapshot],
+    explicit: Option<&[AllocationClaim]>,
+) -> Result<Vec<StockAllocation>, AllocationPlanError> {
     match terms.supply() {
         SupplyCommitment::FuturePromise(_) => {
             if explicit.is_some() || !mappings.is_empty() || !pools.is_empty() {
                 return Err(AllocationPlanError::InvalidInput);
             }
-            return Ok((vec![], vec![]));
+            return Ok(vec![]);
         }
         SupplyCommitment::StockBacked => {}
     }
@@ -315,19 +342,5 @@ pub fn plan_allocations(
         return Err(AllocationPlanError::InvalidInput);
     }
     result.sort_by_key(|value| (value.pool, value.line));
-    let mut totals = BTreeMap::new();
-    for allocation in &result {
-        if allocation.ticks == StockTicks::ZERO {
-            return Err(AllocationPlanError::InvalidInput);
-        }
-        let total = totals.entry(allocation.pool).or_insert(StockTicks::ZERO);
-        *total = total
-            .checked_add(allocation.ticks)
-            .map_err(|_| AllocationPlanError::Capacity)?;
-    }
-    let mut effects = Vec::new();
-    for (id, quantity) in totals {
-        effects.push(PoolHoldProposal::new(available[&id], quantity)?);
-    }
-    Ok((result, effects))
+    Ok(result)
 }

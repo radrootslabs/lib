@@ -20,6 +20,7 @@ pub(in crate::workspace::stock) fn catalog_authority_schema(catalog: i64) -> &'s
         17 => "radroots.seller_stock.authority.v17",
         18 => "radroots.seller_stock.authority.v18",
         19 => "radroots.seller_stock.authority.v19",
+        20 => "radroots.seller_stock.authority.v20",
         _ => panic!("unsupported private stock fixture catalog"),
     }
 }
@@ -301,7 +302,7 @@ async fn retained_v10_preserves_prior_families_and_signing_plan_retention() {
 }
 #[tokio::test]
 async fn retained_v11_preserves_prior_families_and_adds_claims_and_obtained_evidence() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(11).await;
 }
 // Exact catalog fixtures exercise retained/successor codecs; they are not
@@ -346,7 +347,7 @@ pub(in crate::workspace::stock) async fn literal_enrollment_catalog(
     catalog: i64,
     enrollment: &StockEnrollment,
 ) {
-    assert!(matches!(catalog, 13..=18));
+    assert!(matches!(catalog, 13..=19));
     let record = enrollment.record.lock().unwrap().take().unwrap();
     literal_catalog_contents(
         fixture,
@@ -405,7 +406,7 @@ async fn literal_catalog_contents(
     if catalog >= 7 {
         value["inventory"]["orders"] = serde_json::json!("0");
     }
-    if matches!(catalog, 8..=18) {
+    if matches!(catalog, 8..=19) {
         value["public_sources"] =
             serde_json::json!({"revision":"0","events":"0","heads":"0","parts":"0","head":null});
     }
@@ -456,6 +457,7 @@ async fn literal_catalog_contents(
         16 => "PRAGMA user_version=16",
         17 => "PRAGMA user_version=17",
         18 => "PRAGMA user_version=18",
+        19 => "PRAGMA user_version=19",
         _ => unreachable!(),
     })
     .execute(&mut *tx)
@@ -999,42 +1001,80 @@ async fn retained_enrollment_v1_authenticates_but_never_auto_creates_inventory()
 
 #[tokio::test]
 async fn retained_v12_preserves_initial_installation_catalog_without_upgrade() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(12).await;
 }
 
 #[tokio::test]
 async fn retained_v13_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(13).await;
 }
 
 #[tokio::test]
 async fn retained_v14_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(14).await;
 }
 
 #[tokio::test]
 async fn retained_v15_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(15).await;
 }
 
 #[tokio::test]
 async fn retained_v16_authenticates_literal_catalog_and_original_inventory_records() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(16).await;
 }
 
 #[tokio::test]
 async fn retained_v17_authenticates_original_delivery_catalog_without_upgrade() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(17).await;
 }
 
 #[tokio::test]
 async fn retained_v18_authenticates_original_rewrap_catalog_without_upgrade() {
-    assert_eq!(schema::CURRENT, 19);
+    assert_eq!(schema::CURRENT, 20);
     retained_inventory_catalog(18).await;
+}
+
+#[tokio::test]
+async fn retained_v19_preserves_deficit_catalog_without_obligation_transition_table_or_upgrade() {
+    assert_eq!(schema::CURRENT, 20);
+    let fixture = CryptoFixture::new();
+    let path = fixture.root().join("retained19");
+    let (input, proof) = literal_catalog(&fixture, &path, 19).await;
+    let store =
+        NativeWorkspace::open_seller_stock(&path, input.clone(), fixture.crypto(), Arc::new(Clock))
+            .await
+            .unwrap();
+    let binding = store.authenticate(input.clone(), &proof).await.unwrap();
+    assert_eq!(binding.actor().participant(), input.participant());
+    store.close().await.unwrap();
+    let mut raw = SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(path.join("stock_execution_v1.sqlite")),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+            .fetch_one(&mut raw)
+            .await
+            .unwrap(),
+        19
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='stock_deficits'"
+        )
+        .fetch_one(&mut raw)
+        .await
+        .unwrap(),
+        1
+    );
+    assert_eq!(sqlx::query_scalar::<_,i64>("SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='stock_obligation_changes'").fetch_one(&mut raw).await.unwrap(),0);
+    raw.close().await.unwrap();
 }

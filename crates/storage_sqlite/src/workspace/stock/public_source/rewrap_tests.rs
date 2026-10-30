@@ -34,7 +34,7 @@ async fn additional(
             proof(r),
         )
         .await;
-    let admission = if matches!(r.catalog, 18 | 19) {
+    let admission = if matches!(r.catalog, 18..=20) {
         let StockRewrapOutcome::Claimed(admission) = admitted.unwrap() else {
             panic!("fresh confirmed admission required before wrapping")
         };

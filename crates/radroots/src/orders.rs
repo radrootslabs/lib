@@ -5,7 +5,7 @@ pub use radroots_execution::session::commerce::{
     AcceptanceRecipient, AcceptanceRewrapStatus, AcceptanceStatus, AcceptanceUnissuedReceipt,
     InstalledAcceptance,
 };
-pub use radroots_protocol::command::AcceptOrderInput;
+pub use radroots_protocol::command::{AcceptOrderInput, InstallTermsInput};
 use radroots_storage::{
     inventory::InventoryCheckpointRef,
     workspace::seller_stock::{StockListingCheckpointRef, StockSourceCheckpointRef},
@@ -35,6 +35,31 @@ impl<'a> Orders<'a> {
         self.client
             .session
             .accept_stock_order(
+                self.client.inventory()?,
+                self.client.acceptance_store()?,
+                &self.scope,
+                context,
+                minimum,
+                sources,
+                listings,
+                input,
+            )
+            .await
+    }
+    /// Owns mutually authorized complete replacement installation through the
+    /// same executor as acceptance. Positive holds precede issuance; old
+    /// obligations remain pending and negative deltas release only at T2.
+    pub async fn install_terms(
+        &self,
+        context: CommandContext,
+        minimum: InventoryCheckpointRef,
+        sources: StockSourceCheckpointRef,
+        listings: StockListingCheckpointRef,
+        input: InstallTermsInput,
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
+        self.client
+            .session
+            .install_stock_terms(
                 self.client.inventory()?,
                 self.client.acceptance_store()?,
                 &self.scope,

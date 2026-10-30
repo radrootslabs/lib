@@ -3,6 +3,7 @@ pub(in crate::workspace) mod abort;
 pub(in crate::workspace) mod acceptance;
 mod allocations;
 pub(in crate::workspace::stock) mod backing;
+mod changes;
 pub(super) mod checkpoint;
 mod codec;
 pub(in crate::workspace::stock) mod deficit;
@@ -47,9 +48,15 @@ pub(super) async fn check_head(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| WorkspaceError::RecoveryRequired)?;
-    if catalog == 19 {
+    if catalog >= 19 {
         let invalid: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM stock_deficits d LEFT JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.operation_id WHERE o.family IS NULL OR o.family!=0) OR EXISTS(SELECT 1 FROM pragma_foreign_key_check('stock_deficits'))")
             .fetch_one(&mut *connection).await.map_err(|_| WorkspaceError::RecoveryRequired)?;
+        if invalid != 0 {
+            return Err(WorkspaceError::RecoveryRequired);
+        }
+    }
+    if catalog >= 20 {
+        let invalid: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM stock_obligation_changes d LEFT JOIN stock_operations o ON o.actor=d.actor AND o.operation_id=d.operation_id WHERE o.family IS NULL OR o.family!=6) OR EXISTS(SELECT 1 FROM pragma_foreign_key_check('stock_obligation_changes'))").fetch_one(&mut *connection).await.map_err(|_|WorkspaceError::RecoveryRequired)?;
         if invalid != 0 {
             return Err(WorkspaceError::RecoveryRequired);
         }
@@ -213,7 +220,7 @@ impl Turn<'_> {
         ))
         .await?;
         self.namespace.validate()?;
-        if authority.catalog == 19 && minimum.revision().get() != 0 {
+        if authority.catalog >= 19 && minimum.revision().get() != 0 {
             let genesis = radroots_storage::inventory::InventoryCheckpointRef::from_host_metadata(
                 self.selected.authority(),
                 Sequence::new(0).map_err(|_| OperationError::RecoveryRequired)?,
@@ -349,7 +356,7 @@ impl Turn<'_> {
             )
             .await?,
         );
-        let losses = if catalog == 19 {
+        let losses = if catalog >= 19 {
             Box::pin(deficit::plan(
                 self.connection,
                 self.selected,
@@ -506,7 +513,7 @@ impl Turn<'_> {
             mapping.as_ref().map(|value| value.effect),
             &losses,
         )?;
-        let framed = if matches!(catalog, 7..=19) {
+        let framed = if matches!(catalog, 7..=20) {
             Some(
                 super::ledger::prepare(
                     self.crypto,
@@ -629,7 +636,7 @@ impl Turn<'_> {
             sqlx::query("INSERT INTO stock_operations(actor,grant_id,operation_id,command_digest,transaction_id,pool_id,revision,chain_head,protected) VALUES(?,?,?,?,?,?,?,?,?)")
                 .bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(digest.as_bytes().as_slice()).bind(transaction.as_bytes().as_slice()).bind(pool.id().as_bytes().as_slice()).bind(revision.get() as i64).bind(head.as_bytes().as_slice()).bind(protected_operation).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             if let Some(framed)=&framed {framed.insert_parts(&mut tx,request.binding().actor(),operation).await?;}
-            if catalog == 19 { deficit::insert(&mut tx, request.binding().actor().participant(), operation, pool.id(), &losses).await?; }
+            if catalog >= 19 { deficit::insert(&mut tx, request.binding().actor().participant(), operation, pool.id(), &losses).await?; }
             if let (Some(id),Some(protected))=(movement,protected_movement) {
             sqlx::query("INSERT INTO stock_movements(movement_id,actor,grant_id,operation_id,pool_id,protected) VALUES(?,?,?,?,?,?)").bind(id.as_slice()).bind(request.binding().actor().participant().as_bytes().as_slice()).bind(request.binding().input().grant_id().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).bind(pool.id().as_bytes().as_slice()).bind(protected).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
             }
@@ -922,7 +929,7 @@ pub(super) async fn read_operation(
         .fetch_one(&mut *connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let (frame, request, decoded) = if matches!(catalog, 7..=19) {
+    let (frame, request, decoded) = if matches!(catalog, 7..=20) {
         let retained = super::ledger::read(connection, input, crypto, operation)
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
@@ -969,7 +976,7 @@ pub(super) async fn read_operation(
     if original_grant != request.binding().input().grant_id().as_bytes() {
         return Err(OperationError::RecoveryRequired);
     }
-    let deficit_projection = if catalog == 19 {
+    let deficit_projection = if catalog >= 19 {
         let expected = Box::pin(deficit::plan(
             connection,
             input,

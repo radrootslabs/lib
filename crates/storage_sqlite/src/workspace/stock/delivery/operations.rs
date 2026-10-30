@@ -11,7 +11,7 @@ async fn authorized(
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if !matches!(catalog, 17..=19) {
+    if !matches!(catalog, 17..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     let loading = signing_plan::load(
@@ -23,7 +23,7 @@ async fn authorized(
         proof,
     );
     let auth = Box::pin(loading).await?;
-    if !matches!(auth.access.authority.catalog, 17..=19) {
+    if !matches!(auth.access.authority.catalog, 17..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !auth

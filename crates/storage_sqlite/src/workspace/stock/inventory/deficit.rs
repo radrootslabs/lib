@@ -12,14 +12,14 @@ pub(super) const MAX_LOSSES: usize = 32;
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Loss {
-    acceptance: OperationId,
-    installation: OperationId,
-    line: AgreementLineId,
-    before: ObligationBacking,
-    after: ObligationBacking,
+    pub(super) acceptance: OperationId,
+    pub(super) installation: OperationId,
+    pub(super) line: AgreementLineId,
+    pub(super) before: ObligationBacking,
+    pub(super) after: ObligationBacking,
 }
 impl Loss {
-    fn quantity(&self) -> Result<StockTicks, OperationError> {
+    pub(super) fn quantity(&self) -> Result<StockTicks, OperationError> {
         let quantity = self
             .before
             .backed()

@@ -510,14 +510,14 @@ pub(super) async fn history(
             ))
             .await
         }
-        Some(2) if matches!(authority.catalog, 9..=19) => {
+        Some(2) if matches!(authority.catalog, 9..=20) => {
             Box::pin(history_family_2(
                 connection, input, crypto, binding, authority, operation,
             ))
             .await
         }
         Some(2) => Err(OperationError::UnsupportedOperation),
-        Some(3) if matches!(authority.catalog, 10..=19) => {
+        Some(3) if matches!(authority.catalog, 10..=20) => {
             Box::pin(history_family_3(
                 connection, input, crypto, binding, authority, operation,
             ))
@@ -535,7 +535,7 @@ pub(super) async fn history(
             ))
             .await
         }
-        Some(6) if matches!(authority.catalog, 12..=19) => {
+        Some(6) if matches!(authority.catalog, 12..=20) => {
             Box::pin(history_family_6(
                 connection, input, crypto, binding, authority, operation,
             ))

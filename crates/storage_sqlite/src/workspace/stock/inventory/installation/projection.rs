@@ -6,6 +6,8 @@ pub(in crate::workspace::stock) struct Projection {
     order: OrderId,
     record: RecordId,
     recipients: [PublicKey; 2],
+    sequence: Sequence,
+    changes: Option<[u8; 32]>,
 }
 impl Projection {
     pub(super) fn new(header: &ledger::Header, body: &Body) -> Result<Self, OperationError> {
@@ -14,6 +16,14 @@ impl Projection {
             order: header.order.ok_or(OperationError::RecoveryRequired)?,
             record: body.record,
             recipients: body.work.map(|value| value.recipient),
+            sequence: body
+                .commit_sequence
+                .unwrap_or(Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?),
+            changes: body
+                .changes
+                .as_deref()
+                .map(super::super::changes::digest)
+                .transpose()?,
         })
     }
     pub(in crate::workspace::stock) fn digest(
@@ -27,10 +37,14 @@ impl Projection {
         h.update(entry.as_bytes());
         h.update(self.operation.as_bytes());
         h.update(self.order.as_bytes());
-        h.update(1_u64.to_be_bytes());
+        h.update(self.sequence.get().to_be_bytes());
         h.update(self.record.as_bytes());
         for recipient in self.recipients {
             h.update(recipient.as_bytes());
+        }
+        if let Some(changes) = self.changes {
+            h.update(b"obligation_changes.v1\0");
+            h.update(changes);
         }
         h.finalize().into()
     }
@@ -53,7 +67,7 @@ impl Projection {
         actor: PublicKey,
         entry: OperationId,
     ) -> Result<(), OperationError> {
-        sqlx::query("INSERT INTO stock_agreements(order_id,commit_sequence,actor,operation_id,entry_id,record_id) VALUES(?,1,?,?,?,?)").bind(self.order.as_bytes().as_slice()).bind(actor.as_bytes().as_slice()).bind(self.operation.as_bytes().as_slice()).bind(entry.as_bytes().as_slice()).bind(self.record.as_bytes().as_slice()).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
+        sqlx::query("INSERT INTO stock_agreements(order_id,commit_sequence,actor,operation_id,entry_id,record_id) VALUES(?,?,?,?,?,?)").bind(self.order.as_bytes().as_slice()).bind(self.sequence.get() as i64).bind(actor.as_bytes().as_slice()).bind(self.operation.as_bytes().as_slice()).bind(entry.as_bytes().as_slice()).bind(self.record.as_bytes().as_slice()).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
         for recipient in self.recipients {
             sqlx::query("INSERT INTO stock_publication_work(actor,operation_id,recipient,installation_entry) VALUES(?,?,?,?)").bind(actor.as_bytes().as_slice()).bind(self.operation.as_bytes().as_slice()).bind(recipient.as_bytes().as_slice()).bind(entry.as_bytes().as_slice()).execute(&mut *connection).await.map_err(|_|OperationError::StorageFailure)?;
         }
@@ -77,7 +91,7 @@ pub(in crate::workspace::stock) async fn raw_projection(
     let sequence: i64 = row
         .try_get(1)
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if sequence != 1 {
+    if sequence <= 0 {
         return Err(OperationError::RecoveryRequired);
     }
     let operation = OperationId::from_bytes(field(2)?);
@@ -105,6 +119,22 @@ pub(in crate::workspace::stock) async fn raw_projection(
             .map_err(|_| OperationError::RecoveryRequired)?,
         );
     }
+    let actor_key = PublicKey::from_bytes(*actor).map_err(|_| OperationError::RecoveryRequired)?;
+    let entry_key = OperationId::from_bytes(*entry);
+    let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut *connection)
+        .await
+        .map_err(|_| OperationError::RecoveryRequired)?;
+    let changes = if catalog >= 20 {
+        let raw = super::super::changes::raw_digest(connection, actor_key, entry_key).await?;
+        if sequence != 1 || raw != super::super::changes::digest(&[])? {
+            Some(raw)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let projection = Projection {
         operation,
         order: OrderId::from_bytes(field(0)?),
@@ -112,6 +142,8 @@ pub(in crate::workspace::stock) async fn raw_projection(
         recipients: recipients
             .try_into()
             .map_err(|_| OperationError::RecoveryRequired)?,
+        sequence: Sequence::new(sequence as u64).map_err(|_| OperationError::RecoveryRequired)?,
+        changes,
     };
     Ok(projection.digest(
         PublicKey::from_bytes(*actor).map_err(|_| OperationError::RecoveryRequired)?,

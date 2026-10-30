@@ -709,7 +709,7 @@ fn stock_root_context(
     input: &super::AttachmentInput,
     version: i64,
 ) -> Result<EnvelopeContext, WorkspaceError> {
-    if matches!(version, 4..=19) {
+    if matches!(version, 4..=20) {
         use sha2::{Digest, Sha256};
         let namespace =
             radroots_storage::workspace::seller_stock::SellerAuthoritySelection::from_attachment(
@@ -752,8 +752,10 @@ fn stock_root_context(
             b"radroots.seller_stock.authority_context.v17\0".as_slice()
         } else if version == 18 {
             b"radroots.seller_stock.authority_context.v18\0".as_slice()
-        } else {
+        } else if version == 19 {
             b"radroots.seller_stock.authority_context.v19\0".as_slice()
+        } else {
+            b"radroots.seller_stock.authority_context.v20\0".as_slice()
         });
         hash.update(wire.as_slice());
         let subject = radroots_domain::CommandDigest::from_bytes(hash.finalize().into());
@@ -792,8 +794,10 @@ fn stock_root_context(
                 "radroots.seller_stock.authority.v17"
             } else if version == 18 {
                 "radroots.seller_stock.authority.v18"
-            } else {
+            } else if version == 19 {
                 "radroots.seller_stock.authority.v19"
+            } else {
+                "radroots.seller_stock.authority.v20"
             })
             .map_err(|_| WorkspaceError::InvalidInput)?,
         ));
@@ -874,6 +878,10 @@ fn stock_record_context(
             "radroots.seller_stock.grant",
             "radroots.seller_stock.grant.v2",
         ),
+        "replacement_movement" => (
+            "radroots.seller_stock.installation_movement",
+            "radroots.seller_stock.installation_movement.v2",
+        ),
         "pool" => (
             "radroots.seller_stock.pool",
             "radroots.seller_stock.pool.v1",
@@ -911,12 +919,12 @@ fn stock_record_context_for_catalog(
 ) -> Result<EnvelopeContext, WorkspaceError> {
     let original = stock_record_context(input, kind, id)?;
     let schema = match (catalog, kind) {
-        (2, _) | (3..=19, "pool") => return Ok(original),
+        (2, _) | (3..=20, "pool") => return Ok(original),
         (3, "operation") => "radroots.seller_stock.operation.v2",
         (4, "operation") => "radroots.seller_stock.operation.v3",
         (5 | 6, "operation") => "radroots.seller_stock.operation.v4",
-        (7..=19, "operation") => "radroots.seller_stock.operation.v5",
-        (3..=19, "movement") => "radroots.seller_stock.movement.v2",
+        (7..=20, "operation") => "radroots.seller_stock.operation.v5",
+        (3..=20, "movement") => "radroots.seller_stock.movement.v2",
         _ => return Err(WorkspaceError::RecoveryRequired),
     };
     Ok(EnvelopeContext::new(

@@ -44,6 +44,7 @@ struct Policy {
 #[serde(deny_unknown_fields)]
 struct StockAccounting {
     replacement_terms_admission: ReplacementTermsAdmission,
+    native_terms_installation: NativeTermsInstallation,
     native_inspection: NativeInspection,
     value_owner: String,
     scope: String,
@@ -69,6 +70,31 @@ struct ReplacementTermsAdmission {
     native_current_head_and_residual_required: bool,
     claim_grants_current_authority: bool,
     claim_creates_stock_effects: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeTermsInstallation {
+    catalog: u8,
+    facade_method: String,
+    execution_method: String,
+    source_owner: String,
+    allocation_owner: String,
+    delta_owner: String,
+    current_installed_base_required: bool,
+    original_allocations_required: bool,
+    positive_hold_phase: String,
+    negative_release_phase: String,
+    pending_negatives_finance_holds: bool,
+    old_commitment_retained_while_pending: bool,
+    changed_residual_requires_new_admission: bool,
+    release_composition: String,
+    quantity_storage: String,
+    index_plaintext_quantities: bool,
+    automatic_changed_multi_pool_split: String,
+    same_signing_and_recovery_owner: bool,
+    unknown_issuance_releases_stock: bool,
+    retained_catalog_auto_upgrade: bool,
 }
 
 #[derive(Deserialize)]
@@ -791,12 +817,36 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !replacement.claim_creates_stock_effects,
         "replacement claim/native authority boundary policy drift",
     )?;
+    let terms = &accounting.native_terms_installation;
+    require(
+        terms.catalog == 20
+            && terms.facade_method == "Orders.install_terms"
+            && terms.execution_method == "ClientSession.install_stock_terms"
+            && terms.source_owner == "radroots_domain.causal.prepare_replacement_terms"
+            && terms.allocation_owner == "radroots_domain.stock.resolve_replacement_allocations"
+            && terms.delta_owner == "radroots_domain.stock.plan_replacement_allocations"
+            && terms.current_installed_base_required
+            && terms.original_allocations_required
+            && terms.positive_hold_phase == "T0"
+            && terms.negative_release_phase == "T2"
+            && !terms.pending_negatives_finance_holds
+            && terms.old_commitment_retained_while_pending
+            && terms.changed_residual_requires_new_admission
+            && terms.release_composition == "original_installation_order_deficit_then_backed"
+            && terms.quantity_storage == "protected_installation_body"
+            && !terms.index_plaintext_quantities
+            && terms.automatic_changed_multi_pool_split == "requires_explicit_complete_allocation"
+            && terms.same_signing_and_recovery_owner
+            && !terms.unknown_issuance_releases_stock
+            && !terms.retained_catalog_auto_upgrade,
+        "native replacement ownership, residual or stock phase policy drift",
+    )?;
     let inspection = &accounting.native_inspection;
     require(
         inspection.model_owner == "radroots_storage.inventory.StockSnapshot"
             && inspection.facade_method == "Stock.inspect"
             && inspection.storage_port == "InventoryStore.inspect_stock"
-            && inspection.supported_catalogs == [19]
+            && inspection.supported_catalogs == [19, 20]
             && inspection.worker_charge_bytes == 1048576
             && inspection.same_checkpoint_required
             && inspection.original_allocation_required
@@ -808,7 +858,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     )?;
     let correction = &accounting.native_correction;
     require(
-        correction.catalog == 19
+        correction.catalog == 20
             && correction.selection == "available_then_original_installation_and_allocation_order"
             && correction.max_affected_allocations == 32
             && correction.protected_original_allocation_required
@@ -859,7 +909,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
         envelope.journal_family == 10
             && envelope.payload_version == 1
             && envelope.payload_prefix_bytes == 213
-            && envelope.supported_catalogs == [16, 17, 18, 19]
+            && envelope.supported_catalogs == [16, 17, 18, 19, 20]
             && envelope.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
             && envelope.raw_max_bytes == 65536
@@ -907,7 +957,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && !rewrap.ordinary_status_is_atomic_absence_proof
             && rewrap.payload_version == 1
             && rewrap.payload_prefix_bytes == 117
-            && rewrap.supported_catalogs == [18, 19]
+            && rewrap.supported_catalogs == [18, 19, 20]
             && rewrap.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
             && rewrap.raw_max_bytes == 65536
@@ -935,7 +985,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     )?;
     let delivery = &stock.delivery;
     require(
-        delivery.supported_catalogs == [17, 18, 19]
+        delivery.supported_catalogs == [17, 18, 19, 20]
             && delivery.retained_unsupported_catalogs
                 == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
             && delivery.attempt_journal_family == 11
@@ -995,11 +1045,13 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.scope == "seller_stock_owner"
             && stock.database == "stock_execution_v1.sqlite"
             && stock.lock == ".stock_execution_v1.lock"
-            && stock.schema_version == 19
+            && stock.schema_version == 20
             && stock.retained_enrollment_versions == [1]
             && stock.retained_inventory_versions
-                == [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-            && stock.authority_payload_schema == "radroots.seller_stock.authority.v19"
+                == [
+                    2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                ]
+            && stock.authority_payload_schema == "radroots.seller_stock.authority.v20"
             && stock.public_source_payload_schemas
                 == [
                     "radroots.seller_stock.public_source_event.v1",
@@ -1278,7 +1330,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.qualified_local_recovery.native_authorizer
                 == "NativeWorkspace.authorize_stock_exact_replay"
             && stock.qualified_local_recovery.captured_replay == "local_replay_safe"
-            && stock.qualified_local_recovery.native_catalog == 19
+            && stock.qualified_local_recovery.native_catalog == 20
             && stock.qualified_local_recovery.worker_charge_bytes == 1048576
             && stock
                 .qualified_local_recovery
@@ -1341,7 +1393,7 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
             && stock.preparation_abort.unsupported_hosts_return == "capability_unavailable"
             && stock.preparation_abort.retained_payload_versions == [1]
             && stock.preparation_abort.retained_v1_requires_absent_claims
-            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16, 17, 18, 19]
+            && stock.preparation_abort.claimed_cleanup_catalogs == [15, 16, 17, 18, 19, 20]
             && stock.preparation_abort.untracked_claimed_catalogs == [13, 14]
             && stock.preparation_abort.per_recipient_proof_count == 2
             && stock
@@ -1924,6 +1976,39 @@ mod tests {
         }
     }
 
+    #[test]
+    fn native_terms_require_original_state_and_separate_stock_effect_phases() {
+        for (field, value) in [
+            ("catalog", json!(19)),
+            ("facade_method", json!("another_executor")),
+            ("source_owner", json!("captured_metadata")),
+            ("current_installed_base_required", json!(false)),
+            ("original_allocations_required", json!(false)),
+            ("positive_hold_phase", json!("T2")),
+            ("negative_release_phase", json!("T0")),
+            ("pending_negatives_finance_holds", json!(true)),
+            ("old_commitment_retained_while_pending", json!(false)),
+            ("changed_residual_requires_new_admission", json!(false)),
+            ("quantity_storage", json!("plaintext_index")),
+            ("index_plaintext_quantities", json!(true)),
+            (
+                "automatic_changed_multi_pool_split",
+                json!("current_mapping"),
+            ),
+            ("same_signing_and_recovery_owner", json!(false)),
+            ("unknown_issuance_releases_stock", json!(true)),
+            ("retained_catalog_auto_upgrade", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/stock_accounting/native_terms_installation/{field}"),
+                    value
+                ))
+                .is_err(),
+                "{field}"
+            );
+        }
+    }
     #[test]
     fn native_corrections_require_original_allocations_and_atomic_deficits() {
         for (field, value) in [

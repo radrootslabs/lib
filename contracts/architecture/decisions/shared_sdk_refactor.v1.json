@@ -82,7 +82,7 @@
       "adapter": "radroots_nostr.signing.LocalSigner",
       "native_authorizer": "NativeWorkspace.authorize_stock_exact_replay",
       "captured_replay": "local_replay_safe",
-      "native_catalog": 19,
+      "native_catalog": 20,
       "worker_charge_bytes": 1048576,
       "existing_protected_claim_required": true,
       "current_execute_consent_required": true,
@@ -111,7 +111,7 @@
     "scope": "seller_stock_owner",
     "database": "stock_execution_v1.sqlite",
     "lock": ".stock_execution_v1.lock",
-    "schema_version": 19,
+    "schema_version": 20,
     "retained_enrollment_versions": [
       1
     ],
@@ -132,9 +132,10 @@
       15,
       16,
       17,
-      18
+      18,
+      19
     ],
-    "authority_payload_schema": "radroots.seller_stock.authority.v19",
+    "authority_payload_schema": "radroots.seller_stock.authority.v20",
     "public_source_payload_schemas": [
       "radroots.seller_stock.public_source_event.v1",
       "radroots.seller_stock.public_source_head.v1",
@@ -401,7 +402,8 @@
         16,
         17,
         18,
-        19
+        19,
+        20
       ],
       "untracked_claimed_catalogs": [
         13,
@@ -423,7 +425,8 @@
         16,
         17,
         18,
-        19
+        19,
+        20
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -464,7 +467,8 @@
       "supported_catalogs": [
         17,
         18,
-        19
+        19,
+        20
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -539,7 +543,8 @@
       "payload_prefix_bytes": 117,
       "supported_catalogs": [
         18,
-        19
+        19,
+        20
       ],
       "retained_unsupported_catalogs": [
         1,
@@ -1106,7 +1111,10 @@
       "model_owner": "radroots_storage.inventory.StockSnapshot",
       "facade_method": "Stock.inspect",
       "storage_port": "InventoryStore.inspect_stock",
-      "supported_catalogs": [19],
+      "supported_catalogs": [
+        19,
+        20
+      ],
       "worker_charge_bytes": 1048576,
       "same_checkpoint_required": true,
       "original_allocation_required": true,
@@ -1126,7 +1134,7 @@
     "loss_deletes_obligation": false,
     "native_atomic_allocation_and_identity_required": true,
     "native_correction": {
-      "catalog": 19,
+      "catalog": 20,
       "selection": "available_then_original_installation_and_allocation_order",
       "max_affected_allocations": 32,
       "protected_original_allocation_required": true,
@@ -1135,6 +1143,28 @@
       "worker_charge_bytes": 1048576,
       "preparatory_loss_implicit": false,
       "quarantine_loss_implicit": false
+    },
+    "native_terms_installation": {
+      "catalog": 20,
+      "facade_method": "Orders.install_terms",
+      "execution_method": "ClientSession.install_stock_terms",
+      "source_owner": "radroots_domain.causal.prepare_replacement_terms",
+      "allocation_owner": "radroots_domain.stock.resolve_replacement_allocations",
+      "delta_owner": "radroots_domain.stock.plan_replacement_allocations",
+      "current_installed_base_required": true,
+      "original_allocations_required": true,
+      "positive_hold_phase": "T0",
+      "negative_release_phase": "T2",
+      "pending_negatives_finance_holds": false,
+      "old_commitment_retained_while_pending": true,
+      "changed_residual_requires_new_admission": true,
+      "release_composition": "original_installation_order_deficit_then_backed",
+      "quantity_storage": "protected_installation_body",
+      "index_plaintext_quantities": false,
+      "automatic_changed_multi_pool_split": "requires_explicit_complete_allocation",
+      "same_signing_and_recovery_owner": true,
+      "unknown_issuance_releases_stock": false,
+      "retained_catalog_auto_upgrade": false
     }
   },
   "execution": {

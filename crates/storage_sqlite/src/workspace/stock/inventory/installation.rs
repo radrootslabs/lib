@@ -1,10 +1,13 @@
-//! Initial T2 installation. Original preparation and issuance remain immutable.
+//! T2 commitment installation. Original preparation and issuance remain immutable.
 use super::super::{issuance::evidence::selection, ledger, signing_plan};
 use super::*;
 use checkpoint::{EntryIdentity, IdentityTarget};
 use radroots_domain::{OrderId, PublicKey, RecordId, stock::StockTicks};
+use std::collections::BTreeMap;
 mod codec;
 mod projection;
+#[cfg(test)]
+mod wire_tests;
 pub(in crate::workspace::stock) use codec::{Retained, read_entry};
 pub(in crate::workspace::stock) use projection::{Projection, raw_projection};
 
@@ -69,7 +72,7 @@ impl std::fmt::Debug for StockPublicationWork {
     }
 }
 
-/// Confirmed initial agreement and exact per-recipient work. This is business
+/// Confirmed installed commitment and exact per-recipient work. This is business
 /// installation evidence, independent of signing dispatch and delivery status.
 #[derive(Clone)]
 pub struct StockInstallationReceipt {
@@ -137,13 +140,33 @@ struct Effect {
     before: PoolSnapshot,
     after: PoolSnapshot,
     quantity: StockTicks,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "super::super::optional_present"
+    )]
+    released: Option<StockTicks>,
     movement: [u8; 32],
 }
-fn after(before: PoolSnapshot, quantity: StockTicks) -> Result<PoolSnapshot, OperationError> {
-    let balances = before
-        .balances()
-        .install_preparatory(quantity)
-        .map_err(|_| OperationError::RecoveryRequired)?;
+fn after(
+    before: PoolSnapshot,
+    quantity: StockTicks,
+    released: StockTicks,
+) -> Result<PoolSnapshot, OperationError> {
+    if quantity == StockTicks::ZERO && released == StockTicks::ZERO {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let mut balances = before.balances();
+    if quantity != StockTicks::ZERO {
+        balances = balances
+            .install_preparatory(quantity)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+    }
+    if released != StockTicks::ZERO {
+        balances = balances
+            .release_committed(released)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+    }
     let version = Sequence::new(
         before
             .version()
@@ -163,6 +186,18 @@ fn after(before: PoolSnapshot, quantity: StockTicks) -> Result<PoolSnapshot, Ope
 #[serde(deny_unknown_fields)]
 struct Body {
     version: u8,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "super::super::optional_present"
+    )]
+    commit_sequence: Option<Sequence>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "super::super::optional_present"
+    )]
+    changes: Option<Vec<super::changes::Release>>,
     operation: OperationId,
     plan_entry: OperationId,
     plan_head: CheckpointDigest,
@@ -171,6 +206,20 @@ struct Body {
     authorization: radroots_storage::workspace::seller_stock::StockAuthorizationRef,
     effects: Vec<Effect>,
     work: [Work; 2],
+}
+pub(super) fn read_changes(
+    frame: &ledger::Retained,
+) -> Result<Vec<super::changes::Release>, OperationError> {
+    let body: Body =
+        super::super::closed_record(&frame.body).map_err(|_| OperationError::RecoveryRequired)?;
+    if body.version != 2
+        || frame.header.family != ledger::Family::Installation
+        || frame.header.related_operation != Some(body.operation)
+        || codec::head(&frame.header, &frame.body) != frame.header.head
+    {
+        return Err(OperationError::RecoveryRequired);
+    }
+    body.changes.ok_or(OperationError::RecoveryRequired)
 }
 pub(in crate::workspace::stock) async fn existing(
     turn: &mut Turn<'_>,
@@ -222,7 +271,7 @@ pub(in crate::workspace) async fn install(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12..=19) {
+    if !matches!(auth.access.authority.catalog, 12..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (old, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;
@@ -301,20 +350,55 @@ pub(in crate::workspace) async fn install(
     let backing = Box::pin(super::backing::read(
         turn,
         &auth.access,
-        auth.original.receipt.held_pools(),
+        &auth.original.affected_pool_snapshots()?,
     ))
     .await?;
-    let allocations = auth.original.held_allocations()?;
-    let mut originals = Vec::with_capacity(allocations.len());
-    let mut effects = Vec::with_capacity(allocations.len());
-    for (pool, quantity) in allocations {
+    let before_revision = auth
+        .access
+        .authority
+        .inventory
+        .ok_or(OperationError::RecoveryRequired)?
+        .revision
+        .get()
+        .checked_add(1)
+        .ok_or(WorkspaceError::Capacity)?;
+    let changes = auth
+        .original
+        .plan_releases(turn.connection, turn.selected, turn.crypto, before_revision)
+        .await?;
+    let mut quantities: BTreeMap<_, _> = auth
+        .original
+        .held_allocations()?
+        .into_iter()
+        .map(|(pool, quantity)| (pool, (quantity, StockTicks::ZERO)))
+        .collect();
+    for change in &changes {
+        change.validate()?;
+        if change.backed != StockTicks::ZERO {
+            let quantities = quantities
+                .entry(change.pool)
+                .or_insert((StockTicks::ZERO, StockTicks::ZERO));
+            quantities.1 = quantities
+                .1
+                .checked_add(change.backed)
+                .map_err(|_| WorkspaceError::Capacity)?;
+        }
+    }
+    let mut originals = Vec::with_capacity(quantities.len());
+    let mut effects = Vec::with_capacity(quantities.len());
+    for (pool, (quantity, released)) in quantities {
         let original = read_pool(turn.connection, turn.selected, turn.crypto, pool)
             .await?
             .ok_or(OperationError::RecoveryRequired)?;
         effects.push(Effect {
             before: original.pool,
-            after: after(original.pool, quantity)?,
+            after: after(original.pool, quantity, released)?,
             quantity,
+            released: if released == StockTicks::ZERO {
+                None
+            } else {
+                Some(released)
+            },
             movement: super::super::super::random()?,
         });
         originals.push(original);
@@ -334,8 +418,15 @@ pub(in crate::workspace) async fn install(
     .map_err(|_| WorkspaceError::Capacity)?;
     let transaction = TransactionId::from_bytes(super::super::super::random()?);
     let entry = OperationId::from_bytes(super::super::super::random()?);
+    let replacement = auth.command.proposal().is_some();
     let body = Body {
-        version: 1,
+        version: if replacement { 2 } else { 1 },
+        commit_sequence: if replacement {
+            Some(auth.original.commitment_sequence()?)
+        } else {
+            None
+        },
+        changes: if replacement { Some(changes) } else { None },
         operation: request.operation,
         plan_entry: plan.frame.header.operation,
         plan_head: plan.frame.header.head,
@@ -397,10 +488,14 @@ pub(in crate::workspace) async fn install(
             turn.crypto
                 .seal_stock_record(
                     turn.selected,
-                    "installation_movement",
+                    if body.version == 2 {
+                        "replacement_movement"
+                    } else {
+                        "installation_movement"
+                    },
                     &effect.movement,
                     &encode(&codec::Movement {
-                        version: 1,
+                        version: body.version,
                         operation: entry,
                         digest: request.digest,
                         record: body.record,
@@ -442,6 +537,7 @@ pub(in crate::workspace) async fn install(
         for backing in &backing {backing.confirm(&mut tx).await?;}
         for (recipient,summary) in &selections {summary.confirm(&mut tx,turn.selected.participant(),request.operation,*recipient).await?;}
         framed.insert_record(&mut tx).await?;
+        if let Some(changes)=&body.changes {super::changes::insert(&mut tx,turn.selected.participant(),entry,changes).await?;}
         projection.insert(&mut tx,turn.selected.participant(),entry).await?;
         for (index,(effect,original)) in body.effects.iter().zip(&originals).enumerate() {
             let changed=sqlx::query("UPDATE stock_pools SET revision=?,protected=? WHERE pool_id=? AND revision=? AND protected=?").bind(effect.after.version().get() as i64).bind(&pool_bytes[index]).bind(effect.before.id().as_bytes().as_slice()).bind(effect.before.version().get() as i64).bind(&original.protected).execute(&mut *tx).await.map_err(|_|OperationError::StorageFailure)?;
@@ -481,7 +577,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 12..=19) {
+    if !matches!(auth.access.authority.catalog, 12..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     let (retained, identity) = Box::pin(existing(turn, &auth, request.operation)).await?;

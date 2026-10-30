@@ -442,6 +442,13 @@ pub fn radroots_domain::stock::PoolView::new(&str, radroots_domain::stock::PoolS
 pub const fn radroots_domain::stock::PoolView::snapshot(&self) -> radroots_domain::stock::PoolSnapshot
 impl core::fmt::Debug for radroots_domain::stock::PoolView
 pub fn radroots_domain::stock::PoolView::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::stock::ReplacementAllocationPlan
+impl radroots_domain::stock::ReplacementAllocationPlan
+pub fn radroots_domain::stock::ReplacementAllocationPlan::additional_allocations(&self) -> &[radroots_domain::stock::StockAllocation]
+pub fn radroots_domain::stock::ReplacementAllocationPlan::pending_releases(&self) -> &[radroots_domain::stock::StockAllocation]
+pub fn radroots_domain::stock::ReplacementAllocationPlan::preparatory_holds(&self) -> &[radroots_domain::stock::PoolHoldProposal]
+impl core::fmt::Debug for radroots_domain::stock::ReplacementAllocationPlan
+pub fn radroots_domain::stock::ReplacementAllocationPlan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_domain::stock::StockAllocation
 impl radroots_domain::stock::StockAllocation
 pub const fn radroots_domain::stock::StockAllocation::line_id(self) -> radroots_domain::AgreementLineId
@@ -472,6 +479,9 @@ pub fn radroots_domain::stock::StockTicks::serialize<S: serde_core::ser::Seriali
 impl<'de> serde_core::de::Deserialize<'de> for radroots_domain::stock::StockTicks
 pub fn radroots_domain::stock::StockTicks::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
 pub fn radroots_domain::stock::plan_allocations(&radroots_domain::Terms, &[radroots_domain::stock::OptionPoolMapping], &[radroots_domain::stock::PoolSnapshot], core::option::Option<&[radroots_domain::stock::AllocationClaim]>) -> core::result::Result<(alloc::vec::Vec<radroots_domain::stock::StockAllocation>, alloc::vec::Vec<radroots_domain::stock::PoolHoldProposal>), radroots_domain::stock::AllocationPlanError>
+pub fn radroots_domain::stock::plan_replacement_allocations(&[radroots_domain::stock::StockAllocation], &[radroots_domain::stock::StockAllocation], &[radroots_domain::stock::PoolSnapshot]) -> core::result::Result<radroots_domain::stock::ReplacementAllocationPlan, radroots_domain::stock::AllocationPlanError>
+pub fn radroots_domain::stock::resolve_allocations(&radroots_domain::Terms, &[radroots_domain::stock::OptionPoolMapping], &[radroots_domain::stock::PoolSnapshot], core::option::Option<&[radroots_domain::stock::AllocationClaim]>) -> core::result::Result<alloc::vec::Vec<radroots_domain::stock::StockAllocation>, radroots_domain::stock::AllocationPlanError>
+pub fn radroots_domain::stock::resolve_replacement_allocations(&radroots_domain::Terms, &[radroots_domain::stock::OptionPoolMapping], &[radroots_domain::stock::PoolSnapshot], core::option::Option<&[radroots_domain::stock::AllocationClaim]>, &[radroots_domain::stock::StockAllocation]) -> core::result::Result<alloc::vec::Vec<radroots_domain::stock::StockAllocation>, radroots_domain::stock::AllocationPlanError>
 #[non_exhaustive] pub enum radroots_domain::ActorRole
 pub radroots_domain::ActorRole::Buyer
 pub radroots_domain::ActorRole::Coordinator

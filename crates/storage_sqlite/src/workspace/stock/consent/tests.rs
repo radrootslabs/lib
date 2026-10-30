@@ -166,7 +166,7 @@ fn committed(outcome: StockConsentOutcome) -> StockConsentReceipt {
 #[tokio::test]
 async fn retained_catalog_cannot_mint_initial_consent_for_captured_replacement_terms() {
     for catalog in [9, 19] {
-        let r = Rig::with_catalog((catalog != 19).then_some(catalog)).await;
+        let r = Rig::with_catalog(Some(catalog)).await;
         let initial = r.command(&r.binding, 0x31);
         let mut wire: serde_json::Value = serde_json::from_slice(initial.protected_wire()).unwrap();
         wire["type"] = serde_json::json!("orders.install_terms");

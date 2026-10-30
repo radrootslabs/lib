@@ -128,6 +128,10 @@ impl Witness {
         {
             return Err(OperationError::RecoveryRequired);
         }
+        let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|_| OperationError::RecoveryRequired)?;
         let legal = match self.expected {
             None => next.phase == Phase::Prepared,
             Some(old) if old.actor == next.actor => match (old.phase, next.phase) {
@@ -135,6 +139,9 @@ impl Witness {
                     old.operation == next.operation
                 }
                 (Phase::Aborted, Phase::Prepared) => old.operation != next.operation,
+                (Phase::Installed, Phase::Prepared) if catalog >= 20 => {
+                    old.operation != next.operation
+                }
                 _ => false,
             },
             Some(_) => false,
@@ -164,11 +171,12 @@ impl Witness {
     }
 }
 
-/// Constant-memory backward validation of initial decision transitions. Each
+/// Constant-memory backward validation of retained decision transitions. Each
 /// original preparation remains independently recoverable after a later abort.
 pub(super) struct Chain {
     pub latest: Option<Marker>,
     previous: Previous,
+    replacements: bool,
 }
 enum Previous {
     Latest,
@@ -176,10 +184,11 @@ enum Previous {
     AbortOrGenesis(OperationId),
 }
 impl Chain {
-    pub const fn new() -> Self {
+    pub const fn new(catalog: i64) -> Self {
         Self {
             latest: None,
             previous: Previous::Latest,
+            replacements: catalog >= 20,
         }
     }
     pub fn observe(&mut self, marker: Marker) -> Result<(), OperationError> {
@@ -191,7 +200,9 @@ impl Chain {
             Previous::Preparation(operation)
                 if marker.phase == Phase::Prepared && marker.operation == operation => {}
             Previous::AbortOrGenesis(operation)
-                if marker.phase == Phase::Aborted && marker.operation != operation => {}
+                if (marker.phase == Phase::Aborted
+                    || (self.replacements && marker.phase == Phase::Installed))
+                    && marker.operation != operation => {}
             _ => return Err(OperationError::RecoveryRequired),
         }
         self.previous = match marker.phase {

@@ -132,7 +132,7 @@ pub(super) fn encode_operation(
         String::from_utf8(clear.to_vec()).map_err(|_| OperationError::StorageFailure)?,
     )
     .map_err(|_| OperationError::StorageFailure)?;
-    if catalog == 19 {
+    if catalog >= 19 {
         return super::encode(&OperationV5 {
             version: 5,
             authorization: authorization.ok_or(OperationError::RecoveryRequired)?,
@@ -183,7 +183,7 @@ fn decode_inner(
     catalog: i64,
     allow_mapping: bool,
 ) -> Result<(InventoryRequest, OperationData), OperationError> {
-    if catalog == 19 {
+    if catalog >= 19 {
         let decoded: OperationV5<'_> =
             super::closed_record(bytes).map_err(|_| OperationError::RecoveryRequired)?;
         if decoded.version != 5 || decoded.losses.len() > super::deficit::MAX_LOSSES {

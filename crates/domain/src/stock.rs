@@ -7,12 +7,17 @@ mod allocation;
 mod mapping;
 mod movements;
 mod obligation;
+mod replacement;
 pub use allocation::{
     AllocationClaim, AllocationPlanError, PoolHoldProposal, StockAllocation, plan_allocations,
+    resolve_allocations,
 };
 pub use mapping::{MappingError, OptionMappingKey, OptionPoolMapping};
 pub use movements::{HeldStockCategory, HeldStockLoss};
 pub use obligation::ObligationBacking;
+pub use replacement::{
+    ReplacementAllocationPlan, plan_replacement_allocations, resolve_replacement_allocations,
+};
 
 /// A bounded, input-free stock value failure.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

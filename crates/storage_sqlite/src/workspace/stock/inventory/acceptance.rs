@@ -11,6 +11,7 @@ use radroots_storage::workspace::seller_stock::{
 use std::collections::{BTreeMap, BTreeSet};
 pub(in crate::workspace::stock) mod codec;
 mod plan;
+pub(super) mod replacement;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -20,10 +21,17 @@ struct Body<'a> {
     command: &'a RawValue,
     #[serde(borrow)]
     terms: &'a RawValue,
-    #[serde(borrow)]
-    original_request: &'a RawValue,
+    #[serde(default, borrow, skip_serializing_if = "Option::is_none")]
+    original_request: Option<&'a RawValue>,
     #[serde(borrow, deserialize_with = "super::super::required_nullable")]
     original_quote: Option<&'a RawValue>,
+    #[serde(
+        default,
+        borrow,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "super::super::optional_present"
+    )]
+    replacement: Option<replacement::Basis<'a>>,
     #[serde(deserialize_with = "super::super::required_nullable")]
     seller_author_head: Option<RecordId>,
     seller_author_sequence: Sequence,
@@ -236,13 +244,13 @@ pub(in crate::workspace) async fn admit(
     let access = turn
         .access(request.binding(), request.minimum_checkpoint(), &proof)
         .await?;
-    if !matches!(access.authority.catalog, 9..=19) {
+    if !matches!(access.authority.catalog, 9..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     let command = request.command();
     // This retained preparation format describes an initial acceptance only.
     // Capturing a replacement never grants the initial request path authority.
-    if command.proposal().is_some() {
+    if command.proposal().is_some() && access.authority.catalog < 20 {
         return Err(OperationError::UnsupportedOperation);
     }
     let operation = command.context().operation_id();
@@ -336,27 +344,51 @@ pub(in crate::workspace) async fn admit(
         source::checkpoint::Target::Minimum(request.source_checkpoint()),
     )
     .await?;
-    let admitted = source::request::prepare(
-        turn.connection,
-        turn.selected,
-        turn.crypto,
-        source::history::InventoryRead {
-            binding: &access.current,
-            authority: &access.authority,
-            minimum: request.minimum_checkpoint(),
-        },
-        command.authorization(),
-        request.listing_checkpoint(),
-        access.current.observed_at(),
-    )
-    .await?;
+    let base = if command.proposal().is_some() {
+        Some(Box::pin(replacement::load(turn, &access, command)).await?)
+    } else {
+        None
+    };
+    let inventory_read = source::history::InventoryRead {
+        binding: &access.current,
+        authority: &access.authority,
+        minimum: request.minimum_checkpoint(),
+    };
+    let admitted = if let (CapturedStockCommitment::TermsInstallation(command), Some(base)) =
+        (command, base.as_ref())
+    {
+        Box::pin(source::request::prepare_terms(
+            turn.connection,
+            turn.selected,
+            turn.crypto,
+            inventory_read,
+            source::request::ReplacementSource {
+                command,
+                base: &base.record,
+            },
+            request.listing_checkpoint(),
+            access.current.observed_at(),
+        ))
+        .await?
+    } else {
+        source::request::prepare(
+            turn.connection,
+            turn.selected,
+            turn.crypto,
+            inventory_read,
+            command.authorization(),
+            request.listing_checkpoint(),
+            access.current.observed_at(),
+        )
+        .await?
+    };
     let expected = command
         .context()
         .expected()
         .ok_or(OperationError::InvalidCommand)?;
     if expected.order_id() != admitted.scope.order_id()
-        || expected.agreement().is_some()
-        || expected.seller_sequence().get() != 0
+        || (base.is_none()
+            && (expected.agreement().is_some() || expected.seller_sequence().get() != 0))
         || expected.buyer_head() != admitted.history.analysis.buyer_head()
         || Some(expected.checkpoint()) != admitted.history.checkpoint.as_ref()
         || command.terms_digest() != admitted.digest
@@ -376,11 +408,17 @@ pub(in crate::workspace) async fn admit(
             expected.order_id(),
         ))
         .await?;
-        if checked
-            .witness
-            .expected
-            .is_some_and(|value| value.phase != super::super::order_state::Phase::Aborted)
-        {
+        let stale = match (&base, checked.witness.expected) {
+            (None, Some(value)) => value.phase != super::super::order_state::Phase::Aborted,
+            (Some(base), Some(value)) => {
+                value.phase == super::super::order_state::Phase::Prepared
+                    || (value.phase == super::super::order_state::Phase::Installed
+                        && (value.operation != base.operation || value.entry != base.installation))
+            }
+            (Some(_), None) => true,
+            (None, None) => false,
+        };
+        if stale {
             return Err(OperationError::StaleState);
         }
         Some(checked)
@@ -405,11 +443,42 @@ pub(in crate::workspace) async fn admit(
     let mut mappings = Vec::new();
     let mut mapping_reads = Vec::new();
     let mut pool_ids = BTreeSet::new();
+    let old_terms = base
+        .as_ref()
+        .map(|base| base.preparation.terms())
+        .transpose()?;
+    let old_mappings = base
+        .as_ref()
+        .map(|base| base.preparation.mappings())
+        .transpose()?
+        .unwrap_or_default();
+    if let Some(base) = &base {
+        pool_ids.extend(base.originals.iter().map(|draw| draw.allocation.pool_id()));
+    }
     if matches!(
         admitted.terms()?.supply(),
         radroots_domain::SupplyCommitment::StockBacked
     ) {
         for line in admitted.terms()?.lines() {
+            if let Some(old) = old_terms
+                .as_ref()
+                .and_then(|terms| terms.lines().iter().find(|old| old.id() == line.id()))
+            {
+                if old.source().coordinate() != line.source().coordinate()
+                    || old.option_id() != line.option_id()
+                {
+                    return Err(OperationError::UnsupportedOperation);
+                }
+                let key = radroots_domain::stock::OptionMappingKey::new(
+                    old.source().coordinate(),
+                    old.option_id(),
+                );
+                if let Some(mapping) = old_mappings.iter().find(|mapping| mapping.key() == key) {
+                    pool_ids.insert(mapping.pool_id());
+                    mappings.push(*mapping);
+                    continue;
+                }
+            }
             let key = radroots_domain::stock::OptionMappingKey::new(
                 line.source().coordinate(),
                 line.option_id(),
@@ -462,8 +531,29 @@ pub(in crate::workspace) async fn admit(
         before_pools.push(retained.pool);
         pool_reads.insert(id, retained);
     }
-    let (allocations, effects) =
-        plan::resolve(admitted.terms()?, command, &mappings, &before_pools)?;
+    let replacement::Resolution {
+        allocations,
+        effects,
+        desired,
+        releases,
+    } = if let Some(base) = &base {
+        replacement::resolve(
+            admitted.terms()?,
+            command,
+            &mappings,
+            &before_pools,
+            &base.originals,
+        )?
+    } else {
+        let (allocations, effects) =
+            plan::resolve(admitted.terms()?, command, &mappings, &before_pools)?;
+        replacement::Resolution {
+            allocations,
+            effects,
+            desired: Vec::new(),
+            releases: Vec::new(),
+        }
+    };
     let before = access
         .authority
         .inventory
@@ -505,15 +595,24 @@ pub(in crate::workspace) async fn admit(
     }
     let terms = radroots_protocol::terms::EncodedTerms::capture(admitted.terms()?)
         .map_err(|_| OperationError::InvalidEvidence)?;
-    let original_request = radroots_protocol::commerce::EncodedRecord::capture(
-        admitted
-            .history
-            .records
-            .get(&admitted.request)
-            .ok_or(OperationError::RecoveryRequired)?
-            .content(),
-    )
-    .map_err(|_| OperationError::RecoveryRequired)?;
+    let original_request = if base.is_none() {
+        Some(replacement::encoded(
+            &admitted.history.records,
+            admitted.authorization,
+        )?)
+    } else {
+        None
+    };
+    let replacement_records = admitted
+        .replacement
+        .map(|selected| {
+            Ok::<_, OperationError>([
+                replacement::encoded(&admitted.history.records, selected.base_agreement())?,
+                replacement::encoded(&admitted.history.records, selected.proposal())?,
+                replacement::encoded(&admitted.history.records, selected.authorization())?,
+            ])
+        })
+        .transpose()?;
     let original_quote = admitted
         .quote
         .map(|id| {
@@ -541,13 +640,18 @@ pub(in crate::workspace) async fn admit(
         .transpose()?
         .unwrap_or(Sequence::new(0).map_err(|_| OperationError::RecoveryRequired)?);
     let body = Body {
-        version: 1,
+        version: if base.is_some() { 2 } else { 1 },
         command: serde_json::from_slice(command.protected_wire())
             .map_err(|_| OperationError::InvalidCommand)?,
         terms: serde_json::from_slice(terms.protected_wire())
             .map_err(|_| OperationError::InvalidEvidence)?,
-        original_request: serde_json::from_slice(original_request.protected_wire())
-            .map_err(|_| OperationError::RecoveryRequired)?,
+        original_request: original_request
+            .as_ref()
+            .map(|record| {
+                serde_json::from_slice(record.protected_wire())
+                    .map_err(|_| OperationError::RecoveryRequired)
+            })
+            .transpose()?,
         original_quote: original_quote
             .as_ref()
             .map(|quote| {
@@ -555,6 +659,23 @@ pub(in crate::workspace) async fn admit(
                     .map_err(|_| OperationError::RecoveryRequired)
             })
             .transpose()?,
+        replacement: match (base, replacement_records.as_ref()) {
+            (Some(base), Some(records)) => Some(replacement::Basis {
+                base_operation: base.operation,
+                base_installation: base.installation,
+                base: serde_json::from_slice(records[0].protected_wire())
+                    .map_err(|_| OperationError::RecoveryRequired)?,
+                proposal: serde_json::from_slice(records[1].protected_wire())
+                    .map_err(|_| OperationError::RecoveryRequired)?,
+                authorization: serde_json::from_slice(records[2].protected_wire())
+                    .map_err(|_| OperationError::RecoveryRequired)?,
+                originals: base.originals,
+                desired,
+                releases,
+            }),
+            (None, None) => None,
+            _ => return Err(OperationError::RecoveryRequired),
+        },
         seller_author_head,
         seller_author_sequence,
         minimum_revision: request.minimum_checkpoint().revision(),

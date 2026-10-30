@@ -12,7 +12,7 @@ impl Turn<'_> {
         proof: AttachmentProof,
     ) -> Result<Option<StockSnapshot>, OperationError> {
         let mut access = self.access(&binding, minimum, &proof).await?;
-        if access.authority.catalog != 19 {
+        if access.authority.catalog < 19 {
             return Err(OperationError::UnsupportedOperation);
         }
         access.record.require(StockAction::ReadPools, id)?;
@@ -60,8 +60,8 @@ impl Turn<'_> {
                     .checked_add(value.deficit())
                     .map_err(|_| OperationError::RecoveryRequired)?;
             }
-            // Catalog19 has no quarantine/consumption/release producer. A
-            // current report must match its actual installed physical backing.
+            // Current original-draw transitions must reconcile to actual
+            // physical committed backing, independently of historical receipts.
             if backed != pool.pool.balances().physical().committed_hold
                 || pool.pool.balances().physical().physical_quarantine != StockTicks::ZERO
             {

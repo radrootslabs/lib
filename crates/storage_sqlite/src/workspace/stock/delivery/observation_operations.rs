@@ -18,7 +18,7 @@ pub(in crate::workspace) async fn capture_observation(
     }
     let (authority, credential, root, grant) =
         super::super::read(turn.connection, input, turn.crypto).await?;
-    if !matches!(authority.catalog, 17..=19) {
+    if !matches!(authority.catalog, 17..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     credential.authenticate_retained_capture(input, &proof)?;

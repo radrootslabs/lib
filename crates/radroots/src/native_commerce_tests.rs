@@ -926,6 +926,8 @@ mod rewrap;
 
 #[path = "native_stock_deficit_tests.rs"]
 mod deficit;
+#[path = "native_stock_terms_tests.rs"]
+mod terms;
 
 #[tokio::test]
 async fn peer_installation_survives_self_refusal_and_resume_uses_original_exact_recovery() {

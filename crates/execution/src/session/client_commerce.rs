@@ -11,7 +11,9 @@ use crate::{
 };
 use alloc::boxed::Box;
 use radroots_domain::{CommandDigest, OperationId};
-use radroots_protocol::command::{AcceptOrderInput, CapturedOrderAcceptance};
+use radroots_protocol::command::{
+    AcceptOrderInput, CapturedOrderAcceptance, CapturedTermsInstallation, InstallTermsInput,
+};
 use radroots_storage::{
     command::OperationError,
     inventory::{
@@ -59,6 +61,59 @@ impl<H: SessionHost + 'static> ClientSession<H> {
                     .map_err(|_| OperationError::InvalidCommand)?;
                 let digest = command.digest();
                 let request = StockAcceptanceRequest::capture(
+                    binding.clone(),
+                    minimum,
+                    sources,
+                    listings,
+                    &command,
+                )?;
+                Ok((
+                    AcceptanceSelection {
+                        binding,
+                        minimum,
+                        operation,
+                        digest,
+                    },
+                    Some(request),
+                ))
+            },
+        )
+        .await
+    }
+    /// Installs complete mutually authorized replacement terms through the
+    /// same owned T0/T1/S/T2 and original delivery/recovery pipeline. Pending
+    /// preparation preserves the old agreement and its original obligations.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn install_stock_terms(
+        &self,
+        inventory: Shared<dyn InventoryStore>,
+        store: Shared<dyn AcceptanceStore>,
+        scope: &WorkspaceSession,
+        context: CommandContext,
+        minimum: InventoryCheckpointRef,
+        sources: StockSourceCheckpointRef,
+        listings: StockListingCheckpointRef,
+        input: InstallTermsInput,
+    ) -> crate::ExecutionResult<AcceptanceStatus> {
+        let operation = context.data().operation_id();
+        if !scope.owns_context(&context) {
+            return Err(Error::operation(
+                OperationError::Unauthorized,
+                OperationContext::proposed(Some(operation)),
+            )
+            .into());
+        }
+        self.submit_acceptance(
+            inventory,
+            store,
+            scope,
+            operation,
+            RunMode::Command,
+            move |binding| {
+                let command = CapturedTermsInstallation::new(context.data().clone(), input)
+                    .map_err(|_| OperationError::InvalidCommand)?;
+                let digest = command.digest();
+                let request = StockAcceptanceRequest::capture_terms(
                     binding.clone(),
                     minimum,
                     sources,

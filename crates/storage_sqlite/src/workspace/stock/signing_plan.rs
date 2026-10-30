@@ -148,7 +148,7 @@ pub(in crate::workspace::stock) async fn load(
     proof: &AttachmentProof,
 ) -> Result<Authorized, OperationError> {
     let access = Box::pin(turn.access(binding, minimum, proof)).await?;
-    if !matches!(access.authority.catalog, 10..=19) {
+    if !matches!(access.authority.catalog, 10..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     let original = Box::pin(acceptance::codec::read(
@@ -181,13 +181,11 @@ pub(in crate::workspace::stock) async fn load(
         false,
         access.current.observed_at(),
     )?;
-    for pool in original.receipt.held_pools() {
-        if !consent.resources.contains(pool.id()) {
+    for pool in original.affected_pools()? {
+        if !consent.resources.contains(pool) {
             return Err(OperationError::Unauthorized);
         }
-        access
-            .record
-            .require(StockAction::ReadOperations, pool.id())?;
+        access.record.require(StockAction::ReadOperations, pool)?;
     }
     let id: Option<Vec<u8>> = sqlx::query_scalar("SELECT operation_id FROM stock_operations WHERE actor=? AND related_operation=? AND family=3 AND length(operation_id)=32")
         .bind(turn.selected.participant().as_bytes().as_slice()).bind(operation.as_bytes().as_slice()).fetch_optional(&mut *turn.connection).await.map_err(|_| OperationError::RecoveryRequired)?;
@@ -283,6 +281,21 @@ pub(in crate::workspace) async fn bind(
             auth.plan.ok_or(OperationError::RecoveryRequired)?.bound,
         )));
     }
+    auth.original
+        .confirm_replacement_residual(
+            turn.connection,
+            turn.selected,
+            turn.crypto,
+            auth.access
+                .authority
+                .inventory
+                .ok_or(OperationError::RecoveryRequired)?
+                .revision
+                .get()
+                .checked_add(1)
+                .ok_or(OperationError::RecoveryRequired)?,
+        )
+        .await?;
     let current_order = Box::pin(super::order_state::signing_state(
         turn,
         &auth.access,
@@ -294,7 +307,7 @@ pub(in crate::workspace) async fn bind(
     let backing = Box::pin(inventory::backing::read(
         turn,
         &auth.access,
-        auth.original.receipt.held_pools(),
+        &auth.original.affected_pool_snapshots()?,
     ))
     .await?;
     let before = auth

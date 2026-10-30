@@ -18,6 +18,80 @@ pub(in crate::workspace::stock) struct Retained {
     operation_keyed: bool,
 }
 impl Retained {
+    pub(in crate::workspace::stock) async fn plan_releases(
+        &self,
+        connection: &mut SqliteConnection,
+        input: &AttachmentInput,
+        crypto: &WorkspaceCrypto,
+        before_revision: u64,
+    ) -> Result<Vec<super::super::changes::Release>, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        replacement::releases(&body, connection, input, crypto, before_revision).await
+    }
+    pub(in crate::workspace::stock) async fn confirm_replacement_residual(
+        &self,
+        connection: &mut SqliteConnection,
+        input: &AttachmentInput,
+        crypto: &WorkspaceCrypto,
+        before_revision: u64,
+    ) -> Result<(), OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        replacement::confirm_residual(&body, connection, input, crypto, before_revision).await
+    }
+    pub(in crate::workspace::stock) fn terms(
+        &self,
+    ) -> Result<radroots_domain::Terms, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        radroots_protocol::terms::decode(body.terms.get().as_bytes())
+            .map_err(|_| OperationError::RecoveryRequired)
+    }
+    pub(in crate::workspace::stock) fn mappings(
+        &self,
+    ) -> Result<Vec<radroots_domain::stock::OptionPoolMapping>, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        Ok(body.mappings)
+    }
+    pub(in crate::workspace::stock) fn affected_pools(
+        &self,
+    ) -> Result<Vec<PoolId>, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        Ok(if body.replacement.is_some() {
+            body.pools.into_iter().map(|pool| pool.id()).collect()
+        } else {
+            self.receipt
+                .held_pools()
+                .iter()
+                .map(|pool| pool.id())
+                .collect()
+        })
+    }
+    pub(in crate::workspace::stock) fn affected_pool_snapshots(
+        &self,
+    ) -> Result<Vec<PoolSnapshot>, OperationError> {
+        let body: Body = super::super::super::closed_record(&self.frame.body)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        Ok(if body.replacement.is_some() {
+            body.pools
+        } else {
+            self.receipt.held_pools().to_vec()
+        })
+    }
+    pub(in crate::workspace::stock) fn commitment_sequence(
+        &self,
+    ) -> Result<Sequence, OperationError> {
+        let record = replacement::record(&self.receipt)?;
+        let radroots_domain::CommercePayload::AgreementCommitted(commitment) =
+            record.content().payload()
+        else {
+            return Err(OperationError::RecoveryRequired);
+        };
+        Ok(commitment.seller_sequence())
+    }
     pub(in crate::workspace::stock) fn held_allocations(
         &self,
     ) -> Result<Vec<(PoolId, radroots_domain::stock::StockTicks)>, OperationError> {
@@ -175,22 +249,50 @@ pub(super) fn receipt(
     body: &Body,
     command: &CapturedStockCommitment,
 ) -> Result<StockAcceptanceReceipt, OperationError> {
-    let request = radroots_protocol::commerce::decode(body.original_request.get().as_bytes())
-        .map_err(|_| OperationError::RecoveryRequired)?;
     if body.seller_author_head.is_none() != (body.seller_author_sequence.get() == 0) {
         return Err(OperationError::RecoveryRequired);
     }
-    let CapturedStockCommitment::Acceptance(initial) = command else {
-        return Err(OperationError::RecoveryRequired);
+    let rumor = match command {
+        CapturedStockCommitment::Acceptance(initial) => {
+            let request = radroots_protocol::commerce::decode(
+                body.original_request
+                    .ok_or(OperationError::RecoveryRequired)?
+                    .get()
+                    .as_bytes(),
+            )
+            .map_err(|_| OperationError::RecoveryRequired)?;
+            radroots_protocol::commerce::initial_commitment_rumor(
+                initial,
+                &request,
+                body.seller_author_head
+                    .map(|head| (head, body.seller_author_sequence)),
+                body.observed_at,
+            )
+        }
+        CapturedStockCommitment::TermsInstallation(command) => {
+            let basis = body
+                .replacement
+                .as_ref()
+                .ok_or(OperationError::RecoveryRequired)?;
+            let decode = |raw: &RawValue| {
+                radroots_protocol::commerce::decode(raw.get().as_bytes())
+                    .map_err(|_| OperationError::RecoveryRequired)
+            };
+            radroots_protocol::commerce::replacement_commitment_rumor(
+                command,
+                &decode(basis.base)?,
+                &decode(basis.proposal)?,
+                &decode(basis.authorization)?,
+                (
+                    body.seller_author_head
+                        .ok_or(OperationError::RecoveryRequired)?,
+                    body.seller_author_sequence,
+                ),
+                body.observed_at,
+            )
+        }
     };
-    let rumor = radroots_protocol::commerce::initial_commitment_rumor(
-        initial,
-        &request,
-        body.seller_author_head
-            .map(|head| (head, body.seller_author_sequence)),
-        body.observed_at,
-    )
-    .map_err(|_| OperationError::RecoveryRequired)?;
+    let rumor = rumor.map_err(|_| OperationError::RecoveryRequired)?;
     StockAcceptanceReceipt::from_committed_store(
         input,
         CommitAttempt::new(
@@ -235,46 +337,59 @@ pub(in crate::workspace::stock) async fn read(
         .map_err(|_| OperationError::RecoveryRequired)?;
     let encoded = radroots_protocol::terms::EncodedTerms::capture(&terms)
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let original = radroots_protocol::commerce::decode(body.original_request.get().as_bytes())
+    if body.version == 1 {
+        if body.replacement.is_some() || command.proposal().is_some() {
+            return Err(OperationError::RecoveryRequired);
+        }
+        let original = radroots_protocol::commerce::decode(
+            body.original_request
+                .ok_or(OperationError::RecoveryRequired)?
+                .get()
+                .as_bytes(),
+        )
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let radroots_domain::CommercePayload::Request(original_request) = original.content().payload()
-    else {
-        return Err(OperationError::RecoveryRequired);
-    };
-    if original.record_id() != command.authorization()
-        || original_request.terms() != &terms
-        || original.content().header().order_id()
-            != command.context().expected().map(|value| value.order_id())
-        || original.content().header().author() != terms.buyer()
-        || original.content().header().created_at() > body.observed_at
-        || body.expires > original_request.expires_at()
-        || original_request.quote().is_some() != body.original_quote.is_some()
-    {
-        return Err(OperationError::RecoveryRequired);
-    }
-    if let Some(raw) = body.original_quote {
-        let quoted = radroots_protocol::commerce::decode(raw.get().as_bytes())
-            .map_err(|_| OperationError::RecoveryRequired)?;
-        let radroots_domain::CommercePayload::Quote(quote) = quoted.content().payload() else {
+        let radroots_domain::CommercePayload::Request(original_request) =
+            original.content().payload()
+        else {
             return Err(OperationError::RecoveryRequired);
         };
-        if Some(quoted.record_id()) != original_request.quote()
-            || quote.terms() != &terms
-            || body.expires > quote.expires_at()
-            || quoted.content().header().thread_id() != original.content().header().thread_id()
-            || quoted.content().header().buyer() != terms.buyer()
-            || quoted.content().header().seller() != terms.seller()
-            || quoted.content().header().created_at() > body.observed_at
+        if original.record_id() != command.authorization()
+            || original_request.terms() != &terms
+            || original.content().header().order_id()
+                != command.context().expected().map(|value| value.order_id())
+            || original.content().header().author() != terms.buyer()
+            || original.content().header().created_at() > body.observed_at
+            || body.expires > original_request.expires_at()
+            || original_request.quote().is_some() != body.original_quote.is_some()
         {
             return Err(OperationError::RecoveryRequired);
         }
+        if let Some(raw) = body.original_quote {
+            let quoted = radroots_protocol::commerce::decode(raw.get().as_bytes())
+                .map_err(|_| OperationError::RecoveryRequired)?;
+            let radroots_domain::CommercePayload::Quote(quote) = quoted.content().payload() else {
+                return Err(OperationError::RecoveryRequired);
+            };
+            if Some(quoted.record_id()) != original_request.quote()
+                || quote.terms() != &terms
+                || body.expires > quote.expires_at()
+                || quoted.content().header().thread_id() != original.content().header().thread_id()
+                || quoted.content().header().buyer() != terms.buyer()
+                || quoted.content().header().seller() != terms.seller()
+                || quoted.content().header().created_at() > body.observed_at
+            {
+                return Err(OperationError::RecoveryRequired);
+            }
+        }
+    } else {
+        replacement::validate(&body, &command)?;
     }
     let expected = command
         .context()
         .expected()
         .ok_or(OperationError::RecoveryRequired)?;
     let header = &frame.header;
-    if body.version != 1
+    if !matches!(body.version, 1 | 2)
         || (body.seller_author_sequence.get() == 0) != body.seller_author_head.is_none()
         || body.minimum_revision >= header.revision
         || (body.minimum_revision.get() == 0) != body.minimum_head.is_none()
@@ -285,8 +400,8 @@ pub(in crate::workspace::stock) async fn read(
         || command.context().authority() != input.authority()
         || command.context().route_digest() != input.route_digest()
         || header.order != Some(expected.order_id())
-        || expected.agreement().is_some()
-        || expected.seller_sequence().get() != 0
+        || (body.version == 1
+            && (expected.agreement().is_some() || expected.seller_sequence().get() != 0))
         || expected.checkpoint() != &body.coverage
         || expected.buyer_head() != body.buyer_head
         || encoded.digest() != command.terms_digest()
@@ -298,7 +413,7 @@ pub(in crate::workspace::stock) async fn read(
         || body.issue_before.get() - body.observed_at.get() > 120
         || body.expires > command.context().not_after()
         || command.context().approval().is_none_or(|approval| {
-            approval.scope() != "orders.accept"
+            approval.scope() != command.command_name()
                 || approval.intent_digest() != command.approval_intent_digest()
                 || body.expires > approval.expires_at()
         })
@@ -324,10 +439,12 @@ pub(in crate::workspace::stock) async fn read(
     {
         return Err(OperationError::RecoveryRequired);
     }
-    let (allocations, effects) = plan::resolve(&terms, &command, &body.mappings, &body.pools)
-        .map_err(|_| OperationError::RecoveryRequired)?;
-    if allocations != body.allocations || effects != body.effects {
-        return Err(OperationError::RecoveryRequired);
+    if body.version == 1 {
+        let (allocations, effects) = plan::resolve(&terms, &command, &body.mappings, &body.pools)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        if allocations != body.allocations || effects != body.effects {
+            return Err(OperationError::RecoveryRequired);
+        }
     }
     let expected_fence = fence(header, &command)?;
     let catalog: i64 = sqlx::query_scalar("PRAGMA user_version")
@@ -336,9 +453,12 @@ pub(in crate::workspace::stock) async fn read(
         .map_err(|_| OperationError::RecoveryRequired)?;
     let operation_keyed = match catalog {
         1..=12 => false,
-        13..=19 => true,
+        13..=20 => true,
         _ => return Err(OperationError::RecoveryRequired),
     };
+    if body.version == 2 && catalog < 20 {
+        return Err(OperationError::RecoveryRequired);
+    }
     let actor = header.actor.participant();
     let query = if operation_keyed {
         sqlx::query("SELECT revision,protected FROM stock_orders WHERE actor=? AND operation_id=? AND order_id=? AND length(protected) BETWEEN 1 AND 262144")

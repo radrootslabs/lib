@@ -106,7 +106,12 @@ async fn read_frame(
     }
     let body: Body = super::super::super::closed_record(&frame.body)
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if body.version != 1
+    if !matches!(body.version, 1 | 2)
+        || (body.version == 1
+            && (body.commit_sequence.is_some()
+                || body.changes.is_some()
+                || body.effects.iter().any(|effect| effect.released.is_some())))
+        || (body.version == 2 && (body.commit_sequence.is_none() || body.changes.is_none()))
         || body.effects.len() > 64
         || body
             .effects
@@ -146,15 +151,46 @@ async fn read_frame(
     {
         return Err(OperationError::RecoveryRequired);
     }
-    let allocations = original.held_allocations()?;
+    let sequence = original.commitment_sequence()?;
+    if body
+        .commit_sequence
+        .unwrap_or(Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?)
+        != sequence
+        || (body.version == 2 && sequence.get() < 2)
+    {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let changes = original
+        .plan_releases(connection, input, crypto, header.revision.get())
+        .await?;
+    if body.changes.as_deref().unwrap_or(&[]) != changes {
+        return Err(OperationError::RecoveryRequired);
+    }
+    let mut allocations: std::collections::BTreeMap<_, _> = original
+        .held_allocations()?
+        .into_iter()
+        .map(|(pool, quantity)| (pool, (quantity, StockTicks::ZERO)))
+        .collect();
+    for change in &changes {
+        if change.backed != StockTicks::ZERO {
+            let quantities = allocations
+                .entry(change.pool)
+                .or_insert((StockTicks::ZERO, StockTicks::ZERO));
+            quantities.1 = quantities
+                .1
+                .checked_add(change.backed)
+                .map_err(|_| OperationError::RecoveryRequired)?;
+        }
+    }
     if allocations.len() != body.effects.len() {
         return Err(OperationError::RecoveryRequired);
     }
-    for ((pool, quantity), effect) in allocations.into_iter().zip(&body.effects) {
+    for ((pool, (quantity, released)), effect) in allocations.into_iter().zip(&body.effects) {
         if pool != effect.before.id()
             || quantity != effect.quantity
+            || released != effect.released.unwrap_or(StockTicks::ZERO)
             || effect.before.version().get() == 0
-            || after(effect.before, quantity)? != effect.after
+            || after(effect.before, quantity, released)? != effect.after
         {
             return Err(OperationError::RecoveryRequired);
         }
@@ -219,14 +255,23 @@ async fn read_frame(
             .map_err(|_| OperationError::RecoveryRequired)?
             .ok_or(OperationError::RecoveryRequired)?;
         let clear = crypto
-            .open_stock_record(input, "installation_movement", &effect.movement, &protected)
+            .open_stock_record(
+                input,
+                if body.version == 2 {
+                    "replacement_movement"
+                } else {
+                    "installation_movement"
+                },
+                &effect.movement,
+                &protected,
+            )
             .await?;
         let movement: Movement = clear
             .expose_secret(|bytes| super::super::super::closed_record(bytes))
             .map_err(|_| OperationError::RecoveryRequired)?;
         if movement
             != (Movement {
-                version: 1,
+                version: body.version,
                 operation: header.operation,
                 digest: header.digest,
                 record: body.record,

@@ -19,6 +19,8 @@ mod signing_plan;
 pub use signing_plan::{CommerceSigningPlan, SIGNING_PLAN_MAX_BYTES};
 mod initial_commitment;
 pub use initial_commitment::initial_commitment_rumor;
+mod replacement_commitment;
+pub use replacement_commitment::replacement_commitment_rumor;
 mod payload;
 pub use decode::{DecodedRecord, decode};
 mod rumor;

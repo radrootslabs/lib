@@ -353,7 +353,12 @@ pub(super) async fn read(
     if header.family != ledger::Family::Consent
         || header.actor.grant_id() != Some(administrator)
         || body.version != 1
-        || command.proposal().is_some()
+        || (command.proposal().is_some()
+            && sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+                .fetch_one(&mut *connection)
+                .await
+                .map_err(|_| OperationError::RecoveryRequired)?
+                < 20)
         || !namespace.matches_attachment(&body.selection)
         || body.selection.grant_id() != administrator
         || header.subject_grant != Some(body.subject)
@@ -426,7 +431,9 @@ pub(in crate::workspace) async fn issue(
     proof: AttachmentProof,
 ) -> Result<StockConsentOutcome, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7..=19) || capture.command.proposal().is_some() {
+    if !matches!(access.authority.catalog, 7..=20)
+        || (capture.command.proposal().is_some() && access.authority.catalog < 20)
+    {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()
@@ -687,7 +694,7 @@ pub(in crate::workspace) async fn query(
     proof: AttachmentProof,
 ) -> Result<Option<StockConsentReceipt>, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7..=19) {
+    if !matches!(access.authority.catalog, 7..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator() && access.current.input().grant_id() != subject {

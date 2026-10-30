@@ -9,8 +9,15 @@ pub(super) fn resolve(
     mappings: &[radroots_domain::stock::OptionPoolMapping],
     pools: &[PoolSnapshot],
 ) -> Result<(Vec<Allocation>, Vec<Effect>), OperationError> {
-    use radroots_domain::stock::{AllocationClaim, AllocationPlanError};
-    let explicit = command
+    let explicit = claims(command)?;
+    radroots_domain::stock::plan_allocations(terms, mappings, pools, explicit.as_deref())
+        .map_err(error)
+}
+pub(super) fn claims(
+    command: &CapturedStockCommitment,
+) -> Result<Option<Vec<radroots_domain::stock::AllocationClaim>>, OperationError> {
+    use radroots_domain::stock::AllocationClaim;
+    command
         .allocation()
         .explicit_allocations()
         .map(|values| {
@@ -27,14 +34,15 @@ pub(super) fn resolve(
                 .collect::<Result<Vec<_>, _>>()
         })
         .transpose()
-        .map_err(|_| OperationError::InvalidCommand)?;
-    radroots_domain::stock::plan_allocations(terms, mappings, pools, explicit.as_deref()).map_err(
-        |error| match error {
-            AllocationPlanError::InvalidInput => OperationError::InvalidCommand,
-            AllocationPlanError::StaleState => OperationError::StaleState,
-            AllocationPlanError::Unsupported => OperationError::UnsupportedOperation,
-            AllocationPlanError::Capacity => WorkspaceError::Capacity.into(),
-            _ => OperationError::RecoveryRequired,
-        },
-    )
+        .map_err(|_| OperationError::InvalidCommand)
+}
+pub(super) fn error(error: radroots_domain::stock::AllocationPlanError) -> OperationError {
+    use radroots_domain::stock::AllocationPlanError;
+    match error {
+        AllocationPlanError::InvalidInput => OperationError::InvalidCommand,
+        AllocationPlanError::StaleState => OperationError::StaleState,
+        AllocationPlanError::Unsupported => OperationError::UnsupportedOperation,
+        AllocationPlanError::Capacity => WorkspaceError::Capacity.into(),
+        _ => OperationError::RecoveryRequired,
+    }
 }

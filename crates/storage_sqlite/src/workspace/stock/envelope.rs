@@ -188,7 +188,7 @@ pub(in crate::workspace) async fn capture(
         return Err(OperationError::Unauthorized);
     }
     let (authority, record, root, grant) = super::read(turn.connection, input, turn.crypto).await?;
-    if !matches!(authority.catalog, 16..=19) {
+    if !matches!(authority.catalog, 16..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     record.authenticate_retained_capture(input, &proof)?;
@@ -368,7 +368,7 @@ pub(in crate::workspace) async fn read(
         .fetch_one(&mut *turn.connection)
         .await
         .map_err(|_| OperationError::RecoveryRequired)?;
-    if !matches!(catalog, 16..=19) {
+    if !matches!(catalog, 16..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     let auth = Box::pin(super::signing_plan::load(
@@ -380,7 +380,7 @@ pub(in crate::workspace) async fn read(
         &proof,
     ))
     .await?;
-    if !matches!(auth.access.authority.catalog, 16..=19) {
+    if !matches!(auth.access.authority.catalog, 16..=20) {
         return Err(OperationError::UnsupportedOperation);
     }
     let witness = Box::pin(full_proof(turn, &request, &auth.access.authority)).await?;
