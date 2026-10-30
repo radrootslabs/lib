@@ -304,6 +304,24 @@ impl<H: SessionHost + 'static> ClientSession<H> {
         .await
     }
 
+    /// Reads current physical and installed backing/deficit together. This
+    /// starts no signer, command capture or physical stock effect.
+    pub async fn inspect_stock_pool(
+        &self,
+        store: Shared<dyn InventoryStore>,
+        scope: &WorkspaceSession,
+        minimum: InventoryCheckpointRef,
+        pool: PoolId,
+    ) -> crate::Result<Option<radroots_storage::inventory::StockSnapshot>> {
+        self.run_stock(
+            scope,
+            OperationContext::proposed(None),
+            move |binding, proof| {
+                Box::pin(async move { store.inspect_stock(binding, minimum, pool, proof).await })
+            },
+        )
+        .await
+    }
     /// Reads a private pool; a missing row never constructs stock or authority.
     pub async fn stock_pool(
         &self,

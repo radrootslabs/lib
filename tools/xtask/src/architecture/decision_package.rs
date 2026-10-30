@@ -43,6 +43,7 @@ struct Policy {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StockAccounting {
+    native_inspection: NativeInspection,
     value_owner: String,
     scope: String,
     obligation_equation: String,
@@ -68,6 +69,22 @@ struct NativeCorrection {
     worker_charge_bytes: u32,
     preparatory_loss_implicit: bool,
     quarantine_loss_implicit: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NativeInspection {
+    model_owner: String,
+    facade_method: String,
+    storage_port: String,
+    supported_catalogs: Vec<u8>,
+    worker_charge_bytes: u32,
+    same_checkpoint_required: bool,
+    original_allocation_required: bool,
+    read_pools_and_operations_required: bool,
+    pending_claims_are_installed: bool,
+    query_creates_store_effects: bool,
+    reports_global_business_completeness: bool,
 }
 
 #[derive(Deserialize)]
@@ -673,6 +690,9 @@ struct OrdinaryInventoryOwner {
     selected_workspace_views_share_owner: bool,
     exact_owned_attachment_required: bool,
     bounded_task_host_required: bool,
+    native_accepted_work_max: usize,
+    native_pending_work_blocks_queries: bool,
+    native_controls_drain_prior_work: bool,
     observer_loss_cancels_accepted_work: bool,
     close_drains_before_workspace_disposal: bool,
     stock_signer_or_transport_constructed: bool,
@@ -744,6 +764,21 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     let p: Policy = serde_json::from_slice(raw)
         .map_err(|_| "shared SDK contract: invalid closed JSON shape".to_owned())?;
     let accounting = &p.stock_accounting;
+    let inspection = &accounting.native_inspection;
+    require(
+        inspection.model_owner == "radroots_storage.inventory.StockSnapshot"
+            && inspection.facade_method == "Stock.inspect"
+            && inspection.storage_port == "InventoryStore.inspect_stock"
+            && inspection.supported_catalogs == [19]
+            && inspection.worker_charge_bytes == 1048576
+            && inspection.same_checkpoint_required
+            && inspection.original_allocation_required
+            && inspection.read_pools_and_operations_required
+            && !inspection.pending_claims_are_installed
+            && !inspection.query_creates_store_effects
+            && !inspection.reports_global_business_completeness,
+        "current stock inspection scope, permission, checkpoint or effect policy drift",
+    )?;
     let correction = &accounting.native_correction;
     require(
         correction.catalog == 19
@@ -1739,6 +1774,11 @@ fn validate_execution(e: &Execution, p: &Protocol, c: &Cutover) -> Result<(), St
                 .selected_workspace_views_share_owner
             && e.ordinary_inventory_owner.exact_owned_attachment_required
             && e.ordinary_inventory_owner.bounded_task_host_required
+            && e.ordinary_inventory_owner.native_accepted_work_max == 32
+            && !e
+                .ordinary_inventory_owner
+                .native_pending_work_blocks_queries
+            && e.ordinary_inventory_owner.native_controls_drain_prior_work
             && !e
                 .ordinary_inventory_owner
                 .observer_loss_cancels_accepted_work
@@ -1847,6 +1887,28 @@ mod tests {
             assert!(
                 validate_bytes(&changed(
                     &format!("/stock_accounting/native_correction/{field}"),
+                    value
+                ))
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn current_inspection_cannot_invent_backing_authority_or_business_completeness() {
+        for (field, value) in [
+            ("supported_catalogs", json!([18, 19])),
+            ("worker_charge_bytes", json!(16384)),
+            ("same_checkpoint_required", json!(false)),
+            ("original_allocation_required", json!(false)),
+            ("read_pools_and_operations_required", json!(false)),
+            ("pending_claims_are_installed", json!(true)),
+            ("query_creates_store_effects", json!(true)),
+            ("reports_global_business_completeness", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/stock_accounting/native_inspection/{field}"),
                     value
                 ))
                 .is_err()
@@ -2188,6 +2250,9 @@ mod tests {
             ("selected_workspace_views_share_owner", json!(false)),
             ("exact_owned_attachment_required", json!(false)),
             ("bounded_task_host_required", json!(false)),
+            ("native_accepted_work_max", json!(33)),
+            ("native_pending_work_blocks_queries", json!(true)),
+            ("native_controls_drain_prior_work", json!(false)),
             ("observer_loss_cancels_accepted_work", json!(true)),
             ("close_drains_before_workspace_disposal", json!(false)),
             ("stock_signer_or_transport_constructed", json!(true)),

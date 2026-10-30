@@ -292,6 +292,13 @@ enum Job {
         AttachmentProof,
         Reply<Option<radroots_storage::inventory::InventoryReceipt>, OperationError>,
     ),
+    InspectStock(
+        Box<WorkspaceBinding>,
+        radroots_storage::inventory::InventoryCheckpointRef,
+        radroots_domain::PoolId,
+        AttachmentProof,
+        Reply<Option<radroots_storage::inventory::StockSnapshot>, OperationError>,
+    ),
     Pool(
         Box<WorkspaceBinding>,
         radroots_storage::inventory::InventoryCheckpointRef,
@@ -527,6 +534,9 @@ impl Job {
             Self::InventoryOperation(_, _, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
+            Self::InspectStock(_, _, _, _, reply) => {
+                let _ = reply.send(Err(OperationError::RecoveryRequired));
+            }
             Self::Pool(_, _, _, _, reply) => {
                 let _ = reply.send(Err(OperationError::RecoveryRequired));
             }
@@ -730,6 +740,7 @@ impl Handle {
                                         | Job::ChangeStockGrant(..)
                                         | Job::ExecuteInventory(..)
                                         | Job::InventoryOperation(..)
+                                        | Job::InspectStock(..)
                                         | Job::Pool(..)
                                         | Job::OptionMapping(..)
                                         | Job::RetainStockSource(..)
@@ -1556,6 +1567,23 @@ impl Handle {
         ))?;
         result.await.map_err(|_| OperationError::RecoveryRequired)?
     }
+    pub(super) async fn inspect_stock(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        id: radroots_domain::PoolId,
+        proof: AttachmentProof,
+    ) -> Result<Option<radroots_storage::inventory::StockSnapshot>, OperationError> {
+        let (reply, result) = oneshot::channel();
+        self.send(Job::InspectStock(
+            Box::new(binding),
+            minimum,
+            id,
+            proof,
+            reply,
+        ))?;
+        result.await.map_err(|_| OperationError::RecoveryRequired)?
+    }
     pub(super) async fn pool(
         &self,
         binding: WorkspaceBinding,
@@ -1599,6 +1627,7 @@ impl Handle {
             // allocations and protected deficit history before its SQL fence.
             Job::ExecuteInventory(..)
             | Job::InventoryOperation(..)
+            | Job::InspectStock(..)
             | Job::Pool(..)
             | Job::OptionMapping(..) => 1024 * 1024,
             Job::IssueStockConsent(..) | Job::PrepareStockAcceptance(..) => 512 * 1024,

@@ -822,6 +822,23 @@ pub(super) fn run<'a>(
             };
             let _ = reply.send(result);
         }),
+        Job::InspectStock(binding, minimum, id, proof, reply) => Box::pin(async move {
+            let result = if kind == Kind::SellerStock {
+                stock::inventory::Turn {
+                    connection,
+                    namespace,
+                    selected: input,
+                    crypto,
+                    clock,
+                    uncertain,
+                }
+                .inspect(*binding, minimum, id, proof)
+                .await
+            } else {
+                Err(OperationError::UnsupportedOperation)
+            };
+            let _ = reply.send(result);
+        }),
         Job::Pool(binding, minimum, id, proof, reply) => Box::pin(async move {
             let result = if kind == Kind::SellerStock {
                 stock::inventory::Turn {

@@ -88,6 +88,114 @@ async fn balances(r: &Rig, id: u8, available: u64, preparatory: u64, committed: 
     );
 }
 #[tokio::test]
+async fn current_inspection_filters_original_allocations_and_requires_both_read_permissions() {
+    use radroots_storage::{
+        inventory::InventoryStore,
+        workspace::seller_stock::{StockAction, StockResources},
+    };
+    let r = Rig::new().await;
+    let receipt = ready(&r).await;
+    retain(&r, &receipt, peer(&r, &receipt)).await;
+    installed(install(&r, &receipt).await.unwrap());
+    let before = inventory_minimum(&r).await;
+    for (id, remaining, available) in [(80, 1, 9), (81, 2, 8)] {
+        let view = r
+            .store
+            .inspect_stock(
+                r.binding.clone(),
+                before,
+                pool(id),
+                r.enrollment
+                    .proof()
+                    .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(view.checkpoint(), before);
+        assert_eq!(view.installed_obligations().remaining().get(), remaining);
+        assert_eq!(view.installed_obligations().backed().get(), remaining);
+        assert_eq!(view.installed_obligations().deficit().get(), 0);
+        assert_eq!(
+            view.pool().snapshot().balances().physical().available.get(),
+            available
+        );
+    }
+    assert_eq!(inventory_minimum(&r).await, before);
+    for actions in [
+        vec![StockAction::ReadPools],
+        vec![StockAction::ReadOperations],
+        vec![StockAction::ReadPools, StockAction::ReadOperations],
+    ] {
+        let allowed = actions.len() == 2;
+        let child = StockGrantEnrollment::prepare(
+            &SellerAuthoritySelection::from_attachment(r.enrollment.input()),
+            "inspection-reader".into(),
+            UnixSeconds::new(290).unwrap(),
+            StockGrantScope::new(StockResources::pools(vec![pool(80)]).unwrap(), actions).unwrap(),
+        )
+        .unwrap();
+        r.store
+            .enroll_stock_grant(
+                r.binding.clone(),
+                inventory_minimum(&r).await,
+                r.enrollment.proof(),
+                &child,
+            )
+            .await
+            .unwrap();
+        let binding = r
+            .store
+            .authenticate(child.input().clone(), child.proof())
+            .await
+            .unwrap();
+        let minimum = inventory_minimum(&r).await;
+        let result = r
+            .store
+            .inspect_stock(
+                binding.clone(),
+                minimum,
+                pool(80),
+                child
+                    .proof()
+                    .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                    .unwrap(),
+            )
+            .await;
+        if allowed {
+            assert_eq!(
+                result
+                    .unwrap()
+                    .unwrap()
+                    .installed_obligations()
+                    .remaining()
+                    .get(),
+                1
+            );
+        } else {
+            assert_eq!(result.unwrap_err(), OperationError::Unauthorized);
+        }
+        assert_eq!(
+            r.store
+                .inspect_stock(
+                    binding,
+                    minimum,
+                    pool(81),
+                    child
+                        .proof()
+                        .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                        .unwrap()
+                )
+                .await
+                .unwrap_err(),
+            OperationError::Unauthorized
+        );
+    }
+    r.store.close().await.unwrap();
+}
+
+#[tokio::test]
 async fn peer_only_t2_installs_original_agreement_and_two_work_items_once_across_reopen() {
     let mut r = Rig::new().await;
     let receipt = ready(&r).await;

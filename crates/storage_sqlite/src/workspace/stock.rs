@@ -1488,6 +1488,21 @@ impl radroots_storage::inventory::InventoryStore for NativeWorkspace {
                 .inventory_operation(binding, minimum, operation, digest, proof),
         )
     }
+    fn inspect_stock(
+        &self,
+        binding: WorkspaceBinding,
+        minimum: radroots_storage::inventory::InventoryCheckpointRef,
+        id: radroots_domain::PoolId,
+        proof: AttachmentProof,
+    ) -> radroots_transport::BoxFuture<
+        '_,
+        Result<
+            Option<radroots_storage::inventory::StockSnapshot>,
+            radroots_storage::command::OperationError,
+        >,
+    > {
+        Box::pin(self.worker.inspect_stock(binding, minimum, id, proof))
+    }
     fn pool(
         &self,
         binding: WorkspaceBinding,

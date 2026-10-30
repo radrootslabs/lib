@@ -1,10 +1,12 @@
 //! Owner-private inventory effects on the existing connection owner.
 pub(in crate::workspace) mod abort;
 pub(in crate::workspace) mod acceptance;
+mod allocations;
 pub(in crate::workspace::stock) mod backing;
 pub(super) mod checkpoint;
 mod codec;
 pub(in crate::workspace::stock) mod deficit;
+mod inspection;
 pub(in crate::workspace) mod installation;
 mod mapping;
 mod plan;

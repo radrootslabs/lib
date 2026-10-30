@@ -1092,6 +1092,19 @@
     "first_issuance_seconds": 120
   },
   "stock_accounting": {
+    "native_inspection": {
+      "model_owner": "radroots_storage.inventory.StockSnapshot",
+      "facade_method": "Stock.inspect",
+      "storage_port": "InventoryStore.inspect_stock",
+      "supported_catalogs": [19],
+      "worker_charge_bytes": 1048576,
+      "same_checkpoint_required": true,
+      "original_allocation_required": true,
+      "read_pools_and_operations_required": true,
+      "pending_claims_are_installed": false,
+      "query_creates_store_effects": false,
+      "reports_global_business_completeness": false
+    },
     "value_owner": "radroots_domain.stock",
     "scope": "one_fixed_pool_unit",
     "obligation_equation": "remaining = backed + deficit",
@@ -1133,6 +1146,9 @@
       "selected_workspace_views_share_owner": true,
       "exact_owned_attachment_required": true,
       "bounded_task_host_required": true,
+      "native_accepted_work_max": 32,
+      "native_pending_work_blocks_queries": false,
+      "native_controls_drain_prior_work": true,
       "observer_loss_cancels_accepted_work": false,
       "close_drains_before_workspace_disposal": true,
       "stock_signer_or_transport_constructed": false

@@ -10,6 +10,8 @@ use radroots_transport::BoxFuture;
 mod abort;
 mod acceptance;
 mod deficit;
+mod snapshot;
+pub use snapshot::StockSnapshot;
 mod delivery;
 pub use deficit::StockDeficit;
 mod delivery_state;
@@ -536,6 +538,17 @@ pub trait InventoryStore: WorkspaceStore {
         digest: Option<CommandDigest>,
         proof: AttachmentProof,
     ) -> BoxFuture<'_, Result<Option<InventoryReceipt>, OperationError>>;
+    /// Reads one current physical/installed-backing snapshot. Unsupported hosts
+    /// refuse; a physical-only read must never be filled with invented totals.
+    fn inspect_stock(
+        &self,
+        _binding: WorkspaceBinding,
+        _minimum: InventoryCheckpointRef,
+        _id: PoolId,
+        _proof: AttachmentProof,
+    ) -> BoxFuture<'_, Result<Option<StockSnapshot>, OperationError>> {
+        Box::pin(async { Err(OperationError::UnsupportedOperation) })
+    }
     fn pool(
         &self,
         binding: WorkspaceBinding,

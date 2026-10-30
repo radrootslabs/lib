@@ -6,7 +6,7 @@ use radroots_domain::{
 };
 pub use radroots_protocol::command::{CreatePoolInput, MapOptionInput, PoolCorrectionInput};
 pub use radroots_storage::inventory::{
-    InventoryCheckpointRef, InventoryOutcome, InventoryReceipt, StockDeficit,
+    InventoryCheckpointRef, InventoryOutcome, InventoryReceipt, StockDeficit, StockSnapshot,
 };
 pub use radroots_storage::inventory::{
     StockEvidenceOutcome, StockEvidenceReceipt, StockEvidenceRequest,
@@ -116,6 +116,18 @@ impl<'a> Stock<'a> {
                 minimum,
                 input,
             )
+            .await
+    }
+    /// Inspects current physical stock and pool-backed installed obligations at
+    /// one confirmed checkpoint. Historical correction receipts are separate.
+    pub async fn inspect(
+        &self,
+        minimum: InventoryCheckpointRef,
+        pool: PoolId,
+    ) -> Result<Option<StockSnapshot>> {
+        self.client
+            .session
+            .inspect_stock_pool(self.client.inventory()?, &self.scope, minimum, pool)
             .await
     }
     /// Reads the actual protected pool under an independently retained minimum.

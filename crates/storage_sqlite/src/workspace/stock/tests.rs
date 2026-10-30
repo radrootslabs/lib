@@ -483,6 +483,19 @@ async fn retained_inventory_catalog(catalog: i64) {
         matches!(catalog, 8..=18)
     );
     let minimum = authority.inventory_checkpoint().unwrap();
+    assert_eq!(
+        store
+            .inspect_stock(
+                binding.clone(),
+                minimum,
+                PoolId::from_bytes([8; 32]),
+                proof
+                    .with_secret(|bytes| AttachmentProof::from_protected_input(bytes))
+                    .unwrap()
+            )
+            .await,
+        Err(OperationError::UnsupportedOperation)
+    );
     let context = CommandContextData::new(
         OperationId::from_bytes([7; 32]),
         binding.actor(),

@@ -1,10 +1,20 @@
 //! One explicitly started native executor for library-owned command futures.
-use futures::{FutureExt, future::Shared};
+use futures::{
+    FutureExt, StreamExt,
+    future::{Either, Shared, select},
+    stream::FuturesUnordered,
+};
 use radroots_execution::{
     Code, Error, OperationContext, RetryClass,
     session::{HostFuture, tasks::TaskHost},
 };
-use std::{sync::Mutex, thread::JoinHandle};
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    thread::JoinHandle,
+};
 use tokio::sync::{mpsc, oneshot};
 
 const CAPACITY: usize = 32;
@@ -56,6 +66,13 @@ struct State {
 pub(crate) struct NativeTasks {
     state: Mutex<State>,
     closing: futures::lock::Mutex<()>,
+    admitted: Arc<AtomicUsize>,
+}
+struct WorkLease(Arc<AtomicUsize>);
+impl Drop for WorkLease {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 fn completion(receiver: oneshot::Receiver<crate::Result<()>>) -> Completion {
     let future: HostFuture<'static, crate::Result<()>> =
@@ -78,14 +95,32 @@ fn run_worker(
     };
     let _ = ready.send(Ok(()));
     runtime.block_on(async move {
-        while let Some(job) = receiver.recv().await {
+        let mut active = FuturesUnordered::new();
+        loop {
+            let next = if active.is_empty() {
+                receiver.recv().await
+            } else {
+                match select(Box::pin(receiver.recv()), active.next()).await {
+                    Either::Left((job, _)) => job,
+                    Either::Right((_, _)) => continue,
+                }
+            };
+            let Some(job) = next else {
+                while active.next().await.is_some() {}
+                break;
+            };
             match job {
-                Job::Work(task) => task.await,
+                Job::Work(task) => active.push(task),
                 Job::Control(task, reply) => {
+                    // Later submissions cannot cross a control barrier.
+                    while active.next().await.is_some() {}
                     let result = task.await;
                     let _ = reply.send(result);
                 }
-                Job::Stop => break,
+                Job::Stop => {
+                    while active.next().await.is_some() {}
+                    break;
+                }
             }
         }
     });
@@ -301,6 +336,21 @@ impl TaskHost for NativeTasks {
             return Err(UNAVAILABLE);
         }
         let running = state.running.as_ref().ok_or(UNAVAILABLE)?;
+        if self
+            .admitted
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(1).filter(|next| *next <= CAPACITY)
+            })
+            .is_err()
+        {
+            drop(state);
+            return Err(UNAVAILABLE);
+        }
+        let lease = WorkLease(self.admitted.clone());
+        let task = Box::pin(async move {
+            task.await;
+            drop(lease);
+        });
         let result = running.sender.try_send(Job::Work(task));
         drop(state);
         result.map_err(|_| UNAVAILABLE)
@@ -509,6 +559,34 @@ mod tests {
     }
 
     #[test]
+    fn dropping_the_driver_does_not_cancel_accepted_pending_work() {
+        let tasks = NativeTasks::new();
+        block_on(tasks.start()).unwrap();
+        let (started, observed) = std::sync::mpsc::sync_channel(1);
+        let (release, wait) = oneshot::channel();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let completed = calls.clone();
+        tasks
+            .submit(Box::pin(async move {
+                started.send(()).unwrap();
+                wait.await.unwrap();
+                completed.fetch_add(1, Ordering::SeqCst);
+            }))
+            .unwrap();
+        observed.recv_timeout(Duration::from_secs(10)).unwrap();
+        let (done, thread) = {
+            let mut state = tasks.state.lock().unwrap();
+            let running = state.running.as_mut().unwrap();
+            (running.done.clone(), running.thread.take().unwrap())
+        };
+        drop(tasks);
+        release.send(()).unwrap();
+        block_on(done).unwrap();
+        thread.join().unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
     fn accepted_tasks_and_control_survive_lost_observation_on_the_actual_native_executor() {
         let tasks = NativeTasks::new();
         let count = Arc::new(AtomicUsize::new(0));
@@ -589,37 +667,99 @@ mod tests {
         }
     }
     #[test]
+    fn pending_work_allows_reads_but_controls_and_later_work_keep_their_barrier() {
+        let tasks = NativeTasks::new();
+        block_on(tasks.start()).unwrap();
+        let (release, wait) = oneshot::channel();
+        tasks
+            .submit(Box::pin(async move {
+                wait.await.unwrap();
+            }))
+            .unwrap();
+        let (read, observed) = std::sync::mpsc::sync_channel(1);
+        tasks
+            .submit(Box::pin(async move {
+                read.send(()).unwrap();
+            }))
+            .unwrap();
+        observed.recv_timeout(Duration::from_secs(10)).unwrap();
+        let (controlled, control_seen) = std::sync::mpsc::sync_channel(1);
+        let (release_control, wait_control) = oneshot::channel();
+        let mut control = Box::pin(tasks.control(
+            ControlKind::Drain,
+            Box::pin(async move {
+                controlled.send(()).unwrap();
+                wait_control.await.unwrap();
+                Ok(())
+            }),
+        ));
+        pending(control.as_mut());
+        let (later, later_seen) = std::sync::mpsc::sync_channel(1);
+        tasks
+            .submit(Box::pin(async move {
+                later.send(()).unwrap();
+            }))
+            .unwrap();
+        assert!(matches!(
+            control_seen.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        ));
+        release.send(()).unwrap();
+        control_seen.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(matches!(
+            later_seen.try_recv(),
+            Err(std::sync::mpsc::TryRecvError::Empty)
+        ));
+        release_control.send(()).unwrap();
+        block_on(control).unwrap();
+        later_seen.recv_timeout(Duration::from_secs(10)).unwrap();
+        block_on(tasks.close()).unwrap();
+        assert_eq!(tasks.admitted.load(Ordering::Acquire), 0);
+    }
+    #[test]
     fn native_queue_refusal_drops_captured_roots_outside_the_gate_and_close_drains_accepted_tasks()
     {
         let tasks = Arc::new(NativeTasks::new());
         block_on(tasks.start()).unwrap();
         let (ready, observed) = std::sync::mpsc::sync_channel(1);
         let (release, wait) = oneshot::channel();
+        let wait = wait.shared();
+        let first_wait = wait.clone();
         tasks
             .submit(Box::pin(async move {
                 ready.send(()).unwrap();
-                wait.await.unwrap();
+                first_wait.await.unwrap();
             }))
             .unwrap();
         observed.recv_timeout(Duration::from_secs(10)).unwrap();
         let count = Arc::new(AtomicUsize::new(0));
         let (finished, completed) = oneshot::channel();
         let mut finished = Some(finished);
-        for index in 0..CAPACITY {
+        let (started, observed) = std::sync::mpsc::sync_channel(CAPACITY);
+        for index in 0..CAPACITY - 1 {
             let count = count.clone();
-            let finished = if index + 1 == CAPACITY {
+            let wait = wait.clone();
+            let started = started.clone();
+            let finished = if index + 2 == CAPACITY {
                 finished.take()
             } else {
                 None
             };
             tasks
                 .submit(Box::pin(async move {
+                    started.send(()).unwrap();
+                    wait.await.unwrap();
                     count.fetch_add(1, Ordering::SeqCst);
                     if let Some(finished) = finished {
                         let _ = finished.send(());
                     }
                 }))
                 .unwrap();
+        }
+        // All32 work slots are active; control/stop admission must not depend
+        // on whether the worker happened to empty its channel before polling.
+        for _ in 0..CAPACITY - 1 {
+            observed.recv_timeout(Duration::from_secs(10)).unwrap();
         }
         let drops = Arc::new(AtomicUsize::new(0));
         let probe = ReentrantDrop(tasks.clone(), drops.clone());
@@ -631,9 +771,12 @@ mod tests {
                 .is_err()
         );
         assert_eq!(drops.load(Ordering::SeqCst), 1);
-        assert!(block_on(tasks.control(ControlKind::Drain, Box::pin(async { Ok(()) }))).is_err());
-        assert!(block_on(tasks.close()).is_err());
-        tasks.quiesce();
+        assert_eq!(tasks.admitted.load(Ordering::Acquire), CAPACITY);
+        let mut drain = Box::pin(tasks.control(ControlKind::Drain, Box::pin(async { Ok(()) })));
+        pending(drain.as_mut());
+        let mut closing = Box::pin(tasks.close());
+        pending(closing.as_mut());
+        drop(closing);
         let probe = ReentrantDrop(tasks.clone(), drops.clone());
         assert!(
             tasks
@@ -645,8 +788,9 @@ mod tests {
         assert_eq!(drops.load(Ordering::SeqCst), 2);
         release.send(()).unwrap();
         block_on(completed).unwrap();
-        block_on(tasks.control(ControlKind::Drain, Box::pin(async { Ok(()) }))).unwrap();
+        block_on(drain).unwrap();
         block_on(tasks.close()).unwrap();
-        assert_eq!(count.load(Ordering::SeqCst), CAPACITY);
+        assert_eq!(count.load(Ordering::SeqCst), CAPACITY - 1);
+        assert_eq!(tasks.admitted.load(Ordering::Acquire), 0);
     }
 }

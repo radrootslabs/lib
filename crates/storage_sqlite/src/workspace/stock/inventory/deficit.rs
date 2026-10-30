@@ -85,94 +85,36 @@ pub(super) async fn plan(
     if remaining > physical.committed_hold {
         return Err(OperationError::StaleState);
     }
-    let mut cursor = 0_u64;
+    let mut cursor = super::allocations::InstalledCursor::new(pool.id(), before_revision)?;
     let mut losses = Vec::new();
     while remaining != StockTicks::ZERO {
-        let row = sqlx::query("SELECT revision,CASE WHEN length(operation_id)=32 THEN operation_id END FROM stock_operations WHERE family=6 AND revision>? AND revision<? ORDER BY revision LIMIT 1")
-            .bind(cursor as i64).bind(before_revision as i64).fetch_optional(&mut *connection).await
-            .map_err(|_| OperationError::RecoveryRequired)?
+        let allocation = Box::pin(cursor.next(connection, input, crypto))
+            .await?
             .ok_or(OperationError::RecoveryRequired)?;
-        let revision: i64 = row
-            .try_get(0)
-            .map_err(|_| OperationError::RecoveryRequired)?;
-        let entry: Vec<u8> = row
-            .try_get::<Option<Vec<u8>>, _>(1)
-            .map_err(|_| OperationError::RecoveryRequired)?
-            .ok_or(OperationError::RecoveryRequired)?;
-        if revision <= 0 {
-            return Err(OperationError::RecoveryRequired);
-        }
-        cursor = revision as u64;
-        let entry = OperationId::from_bytes(
-            entry
-                .try_into()
-                .map_err(|_| OperationError::RecoveryRequired)?,
-        );
-        let installed = Box::pin(super::installation::read_entry(
-            connection, input, crypto, entry,
-        ))
-        .await?
-        .ok_or(OperationError::RecoveryRequired)?;
-        if installed.frame.header.revision.get() != cursor
-            || installed.frame.header.actor.participant() != input.participant()
-        {
-            return Err(OperationError::RecoveryRequired);
-        }
-        let acceptance = installed
-            .frame
-            .header
-            .related_operation
-            .ok_or(OperationError::RecoveryRequired)?;
-        let original = Box::pin(super::acceptance::codec::read(
-            connection, input, crypto, acceptance,
-        ))
-        .await?
-        .ok_or(OperationError::RecoveryRequired)?;
-        for allocation in original.original_allocations()? {
-            if allocation.pool_id() != pool.id() {
-                continue;
-            }
-            let prior = prior_quantity(
-                connection,
-                input,
-                crypto,
-                acceptance,
-                entry,
-                allocation.line_id(),
-                pool.id(),
-                before_revision,
-            )
+        let before = allocation
+            .backing(connection, input, crypto, before_revision)
             .await?;
-            let backed = allocation
-                .ticks()
-                .checked_sub(prior)
-                .map_err(|_| OperationError::RecoveryRequired)?;
-            if backed == StockTicks::ZERO {
-                continue;
-            }
-            if losses.len() == MAX_LOSSES {
-                return Err(WorkspaceError::Capacity.into());
-            }
-            let quantity = remaining.min(backed);
-            let before = ObligationBacking::new(allocation.ticks(), backed, prior)
-                .map_err(|_| OperationError::RecoveryRequired)?;
-            let after = before
-                .lose_backing(quantity)
-                .map_err(|_| OperationError::RecoveryRequired)?;
-            losses.push(Loss {
-                acceptance,
-                installation: entry,
-                line: allocation.line_id(),
-                before,
-                after,
-            });
-            remaining = remaining
-                .checked_sub(quantity)
-                .map_err(|_| OperationError::RecoveryRequired)?;
-            if remaining == StockTicks::ZERO {
-                break;
-            }
+        let backed = before.backed();
+        if backed == StockTicks::ZERO {
+            continue;
         }
+        if losses.len() == MAX_LOSSES {
+            return Err(WorkspaceError::Capacity.into());
+        }
+        let quantity = remaining.min(backed);
+        let after = before
+            .lose_backing(quantity)
+            .map_err(|_| OperationError::RecoveryRequired)?;
+        losses.push(Loss {
+            acceptance: allocation.acceptance,
+            installation: allocation.installation,
+            line: allocation.allocation.line_id(),
+            before,
+            after,
+        });
+        remaining = remaining
+            .checked_sub(quantity)
+            .map_err(|_| OperationError::RecoveryRequired)?;
     }
     Ok(losses)
 }
@@ -202,7 +144,7 @@ pub(super) fn quantity(losses: &[Loss]) -> Result<StockTicks, OperationError> {
     clippy::too_many_arguments,
     reason = "exact original allocation and revision boundary"
 )]
-async fn prior_quantity(
+pub(super) async fn prior_quantity(
     connection: &mut SqliteConnection,
     input: &AttachmentInput,
     crypto: &WorkspaceCrypto,

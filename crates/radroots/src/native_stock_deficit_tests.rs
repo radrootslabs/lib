@@ -6,6 +6,255 @@ use radroots_domain::{
 };
 use radroots_storage::inventory::InventoryReceipt;
 
+#[tokio::test]
+async fn current_inspection_reports_aggregate_backing_instead_of_old_receipt_totals() {
+    use AvailableStockCorrection::{Add, Remove, Spoil};
+    use sqlx::Connection;
+    let r = Rig::new().await;
+    let (_command, _status) = r.accept().await;
+    let (_, _, minimum) = r.minima().await;
+    let initial = r
+        .client
+        .stock(&r.scope)
+        .inspect(minimum, PoolId::from_bytes([80; 32]))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(initial.checkpoint(), minimum);
+    assert_eq!(initial.installed_obligations().remaining().get(), 3);
+    assert_eq!(initial.installed_obligations().backed().get(), 3);
+    assert_eq!(initial.installed_obligations().deficit(), StockTicks::ZERO);
+    let first = committed(
+        correct(
+            &r,
+            130,
+            initial.pool().snapshot().version().get(),
+            Spoil,
+            "8",
+            "first synthetic loss",
+        )
+        .await
+        .unwrap(),
+    );
+    let current = r
+        .client
+        .stock(&r.scope)
+        .inspect(first.checkpoint(), first.pool().id())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(current.checkpoint(), first.checkpoint());
+    assert_eq!(current.installed_obligations().remaining().get(), 3);
+    assert_eq!(current.installed_obligations().backed().get(), 2);
+    assert_eq!(current.installed_obligations().deficit().get(), 1);
+    let second = committed(
+        correct(
+            &r,
+            131,
+            first.pool().version().get(),
+            Remove,
+            "1",
+            "second synthetic loss",
+        )
+        .await
+        .unwrap(),
+    );
+    let added = committed(
+        correct(
+            &r,
+            132,
+            second.pool().version().get(),
+            Add,
+            "2",
+            "explicit new source",
+        )
+        .await
+        .unwrap(),
+    );
+    let current = r
+        .client
+        .stock(&r.scope)
+        .inspect(added.checkpoint(), added.pool().id())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(first.deficits()[0].backing().deficit().get(), 1);
+    assert_eq!(current.installed_obligations().remaining().get(), 3);
+    assert_eq!(current.installed_obligations().backed().get(), 1);
+    assert_eq!(current.installed_obligations().deficit().get(), 2);
+    assert_eq!(
+        current
+            .pool()
+            .snapshot()
+            .balances()
+            .physical()
+            .available
+            .get(),
+        2
+    );
+    assert_eq!(
+        format!("{current:?}"),
+        "StockSnapshot(<private current metadata>)"
+    );
+    // Read fences do not append operations or reinterpret absent projections.
+    assert_eq!(r.minima().await.2, added.checkpoint());
+    let mut fault = sqlx::SqliteConnection::connect(&format!(
+        "sqlite://{}",
+        r._temp
+            .path()
+            .join("stock/stock_execution_v1.sqlite")
+            .display()
+    ))
+    .await
+    .unwrap();
+    sqlx::query("DELETE FROM stock_deficits WHERE operation_id=?")
+        .bind(first.attempt().operation_id().as_bytes().as_slice())
+        .execute(&mut fault)
+        .await
+        .unwrap();
+    assert_eq!(
+        r.client
+            .stock(&r.scope)
+            .inspect(added.checkpoint(), added.pool().id())
+            .await
+            .unwrap_err()
+            .code(),
+        crate::Code::RecoveryRequired
+    );
+    let original = first.deficits()[0];
+    sqlx::query("INSERT INTO stock_deficits(actor,operation_id,acceptance_id,installation_id,line_id,pool_id) VALUES(?,?,?,?,?,?)")
+        .bind(r.enrollment.input().participant().as_bytes().as_slice()).bind(first.attempt().operation_id().as_bytes().as_slice())
+        .bind(original.acceptance().as_bytes().as_slice()).bind(original.installation().as_bytes().as_slice())
+        .bind(original.line().as_bytes().as_slice()).bind(original.pool().as_bytes().as_slice()).execute(&mut fault).await.unwrap();
+    fault.close().await.unwrap();
+    r.clock.0.store(0, Ordering::SeqCst);
+    assert!(
+        r.client
+            .stock(&r.scope)
+            .inspect(added.checkpoint(), added.pool().id())
+            .await
+            .is_err()
+    );
+    r.clock.0.store(150, Ordering::SeqCst);
+    assert_eq!(r.control.signs.load(Ordering::SeqCst), 2);
+    assert_eq!(r.io.wraps.load(Ordering::SeqCst), 2);
+    assert_eq!(r.io.sent.lock().unwrap().len(), 2);
+    r.client.close().await.unwrap();
+    let crypto = WorkspaceCrypto::new(
+        r.vault.clone(),
+        SecretRef::new(
+            SecretId::parse("workspace-key").unwrap(),
+            BackendKind::File,
+            KeyVersion::new(1).unwrap(),
+        ),
+        SecretMaterial::from_slice(&[0x41; 32]).unwrap(),
+        AccessPolicy::standard(),
+    )
+    .unwrap();
+    let reopened = NativeWorkspace::open_seller_stock(
+        &r._temp.path().join("stock"),
+        r.enrollment.input().clone(),
+        crypto,
+        r.clock.clone(),
+    )
+    .await
+    .unwrap();
+    let binding = reopened
+        .authenticate(r.enrollment.input().clone(), r.enrollment.proof())
+        .await
+        .unwrap();
+    let recovered = reopened
+        .inspect_stock(
+            binding,
+            added.checkpoint(),
+            added.pool().id(),
+            proof(r.enrollment.proof()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered, current);
+    reopened.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn current_inspection_keeps_pending_claims_separate_from_installed_obligations() {
+    let r = Arc::new(Rig::new().await);
+    let (_, _, minimum) = r.minima().await;
+    assert!(
+        r.client
+            .stock(&r.scope)
+            .inspect(minimum, PoolId::from_bytes([99; 32]))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    r.control.pause_peer.store(true, Ordering::SeqCst);
+    let task = {
+        let r = r.clone();
+        tokio::spawn(async move { r.accept().await })
+    };
+    r.control.entered.notified().await;
+    let (_, _, minimum) = r.minima().await;
+    let signs = r.control.signs.load(Ordering::SeqCst);
+    let pending = r
+        .client
+        .stock(&r.scope)
+        .inspect(minimum, PoolId::from_bytes([80; 32]))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        pending
+            .pool()
+            .snapshot()
+            .balances()
+            .physical()
+            .preparatory_hold
+            .get(),
+        3
+    );
+    assert_eq!(
+        pending
+            .pool()
+            .snapshot()
+            .balances()
+            .physical()
+            .available
+            .get(),
+        7
+    );
+    assert_eq!(
+        pending.installed_obligations().remaining(),
+        StockTicks::ZERO
+    );
+    assert_eq!(pending.installed_obligations().backed(), StockTicks::ZERO);
+    assert_eq!(pending.installed_obligations().deficit(), StockTicks::ZERO);
+    assert_eq!(r.control.signs.load(Ordering::SeqCst), signs);
+    r.control.release.notify_one();
+    task.await.unwrap();
+    let (_, _, minimum) = r.minima().await;
+    let installed = r
+        .client
+        .stock(&r.scope)
+        .inspect(minimum, pending.pool().snapshot().id())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(installed.installed_obligations().remaining().get(), 3);
+    assert_eq!(installed.installed_obligations().backed().get(), 3);
+    assert_eq!(
+        installed
+            .pool()
+            .snapshot()
+            .balances()
+            .physical()
+            .preparatory_hold,
+        StockTicks::ZERO
+    );
+    r.client.close().await.unwrap();
+}
+
 async fn correct(
     r: &Rig,
     id: u8,
@@ -193,6 +442,15 @@ async fn failed_native_correction(uncertain_commit: bool) {
 
 #[tokio::test]
 async fn native_inventory_proof_work_reserves_the_live_queue_budget_until_sql_confirmation() {
+    inventory_read_budget(false).await;
+}
+
+#[tokio::test]
+async fn native_inspection_reserves_the_live_queue_budget_until_sql_confirmation() {
+    inventory_read_budget(true).await;
+}
+
+async fn inventory_read_budget(inspect: bool) {
     use sqlx::Connection;
     let r = Rig::new().await;
     let (_, _, minimum) = r.minima().await;
@@ -207,25 +465,33 @@ async fn native_inventory_proof_work_reserves_the_live_queue_budget_until_sql_co
     .await
     .unwrap();
     let transaction = blocker.begin_with("BEGIN IMMEDIATE").await.unwrap();
-    let mut reads: Vec<_> = (0..4)
-        .map(|_| {
-            Box::pin(r.native.pool(
-                r.scope.binding().clone(),
-                minimum,
-                pool,
-                proof(r.enrollment.proof()),
-            ))
-        })
-        .collect();
+    let read = || async {
+        if inspect {
+            r.native
+                .inspect_stock(
+                    r.scope.binding().clone(),
+                    minimum,
+                    pool,
+                    proof(r.enrollment.proof()),
+                )
+                .await
+                .map(|value| value.map(|value| value.pool().clone()))
+        } else {
+            r.native
+                .pool(
+                    r.scope.binding().clone(),
+                    minimum,
+                    pool,
+                    proof(r.enrollment.proof()),
+                )
+                .await
+        }
+    };
+    let mut reads: Vec<_> = (0..4).map(|_| Box::pin(read())).collect();
     for read in &mut reads {
         assert!(futures::poll!(read.as_mut()).is_pending());
     }
-    let fifth = r.native.pool(
-        r.scope.binding().clone(),
-        minimum,
-        pool,
-        proof(r.enrollment.proof()),
-    );
+    let fifth = read();
     let error = tokio::time::timeout(std::time::Duration::from_secs(1), fifth)
         .await
         .expect("full queue must refuse without waiting for its blocked writer")
