@@ -96,7 +96,7 @@ pub enum StockSigningPlanOutcome {
 pub(in crate::workspace::stock) struct Authorized {
     pub(in crate::workspace::stock) access: Access,
     pub(in crate::workspace::stock) original: acceptance::codec::Retained,
-    pub(in crate::workspace::stock) command: radroots_protocol::command::CapturedOrderAcceptance,
+    pub(in crate::workspace::stock) command: radroots_protocol::command::CapturedStockCommitment,
     pub(in crate::workspace::stock) original_proof: MinimumProof,
     pub(in crate::workspace::stock) consent: consent::Retained,
     pub(in crate::workspace::stock) consent_proof: MinimumProof,

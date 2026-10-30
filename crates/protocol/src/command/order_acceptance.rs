@@ -242,7 +242,7 @@ struct AllocationWire {
     quantity: Quantity,
     expected_pool_version: Sequence,
 }
-fn parse_selection(raw: &[u8]) -> Result<AllocationSelection, CommandError> {
+pub(super) fn parse_selection(raw: &[u8]) -> Result<AllocationSelection, CommandError> {
     #[derive(Deserialize)]
     struct Probe {
         #[serde(rename = "type")]

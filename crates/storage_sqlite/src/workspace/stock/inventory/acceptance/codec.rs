@@ -36,10 +36,10 @@ impl Retained {
             .map_err(|_| OperationError::RecoveryRequired)?;
         Ok(body.allocations)
     }
-    pub fn command(&self) -> Result<CapturedOrderAcceptance, OperationError> {
+    pub fn command(&self) -> Result<CapturedStockCommitment, OperationError> {
         let body: Body = super::super::super::closed_record(&self.frame.body)
             .map_err(|_| OperationError::RecoveryRequired)?;
-        CapturedOrderAcceptance::parse(body.command.get().as_bytes())
+        CapturedStockCommitment::parse(body.command.get().as_bytes())
             .map_err(|_| OperationError::RecoveryRequired)
     }
     pub fn identity(&self) -> checkpoint::EntryIdentity {
@@ -173,15 +173,18 @@ pub(super) fn receipt(
     input: &AttachmentInput,
     header: &ledger::Header,
     body: &Body,
-    command: &CapturedOrderAcceptance,
+    command: &CapturedStockCommitment,
 ) -> Result<StockAcceptanceReceipt, OperationError> {
     let request = radroots_protocol::commerce::decode(body.original_request.get().as_bytes())
         .map_err(|_| OperationError::RecoveryRequired)?;
     if body.seller_author_head.is_none() != (body.seller_author_sequence.get() == 0) {
         return Err(OperationError::RecoveryRequired);
     }
+    let CapturedStockCommitment::Acceptance(initial) = command else {
+        return Err(OperationError::RecoveryRequired);
+    };
     let rumor = radroots_protocol::commerce::initial_commitment_rumor(
-        command,
+        initial,
         &request,
         body.seller_author_head
             .map(|head| (head, body.seller_author_sequence)),
@@ -197,8 +200,8 @@ pub(super) fn receipt(
             Some(header.transaction),
         ),
         header.order.ok_or(OperationError::RecoveryRequired)?,
-        command.input().request(),
-        command.input().terms_digest(),
+        command.authorization(),
+        command.terms_digest(),
         InventoryCheckpointRef::from_host_metadata(
             input.authority(),
             header.revision,
@@ -226,7 +229,7 @@ pub(in crate::workspace::stock) async fn read(
     }
     let body: Body = super::super::super::closed_record(&frame.body)
         .map_err(|_| OperationError::RecoveryRequired)?;
-    let command = CapturedOrderAcceptance::parse(body.command.get().as_bytes())
+    let command = CapturedStockCommitment::parse(body.command.get().as_bytes())
         .map_err(|_| OperationError::RecoveryRequired)?;
     let terms = radroots_protocol::terms::decode(body.terms.get().as_bytes())
         .map_err(|_| OperationError::RecoveryRequired)?;
@@ -238,7 +241,7 @@ pub(in crate::workspace::stock) async fn read(
     else {
         return Err(OperationError::RecoveryRequired);
     };
-    if original.record_id() != command.input().request()
+    if original.record_id() != command.authorization()
         || original_request.terms() != &terms
         || original.content().header().order_id()
             != command.context().expected().map(|value| value.order_id())
@@ -286,7 +289,7 @@ pub(in crate::workspace::stock) async fn read(
         || expected.seller_sequence().get() != 0
         || expected.checkpoint() != &body.coverage
         || expected.buyer_head() != body.buyer_head
-        || encoded.digest() != command.input().terms_digest()
+        || encoded.digest() != command.terms_digest()
         || terms.seller() != header.actor.participant()
         || body.observed_at.get() == 0
         || body.expires <= body.observed_at

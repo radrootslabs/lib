@@ -175,6 +175,26 @@ impl core::convert::From<radroots_protocol::command::CapturedPoolCreation> for r
 pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedPoolCreation) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedInventoryCommand
 pub fn radroots_protocol::command::CapturedInventoryCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum radroots_protocol::command::CapturedStockCommitment
+pub radroots_protocol::command::CapturedStockCommitment::Acceptance(radroots_protocol::command::CapturedOrderAcceptance)
+pub radroots_protocol::command::CapturedStockCommitment::TermsInstallation(radroots_protocol::command::CapturedTermsInstallation)
+impl radroots_protocol::command::CapturedStockCommitment
+pub const fn radroots_protocol::command::CapturedStockCommitment::allocation(&self) -> &radroots_protocol::command::AllocationSelection
+pub const fn radroots_protocol::command::CapturedStockCommitment::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedStockCommitment::authorization(&self) -> radroots_domain::identifier::RecordId
+pub const fn radroots_protocol::command::CapturedStockCommitment::command_name(&self) -> &'static str
+pub const fn radroots_protocol::command::CapturedStockCommitment::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedStockCommitment::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub fn radroots_protocol::command::CapturedStockCommitment::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub const fn radroots_protocol::command::CapturedStockCommitment::proposal(&self) -> core::option::Option<radroots_domain::identifier::RecordId>
+pub fn radroots_protocol::command::CapturedStockCommitment::protected_wire(&self) -> &[u8]
+pub const fn radroots_protocol::command::CapturedStockCommitment::terms_digest(&self) -> radroots_domain::identifier::TermsDigest
+impl core::convert::From<radroots_protocol::command::CapturedOrderAcceptance> for radroots_protocol::command::CapturedStockCommitment
+pub fn radroots_protocol::command::CapturedStockCommitment::from(radroots_protocol::command::CapturedOrderAcceptance) -> Self
+impl core::convert::From<radroots_protocol::command::CapturedTermsInstallation> for radroots_protocol::command::CapturedStockCommitment
+pub fn radroots_protocol::command::CapturedStockCommitment::from(radroots_protocol::command::CapturedTermsInstallation) -> Self
+impl core::fmt::Debug for radroots_protocol::command::CapturedStockCommitment
+pub fn radroots_protocol::command::CapturedStockCommitment::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum radroots_protocol::command::ChatKind
 pub radroots_protocol::command::ChatKind::Inquire
 pub radroots_protocol::command::ChatKind::Reply
@@ -269,6 +289,8 @@ pub const fn radroots_protocol::command::CapturedOrderAcceptance::input(&self) -
 pub fn radroots_protocol::command::CapturedOrderAcceptance::new(radroots_domain::context::CommandContextData, radroots_protocol::command::AcceptOrderInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
 pub fn radroots_protocol::command::CapturedOrderAcceptance::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
 pub fn radroots_protocol::command::CapturedOrderAcceptance::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::command::CapturedOrderAcceptance> for radroots_protocol::command::CapturedStockCommitment
+pub fn radroots_protocol::command::CapturedStockCommitment::from(radroots_protocol::command::CapturedOrderAcceptance) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedOrderAcceptance
 pub fn radroots_protocol::command::CapturedOrderAcceptance::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::CapturedPoolCorrection
@@ -297,6 +319,19 @@ impl core::convert::From<radroots_protocol::command::CapturedPoolCreation> for r
 pub fn radroots_protocol::command::CapturedInventoryCommand::from(radroots_protocol::command::CapturedPoolCreation) -> Self
 impl core::fmt::Debug for radroots_protocol::command::CapturedPoolCreation
 pub fn radroots_protocol::command::CapturedPoolCreation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::CapturedTermsInstallation
+impl radroots_protocol::command::CapturedTermsInstallation
+pub const fn radroots_protocol::command::CapturedTermsInstallation::approval_intent_digest(&self) -> radroots_domain::identifier::ApprovalIntentDigest
+pub const fn radroots_protocol::command::CapturedTermsInstallation::context(&self) -> &radroots_domain::context::CommandContextData
+pub const fn radroots_protocol::command::CapturedTermsInstallation::digest(&self) -> radroots_domain::identifier::CommandDigest
+pub const fn radroots_protocol::command::CapturedTermsInstallation::input(&self) -> &radroots_protocol::command::InstallTermsInput
+pub fn radroots_protocol::command::CapturedTermsInstallation::new(radroots_domain::context::CommandContextData, radroots_protocol::command::InstallTermsInput) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedTermsInstallation::parse(&[u8]) -> core::result::Result<Self, radroots_protocol::command::CommandError>
+pub fn radroots_protocol::command::CapturedTermsInstallation::protected_wire(&self) -> &[u8]
+impl core::convert::From<radroots_protocol::command::CapturedTermsInstallation> for radroots_protocol::command::CapturedStockCommitment
+pub fn radroots_protocol::command::CapturedStockCommitment::from(radroots_protocol::command::CapturedTermsInstallation) -> Self
+impl core::fmt::Debug for radroots_protocol::command::CapturedTermsInstallation
+pub fn radroots_protocol::command::CapturedTermsInstallation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::CreatePoolInput
 impl radroots_protocol::command::CreatePoolInput
 pub const fn radroots_protocol::command::CreatePoolInput::id(&self) -> radroots_domain::identifier::PoolId
@@ -316,6 +351,15 @@ pub fn radroots_protocol::command::InquireInput::text(&self) -> &str
 pub const fn radroots_protocol::command::InquireInput::thread_id(&self) -> radroots_domain::identifier::ThreadId
 impl core::fmt::Debug for radroots_protocol::command::InquireInput
 pub fn radroots_protocol::command::InquireInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_protocol::command::InstallTermsInput
+impl radroots_protocol::command::InstallTermsInput
+pub const fn radroots_protocol::command::InstallTermsInput::allocation(&self) -> &radroots_protocol::command::AllocationSelection
+pub const fn radroots_protocol::command::InstallTermsInput::authorization(&self) -> radroots_domain::identifier::RecordId
+pub const fn radroots_protocol::command::InstallTermsInput::new(radroots_domain::identifier::RecordId, radroots_domain::identifier::RecordId, radroots_domain::identifier::TermsDigest, radroots_protocol::command::AllocationSelection) -> Self
+pub const fn radroots_protocol::command::InstallTermsInput::proposal(&self) -> radroots_domain::identifier::RecordId
+pub const fn radroots_protocol::command::InstallTermsInput::terms_digest(&self) -> radroots_domain::identifier::TermsDigest
+impl core::fmt::Debug for radroots_protocol::command::InstallTermsInput
+pub fn radroots_protocol::command::InstallTermsInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_protocol::command::ListingRevisionRef
 impl radroots_protocol::command::ListingRevisionRef
 pub const fn radroots_protocol::command::ListingRevisionRef::author(&self) -> radroots_identity::key::PublicKey

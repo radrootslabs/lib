@@ -561,11 +561,11 @@ impl core::fmt::Debug for radroots_storage_sqlite::workspace::StockClaimRequest
 pub fn radroots_storage_sqlite::workspace::StockClaimRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct radroots_storage_sqlite::workspace::StockConsentCapture
 impl radroots_storage_sqlite::workspace::StockConsentCapture
-pub fn radroots_storage_sqlite::workspace::StockConsentCapture::command(&self) -> &radroots_protocol::command::order_acceptance::CapturedOrderAcceptance
+pub fn radroots_storage_sqlite::workspace::StockConsentCapture::command(&self) -> &radroots_protocol::command::stock_commitment::CapturedStockCommitment
 pub const fn radroots_storage_sqlite::workspace::StockConsentCapture::control_operation_id(&self) -> radroots_domain::identifier::OperationId
 pub const fn radroots_storage_sqlite::workspace::StockConsentCapture::expires_at(&self) -> radroots_domain::context::UnixSeconds
 pub const fn radroots_storage_sqlite::workspace::StockConsentCapture::mode(&self) -> radroots_storage_sqlite::workspace::StockConsentMode
-pub fn radroots_storage_sqlite::workspace::StockConsentCapture::prepare(radroots_storage::workspace::seller_stock::selection::SellerAuthoritySelection, radroots_domain::identifier::GrantId, radroots_storage_sqlite::workspace::StockConsentMode, radroots_storage::workspace::seller_stock::permissions::StockResources, radroots_domain::context::UnixSeconds, radroots_protocol::command::order_acceptance::CapturedOrderAcceptance) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub fn radroots_storage_sqlite::workspace::StockConsentCapture::prepare(radroots_storage::workspace::seller_stock::selection::SellerAuthoritySelection, radroots_domain::identifier::GrantId, radroots_storage_sqlite::workspace::StockConsentMode, radroots_storage::workspace::seller_stock::permissions::StockResources, radroots_domain::context::UnixSeconds, impl core::convert::Into<radroots_protocol::command::stock_commitment::CapturedStockCommitment>) -> core::result::Result<Self, radroots_storage::command::OperationError>
 pub fn radroots_storage_sqlite::workspace::StockConsentCapture::resources(&self) -> &radroots_storage::workspace::seller_stock::permissions::StockResources
 pub const fn radroots_storage_sqlite::workspace::StockConsentCapture::subject_grant(&self) -> radroots_domain::identifier::GrantId
 pub const fn radroots_storage_sqlite::workspace::StockConsentCapture::transaction_id(&self) -> radroots_domain::identifier::TransactionId

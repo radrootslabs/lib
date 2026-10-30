@@ -5,13 +5,12 @@ pub(super) use radroots_domain::stock::{
 };
 pub(super) fn resolve(
     terms: &radroots_domain::Terms,
-    command: &CapturedOrderAcceptance,
+    command: &CapturedStockCommitment,
     mappings: &[radroots_domain::stock::OptionPoolMapping],
     pools: &[PoolSnapshot],
 ) -> Result<(Vec<Allocation>, Vec<Effect>), OperationError> {
     use radroots_domain::stock::{AllocationClaim, AllocationPlanError};
     let explicit = command
-        .input()
         .allocation()
         .explicit_allocations()
         .map(|values| {

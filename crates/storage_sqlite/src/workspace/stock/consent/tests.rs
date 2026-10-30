@@ -3,6 +3,7 @@
 use super::*;
 use crate::workspace::{tests::CryptoFixture, tests::participant};
 use radroots_domain::{CommandContextData, PoolId};
+use radroots_protocol::command::CapturedOrderAcceptance;
 use radroots_storage::inventory::{InventoryOutcome, InventoryRequest, InventoryStore};
 use std::sync::atomic::{AtomicU64, Ordering};
 #[path = "test_provider.rs"]
@@ -159,6 +160,79 @@ fn committed(outcome: StockConsentOutcome) -> StockConsentReceipt {
     match outcome {
         StockConsentOutcome::Committed(value) => *value,
         _ => panic!("issuance must confirm"),
+    }
+}
+
+#[tokio::test]
+async fn retained_catalog_cannot_mint_initial_consent_for_captured_replacement_terms() {
+    for catalog in [9, 19] {
+        let r = Rig::with_catalog((catalog != 19).then_some(catalog)).await;
+        let initial = r.command(&r.binding, 0x31);
+        let mut wire: serde_json::Value = serde_json::from_slice(initial.protected_wire()).unwrap();
+        wire["type"] = serde_json::json!("orders.install_terms");
+        wire["input"] = serde_json::json!({"proposal":"61".repeat(32),"authorization":"62".repeat(32),"terms_digest":"24".repeat(32),"allocation":{"type":"automatic"}});
+        wire["context"]["expected"]["agreement"] = serde_json::json!("63".repeat(32));
+        wire["context"]["expected"]["seller_sequence"] = serde_json::json!("1");
+        wire["context"]["approval"] = serde_json::Value::Null;
+        let command = radroots_protocol::command::CapturedTermsInstallation::parse(
+            &serde_json::to_vec(&wire).unwrap(),
+        )
+        .unwrap();
+        wire["context"]["approval"] = serde_json::json!({"intent_digest":command.approval_intent_digest(),"scope":"orders.install_terms","expires_at":"150"});
+        let command = radroots_protocol::command::CapturedTermsInstallation::parse(
+            &serde_json::to_vec(&wire).unwrap(),
+        )
+        .unwrap();
+        let capture = StockConsentCapture::prepare(
+            SellerAuthoritySelection::from_attachment(&r.input),
+            r.input.grant_id(),
+            StockConsentMode::ExecuteAndRecover,
+            StockResources::all_pools(),
+            UnixSeconds::new(150).unwrap(),
+            command,
+        )
+        .unwrap();
+        assert_eq!(
+            r.store
+                .issue_stock_consent(r.binding.clone(), r.minimum, &capture, &r.proof)
+                .await
+                .unwrap_err(),
+            OperationError::UnsupportedOperation
+        );
+        let mut raw = SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(r.path.join("stock_execution_v1.sqlite")),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM stock_operations")
+                .fetch_one(&mut raw)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+                .fetch_one(&mut raw)
+                .await
+                .unwrap(),
+            catalog
+        );
+        raw.close().await.unwrap();
+        let receipt = committed(
+            r.store
+                .issue_stock_consent(
+                    r.binding.clone(),
+                    r.minimum,
+                    &r.capture(&r.binding, 0x32),
+                    &r.proof,
+                )
+                .await
+                .unwrap(),
+        );
+        assert_eq!(receipt.checkpoint().revision().get(), 1);
+        r.store.close().await.unwrap();
     }
 }
 

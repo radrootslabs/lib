@@ -7,7 +7,10 @@ use crate::workspace::{
 use radroots_domain::{
     IssuanceWindow, OrderId, RecordId, TermsDigest, UnixSeconds, stock::PoolSnapshot,
 };
-use radroots_protocol::{command::CapturedOrderAcceptance, commerce::EncodedCommerceRumor};
+use radroots_protocol::{
+    command::{CapturedOrderAcceptance, CapturedStockCommitment, CapturedTermsInstallation},
+    commerce::EncodedCommerceRumor,
+};
 use std::sync::Arc;
 
 /// Captured inputs and independently retained minima, never authority evidence.
@@ -16,7 +19,7 @@ pub struct StockAcceptanceRequest {
     minimum: InventoryCheckpointRef,
     sources: StockSourceCheckpointRef,
     listings: StockListingCheckpointRef,
-    command: CapturedOrderAcceptance,
+    command: CapturedStockCommitment,
 }
 impl StockAcceptanceRequest {
     /// Copies bounded protected command bytes. Current consent, source policy,
@@ -28,8 +31,40 @@ impl StockAcceptanceRequest {
         listings: StockListingCheckpointRef,
         command: &CapturedOrderAcceptance,
     ) -> Result<Self, OperationError> {
-        let command = CapturedOrderAcceptance::parse(command.protected_wire())
-            .map_err(|_| OperationError::InvalidCommand)?;
+        Self::capture_wire(
+            binding,
+            minimum,
+            sources,
+            listings,
+            command.protected_wire(),
+        )
+    }
+    /// Copies exact terms-installation data into the same native commitment
+    /// request. This performs no admission, allocation, signing or stock effect.
+    pub fn capture_terms(
+        binding: WorkspaceBinding,
+        minimum: InventoryCheckpointRef,
+        sources: StockSourceCheckpointRef,
+        listings: StockListingCheckpointRef,
+        command: &CapturedTermsInstallation,
+    ) -> Result<Self, OperationError> {
+        Self::capture_wire(
+            binding,
+            minimum,
+            sources,
+            listings,
+            command.protected_wire(),
+        )
+    }
+    fn capture_wire(
+        binding: WorkspaceBinding,
+        minimum: InventoryCheckpointRef,
+        sources: StockSourceCheckpointRef,
+        listings: StockListingCheckpointRef,
+        raw: &[u8],
+    ) -> Result<Self, OperationError> {
+        let command =
+            CapturedStockCommitment::parse(raw).map_err(|_| OperationError::InvalidCommand)?;
         Ok(Self {
             binding,
             minimum,
@@ -50,7 +85,7 @@ impl StockAcceptanceRequest {
     pub const fn listing_checkpoint(&self) -> StockListingCheckpointRef {
         self.listings
     }
-    pub const fn command(&self) -> &CapturedOrderAcceptance {
+    pub const fn command(&self) -> &CapturedStockCommitment {
         &self.command
     }
     /// Original identity anchor; not proof of a confirmed commit.
@@ -75,7 +110,7 @@ impl core::fmt::Debug for StockAcceptanceRequest {
 pub struct StockAcceptanceReceipt {
     attempt: CommitAttempt,
     order: OrderId,
-    request: RecordId,
+    authorization: RecordId,
     terms: TermsDigest,
     checkpoint: InventoryCheckpointRef,
     pools: Vec<PoolSnapshot>,
@@ -91,7 +126,7 @@ impl StockAcceptanceReceipt {
         namespace: &AttachmentInput,
         attempt: CommitAttempt,
         order: OrderId,
-        request: RecordId,
+        authorization: RecordId,
         terms: TermsDigest,
         checkpoint: InventoryCheckpointRef,
         pools: Vec<PoolSnapshot>,
@@ -115,7 +150,7 @@ impl StockAcceptanceReceipt {
         Ok(Self {
             attempt,
             order,
-            request,
+            authorization,
             terms,
             checkpoint,
             pools,
@@ -130,8 +165,10 @@ impl StockAcceptanceReceipt {
     pub const fn order_id(&self) -> OrderId {
         self.order
     }
-    pub const fn request(&self) -> RecordId {
-        self.request
+    /// Original selected buyer request or terms authorization. This metadata
+    /// alone proves neither participant consent nor a confirmed preparation.
+    pub const fn authorization(&self) -> RecordId {
+        self.authorization
     }
     pub const fn terms_digest(&self) -> TermsDigest {
         self.terms

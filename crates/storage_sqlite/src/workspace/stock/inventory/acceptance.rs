@@ -3,7 +3,7 @@
 use super::super::{consent, ledger, source};
 use super::*;
 use radroots_domain::{CheckpointRef, OrderId, RecordId, TermsDigest};
-use radroots_protocol::command::CapturedOrderAcceptance;
+use radroots_protocol::command::CapturedStockCommitment;
 use radroots_storage::inventory::InventoryCheckpointRef;
 use radroots_storage::workspace::seller_stock::{
     StockListingCheckpointRef, StockSourceCheckpointRef,
@@ -90,7 +90,7 @@ struct Fence {
 }
 fn fence(
     header: &ledger::Header,
-    command: &CapturedOrderAcceptance,
+    command: &CapturedStockCommitment,
 ) -> Result<Fence, OperationError> {
     Ok(Fence {
         version: 1,
@@ -99,8 +99,8 @@ fn fence(
         digest: header.digest,
         transaction: header.transaction,
         revision: Sequence::new(1).map_err(|_| OperationError::RecoveryRequired)?,
-        request: command.input().request(),
-        terms: command.input().terms_digest(),
+        request: command.authorization(),
+        terms: command.terms_digest(),
     })
 }
 fn bytes(value: &impl Serialize) -> Result<zeroize::Zeroizing<Vec<u8>>, OperationError> {
@@ -151,7 +151,7 @@ fn head(header: &ledger::Header, body: &[u8]) -> CheckpointDigest {
 pub(in crate::workspace::stock) fn check_consent(
     access: &Access,
     scope: &consent::Retained,
-    command: &CapturedOrderAcceptance,
+    command: &CapturedStockCommitment,
     fresh: bool,
     at: UnixSeconds,
 ) -> Result<(), OperationError> {
@@ -190,7 +190,7 @@ pub(in crate::workspace::stock) fn check_consent(
 pub(in crate::workspace::stock) async fn current_consent(
     turn: &mut Turn<'_>,
     access: &Access,
-    command: &CapturedOrderAcceptance,
+    command: &CapturedStockCommitment,
 ) -> Result<(consent::Retained, MinimumProof), OperationError> {
     let operation = consent::natural(
         turn.connection,
@@ -240,6 +240,11 @@ pub(in crate::workspace) async fn admit(
         return Err(OperationError::UnsupportedOperation);
     }
     let command = request.command();
+    // This retained preparation format describes an initial acceptance only.
+    // Capturing a replacement never grants the initial request path authority.
+    if command.proposal().is_some() {
+        return Err(OperationError::UnsupportedOperation);
+    }
     let operation = command.context().operation_id();
     let original = codec::read(turn.connection, turn.selected, turn.crypto, operation).await?;
     let identity = checkpoint::authenticate_identity(
@@ -340,7 +345,7 @@ pub(in crate::workspace) async fn admit(
             authority: &access.authority,
             minimum: request.minimum_checkpoint(),
         },
-        command.input().request(),
+        command.authorization(),
         request.listing_checkpoint(),
         access.current.observed_at(),
     )
@@ -354,7 +359,7 @@ pub(in crate::workspace) async fn admit(
         || expected.seller_sequence().get() != 0
         || expected.buyer_head() != admitted.history.analysis.buyer_head()
         || Some(expected.checkpoint()) != admitted.history.checkpoint.as_ref()
-        || command.input().terms_digest() != admitted.digest
+        || command.terms_digest() != admitted.digest
         || command.context().workspace_id() != turn.selected.workspace_id()
         || command.context().authority() != turn.selected.authority()
         || command.context().route_digest() != turn.selected.route_digest()
@@ -429,7 +434,7 @@ pub(in crate::workspace) async fn admit(
                 proof: witness,
             });
         }
-        if let Some(explicit) = command.input().allocation().explicit_allocations() {
+        if let Some(explicit) = command.allocation().explicit_allocations() {
             pool_ids.extend(explicit.iter().map(|value| value.pool_id()));
         }
     }

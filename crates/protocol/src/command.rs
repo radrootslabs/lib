@@ -59,7 +59,11 @@ pub use inventory::{CapturedInventoryCommand, InventoryCommandKind};
 pub use order_acceptance::{
     AcceptOrderInput, AllocationInput, AllocationSelection, CapturedOrderAcceptance,
 };
+mod order_terms;
+pub use order_terms::{CapturedTermsInstallation, InstallTermsInput};
+mod stock_commitment;
 pub use stock::{CapturedPoolCreation, CreatePoolInput};
+pub use stock_commitment::CapturedStockCommitment;
 pub use stock_correction::{CapturedPoolCorrection, PoolCorrectionInput};
 pub use stock_mapping::{CapturedOptionMapping, MapOptionInput};
 

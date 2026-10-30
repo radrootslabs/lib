@@ -4,7 +4,7 @@
 mod tests;
 use super::*;
 use radroots_domain::{ActorRole, CommandDigest, OperationId, OrderId, UnixSeconds};
-use radroots_protocol::command::CapturedOrderAcceptance;
+use radroots_protocol::command::CapturedStockCommitment;
 use radroots_storage::{
     command::OperationError, inventory::InventoryCheckpointRef,
     workspace::seller_stock::StockResources,
@@ -32,7 +32,7 @@ pub struct StockConsentCapture {
     mode: StockConsentMode,
     resources: StockResources,
     expires: UnixSeconds,
-    command: CapturedOrderAcceptance,
+    command: CapturedStockCommitment,
     digest: CommandDigest,
 }
 impl StockConsentCapture {
@@ -42,8 +42,9 @@ impl StockConsentCapture {
         mode: StockConsentMode,
         resources: StockResources,
         expires: UnixSeconds,
-        command: CapturedOrderAcceptance,
+        command: impl Into<CapturedStockCommitment>,
     ) -> Result<Self, OperationError> {
+        let command = command.into();
         validate_capture(&namespace, subject, mode, expires, &command)?;
         let digest = scope_digest(
             &namespace,
@@ -84,7 +85,7 @@ impl StockConsentCapture {
     pub const fn expires_at(&self) -> UnixSeconds {
         self.expires
     }
-    pub fn command(&self) -> &CapturedOrderAcceptance {
+    pub fn command(&self) -> &CapturedStockCommitment {
         &self.command
     }
     pub fn resources(&self) -> &StockResources {
@@ -99,7 +100,7 @@ impl StockConsentCapture {
             mode: self.mode,
             resources: self.resources.clone(),
             expires: self.expires,
-            command: CapturedOrderAcceptance::parse(self.command.protected_wire())
+            command: CapturedStockCommitment::parse(self.command.protected_wire())
                 .map_err(|_| OperationError::InvalidCommand)?,
             digest: self.digest,
         })
@@ -115,7 +116,7 @@ fn validate_capture(
     subject: GrantId,
     mode: StockConsentMode,
     expires: UnixSeconds,
-    command: &CapturedOrderAcceptance,
+    command: &CapturedStockCommitment,
 ) -> Result<(), OperationError> {
     let context = command.context();
     let approval = context
@@ -130,7 +131,7 @@ fn validate_capture(
         || context.route_digest() != namespace.route_digest()
         || context.expected().is_none()
         || expires.get() == 0
-        || approval.scope() != "orders.accept"
+        || approval.scope() != command.command_name()
         || approval.intent_digest() != command.approval_intent_digest()
         || (mode == StockConsentMode::ExecuteAndRecover
             && (context.actor().grant_id() != Some(subject)
@@ -261,7 +262,7 @@ struct Body<'a> {
 pub(super) struct Retained {
     pub frame: ledger::Retained,
     pub observed_at: UnixSeconds,
-    pub command: CapturedOrderAcceptance,
+    pub command: CapturedStockCommitment,
     pub mode: StockConsentMode,
     pub resources: StockResources,
     pub subject: GrantId,
@@ -343,7 +344,7 @@ pub(super) async fn read(
     let body: Body<'_> =
         super::object(&mut parser).map_err(|_| OperationError::RecoveryRequired)?;
     parser.end().map_err(|_| OperationError::RecoveryRequired)?;
-    let command = CapturedOrderAcceptance::parse(body.command.get().as_bytes())
+    let command = CapturedStockCommitment::parse(body.command.get().as_bytes())
         .map_err(|_| OperationError::RecoveryRequired)?;
     let namespace = SellerAuthoritySelection::from_attachment(input);
     validate_capture(&namespace, body.subject, body.mode, body.expires, &command)
@@ -352,6 +353,7 @@ pub(super) async fn read(
     if header.family != ledger::Family::Consent
         || header.actor.grant_id() != Some(administrator)
         || body.version != 1
+        || command.proposal().is_some()
         || !namespace.matches_attachment(&body.selection)
         || body.selection.grant_id() != administrator
         || header.subject_grant != Some(body.subject)
@@ -424,7 +426,7 @@ pub(in crate::workspace) async fn issue(
     proof: AttachmentProof,
 ) -> Result<StockConsentOutcome, OperationError> {
     let access = turn.access(&binding, minimum, &proof).await?;
-    if !matches!(access.authority.catalog, 7..=19) {
+    if !matches!(access.authority.catalog, 7..=19) || capture.command.proposal().is_some() {
         return Err(OperationError::UnsupportedOperation);
     }
     if !access.record.administrator()

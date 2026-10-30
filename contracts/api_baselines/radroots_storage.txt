@@ -1471,6 +1471,7 @@ pub struct radroots_storage::inventory::StockAcceptanceReceipt
 impl radroots_storage::inventory::StockAcceptanceReceipt
 pub const fn radroots_storage::inventory::StockAcceptanceReceipt::allocation_count(&self) -> usize
 pub const fn radroots_storage::inventory::StockAcceptanceReceipt::attempt(&self) -> radroots_storage::command::CommitAttempt
+pub const fn radroots_storage::inventory::StockAcceptanceReceipt::authorization(&self) -> radroots_domain::identifier::RecordId
 pub const fn radroots_storage::inventory::StockAcceptanceReceipt::checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
 pub const fn radroots_storage::inventory::StockAcceptanceReceipt::first_issue_deadline(&self) -> radroots_domain::context::UnixSeconds
 pub fn radroots_storage::inventory::StockAcceptanceReceipt::from_committed_store(&radroots_storage::workspace::AttachmentInput, radroots_storage::command::CommitAttempt, radroots_domain::identifier::OrderId, radroots_domain::identifier::RecordId, radroots_domain::identifier::TermsDigest, radroots_storage::inventory::InventoryCheckpointRef, alloc::vec::Vec<radroots_domain::stock::PoolSnapshot>, usize, radroots_domain::issuance::IssuanceWindow, radroots_protocol::commerce::rumor::EncodedCommerceRumor) -> core::result::Result<Self, radroots_storage::command::OperationError>
@@ -1478,7 +1479,6 @@ pub fn radroots_storage::inventory::StockAcceptanceReceipt::held_pools(&self) ->
 pub fn radroots_storage::inventory::StockAcceptanceReceipt::into_held_pools(self) -> alloc::vec::Vec<radroots_domain::stock::PoolSnapshot>
 pub const fn radroots_storage::inventory::StockAcceptanceReceipt::order_id(&self) -> radroots_domain::identifier::OrderId
 pub const fn radroots_storage::inventory::StockAcceptanceReceipt::prepared_at(&self) -> radroots_domain::context::UnixSeconds
-pub const fn radroots_storage::inventory::StockAcceptanceReceipt::request(&self) -> radroots_domain::identifier::RecordId
 pub fn radroots_storage::inventory::StockAcceptanceReceipt::rumor(&self) -> &radroots_protocol::commerce::rumor::EncodedCommerceRumor
 pub const fn radroots_storage::inventory::StockAcceptanceReceipt::terms_digest(&self) -> radroots_domain::identifier::TermsDigest
 impl core::fmt::Debug for radroots_storage::inventory::StockAcceptanceReceipt
@@ -1488,7 +1488,8 @@ impl radroots_storage::inventory::StockAcceptanceRequest
 pub fn radroots_storage::inventory::StockAcceptanceRequest::attempt(&self) -> radroots_storage::command::CommitAttempt
 pub const fn radroots_storage::inventory::StockAcceptanceRequest::binding(&self) -> &radroots_storage::workspace::WorkspaceBinding
 pub fn radroots_storage::inventory::StockAcceptanceRequest::capture(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::StockListingCheckpointRef, &radroots_protocol::command::order_acceptance::CapturedOrderAcceptance) -> core::result::Result<Self, radroots_storage::command::OperationError>
-pub const fn radroots_storage::inventory::StockAcceptanceRequest::command(&self) -> &radroots_protocol::command::order_acceptance::CapturedOrderAcceptance
+pub fn radroots_storage::inventory::StockAcceptanceRequest::capture_terms(radroots_storage::workspace::WorkspaceBinding, radroots_storage::inventory::InventoryCheckpointRef, radroots_storage::workspace::seller_stock::StockSourceCheckpointRef, radroots_storage::workspace::seller_stock::StockListingCheckpointRef, &radroots_protocol::command::order_terms::CapturedTermsInstallation) -> core::result::Result<Self, radroots_storage::command::OperationError>
+pub const fn radroots_storage::inventory::StockAcceptanceRequest::command(&self) -> &radroots_protocol::command::stock_commitment::CapturedStockCommitment
 pub const fn radroots_storage::inventory::StockAcceptanceRequest::listing_checkpoint(&self) -> radroots_storage::workspace::seller_stock::StockListingCheckpointRef
 pub const fn radroots_storage::inventory::StockAcceptanceRequest::minimum_checkpoint(&self) -> radroots_storage::inventory::InventoryCheckpointRef
 pub const fn radroots_storage::inventory::StockAcceptanceRequest::source_checkpoint(&self) -> radroots_storage::workspace::seller_stock::StockSourceCheckpointRef
