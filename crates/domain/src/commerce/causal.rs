@@ -12,6 +12,11 @@ use alloc::{
 use core::fmt;
 mod request;
 pub use request::{InitialRequestClaim, RequestClaimError, prepare_initial_request};
+mod replacement;
+pub use replacement::{
+    ReplacementTermsClaim, ReplacementTermsError, ReplacementTermsSelection,
+    prepare_replacement_terms,
+};
 
 /// One exact bilateral order scope, including seller quotes in its null-order
 /// author chain. The scope itself is untrusted data, not evidence coverage.

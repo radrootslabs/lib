@@ -1,5 +1,7 @@
 use super::agreement::{buyer, group, line, money, seller, terms};
 use radroots_domain::{causal::*, *};
+#[path = "terms_authorization.rs"]
+mod terms_authorization;
 
 fn id(value: u64) -> RecordId {
     let mut out = [0; 32];

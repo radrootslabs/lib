@@ -1092,6 +1092,16 @@
     "first_issuance_seconds": 120
   },
   "stock_accounting": {
+    "replacement_terms_admission": {
+      "owner": "radroots_domain.causal.prepare_replacement_terms",
+      "scope": "explicit_existing_agreement_proposal_and_counterparty_authorization",
+      "complete_local_causal_coverage_required": true,
+      "conflicting_authorizations_require_reconciliation": true,
+      "native_canonical_digest_recompute_required": true,
+      "native_current_head_and_residual_required": true,
+      "claim_grants_current_authority": false,
+      "claim_creates_stock_effects": false
+    },
     "native_inspection": {
       "model_owner": "radroots_storage.inventory.StockSnapshot",
       "facade_method": "Stock.inspect",

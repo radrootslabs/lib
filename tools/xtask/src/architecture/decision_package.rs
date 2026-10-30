@@ -43,6 +43,7 @@ struct Policy {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StockAccounting {
+    replacement_terms_admission: ReplacementTermsAdmission,
     native_inspection: NativeInspection,
     value_owner: String,
     scope: String,
@@ -55,6 +56,19 @@ struct StockAccounting {
     loss_deletes_obligation: bool,
     native_atomic_allocation_and_identity_required: bool,
     native_correction: NativeCorrection,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReplacementTermsAdmission {
+    owner: String,
+    scope: String,
+    complete_local_causal_coverage_required: bool,
+    conflicting_authorizations_require_reconciliation: bool,
+    native_canonical_digest_recompute_required: bool,
+    native_current_head_and_residual_required: bool,
+    claim_grants_current_authority: bool,
+    claim_creates_stock_effects: bool,
 }
 
 #[derive(Deserialize)]
@@ -764,6 +778,19 @@ fn validate_bytes(raw: &[u8]) -> Result<(), String> {
     let p: Policy = serde_json::from_slice(raw)
         .map_err(|_| "shared SDK contract: invalid closed JSON shape".to_owned())?;
     let accounting = &p.stock_accounting;
+    let replacement = &accounting.replacement_terms_admission;
+    require(
+        replacement.owner == "radroots_domain.causal.prepare_replacement_terms"
+            && replacement.scope
+                == "explicit_existing_agreement_proposal_and_counterparty_authorization"
+            && replacement.complete_local_causal_coverage_required
+            && replacement.conflicting_authorizations_require_reconciliation
+            && replacement.native_canonical_digest_recompute_required
+            && replacement.native_current_head_and_residual_required
+            && !replacement.claim_grants_current_authority
+            && !replacement.claim_creates_stock_effects,
+        "replacement claim/native authority boundary policy drift",
+    )?;
     let inspection = &accounting.native_inspection;
     require(
         inspection.model_owner == "radroots_storage.inventory.StockSnapshot"
@@ -1867,6 +1894,32 @@ mod tests {
         ] {
             assert!(
                 validate_bytes(&changed(&format!("/stock_accounting/{field}"), value)).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn replacement_claims_require_native_digest_head_and_effect_revalidation() {
+        for (field, value) in [
+            ("owner", json!("application")),
+            ("scope", json!("latest_timestamp_wins")),
+            ("complete_local_causal_coverage_required", json!(false)),
+            (
+                "conflicting_authorizations_require_reconciliation",
+                json!(false),
+            ),
+            ("native_canonical_digest_recompute_required", json!(false)),
+            ("native_current_head_and_residual_required", json!(false)),
+            ("claim_grants_current_authority", json!(true)),
+            ("claim_creates_stock_effects", json!(true)),
+        ] {
+            assert!(
+                validate_bytes(&changed(
+                    &format!("/stock_accounting/replacement_terms_admission/{field}"),
+                    value,
+                ))
+                .is_err(),
+                "{field}"
             );
         }
     }

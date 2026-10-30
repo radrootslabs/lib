@@ -13,6 +13,23 @@ pub radroots_domain::causal::CausalReadiness::Complete
 pub radroots_domain::causal::CausalReadiness::Conflicted
 pub radroots_domain::causal::CausalReadiness::MissingHistory
 pub radroots_domain::causal::CausalReadiness::Uninterpreted
+#[non_exhaustive] pub enum radroots_domain::causal::ReplacementTermsError
+pub radroots_domain::causal::ReplacementTermsError::ClockAhead
+pub radroots_domain::causal::ReplacementTermsError::Conflicted
+pub radroots_domain::causal::ReplacementTermsError::ConflictingAuthorizations
+pub radroots_domain::causal::ReplacementTermsError::Expired
+pub radroots_domain::causal::ReplacementTermsError::InvalidGraph
+pub radroots_domain::causal::ReplacementTermsError::MissingHistory
+pub radroots_domain::causal::ReplacementTermsError::Rejected
+pub radroots_domain::causal::ReplacementTermsError::TermsDigestMismatch
+pub radroots_domain::causal::ReplacementTermsError::Uninterpreted
+pub radroots_domain::causal::ReplacementTermsError::Withdrawn
+pub radroots_domain::causal::ReplacementTermsError::WrongAuthorization
+pub radroots_domain::causal::ReplacementTermsError::WrongBase
+pub radroots_domain::causal::ReplacementTermsError::WrongProposal
+impl core::error::Error for radroots_domain::causal::ReplacementTermsError
+impl core::fmt::Display for radroots_domain::causal::ReplacementTermsError
+pub fn radroots_domain::causal::ReplacementTermsError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum radroots_domain::causal::RequestClaimError
 pub radroots_domain::causal::RequestClaimError::ClockAhead
 pub radroots_domain::causal::RequestClaimError::Conflicted
@@ -64,10 +81,28 @@ pub const fn radroots_domain::causal::InitialRequestClaim<'_>::request(&self) ->
 pub const fn radroots_domain::causal::InitialRequestClaim<'_>::terms(&self) -> &radroots_domain::Terms
 impl core::fmt::Debug for radroots_domain::causal::InitialRequestClaim<'_>
 pub fn radroots_domain::causal::InitialRequestClaim<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::causal::ReplacementTermsClaim<'a>
+impl radroots_domain::causal::ReplacementTermsClaim<'_>
+pub const fn radroots_domain::causal::ReplacementTermsClaim<'_>::base_commitment(&self) -> radroots_domain::AgreementCommitment
+pub const fn radroots_domain::causal::ReplacementTermsClaim<'_>::expires_at(&self) -> radroots_domain::UnixSeconds
+pub const fn radroots_domain::causal::ReplacementTermsClaim<'_>::selection(&self) -> radroots_domain::causal::ReplacementTermsSelection
+pub const fn radroots_domain::causal::ReplacementTermsClaim<'_>::terms(&self) -> &radroots_domain::Terms
+impl core::fmt::Debug for radroots_domain::causal::ReplacementTermsClaim<'_>
+pub fn radroots_domain::causal::ReplacementTermsClaim<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct radroots_domain::causal::ReplacementTermsSelection
+impl radroots_domain::causal::ReplacementTermsSelection
+pub const fn radroots_domain::causal::ReplacementTermsSelection::authorization(self) -> radroots_domain::RecordId
+pub const fn radroots_domain::causal::ReplacementTermsSelection::base_agreement(self) -> radroots_domain::RecordId
+pub const fn radroots_domain::causal::ReplacementTermsSelection::new(radroots_domain::RecordId, radroots_domain::RecordId, radroots_domain::RecordId, radroots_domain::TermsDigest) -> Self
+pub const fn radroots_domain::causal::ReplacementTermsSelection::proposal(self) -> radroots_domain::RecordId
+pub const fn radroots_domain::causal::ReplacementTermsSelection::terms_digest(self) -> radroots_domain::TermsDigest
+impl core::fmt::Debug for radroots_domain::causal::ReplacementTermsSelection
+pub fn radroots_domain::causal::ReplacementTermsSelection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const radroots_domain::causal::MAX_CAUSAL_RECORDS: usize
 pub const radroots_domain::causal::MAX_CAUSAL_SOURCES: usize
 pub fn radroots_domain::causal::analyze(radroots_domain::causal::CausalScope, &[radroots_domain::causal::CausalRecord<'_>], &[radroots_domain::SourceId], &[radroots_domain::SourceId]) -> core::result::Result<radroots_domain::causal::CausalAnalysis, radroots_domain::causal::CausalError>
 pub fn radroots_domain::causal::prepare_initial_request<'a>(radroots_domain::causal::CausalScope, radroots_domain::RecordId, &[radroots_domain::causal::CausalRecord<'a>], &[radroots_domain::SourceId], &[radroots_domain::SourceId], radroots_domain::UnixSeconds) -> core::result::Result<radroots_domain::causal::InitialRequestClaim<'a>, radroots_domain::causal::RequestClaimError>
+pub fn radroots_domain::causal::prepare_replacement_terms<'a>(radroots_domain::causal::CausalScope, radroots_domain::causal::ReplacementTermsSelection, &[radroots_domain::causal::CausalRecord<'a>], &[radroots_domain::SourceId], &[radroots_domain::SourceId], radroots_domain::UnixSeconds) -> core::result::Result<radroots_domain::causal::ReplacementTermsClaim<'a>, radroots_domain::causal::ReplacementTermsError>
 pub mod radroots_domain::listing
 pub enum radroots_domain::listing::FulfillmentMode
 pub radroots_domain::listing::FulfillmentMode::Delivery
